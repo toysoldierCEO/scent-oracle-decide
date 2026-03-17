@@ -686,10 +686,8 @@ const OdaraScreen = () => {
                 <div
                   className="absolute top-[3px] z-10"
                   style={{
-                    left: `calc(12px + ${pct}% * (100% - 24px) / 100%)`,
+                    left: `calc(12px + ${pct / 100} * (100% - 24px))`,
                     transform: "translateX(-50%)",
-                    /* Use CSS calc for the track width */
-                    left: `calc(12px + (${pct / 100}) * (100% - 24px))`,
                   }}
                 >
                   <div
