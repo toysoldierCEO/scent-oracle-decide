@@ -378,17 +378,17 @@ const OdaraScreen = () => {
               {hasLayer && activeLayer && (
                 <div
                   onClick={() => setLayerSheetOpen((o) => !o)}
-                  className="w-fit max-w-[85%] mx-auto rounded-[16px] px-4 py-3.5 mb-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
                   style={{
                     background: "var(--sub-glass-bg)",
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                   }}
                 >
-                  <p className="text-[14px] font-medium text-foreground/90 mb-2 tracking-wide">
+                  <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
                     {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
                   <span
-                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1.5"
+                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
                     style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
                   >
                     {activeLayer.mode}
@@ -407,7 +407,7 @@ const OdaraScreen = () => {
                         transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
                         className="w-full overflow-hidden"
                       >
-                        <div className="pt-3 mt-3 space-y-2.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div className="pt-2 mt-2 space-y-1.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                           {/* Mood selector */}
                           <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
                             {LAYER_MOODS.map((mood) => (
