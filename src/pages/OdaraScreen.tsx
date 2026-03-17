@@ -352,56 +352,7 @@ const OdaraScreen = () => {
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
           const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
-          // Scent-family curve color
-          const familyLower = (oracle?.today_pick?.family ?? "").toLowerCase();
-          const curveColor = familyLower.includes("oud") || familyLower.includes("amber") || familyLower.includes("oriental")
-            ? "rgba(192,138,62,0.14)"
-            : familyLower.includes("fresh") || familyLower.includes("aqua") || familyLower.includes("citrus")
-            ? "rgba(120,180,220,0.14)"
-            : "rgba(255,255,255,0.10)";
-          const curveGlow = familyLower.includes("oud") || familyLower.includes("amber") || familyLower.includes("oriental")
-            ? "rgba(192,138,62,0.06)"
-            : familyLower.includes("fresh") || familyLower.includes("aqua") || familyLower.includes("citrus")
-            ? "rgba(120,180,220,0.06)"
-            : "rgba(255,255,255,0.04)";
 
-          // Scent behavior label
-          const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
-
-          return (
-            <div className="w-full max-w-md mb-6 px-2">
-              {/* Context label */}
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 select-none">
-                  Temperature → Scent
-                </span>
-              </div>
-
-              {/* Dynamic label */}
-              <div className="flex items-center justify-center mb-2">
-                <span className="text-[10px] font-mono text-muted-foreground/60 select-none">
-                  {effectiveTemperature}° · {effectiveTemperature <= 50 ? "Cold" : effectiveTemperature <= 70 ? "Warm" : "Hot"} → {scentBehavior}
-                </span>
-              </div>
-
-              {/* Scent suggestion curve + Track + Orb (unified) */}
-              <div className="relative w-full" style={{ height: "28px" }}>
-                {/* Curve behind track */}
-                <svg
-                  viewBox="0 0 400 28"
-                  preserveAspectRatio="none"
-                  className="absolute inset-0 w-full h-full"
-                  style={{ overflow: "visible" }}
-                >
-                  <path
-                    d="M 0 18 Q 100 6, 200 14 Q 300 22, 400 10"
-                    fill="none"
-                    stroke={curveColor}
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    style={{ filter: `drop-shadow(0 0 4px ${curveGlow})` }}
-                  />
-                </svg>
 
                 {/* Track line at vertical center */}
                 <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "13px" }} />
