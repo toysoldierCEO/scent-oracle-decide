@@ -1,8 +1,9 @@
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { Star } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -80,8 +81,20 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
+  const [layerSaved, setLayerSaved] = useState(false);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
+
+  // Generate forecast days
+  const forecastDays = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i + 1);
+      return { label: days[d.getDay()], day: d.getDate() };
+    });
+  }, []);
 
   // Fetch live weather on mount
   useEffect(() => {
@@ -391,8 +404,9 @@ const OdaraScreen = () => {
           );
         })()}
 
+
         {/* Swipeable Hero Card */}
-        <div className="relative w-full max-w-md">
+        <div className="relative w-full max-w-md mt-3">
           {/* Swipe hint labels */}
           <motion.div
             className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-10"
@@ -452,12 +466,31 @@ const OdaraScreen = () => {
               {hasLayer && activeLayer && (
                 <div
                   onClick={() => setLayerSheetOpen((o) => !o)}
-                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
                   style={{
                     background: "var(--sub-glass-bg)",
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                   }}
                 >
+                  {/* Save star */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLayerSaved((s) => !s);
+                      toast(layerSaved ? "Combo unsaved" : "Combo saved");
+                    }}
+                    className="absolute top-3 right-3 p-1 transition-all duration-200 hover:scale-110"
+                  >
+                    <Star
+                      size={14}
+                      className={`transition-all duration-200 ${
+                        layerSaved
+                          ? "text-foreground fill-foreground/80"
+                          : "text-muted-foreground/30 hover:text-muted-foreground/60"
+                      }`}
+                    />
+                  </button>
+
                   <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
                     {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
@@ -585,7 +618,7 @@ const OdaraScreen = () => {
         </div>
 
         {/* Footer */}
-        <footer className="flex flex-col items-center w-full max-w-md px-2 mt-auto pb-12 pt-8 gap-4">
+        <footer className="flex flex-col items-center w-full max-w-md px-2 mt-auto pb-4 pt-8 gap-4">
           <div className="flex items-center justify-between w-full">
             <button
               onClick={handleSkip}
@@ -634,6 +667,32 @@ const OdaraScreen = () => {
             {actionState === "disliking" ? "Removing…" : "Don't show again"}
           </button>
         </footer>
+
+        {/* 7-Day Forecast Strip */}
+        <div
+          className="w-full max-w-md rounded-t-[16px] px-4 py-3 pb-6 backdrop-blur-xl"
+          style={{
+            background: "var(--sub-glass-bg)",
+            boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
+          }}
+        >
+          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/40 block text-center mb-2">
+            Forecast
+          </span>
+          <div className="flex justify-between">
+            {forecastDays.map((d, i) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <span className="text-[9px] font-mono text-muted-foreground/50">{d.label}</span>
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
+                >
+                  <span className="text-[8px] font-mono text-muted-foreground/30">{d.day}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
