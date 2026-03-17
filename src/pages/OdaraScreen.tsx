@@ -366,9 +366,11 @@ const OdaraScreen = () => {
                     {effectiveTemperature}°
                   </span>
                   <div
-                    className="w-3 h-3 rounded-full bg-foreground"
+                    className="w-3 h-3 rounded-full"
                     style={{
-                      boxShadow: "0 0 8px 2px hsl(var(--family-accent) / 0.4), 0 0 20px 4px hsl(var(--family-accent) / 0.15)",
+                      background: "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 40%, transparent 70%)",
+                      boxShadow: "0 0 8px 3px rgba(255,255,255,0.18), 0 0 20px 6px rgba(255,255,255,0.07)",
+                      animation: "orbBreathe 4s ease-in-out infinite",
                     }}
                   />
                 </motion.div>
@@ -693,8 +695,9 @@ const OdaraScreen = () => {
                   <div
                     className="w-3 h-3 rounded-full"
                     style={{
-                      background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 50%, transparent 70%)",
-                      boxShadow: "0 0 8px 3px rgba(255,255,255,0.15), 0 0 20px 6px rgba(255,255,255,0.06)",
+                      background: "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 40%, transparent 70%)",
+                      boxShadow: "0 0 8px 3px rgba(255,255,255,0.18), 0 0 20px 6px rgba(255,255,255,0.07)",
+                      animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
                   />
                 </div>
