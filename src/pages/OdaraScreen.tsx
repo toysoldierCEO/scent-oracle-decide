@@ -466,12 +466,31 @@ const OdaraScreen = () => {
               {hasLayer && activeLayer && (
                 <div
                   onClick={() => setLayerSheetOpen((o) => !o)}
-                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
                   style={{
                     background: "var(--sub-glass-bg)",
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                   }}
                 >
+                  {/* Save star */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLayerSaved((s) => !s);
+                      toast(layerSaved ? "Combo unsaved" : "Combo saved");
+                    }}
+                    className="absolute top-3 right-3 p-1 transition-all duration-200 hover:scale-110"
+                  >
+                    <Star
+                      size={14}
+                      className={`transition-all duration-200 ${
+                        layerSaved
+                          ? "text-foreground fill-foreground/80"
+                          : "text-muted-foreground/30 hover:text-muted-foreground/60"
+                      }`}
+                    />
+                  </button>
+
                   <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
                     {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
