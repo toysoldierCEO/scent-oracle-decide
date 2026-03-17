@@ -681,28 +681,25 @@ const OdaraScreen = () => {
           </span>
           <div className="relative">
             {/* Track line */}
-            <div className="absolute top-[9px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
+            <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
             
             {/* Continuous orb */}
             {(() => {
-              // orbPosition is 0..1 (progress through today)
-              // Map to percentage across the track: today marker is at 0/6, tomorrow at 1/6, etc.
-              // Orb sits between today (index 0) and tomorrow (index 1)
-              const totalSegments = 6; // 7 markers = 6 segments
+              const totalSegments = 6;
               const pct = (orbPosition / totalSegments) * 100;
               return (
                 <div
-                  className="absolute top-[3px] z-10"
+                  className="absolute top-[2px] z-10"
                   style={{
                     left: `calc(12px + ${pct / 100} * (100% - 24px))`,
                     transform: "translateX(-50%)",
                   }}
                 >
                   <div
-                    className="w-3.5 h-3.5 rounded-full relative"
+                    className="w-2.5 h-2.5 rounded-full relative"
                     style={{
-                      background: "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.7) 25%, rgba(255,255,255,0.25) 50%, transparent 65%)",
-                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.35), 0 0 10px 4px rgba(255,255,255,0.15), 0 0 20px 8px rgba(255,255,255,0.06)",
+                      background: "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.15) 55%, transparent 65%)",
+                      boxShadow: "0 0 3px 1.5px rgba(255,255,255,0.28), 0 0 8px 3px rgba(255,255,255,0.12), 0 0 16px 6px rgba(255,255,255,0.04)",
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
                   >
@@ -719,14 +716,29 @@ const OdaraScreen = () => {
             {/* Day markers */}
             <div className="flex justify-between relative">
               {forecastDays.map((d, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5">
+                <div key={i} className="flex flex-col items-center gap-2.5">
                   <div
                     className="w-[5px] h-[5px] rounded-full"
                     style={{
-                      background: i === 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)",
+                      background: i === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.12)",
                     }}
                   />
-                  <span className="text-[8px] font-mono text-muted-foreground/40">{d.label}</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: "10px",
+                        letterSpacing: "0.08em",
+                        color: i === 0 ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
+                        fontWeight: i === 0 ? 500 : 400,
+                      }}
+                    >
+                      {d.label}
+                    </span>
+                    {i === 0 && (
+                      <div className="w-3 h-px rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
