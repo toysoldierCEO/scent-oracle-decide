@@ -14,12 +14,88 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      oracle_accepts: {
+        Row: {
+          context: string
+          created_at: string
+          fragrance_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          context?: string
+          created_at?: string
+          fragrance_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          context?: string
+          created_at?: string
+          fragrance_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      oracle_dislikes: {
+        Row: {
+          created_at: string
+          fragrance_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fragrance_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fragrance_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      oracle_skips: {
+        Row: {
+          context: string
+          created_at: string
+          fragrance_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          context?: string
+          created_at?: string
+          fragrance_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          context?: string
+          created_at?: string
+          fragrance_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      accept_today_pick_v1: {
+        Args: { p_context?: string; p_fragrance_id: string; p_user: string }
+        Returns: Json
+      }
+      dislike_fragrance_v1: {
+        Args: { p_fragrance_id: string; p_user: string }
+        Returns: Json
+      }
       get_todays_oracle_v3: {
         Args: {
           p_brand?: string
@@ -27,6 +103,10 @@ export type Database = {
           p_temperature?: number
           p_user_id: string
         }
+        Returns: Json
+      }
+      skip_today_pick_v1: {
+        Args: { p_context?: string; p_fragrance_id: string; p_user: string }
         Returns: Json
       }
     }
