@@ -77,6 +77,29 @@ const OdaraScreen = () => {
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
+  const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
+
+  const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
+
+  // Fetch live weather on mount
+  useEffect(() => {
+    let cancelled = false;
+    setWeatherLoading(true);
+    fetchLiveTemperature()
+      .then((temp) => {
+        if (!cancelled) {
+          setLiveTemperature(temp);
+          setSelectedTemperature(temp);
+        }
+      })
+      .catch(() => {
+        // silently fall back to 40
+      })
+      .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
