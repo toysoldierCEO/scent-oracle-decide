@@ -378,24 +378,22 @@ const OdaraScreen = () => {
                 <>
                   <button
                     onClick={() => setLayerSheetOpen(true)}
-                    className="w-full rounded-[20px] p-5 mb-8 text-left transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                    className="w-full rounded-[20px] px-6 py-6 mb-8 flex flex-col items-center text-center transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
                     style={{
                       background: "var(--sub-glass-bg)",
                       boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                     }}
                   >
-                    <p className="text-sm text-foreground/90 mb-1">
+                    <p className="text-[15px] font-medium text-foreground/90 mb-3 tracking-wide">
                       {layer!.top ?? `Enhance with ${layer!.top_name}`}
                     </p>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
-                        style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
-                      >
-                        {layer!.mode}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/40">tap for details</span>
-                    </div>
+                    <span
+                      className="text-[10px] text-muted-foreground/80 px-3 py-1 rounded-full mb-3"
+                      style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
+                    >
+                      {layer!.mode}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/40 tracking-[0.1em]">tap for details</span>
                   </button>
 
                   <Drawer open={layerSheetOpen} onOpenChange={setLayerSheetOpen}>
