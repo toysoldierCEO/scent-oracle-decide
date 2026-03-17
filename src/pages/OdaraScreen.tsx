@@ -618,7 +618,7 @@ const OdaraScreen = () => {
         </div>
 
         {/* Footer */}
-        <footer className="flex flex-col items-center w-full max-w-md px-2 mt-auto pb-12 pt-8 gap-4">
+        <footer className="flex flex-col items-center w-full max-w-md px-2 mt-auto pb-4 pt-8 gap-4">
           <div className="flex items-center justify-between w-full">
             <button
               onClick={handleSkip}
@@ -667,6 +667,32 @@ const OdaraScreen = () => {
             {actionState === "disliking" ? "Removing…" : "Don't show again"}
           </button>
         </footer>
+
+        {/* 7-Day Forecast Strip */}
+        <div
+          className="w-full max-w-md rounded-t-[16px] px-4 py-3 pb-6 backdrop-blur-xl"
+          style={{
+            background: "var(--sub-glass-bg)",
+            boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
+          }}
+        >
+          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/40 block text-center mb-2">
+            Forecast
+          </span>
+          <div className="flex justify-between">
+            {forecastDays.map((d, i) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <span className="text-[9px] font-mono text-muted-foreground/50">{d.label}</span>
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
+                >
+                  <span className="text-[8px] font-mono text-muted-foreground/30">{d.day}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
