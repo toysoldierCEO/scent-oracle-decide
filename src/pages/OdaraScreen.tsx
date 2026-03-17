@@ -229,10 +229,49 @@ const OdaraScreen = () => {
           <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
         </header>
 
-        {/* Context line */}
-        <p className="text-[11px] font-mono text-muted-foreground/60 mb-6 tracking-wide">
-          40° · Hangout · Alexandria Archive
-        </p>
+        {/* Context chips */}
+        <div className="flex gap-1.5 mb-3">
+          {CONTEXTS.map((ctx) => (
+            <button
+              key={ctx}
+              onClick={() => {
+                setSelectedContext(ctx);
+                fetchOracle(ctx, selectedTemperature);
+              }}
+              disabled={isBusy || loading}
+              className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                selectedContext === ctx
+                  ? "bg-foreground/10 text-foreground"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
+              }`}
+              style={selectedContext === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
+            >
+              {ctx}
+            </button>
+          ))}
+        </div>
+
+        {/* Temperature chips */}
+        <div className="flex gap-1.5 mb-6">
+          {TEMPERATURES.map((temp) => (
+            <button
+              key={temp}
+              onClick={() => {
+                setSelectedTemperature(temp);
+                fetchOracle(selectedContext, temp);
+              }}
+              disabled={isBusy || loading}
+              className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                selectedTemperature === temp
+                  ? "bg-foreground/10 text-foreground"
+                  : "text-muted-foreground/40 hover:text-muted-foreground"
+              }`}
+              style={selectedTemperature === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+            >
+              {temp}°
+            </button>
+          ))}
+        </div>
 
         {/* Swipeable Hero Card */}
         <div className="relative w-full max-w-md">
