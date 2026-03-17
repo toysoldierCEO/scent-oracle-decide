@@ -32,6 +32,9 @@ type ActionState = "idle" | "accepting" | "skipping" | "disliking";
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
 
+const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
+const TEMPERATURES = [35, 50, 65, 80] as const;
+
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,8 @@ const OdaraScreen = () => {
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
+  const [selectedContext, setSelectedContext] = useState<string>("hangout");
+  const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
