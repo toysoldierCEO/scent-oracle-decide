@@ -259,8 +259,9 @@ const OdaraScreen = () => {
     );
   }
 
-  const { today_pick, layer, alternates } = oracle;
-  const hasLayer = layer != null;
+  const { today_pick, layer: layerMap, alternates } = oracle;
+  const hasLayer = layerMap != null;
+  const activeLayer = hasLayer ? layerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
   return (
