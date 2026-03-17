@@ -352,6 +352,19 @@ const OdaraScreen = () => {
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
           const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
+          // Scent-family curve color
+          const familyLower = (oracle?.today_pick?.family ?? "").toLowerCase();
+          const curveColor = familyLower.includes("oud") || familyLower.includes("amber") || familyLower.includes("oriental")
+            ? "rgba(192,138,62,0.14)"
+            : familyLower.includes("fresh") || familyLower.includes("aqua") || familyLower.includes("citrus")
+            ? "rgba(120,180,220,0.14)"
+            : "rgba(255,255,255,0.10)";
+          const curveGlow = familyLower.includes("oud") || familyLower.includes("amber") || familyLower.includes("oriental")
+            ? "rgba(192,138,62,0.06)"
+            : familyLower.includes("fresh") || familyLower.includes("aqua") || familyLower.includes("citrus")
+            ? "rgba(120,180,220,0.06)"
+            : "rgba(255,255,255,0.04)";
+
           return (
             <div className="w-full max-w-md mb-6 px-2">
               {/* Indicator + label */}
@@ -376,6 +389,27 @@ const OdaraScreen = () => {
                     }}
                   />
                 </motion.div>
+              </div>
+
+              {/* Scent suggestion curve */}
+              <div className="relative w-full" style={{ height: "20px", marginBottom: "-9px" }}>
+                <svg
+                  viewBox="0 0 400 20"
+                  preserveAspectRatio="none"
+                  className="absolute inset-0 w-full h-full"
+                  style={{ overflow: "visible" }}
+                >
+                  <path
+                    d="M 0 14 Q 100 2, 200 10 Q 300 18, 400 6"
+                    fill="none"
+                    stroke={curveColor}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    style={{
+                      filter: `drop-shadow(0 0 4px ${curveGlow})`,
+                    }}
+                  />
+                </svg>
               </div>
 
               {/* Track */}
