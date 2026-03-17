@@ -352,8 +352,27 @@ const OdaraScreen = () => {
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
           const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
+          // Scent behavior label
+          const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
 
+          return (
+            <div className="w-full max-w-md mb-6 px-2">
+              {/* Context label */}
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 select-none">
+                  Temperature → Scent
+                </span>
+              </div>
 
+              {/* Dynamic label */}
+              <div className="flex items-center justify-center mb-2">
+                <span className="text-[10px] font-mono text-muted-foreground/60 select-none">
+                  {effectiveTemperature}° · {effectiveTemperature <= 50 ? "Cold" : effectiveTemperature <= 70 ? "Warm" : "Hot"} → {scentBehavior}
+                </span>
+              </div>
+
+              {/* Track + Orb */}
+              <div className="relative w-full" style={{ height: "28px" }}>
                 {/* Track line at vertical center */}
                 <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "13px" }} />
 
