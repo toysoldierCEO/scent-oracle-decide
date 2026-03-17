@@ -1,8 +1,9 @@
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { Star } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
