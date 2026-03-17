@@ -366,19 +366,15 @@ const OdaraScreen = () => {
                     {effectiveTemperature}°
                   </span>
                   <div
-                    className="w-3.5 h-3.5 rounded-full relative"
+                    className="rounded-full"
                     style={{
-                      background: "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.7) 25%, rgba(255,255,255,0.25) 50%, transparent 65%)",
-                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.35), 0 0 10px 4px rgba(255,255,255,0.15), 0 0 20px 8px rgba(255,255,255,0.06)",
+                      width: "7px",
+                      height: "7px",
+                      background: "white",
+                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
                       animation: "orbBreathe 4s ease-in-out infinite",
                     }}
-                  >
-                    <div className="absolute inset-0 rounded-full" style={{
-                      background: "conic-gradient(from 0deg, rgba(0,255,255,0.04), rgba(255,0,180,0.03), rgba(255,210,80,0.04), rgba(0,255,255,0.04))",
-                      filter: "blur(1px)",
-                      animation: "orbIridescence 8s linear infinite",
-                    }} />
-                  </div>
+                  />
                 </motion.div>
               </div>
 
@@ -696,19 +692,15 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className="w-2.5 h-2.5 rounded-full relative"
+                    className="rounded-full"
                     style={{
-                      background: "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.15) 55%, transparent 65%)",
-                      boxShadow: "0 0 3px 1.5px rgba(255,255,255,0.28), 0 0 8px 3px rgba(255,255,255,0.12), 0 0 16px 6px rgba(255,255,255,0.04)",
+                      width: "7px",
+                      height: "7px",
+                      background: "white",
+                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
-                  >
-                    <div className="absolute inset-0 rounded-full" style={{
-                      background: "conic-gradient(from 0deg, rgba(0,255,255,0.04), rgba(255,0,180,0.03), rgba(255,210,80,0.04), rgba(0,255,255,0.04))",
-                      filter: "blur(1px)",
-                      animation: "orbIridescence 8s linear infinite 2s",
-                    }} />
-                  </div>
+                  />
                 </div>
               );
             })()}
