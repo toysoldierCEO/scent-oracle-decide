@@ -193,25 +193,6 @@ const OdaraScreen = () => {
     }
   }, [actionState, oracle, getUserId, fetchOracle]);
 
-  const handleDislike = useCallback(async () => {
-    if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
-    setActionState("disliking");
-    try {
-      const userId = await getUserId();
-      const { error: rpcError } = await supabase.rpc("dislike_fragrance_v1" as any, {
-        p_user: userId,
-        p_fragrance_id: oracle.today_pick.fragrance_id,
-      });
-      if (rpcError) throw rpcError;
-      await fetchOracle();
-    } catch (e) {
-      console.error("Dislike failed:", e);
-      toast.error("Couldn't remove — try again");
-    } finally {
-      setActionState("idle");
-      swipeLocked.current = false;
-    }
-  }, [actionState, oracle, getUserId, fetchOracle]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !oracle) return;
