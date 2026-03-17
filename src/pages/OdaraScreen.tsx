@@ -32,6 +32,9 @@ type ActionState = "idle" | "accepting" | "skipping" | "disliking";
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
 
+const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
+const TEMPERATURES = [35, 50, 65, 80] as const;
+
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,8 @@ const OdaraScreen = () => {
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
+  const [selectedContext, setSelectedContext] = useState<string>("hangout");
+  const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
@@ -52,7 +57,7 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async () => {
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number) => {
     setLoading(true);
     setError(false);
     setAccepted(false);
@@ -61,7 +66,7 @@ const OdaraScreen = () => {
       const userId = await getUserId();
       const { data, error: rpcError } = await supabase.rpc(
         "get_todays_oracle_v3",
-        { p_user_id: userId, p_temperature: 40, p_context: "hangout" }
+        { p_user_id: userId, p_temperature: temp ?? selectedTemperature, p_context: ctx ?? selectedContext }
       );
       if (rpcError) throw rpcError;
       setOracle(data as unknown as OracleData);
@@ -72,7 +77,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [getUserId]);
+  }, [getUserId, selectedContext, selectedTemperature]);
 
   useEffect(() => {
     fetchOracle();
@@ -200,7 +205,7 @@ const OdaraScreen = () => {
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
-            onClick={fetchOracle}
+            onClick={() => fetchOracle()}
             className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
             style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
           >
@@ -224,10 +229,49 @@ const OdaraScreen = () => {
           <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
         </header>
 
-        {/* Context line */}
-        <p className="text-[11px] font-mono text-muted-foreground/60 mb-6 tracking-wide">
-          40° · Hangout · Alexandria Archive
-        </p>
+        {/* Context chips */}
+        <div className="flex gap-1.5 mb-3">
+          {CONTEXTS.map((ctx) => (
+            <button
+              key={ctx}
+              onClick={() => {
+                setSelectedContext(ctx);
+                fetchOracle(ctx, selectedTemperature);
+              }}
+              disabled={isBusy || loading}
+              className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                selectedContext === ctx
+                  ? "bg-foreground/10 text-foreground"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
+              }`}
+              style={selectedContext === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
+            >
+              {ctx}
+            </button>
+          ))}
+        </div>
+
+        {/* Temperature chips */}
+        <div className="flex gap-1.5 mb-6">
+          {TEMPERATURES.map((temp) => (
+            <button
+              key={temp}
+              onClick={() => {
+                setSelectedTemperature(temp);
+                fetchOracle(selectedContext, temp);
+              }}
+              disabled={isBusy || loading}
+              className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                selectedTemperature === temp
+                  ? "bg-foreground/10 text-foreground"
+                  : "text-muted-foreground/40 hover:text-muted-foreground"
+              }`}
+              style={selectedTemperature === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+            >
+              {temp}°
+            </button>
+          ))}
+        </div>
 
         {/* Swipeable Hero Card */}
         <div className="relative w-full max-w-md">
