@@ -335,20 +335,39 @@ const OdaraScreen = () => {
 
         {/* Temperature chips */}
         <div className="flex gap-1.5 mb-6">
+          {/* Auto chip — uses live weather */}
+          <button
+            onClick={() => {
+              setManualTemperatureOverride(null);
+              const t = liveTemperature ?? 40;
+              setSelectedTemperature(t);
+              fetchOracle(selectedContext, t);
+            }}
+            disabled={isBusy || loading}
+            className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
+              manualTemperatureOverride === null
+                ? "bg-foreground/10 text-foreground"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
+            style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+          >
+            {weatherLoading ? "…" : `${liveTemperature ?? 40}°`}
+          </button>
           {TEMPERATURES.map((temp) => (
             <button
               key={temp}
               onClick={() => {
+                setManualTemperatureOverride(temp);
                 setSelectedTemperature(temp);
                 fetchOracle(selectedContext, temp);
               }}
               disabled={isBusy || loading}
               className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                selectedTemperature === temp
+                manualTemperatureOverride === temp
                   ? "bg-foreground/10 text-foreground"
                   : "text-muted-foreground/40 hover:text-muted-foreground"
               }`}
-              style={selectedTemperature === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+              style={manualTemperatureOverride === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
             >
               {temp}°
             </button>
