@@ -57,7 +57,7 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async () => {
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number) => {
     setLoading(true);
     setError(false);
     setAccepted(false);
@@ -66,7 +66,7 @@ const OdaraScreen = () => {
       const userId = await getUserId();
       const { data, error: rpcError } = await supabase.rpc(
         "get_todays_oracle_v3",
-        { p_user_id: userId, p_temperature: 40, p_context: "hangout" }
+        { p_user_id: userId, p_temperature: temp ?? selectedTemperature, p_context: ctx ?? selectedContext }
       );
       if (rpcError) throw rpcError;
       setOracle(data as unknown as OracleData);
@@ -77,7 +77,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [getUserId]);
+  }, [getUserId, selectedContext, selectedTemperature]);
 
   useEffect(() => {
     fetchOracle();
