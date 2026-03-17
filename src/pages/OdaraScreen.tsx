@@ -258,7 +258,6 @@ const OdaraScreen = () => {
         <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
           <header className="flex flex-col items-center pt-12 pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-            <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
           </header>
           <Skeleton className="w-20 h-3 mb-6 bg-muted/20 rounded" />
           <div className="w-full max-w-md rounded-[32px] p-8 flex flex-col items-center gap-4" style={{ background: "var(--glass-bg)" }}>
@@ -308,7 +307,6 @@ const OdaraScreen = () => {
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-          <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
         </header>
 
         {/* Context chips */}
@@ -335,11 +333,11 @@ const OdaraScreen = () => {
 
         {/* Temperature Scale */}
         {(() => {
-          const MIN_TEMP = 30;
-          const MAX_TEMP = 100;
+          const TRACK_MIN = 28;
+          const TRACK_MAX = 87;
           const BENCHMARKS = [35, 50, 65, 80];
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-          const pct = ((clamp(effectiveTemperature, MIN_TEMP, MAX_TEMP) - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+          const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
           return (
             <div className="w-full max-w-md mb-6 px-2">
@@ -367,7 +365,7 @@ const OdaraScreen = () => {
               <div className="relative w-full h-[2px] rounded-full bg-foreground/10">
                 {/* Benchmark ticks */}
                 {BENCHMARKS.map((temp) => {
-                  const tickPct = ((temp - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+                  const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
                   return (
                     <button
                       key={temp}
@@ -389,26 +387,6 @@ const OdaraScreen = () => {
                 })}
               </div>
 
-              {/* Auto button */}
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={() => {
-                    setManualTemperatureOverride(null);
-                    const t = liveTemperature ?? 40;
-                    setSelectedTemperature(t);
-                    fetchOracle(selectedContext, t);
-                  }}
-                  disabled={isBusy || loading}
-                  className={`text-[9px] uppercase tracking-[0.15em] px-3 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                    manualTemperatureOverride === null
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground/40 hover:text-muted-foreground"
-                  }`}
-                  style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-                >
-                  {weatherLoading ? "…" : `Auto · ${liveTemperature ?? 40}°`}
-                </button>
-              </div>
             </div>
           );
         })()}
