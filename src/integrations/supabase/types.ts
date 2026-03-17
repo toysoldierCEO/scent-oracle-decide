@@ -20,7 +20,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_todays_oracle_v3: {
+        Args: {
+          p_brand?: string
+          p_context?: string
+          p_temperature?: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
