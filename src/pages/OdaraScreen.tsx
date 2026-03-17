@@ -4,6 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
+/* ── Weather helper (Open-Meteo, no key) ── */
+async function fetchLiveTemperature(): Promise<number> {
+  const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+  );
+  const { latitude, longitude } = pos.coords;
+  const res = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`
+  );
+  if (!res.ok) throw new Error("Weather fetch failed");
+  const json = await res.json();
+  return Math.round(json.current_weather.temperature as number);
+}
+
 interface LayerOption {
   base_id?: string;
   anchor_name?: string;
@@ -63,6 +77,29 @@ const OdaraScreen = () => {
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
+  const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
+
+  const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
+
+  // Fetch live weather on mount
+  useEffect(() => {
+    let cancelled = false;
+    setWeatherLoading(true);
+    fetchLiveTemperature()
+      .then((temp) => {
+        if (!cancelled) {
+          setLiveTemperature(temp);
+          setSelectedTemperature(temp);
+        }
+      })
+      .catch(() => {
+        // silently fall back to 40
+      })
+      .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
@@ -81,9 +118,10 @@ const OdaraScreen = () => {
     setExitDirection(null);
     try {
       const userId = await getUserId();
+      const t = temp ?? effectiveTemperature;
       const { data, error: rpcError } = await supabase.rpc(
         "get_todays_oracle_v3",
-        { p_user_id: userId, p_temperature: temp ?? selectedTemperature, p_context: ctx ?? selectedContext }
+        { p_user_id: userId, p_temperature: t, p_context: ctx ?? selectedContext }
       );
       if (rpcError) throw rpcError;
       setOracle(data as unknown as OracleData);
@@ -94,7 +132,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [getUserId, selectedContext, selectedTemperature]);
+  }, [getUserId, selectedContext, effectiveTemperature]);
 
   useEffect(() => {
     fetchOracle();
@@ -297,20 +335,39 @@ const OdaraScreen = () => {
 
         {/* Temperature chips */}
         <div className="flex gap-1.5 mb-6">
+          {/* Auto chip — uses live weather */}
+          <button
+            onClick={() => {
+              setManualTemperatureOverride(null);
+              const t = liveTemperature ?? 40;
+              setSelectedTemperature(t);
+              fetchOracle(selectedContext, t);
+            }}
+            disabled={isBusy || loading}
+            className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
+              manualTemperatureOverride === null
+                ? "bg-foreground/10 text-foreground"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
+            style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+          >
+            {weatherLoading ? "…" : `${liveTemperature ?? 40}°`}
+          </button>
           {TEMPERATURES.map((temp) => (
             <button
               key={temp}
               onClick={() => {
+                setManualTemperatureOverride(temp);
                 setSelectedTemperature(temp);
                 fetchOracle(selectedContext, temp);
               }}
               disabled={isBusy || loading}
               className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                selectedTemperature === temp
+                manualTemperatureOverride === temp
                   ? "bg-foreground/10 text-foreground"
                   : "text-muted-foreground/40 hover:text-muted-foreground"
               }`}
-              style={selectedTemperature === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+              style={manualTemperatureOverride === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
             >
               {temp}°
             </button>
