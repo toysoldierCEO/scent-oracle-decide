@@ -38,6 +38,7 @@
     --radius: 0.5rem;
 
     /* ODARA custom tokens */
+    --family-accent: 36 68% 50%;
     --glass-bg: rgba(255, 255, 255, 0.03);
     --glass-stroke: rgba(255, 255, 255, 0.08);
     --glass-stroke-strong: rgba(255, 255, 255, 0.1);
