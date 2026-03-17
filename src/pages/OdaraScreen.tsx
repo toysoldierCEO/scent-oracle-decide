@@ -3,13 +3,6 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer";
 
 interface OracleData {
   today_pick: {
@@ -373,111 +366,100 @@ const OdaraScreen = () => {
                 {today_pick.reason}
               </p>
 
-              {/* Layer Card */}
+              {/* Layer Card — inline expand */}
               {hasLayer && (
-                <>
-                  <button
-                    onClick={() => setLayerSheetOpen(true)}
-                    className="w-full rounded-[20px] px-6 py-6 mb-8 flex flex-col items-center text-center transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
-                    style={{
-                      background: "var(--sub-glass-bg)",
-                      boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
-                    }}
+                <div
+                  onClick={() => setLayerSheetOpen((o) => !o)}
+                  className="w-full rounded-[16px] px-5 py-4 mb-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                  style={{
+                    background: "var(--sub-glass-bg)",
+                    boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                  }}
+                >
+                  <p className="text-[14px] font-medium text-foreground/90 mb-2 tracking-wide">
+                    {layer!.top ?? `Enhance with ${layer!.top_name}`}
+                  </p>
+                  <span
+                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1.5"
+                    style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
                   >
-                    <p className="text-[15px] font-medium text-foreground/90 mb-3 tracking-wide">
-                      {layer!.top ?? `Enhance with ${layer!.top_name}`}
-                    </p>
-                    <span
-                      className="text-[10px] text-muted-foreground/80 px-3 py-1 rounded-full mb-3"
-                      style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
-                    >
-                      {layer!.mode}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/40 tracking-[0.1em]">tap for details</span>
-                  </button>
+                    {layer!.mode}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/35 tracking-[0.1em]">
+                    {layerSheetOpen ? "tap to close" : "tap for details"}
+                  </span>
 
-                  <Drawer open={layerSheetOpen} onOpenChange={setLayerSheetOpen}>
-                    <DrawerContent className="bg-background border-t border-border/10 max-h-[85vh]">
-                      <DrawerHeader className="pb-2">
-                        <DrawerTitle className="text-lg font-serif text-foreground text-center">
-                          {layer!.top ?? `Enhance with ${layer!.top_name}`}
-                        </DrawerTitle>
-                      </DrawerHeader>
+                  {/* Inline expanded details */}
+                  <AnimatePresence initial={false}>
+                    {layerSheetOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+                        className="w-full overflow-hidden"
+                      >
+                        <div className="pt-3 mt-3 space-y-2.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          {/* Mode */}
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Mode</span>
+                            <span className="text-[11px] text-foreground/80 capitalize">{layer!.mode}</span>
+                          </div>
 
-                      <div className="px-6 pb-8 space-y-5 overflow-y-auto">
-                        {/* Mode */}
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Mode</p>
-                          <p className="text-sm text-foreground/90 capitalize">{layer!.mode}</p>
+                          {/* How to wear */}
+                          {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
+                            <div>
+                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">How to wear</span>
+                              <div className="mt-1 space-y-0.5">
+                                <p className="text-[11px] text-foreground/75">
+                                  <span className="font-mono text-foreground/90">{layer!.anchor_sprays}×</span> {layer!.anchor_name ?? today_pick.name}
+                                </p>
+                                <p className="text-[11px] text-foreground/75">
+                                  <span className="font-mono text-foreground/90">{layer!.top_sprays}×</span> {layer!.top_name}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Placement */}
+                          {(layer!.anchor_placement || layer!.top_placement) && (
+                            <div>
+                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Placement</span>
+                              <div className="mt-1 space-y-0.5">
+                                {layer!.anchor_placement && (
+                                  <p className="text-[11px] text-muted-foreground/60">
+                                    <span className="text-foreground/65">{layer!.anchor_name ?? today_pick.name}</span>
+                                    <span className="text-muted-foreground/30"> → </span>{layer!.anchor_placement}
+                                  </p>
+                                )}
+                                {layer!.top_placement && (
+                                  <p className="text-[11px] text-muted-foreground/60">
+                                    <span className="text-foreground/65">{layer!.top_name}</span>
+                                    <span className="text-muted-foreground/30"> → </span>{layer!.top_placement}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Strength note */}
+                          {layer!.strength_note && (
+                            <p className="text-[10px] text-muted-foreground/45 italic leading-snug">
+                              ⚠ {layer!.strength_note}
+                            </p>
+                          )}
+
+                          {/* Why it works — condensed */}
+                          {(layer!.why_it_works || layer!.reason) && (
+                            <p className="text-[10px] text-muted-foreground/40 leading-snug">
+                              {layer!.why_it_works ?? layer!.reason}
+                            </p>
+                          )}
                         </div>
-
-                        {/* How to wear */}
-                        {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">How to wear</p>
-                            <div className="space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono text-foreground/90">{layer!.anchor_sprays}×</span>
-                                <span className="text-sm text-foreground/80">{layer!.anchor_name ?? today_pick.name}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono text-foreground/90">{layer!.top_sprays}×</span>
-                                <span className="text-sm text-foreground/80">{layer!.top_name}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Placement */}
-                        {(layer!.anchor_placement || layer!.top_placement) && (
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">Placement</p>
-                            <div className="space-y-1.5">
-                              {layer!.anchor_placement && (
-                                <p className="text-[12px] text-muted-foreground/70">
-                                  <span className="text-foreground/70">{layer!.anchor_name ?? today_pick.name}</span>
-                                  <span className="text-muted-foreground/40"> → </span>
-                                  {layer!.anchor_placement}
-                                </p>
-                              )}
-                              {layer!.top_placement && (
-                                <p className="text-[12px] text-muted-foreground/70">
-                                  <span className="text-foreground/70">{layer!.top_name}</span>
-                                  <span className="text-muted-foreground/40"> → </span>
-                                  {layer!.top_placement}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Mixing rule */}
-                        {layer!.mixing_rule && (
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Mixing rule</p>
-                            <p className="text-[13px] text-muted-foreground/70 italic leading-relaxed">{layer!.mixing_rule}</p>
-                          </div>
-                        )}
-
-                        {/* Why it works */}
-                        {(layer!.why_it_works || layer!.reason) && (
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Why it works</p>
-                            <p className="text-[13px] text-muted-foreground/70 leading-relaxed">{layer!.why_it_works ?? layer!.reason}</p>
-                          </div>
-                        )}
-
-                        {/* Strength note */}
-                        {layer!.strength_note && (
-                          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}>
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50 mb-1">Strength note</p>
-                            <p className="text-[12px] text-muted-foreground/60 leading-relaxed">{layer!.strength_note}</p>
-                          </div>
-                        )}
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                </>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
 
               {/* Alternates */}
