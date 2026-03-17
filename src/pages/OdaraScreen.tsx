@@ -370,7 +370,7 @@ const OdaraScreen = () => {
               {hasLayer && (
                 <div
                   onClick={() => setLayerSheetOpen((o) => !o)}
-                  className="w-full rounded-[16px] px-5 py-4 mb-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                  className="w-fit max-w-[85%] mx-auto rounded-[16px] px-4 py-3.5 mb-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
                   style={{
                     background: "var(--sub-glass-bg)",
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
