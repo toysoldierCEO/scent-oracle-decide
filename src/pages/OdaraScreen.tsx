@@ -35,7 +35,7 @@ interface OracleData {
   }[] | null;
 }
 
-type ActionState = "idle" | "accepting" | "skipping" | "disliking";
+type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
 
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
