@@ -449,7 +449,10 @@ const OdaraScreen = () => {
                     <motion.button
                       key={alt.name}
                       whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors"
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleAlternateTap(alt)}
+                      disabled={isBusy}
+                      className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
                       style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
                     >
                       {alt.name}
