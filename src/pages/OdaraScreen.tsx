@@ -35,7 +35,7 @@ interface OracleData {
   }[] | null;
 }
 
-type ActionState = "idle" | "accepting" | "skipping" | "disliking";
+type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
 
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
@@ -152,6 +152,32 @@ const OdaraScreen = () => {
       swipeLocked.current = false;
     }
   }, [actionState, oracle, getUserId, fetchOracle]);
+
+  const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
+    if (actionState !== "idle" || !oracle) return;
+    setActionState("rebuilding");
+
+    const oldPick = oracle.today_pick;
+    const remainingAlts = (oracle.alternates ?? []).filter((a) => a.name !== alt.name);
+    // Add old hero into alternates, removing duplicates
+    const newAlts = [
+      { fragrance_id: oldPick.fragrance_id, name: oldPick.name, family: oldPick.family, reason: oldPick.reason },
+      ...remainingAlts,
+    ].filter((a) => a.name !== alt.name);
+
+    setExitDirection("left");
+    setTimeout(() => {
+      setOracle({
+        today_pick: { fragrance_id: alt.fragrance_id, name: alt.name, family: alt.family ?? "", reason: alt.reason ?? "" },
+        layer: null, // no layer data for frontend-local rebuild
+        alternates: newAlts.slice(0, 3),
+      });
+      setAccepted(false);
+      setExitDirection(null);
+      setCardKey((k) => k + 1);
+      setActionState("idle");
+    }, 300);
+  }, [actionState, oracle]);
 
   const handleDragEnd = useCallback(
     (_: any, info: PanInfo) => {
@@ -423,7 +449,10 @@ const OdaraScreen = () => {
                     <motion.button
                       key={alt.name}
                       whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors"
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleAlternateTap(alt)}
+                      disabled={isBusy}
+                      className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
                       style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
                     >
                       {alt.name}
