@@ -153,6 +153,32 @@ const OdaraScreen = () => {
     }
   }, [actionState, oracle, getUserId, fetchOracle]);
 
+  const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
+    if (actionState !== "idle" || !oracle) return;
+    setActionState("rebuilding");
+
+    const oldPick = oracle.today_pick;
+    const remainingAlts = (oracle.alternates ?? []).filter((a) => a.name !== alt.name);
+    // Add old hero into alternates, removing duplicates
+    const newAlts = [
+      { fragrance_id: oldPick.fragrance_id, name: oldPick.name, family: oldPick.family, reason: oldPick.reason },
+      ...remainingAlts,
+    ].filter((a) => a.name !== alt.name);
+
+    setExitDirection("left");
+    setTimeout(() => {
+      setOracle({
+        today_pick: { fragrance_id: alt.fragrance_id, name: alt.name, family: alt.family ?? "", reason: alt.reason ?? "" },
+        layer: null, // no layer data for frontend-local rebuild
+        alternates: newAlts.slice(0, 3),
+      });
+      setAccepted(false);
+      setExitDirection(null);
+      setCardKey((k) => k + 1);
+      setActionState("idle");
+    }, 300);
+  }, [actionState, oracle]);
+
   const handleDragEnd = useCallback(
     (_: any, info: PanInfo) => {
       if (swipeLocked.current || actionState !== "idle") return;
