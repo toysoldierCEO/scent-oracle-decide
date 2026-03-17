@@ -4,6 +4,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
+interface LayerOption {
+  base_id?: string;
+  anchor_name?: string;
+  top_id?: string;
+  top_name?: string;
+  top: string;
+  mode: string;
+  anchor_sprays?: number;
+  top_sprays?: number;
+  anchor_placement?: string;
+  top_placement?: string;
+  mixing_rule?: string;
+  why_it_works?: string;
+  strength_note?: string;
+  dominance_level?: 'low' | 'medium' | 'high';
+  reason: string;
+}
+
+type LayerMood = 'balanced' | 'bold' | 'smooth' | 'wild';
+
 interface OracleData {
   today_pick: {
     fragrance_id?: string;
@@ -11,23 +31,7 @@ interface OracleData {
     family: string;
     reason: string;
   };
-  layer?: {
-    base_id?: string;
-    anchor_name?: string;
-    top_id?: string;
-    top_name?: string;
-    top: string;
-    mode: string;
-    anchor_sprays?: number;
-    top_sprays?: number;
-    anchor_placement?: string;
-    top_placement?: string;
-    mixing_rule?: string;
-    why_it_works?: string;
-    strength_note?: string;
-    dominance_level?: 'low' | 'medium' | 'high';
-    reason: string;
-  } | null;
+  layer?: Record<LayerMood, LayerOption> | null;
   alternates?: {
     fragrance_id?: string;
     name: string;
@@ -35,6 +39,8 @@ interface OracleData {
     reason?: string;
   }[] | null;
 }
+
+const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
 
