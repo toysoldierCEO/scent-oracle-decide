@@ -62,6 +62,7 @@ const OdaraScreen = () => {
   const [selectedContext, setSelectedContext] = useState<string>("hangout");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
