@@ -205,7 +205,7 @@ const OdaraScreen = () => {
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
-            onClick={fetchOracle}
+            onClick={() => fetchOracle()}
             className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
             style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
           >
