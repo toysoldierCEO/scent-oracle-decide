@@ -347,19 +347,72 @@ const OdaraScreen = () => {
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                   }}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
-                    Layering Suggestion
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">
+                    Layering Instruction
                   </p>
-                  <p className="text-base font-medium text-foreground">{layer!.top}</p>
-                  <div className="flex justify-between items-center mt-3">
+
+                  {/* Anchor + Top names */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-foreground">{layer!.anchor_name ?? today_pick.name}</span>
+                    <span className="text-[10px] text-muted-foreground/50">+</span>
+                    <span className="text-sm font-medium text-foreground">{layer!.top_name ?? layer!.top}</span>
+                  </div>
+
+                  {/* Spray ratio */}
+                  {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Anchor</span>
+                        <span className="text-xs font-mono text-foreground/90">{layer!.anchor_sprays}x</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/30">·</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Top</span>
+                        <span className="text-xs font-mono text-foreground/90">{layer!.top_sprays}x</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Placement */}
+                  {(layer!.anchor_placement || layer!.top_placement) && (
+                    <div className="space-y-1 mb-3">
+                      {layer!.anchor_placement && (
+                        <p className="text-[10px] text-muted-foreground/60">
+                          <span className="text-muted-foreground/80">Anchor:</span> {layer!.anchor_placement}
+                        </p>
+                      )}
+                      {layer!.top_placement && (
+                        <p className="text-[10px] text-muted-foreground/60">
+                          <span className="text-muted-foreground/80">Top:</span> {layer!.top_placement}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Mixing rule */}
+                  {layer!.mixing_rule && (
+                    <p className="text-[11px] text-muted-foreground/70 italic mb-3 leading-relaxed">
+                      {layer!.mixing_rule}
+                    </p>
+                  )}
+
+                  {/* Mode + Why */}
+                  <div className="flex justify-between items-center mt-1">
                     <span
                       className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
                       style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
                     >
                       {layer!.mode}
                     </span>
-                    <span className="text-[11px] text-muted-foreground italic">{layer!.reason}</span>
+                    <span className="text-[11px] text-muted-foreground/60 italic">{layer!.why_it_works ?? layer!.reason}</span>
                   </div>
+
+                  {/* Strength note */}
+                  {layer!.strength_note && (
+                    <p className="text-[10px] text-muted-foreground/40 mt-3 leading-relaxed">
+                      ⚠ {layer!.strength_note}
+                    </p>
+                  )}
                 </div>
               )}
 
