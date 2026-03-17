@@ -660,29 +660,63 @@ const OdaraScreen = () => {
 
         </footer>
 
-        {/* 7-Day Forecast Strip */}
+        {/* 7-Day Forecast Timepiece */}
         <div
-          className="w-full max-w-md rounded-t-[16px] px-4 py-3 pb-6 backdrop-blur-xl"
+          className="w-full max-w-md rounded-t-[16px] px-5 py-3 pb-6 backdrop-blur-xl"
           style={{
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
           }}
         >
-          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/40 block text-center mb-2">
+          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/40 block text-center mb-3">
             Forecast
           </span>
-          <div className="flex justify-between">
-            {forecastDays.map((d, i) => (
-              <div key={i} className="flex flex-col items-center gap-1">
-                <span className="text-[9px] font-mono text-muted-foreground/50">{d.label}</span>
+          <div className="relative">
+            {/* Track line */}
+            <div className="absolute top-[9px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
+            
+            {/* Continuous orb */}
+            {(() => {
+              // orbPosition is 0..1 (progress through today)
+              // Map to percentage across the track: today marker is at 0/6, tomorrow at 1/6, etc.
+              // Orb sits between today (index 0) and tomorrow (index 1)
+              const totalSegments = 6; // 7 markers = 6 segments
+              const pct = (orbPosition / totalSegments) * 100;
+              return (
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center"
-                  style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}
+                  className="absolute top-[3px] z-10"
+                  style={{
+                    left: `calc(12px + ${pct}% * (100% - 24px) / 100%)`,
+                    transform: "translateX(-50%)",
+                    /* Use CSS calc for the track width */
+                    left: `calc(12px + (${pct / 100}) * (100% - 24px))`,
+                  }}
                 >
-                  <span className="text-[8px] font-mono text-muted-foreground/30">{d.day}</span>
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{
+                      background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 50%, transparent 70%)",
+                      boxShadow: "0 0 8px 3px rgba(255,255,255,0.15), 0 0 20px 6px rgba(255,255,255,0.06)",
+                    }}
+                  />
                 </div>
-              </div>
-            ))}
+              );
+            })()}
+
+            {/* Day markers */}
+            <div className="flex justify-between relative">
+              {forecastDays.map((d, i) => (
+                <div key={i} className="flex flex-col items-center gap-1.5">
+                  <div
+                    className="w-[5px] h-[5px] rounded-full"
+                    style={{
+                      background: i === 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)",
+                    }}
+                  />
+                  <span className="text-[8px] font-mono text-muted-foreground/40">{d.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
