@@ -365,21 +365,58 @@ const OdaraScreen = () => {
             ? "rgba(120,180,220,0.06)"
             : "rgba(255,255,255,0.04)";
 
+          // Scent behavior label
+          const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
+
           return (
             <div className="w-full max-w-md mb-6 px-2">
-              {/* Indicator + label */}
-              <div className="relative h-8 mb-1">
+              {/* Context label */}
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 select-none">
+                  Temperature → Scent
+                </span>
+              </div>
+
+              {/* Dynamic label */}
+              <div className="flex items-center justify-center mb-2">
+                <span className="text-[10px] font-mono text-muted-foreground/60 select-none">
+                  {effectiveTemperature}° · {effectiveTemperature <= 50 ? "Cold" : effectiveTemperature <= 70 ? "Warm" : "Hot"} → {scentBehavior}
+                </span>
+              </div>
+
+              {/* Scent suggestion curve + Track + Orb (unified) */}
+              <div className="relative w-full" style={{ height: "28px" }}>
+                {/* Curve behind track */}
+                <svg
+                  viewBox="0 0 400 28"
+                  preserveAspectRatio="none"
+                  className="absolute inset-0 w-full h-full"
+                  style={{ overflow: "visible" }}
+                >
+                  <path
+                    d="M 0 18 Q 100 6, 200 14 Q 300 22, 400 10"
+                    fill="none"
+                    stroke={curveColor}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    style={{ filter: `drop-shadow(0 0 4px ${curveGlow})` }}
+                  />
+                </svg>
+
+                {/* Track line at vertical center */}
+                <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "13px" }} />
+
+                {/* Orb on track */}
                 <motion.div
-                  className="absolute flex flex-col items-center -translate-x-1/2"
-                  style={{ left: `${pct}%` }}
+                  className="absolute -translate-x-1/2 flex flex-col items-center"
+                  style={{ left: `${pct}%`, top: "7px" }}
                   animate={{ left: `${pct}%` }}
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 >
-                  <span className="text-[11px] font-mono font-bold text-foreground mb-1 select-none">
-                    {effectiveTemperature}°
-                  </span>
-                  <div
-                    className="rounded-full"
+                  <motion.div
+                    className="rounded-full cursor-grab active:cursor-grabbing"
+                    whileHover={{ scale: 1.4, boxShadow: "0 0 6px 3px rgba(255,255,255,0.25), 0 0 14px 6px rgba(255,255,255,0.1)" }}
+                    whileTap={{ scale: 1.2 }}
                     style={{
                       width: "7px",
                       height: "7px",
@@ -391,29 +428,8 @@ const OdaraScreen = () => {
                 </motion.div>
               </div>
 
-              {/* Scent suggestion curve */}
-              <div className="relative w-full" style={{ height: "20px", marginBottom: "-9px" }}>
-                <svg
-                  viewBox="0 0 400 20"
-                  preserveAspectRatio="none"
-                  className="absolute inset-0 w-full h-full"
-                  style={{ overflow: "visible" }}
-                >
-                  <path
-                    d="M 0 14 Q 100 2, 200 10 Q 300 18, 400 6"
-                    fill="none"
-                    stroke={curveColor}
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    style={{
-                      filter: `drop-shadow(0 0 4px ${curveGlow})`,
-                    }}
-                  />
-                </svg>
-              </div>
-
-              {/* Track */}
-              <div className="relative w-full h-[2px] rounded-full bg-foreground/10">
+              {/* Benchmarks below track */}
+              <div className="relative w-full mt-1" style={{ height: "20px" }}>
                 {/* Benchmark ticks */}
                 {BENCHMARKS.map((temp) => {
                   const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
