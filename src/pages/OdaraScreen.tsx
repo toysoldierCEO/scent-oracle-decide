@@ -4,6 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
+/* ── Weather helper (Open-Meteo, no key) ── */
+async function fetchLiveTemperature(): Promise<number> {
+  const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+  );
+  const { latitude, longitude } = pos.coords;
+  const res = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`
+  );
+  if (!res.ok) throw new Error("Weather fetch failed");
+  const json = await res.json();
+  return Math.round(json.current_weather.temperature as number);
+}
+
 interface LayerOption {
   base_id?: string;
   anchor_name?: string;
