@@ -258,7 +258,6 @@ const OdaraScreen = () => {
         <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
           <header className="flex flex-col items-center pt-12 pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-            <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
           </header>
           <Skeleton className="w-20 h-3 mb-6 bg-muted/20 rounded" />
           <div className="w-full max-w-md rounded-[32px] p-8 flex flex-col items-center gap-4" style={{ background: "var(--glass-bg)" }}>
