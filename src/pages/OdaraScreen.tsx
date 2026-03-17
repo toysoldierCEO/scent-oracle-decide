@@ -404,8 +404,9 @@ const OdaraScreen = () => {
           );
         })()}
 
+
         {/* Swipeable Hero Card */}
-        <div className="relative w-full max-w-md">
+        <div className="relative w-full max-w-md mt-3">
           {/* Swipe hint labels */}
           <motion.div
             className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-10"
