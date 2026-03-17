@@ -366,7 +366,7 @@ const OdaraScreen = () => {
               <div className="relative w-full h-[2px] rounded-full bg-foreground/10">
                 {/* Benchmark ticks */}
                 {BENCHMARKS.map((temp) => {
-                  const tickPct = ((temp - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+                  const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
                   return (
                     <button
                       key={temp}
