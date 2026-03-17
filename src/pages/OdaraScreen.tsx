@@ -57,7 +57,7 @@ interface OracleData {
 
 const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
 
-type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
+type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
@@ -193,25 +193,6 @@ const OdaraScreen = () => {
     }
   }, [actionState, oracle, getUserId, fetchOracle]);
 
-  const handleDislike = useCallback(async () => {
-    if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
-    setActionState("disliking");
-    try {
-      const userId = await getUserId();
-      const { error: rpcError } = await supabase.rpc("dislike_fragrance_v1" as any, {
-        p_user: userId,
-        p_fragrance_id: oracle.today_pick.fragrance_id,
-      });
-      if (rpcError) throw rpcError;
-      await fetchOracle();
-    } catch (e) {
-      console.error("Dislike failed:", e);
-      toast.error("Couldn't remove — try again");
-    } finally {
-      setActionState("idle");
-      swipeLocked.current = false;
-    }
-  }, [actionState, oracle, getUserId, fetchOracle]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !oracle) return;
@@ -658,14 +639,6 @@ const OdaraScreen = () => {
             </AnimatePresence>
           </div>
 
-          {/* Dislike control */}
-          <button
-            onClick={handleDislike}
-            disabled={isBusy}
-            className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.15em] hover:text-muted-foreground transition-colors duration-300 disabled:opacity-30"
-          >
-            {actionState === "disliking" ? "Removing…" : "Don't show again"}
-          </button>
         </footer>
 
         {/* 7-Day Forecast Strip */}
