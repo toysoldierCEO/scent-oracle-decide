@@ -334,11 +334,11 @@ const OdaraScreen = () => {
 
         {/* Temperature Scale */}
         {(() => {
-          const MIN_TEMP = 30;
-          const MAX_TEMP = 100;
+          const TRACK_MIN = 28;
+          const TRACK_MAX = 87;
           const BENCHMARKS = [35, 50, 65, 80];
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-          const pct = ((clamp(effectiveTemperature, MIN_TEMP, MAX_TEMP) - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+          const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
           return (
             <div className="w-full max-w-md mb-6 px-2">
