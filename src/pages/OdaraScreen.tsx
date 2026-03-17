@@ -308,7 +308,6 @@ const OdaraScreen = () => {
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-          <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">SCENT ORACLE</span>
         </header>
 
         {/* Context chips */}
