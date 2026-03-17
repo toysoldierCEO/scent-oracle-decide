@@ -3,6 +3,13 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "@/components/ui/drawer";
 
 interface OracleData {
   today_pick: {
@@ -25,6 +32,7 @@ interface OracleData {
     mixing_rule?: string;
     why_it_works?: string;
     strength_note?: string;
+    dominance_level?: 'low' | 'medium' | 'high';
     reason: string;
   } | null;
   alternates?: {
@@ -54,6 +62,7 @@ const OdaraScreen = () => {
   const swipeLocked = useRef(false);
   const [selectedContext, setSelectedContext] = useState<string>("hangout");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
+  const [layerSheetOpen, setLayerSheetOpen] = useState(false);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
@@ -366,80 +375,111 @@ const OdaraScreen = () => {
 
               {/* Layer Card */}
               {hasLayer && (
-                <div
-                  className="w-full rounded-[20px] p-5 mb-8"
-                  style={{
-                    background: "var(--sub-glass-bg)",
-                    boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
-                  }}
-                >
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">
-                    Layering Instruction
-                  </p>
-
-                  {/* Anchor + Top names */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-foreground">{layer!.anchor_name ?? today_pick.name}</span>
-                    <span className="text-[10px] text-muted-foreground/50">+</span>
-                    <span className="text-sm font-medium text-foreground">{layer!.top_name ?? layer!.top}</span>
-                  </div>
-
-                  {/* Spray ratio */}
-                  {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Anchor</span>
-                        <span className="text-xs font-mono text-foreground/90">{layer!.anchor_sprays}x</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/30">·</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Top</span>
-                        <span className="text-xs font-mono text-foreground/90">{layer!.top_sprays}x</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Placement */}
-                  {(layer!.anchor_placement || layer!.top_placement) && (
-                    <div className="space-y-1 mb-3">
-                      {layer!.anchor_placement && (
-                        <p className="text-[10px] text-muted-foreground/60">
-                          <span className="text-muted-foreground/80">Anchor:</span> {layer!.anchor_placement}
-                        </p>
-                      )}
-                      {layer!.top_placement && (
-                        <p className="text-[10px] text-muted-foreground/60">
-                          <span className="text-muted-foreground/80">Top:</span> {layer!.top_placement}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Mixing rule */}
-                  {layer!.mixing_rule && (
-                    <p className="text-[11px] text-muted-foreground/70 italic mb-3 leading-relaxed">
-                      {layer!.mixing_rule}
+                <>
+                  <button
+                    onClick={() => setLayerSheetOpen(true)}
+                    className="w-full rounded-[20px] p-5 mb-8 text-left transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+                    style={{
+                      background: "var(--sub-glass-bg)",
+                      boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                    }}
+                  >
+                    <p className="text-sm text-foreground/90 mb-1">
+                      {layer!.top ?? `Enhance with ${layer!.top_name}`}
                     </p>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
+                        style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
+                      >
+                        {layer!.mode}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/40">tap for details</span>
+                    </div>
+                  </button>
 
-                  {/* Mode + Why */}
-                  <div className="flex justify-between items-center mt-1">
-                    <span
-                      className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
-                      style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
-                    >
-                      {layer!.mode}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground/60 italic">{layer!.why_it_works ?? layer!.reason}</span>
-                  </div>
+                  <Drawer open={layerSheetOpen} onOpenChange={setLayerSheetOpen}>
+                    <DrawerContent className="bg-background border-t border-border/10 max-h-[85vh]">
+                      <DrawerHeader className="pb-2">
+                        <DrawerTitle className="text-lg font-serif text-foreground text-center">
+                          {layer!.top ?? `Enhance with ${layer!.top_name}`}
+                        </DrawerTitle>
+                      </DrawerHeader>
 
-                  {/* Strength note */}
-                  {layer!.strength_note && (
-                    <p className="text-[10px] text-muted-foreground/40 mt-3 leading-relaxed">
-                      ⚠ {layer!.strength_note}
-                    </p>
-                  )}
-                </div>
+                      <div className="px-6 pb-8 space-y-5 overflow-y-auto">
+                        {/* Mode */}
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Mode</p>
+                          <p className="text-sm text-foreground/90 capitalize">{layer!.mode}</p>
+                        </div>
+
+                        {/* How to wear */}
+                        {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">How to wear</p>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-foreground/90">{layer!.anchor_sprays}×</span>
+                                <span className="text-sm text-foreground/80">{layer!.anchor_name ?? today_pick.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-foreground/90">{layer!.top_sprays}×</span>
+                                <span className="text-sm text-foreground/80">{layer!.top_name}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Placement */}
+                        {(layer!.anchor_placement || layer!.top_placement) && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">Placement</p>
+                            <div className="space-y-1.5">
+                              {layer!.anchor_placement && (
+                                <p className="text-[12px] text-muted-foreground/70">
+                                  <span className="text-foreground/70">{layer!.anchor_name ?? today_pick.name}</span>
+                                  <span className="text-muted-foreground/40"> → </span>
+                                  {layer!.anchor_placement}
+                                </p>
+                              )}
+                              {layer!.top_placement && (
+                                <p className="text-[12px] text-muted-foreground/70">
+                                  <span className="text-foreground/70">{layer!.top_name}</span>
+                                  <span className="text-muted-foreground/40"> → </span>
+                                  {layer!.top_placement}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mixing rule */}
+                        {layer!.mixing_rule && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Mixing rule</p>
+                            <p className="text-[13px] text-muted-foreground/70 italic leading-relaxed">{layer!.mixing_rule}</p>
+                          </div>
+                        )}
+
+                        {/* Why it works */}
+                        {(layer!.why_it_works || layer!.reason) && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Why it works</p>
+                            <p className="text-[13px] text-muted-foreground/70 leading-relaxed">{layer!.why_it_works ?? layer!.reason}</p>
+                          </div>
+                        )}
+
+                        {/* Strength note */}
+                        {layer!.strength_note && (
+                          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)" }}>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50 mb-1">Strength note</p>
+                            <p className="text-[12px] text-muted-foreground/60 leading-relaxed">{layer!.strength_note}</p>
+                          </div>
+                        )}
+                      </div>
+                    </DrawerContent>
+                  </Drawer>
+                </>
               )}
 
               {/* Alternates */}
