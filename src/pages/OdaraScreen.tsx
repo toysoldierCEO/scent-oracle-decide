@@ -8,10 +8,10 @@ const OdaraScreen = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
-          <span className="text-[10px] tracking-[0.5em] font-bold text-foreground uppercase">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">
             ODARA
           </span>
-          <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-1.5 opacity-60">
+          <span className="text-[9px] tracking-[0.2em] text-muted-foreground uppercase mt-2 opacity-60">
             SCENT ORACLE
           </span>
         </header>
@@ -48,13 +48,13 @@ const OdaraScreen = () => {
             Dark amber lane fits your strongest scent identity.
           </p>
 
-          {/* Sub-Card — The Layer */}
+          {/* Sub-Card — The Layer (neutral glass, no gold) */}
           <div
             className="w-full rounded-[20px] p-5 mb-8"
             style={{
               background: "var(--sub-glass-bg)",
               boxShadow:
-                "var(--shadow-sub-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.1)",
+                "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
             }}
           >
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
@@ -67,8 +67,7 @@ const OdaraScreen = () => {
               <span
                 className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
                 style={{
-                  boxShadow:
-                    "inset 0 0 0 1px hsl(var(--family-accent) / 0.2)",
+                  boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)",
                 }}
               >
                 balance mode
@@ -79,7 +78,7 @@ const OdaraScreen = () => {
             </div>
           </div>
 
-          {/* Alternates */}
+          {/* Alternates (neutral, no gold) */}
           <div className="flex gap-2 justify-center mb-2">
             {alternates.map((alt) => (
               <motion.button
@@ -87,8 +86,7 @@ const OdaraScreen = () => {
                 whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
                 className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors"
                 style={{
-                  boxShadow:
-                    "inset 0 0 0 1px var(--glass-stroke-strong)",
+                  boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                 }}
               >
                 {alt}
@@ -104,9 +102,11 @@ const OdaraScreen = () => {
           </button>
           <motion.button
             whileTap={{ scale: 0.96 }}
-            className="bg-family-accent text-background px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-shadow duration-300"
+            className="px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-shadow duration-300"
             style={{
-              boxShadow: "0 4px 20px hsl(var(--family-accent) / 0.25)",
+              background: "rgba(255, 255, 255, 0.9)",
+              color: "hsl(var(--background))",
+              boxShadow: "0 4px 20px rgba(255, 255, 255, 0.1)",
             }}
           >
             Wear this
