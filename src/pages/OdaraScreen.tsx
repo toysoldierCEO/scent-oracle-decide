@@ -57,7 +57,7 @@ interface OracleData {
 
 const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
 
-type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
+type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
 const SWIPE_THRESHOLD = 100;
 const SWIPE_VELOCITY = 300;
