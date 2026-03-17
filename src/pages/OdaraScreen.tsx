@@ -257,7 +257,6 @@ const OdaraScreen = () => {
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.9}
               onDragEnd={handleDragEnd}
-              style={{ x, rotate }}
               initial={{ opacity: 0, scale: 0.96, x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{
@@ -269,6 +268,8 @@ const OdaraScreen = () => {
               transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
               className="w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center cursor-grab active:cursor-grabbing touch-pan-y"
               style={{
+                x,
+                rotate,
                 background: "var(--glass-bg)",
                 boxShadow: "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)",
               }}
