@@ -29,7 +29,8 @@ const OdaraScreen = () => {
           className="w-full max-w-md rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center"
           style={{
             background: "var(--glass-bg)",
-            boxShadow: "var(--shadow-glass), inset 0 0 0 1px var(--glass-stroke)",
+            boxShadow:
+              "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)",
           }}
         >
           {/* Title */}
@@ -38,7 +39,7 @@ const OdaraScreen = () => {
           </h1>
 
           {/* Sub-label */}
-          <p className="text-xs text-muted-foreground text-center tracking-[0.2em] mb-5 uppercase">
+          <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase">
             oud-amber
           </p>
 
@@ -52,7 +53,8 @@ const OdaraScreen = () => {
             className="w-full rounded-[20px] p-5 mb-8"
             style={{
               background: "var(--sub-glass-bg)",
-              boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px var(--glass-stroke-strong)",
+              boxShadow:
+                "var(--shadow-sub-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.1)",
             }}
           >
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
@@ -64,7 +66,10 @@ const OdaraScreen = () => {
             <div className="flex justify-between items-center mt-3">
               <span
                 className="text-[10px] text-muted-foreground/80 px-2.5 py-1 rounded-full"
-                style={{ boxShadow: "inset 0 0 0 1px var(--glass-stroke-strong)" }}
+                style={{
+                  boxShadow:
+                    "inset 0 0 0 1px hsl(var(--family-accent) / 0.2)",
+                }}
               >
                 balance mode
               </span>
@@ -81,7 +86,10 @@ const OdaraScreen = () => {
                 key={alt}
                 whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
                 className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors"
-                style={{ boxShadow: "inset 0 0 0 1px var(--glass-stroke-strong)" }}
+                style={{
+                  boxShadow:
+                    "inset 0 0 0 1px var(--glass-stroke-strong)",
+                }}
               >
                 {alt}
               </motion.button>
@@ -96,8 +104,10 @@ const OdaraScreen = () => {
           </button>
           <motion.button
             whileTap={{ scale: 0.96 }}
-            className="bg-foreground text-background px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-shadow duration-300"
-            style={{ boxShadow: "0 4px 20px rgba(255,255,255,0.15)" }}
+            className="bg-family-accent text-background px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-shadow duration-300"
+            style={{
+              boxShadow: "0 4px 20px hsl(var(--family-accent) / 0.25)",
+            }}
           >
             Wear this
           </motion.button>
