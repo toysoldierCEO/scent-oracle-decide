@@ -4,6 +4,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
+interface LayerOption {
+  base_id?: string;
+  anchor_name?: string;
+  top_id?: string;
+  top_name?: string;
+  top: string;
+  mode: string;
+  anchor_sprays?: number;
+  top_sprays?: number;
+  anchor_placement?: string;
+  top_placement?: string;
+  mixing_rule?: string;
+  why_it_works?: string;
+  strength_note?: string;
+  dominance_level?: 'low' | 'medium' | 'high';
+  reason: string;
+}
+
+type LayerMood = 'balanced' | 'bold' | 'smooth' | 'wild';
+
 interface OracleData {
   today_pick: {
     fragrance_id?: string;
@@ -11,23 +31,7 @@ interface OracleData {
     family: string;
     reason: string;
   };
-  layer?: {
-    base_id?: string;
-    anchor_name?: string;
-    top_id?: string;
-    top_name?: string;
-    top: string;
-    mode: string;
-    anchor_sprays?: number;
-    top_sprays?: number;
-    anchor_placement?: string;
-    top_placement?: string;
-    mixing_rule?: string;
-    why_it_works?: string;
-    strength_note?: string;
-    dominance_level?: 'low' | 'medium' | 'high';
-    reason: string;
-  } | null;
+  layer?: Record<LayerMood, LayerOption> | null;
   alternates?: {
     fragrance_id?: string;
     name: string;
@@ -35,6 +39,8 @@ interface OracleData {
     reason?: string;
   }[] | null;
 }
+
+const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "disliking" | "rebuilding";
 
@@ -56,6 +62,7 @@ const OdaraScreen = () => {
   const [selectedContext, setSelectedContext] = useState<string>("hangout");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
@@ -252,8 +259,9 @@ const OdaraScreen = () => {
     );
   }
 
-  const { today_pick, layer, alternates } = oracle;
-  const hasLayer = layer != null;
+  const { today_pick, layer: layerMap, alternates } = oracle;
+  const hasLayer = layerMap != null;
+  const activeLayer = hasLayer ? layerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
   return (
@@ -367,7 +375,7 @@ const OdaraScreen = () => {
               </p>
 
               {/* Layer Card — inline expand */}
-              {hasLayer && (
+              {hasLayer && activeLayer && (
                 <div
                   onClick={() => setLayerSheetOpen((o) => !o)}
                   className="w-fit max-w-[85%] mx-auto rounded-[16px] px-4 py-3.5 mb-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
@@ -377,13 +385,13 @@ const OdaraScreen = () => {
                   }}
                 >
                   <p className="text-[14px] font-medium text-foreground/90 mb-2 tracking-wide">
-                    {layer!.top ?? `Enhance with ${layer!.top_name}`}
+                    {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
                   <span
                     className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1.5"
                     style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
                   >
-                    {layer!.mode}
+                    {activeLayer.mode}
                   </span>
                   <span className="text-[9px] text-muted-foreground/35 tracking-[0.1em]">
                     {layerSheetOpen ? "tap to close" : "tap for details"}
@@ -400,42 +408,60 @@ const OdaraScreen = () => {
                         className="w-full overflow-hidden"
                       >
                         <div className="pt-3 mt-3 space-y-2.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          {/* Mood selector */}
+                          <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
+                            {LAYER_MOODS.map((mood) => (
+                              <button
+                                key={mood}
+                                onClick={() => setSelectedMood(mood)}
+                                className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+                                  selectedMood === mood
+                                    ? "bg-foreground/10 text-foreground"
+                                    : "text-muted-foreground/40 hover:text-muted-foreground/70"
+                                }`}
+                                style={selectedMood === mood ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+                              >
+                                {mood}
+                              </button>
+                            ))}
+                          </div>
+
                           {/* Mode */}
                           <div className="flex items-baseline justify-between">
                             <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Mode</span>
-                            <span className="text-[11px] text-foreground/80 capitalize">{layer!.mode}</span>
+                            <span className="text-[11px] text-foreground/80 capitalize">{activeLayer.mode}</span>
                           </div>
 
                           {/* How to wear */}
-                          {(layer!.anchor_sprays != null && layer!.top_sprays != null) && (
+                          {(activeLayer.anchor_sprays != null && activeLayer.top_sprays != null) && (
                             <div>
                               <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">How to wear</span>
                               <div className="mt-1 space-y-0.5">
                                 <p className="text-[11px] text-foreground/75">
-                                  <span className="font-mono text-foreground/90">{layer!.anchor_sprays}×</span> {layer!.anchor_name ?? today_pick.name}
+                                  <span className="font-mono text-foreground/90">{activeLayer.anchor_sprays}×</span> {activeLayer.anchor_name ?? today_pick.name}
                                 </p>
                                 <p className="text-[11px] text-foreground/75">
-                                  <span className="font-mono text-foreground/90">{layer!.top_sprays}×</span> {layer!.top_name}
+                                  <span className="font-mono text-foreground/90">{activeLayer.top_sprays}×</span> {activeLayer.top_name}
                                 </p>
                               </div>
                             </div>
                           )}
 
                           {/* Placement */}
-                          {(layer!.anchor_placement || layer!.top_placement) && (
+                          {(activeLayer.anchor_placement || activeLayer.top_placement) && (
                             <div>
                               <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Placement</span>
                               <div className="mt-1 space-y-0.5">
-                                {layer!.anchor_placement && (
+                                {activeLayer.anchor_placement && (
                                   <p className="text-[11px] text-muted-foreground/60">
-                                    <span className="text-foreground/65">{layer!.anchor_name ?? today_pick.name}</span>
-                                    <span className="text-muted-foreground/30"> → </span>{layer!.anchor_placement}
+                                    <span className="text-foreground/65">{activeLayer.anchor_name ?? today_pick.name}</span>
+                                    <span className="text-muted-foreground/30"> → </span>{activeLayer.anchor_placement}
                                   </p>
                                 )}
-                                {layer!.top_placement && (
+                                {activeLayer.top_placement && (
                                   <p className="text-[11px] text-muted-foreground/60">
-                                    <span className="text-foreground/65">{layer!.top_name}</span>
-                                    <span className="text-muted-foreground/30"> → </span>{layer!.top_placement}
+                                    <span className="text-foreground/65">{activeLayer.top_name}</span>
+                                    <span className="text-muted-foreground/30"> → </span>{activeLayer.top_placement}
                                   </p>
                                 )}
                               </div>
@@ -443,16 +469,16 @@ const OdaraScreen = () => {
                           )}
 
                           {/* Strength note */}
-                          {layer!.strength_note && (
+                          {activeLayer.strength_note && (
                             <p className="text-[10px] text-muted-foreground/45 italic leading-snug">
-                              ⚠ {layer!.strength_note}
+                              ⚠ {activeLayer.strength_note}
                             </p>
                           )}
 
                           {/* Why it works — condensed */}
-                          {(layer!.why_it_works || layer!.reason) && (
+                          {(activeLayer.why_it_works || activeLayer.reason) && (
                             <p className="text-[10px] text-muted-foreground/40 leading-snug">
-                              {layer!.why_it_works ?? layer!.reason}
+                              {activeLayer.why_it_works ?? activeLayer.reason}
                             </p>
                           )}
                         </div>
