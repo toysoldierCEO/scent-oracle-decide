@@ -85,15 +85,34 @@ const OdaraScreen = () => {
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
-  // Generate forecast days
+  // Generate forecast days (today + next 6 = 7 total)
   const forecastDays = useMemo(() => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const today = new Date();
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today);
-      d.setDate(d.getDate() + i + 1);
+      d.setDate(d.getDate() + i);
       return { label: days[d.getDay()], day: d.getDate() };
     });
+  }, []);
+
+  // Continuous timepiece orb position (requestAnimationFrame)
+  const [orbPosition, setOrbPosition] = useState(0);
+  useEffect(() => {
+    let raf: number;
+    const tick = () => {
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const msInDay = 24 * 60 * 60 * 1000;
+      const dayProgress = (now.getTime() - startOfDay.getTime()) / msInDay;
+      // Position: dayProgress maps to the space between day 0 and day 1 markers
+      // Full range is 0 (start of today) to 7 (end of 7th day)
+      setOrbPosition(dayProgress);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   // Fetch live weather on mount
