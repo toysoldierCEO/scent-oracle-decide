@@ -81,8 +81,20 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
+  const [layerSaved, setLayerSaved] = useState(false);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
+
+  // Generate forecast days
+  const forecastDays = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i + 1);
+      return { label: days[d.getDay()], day: d.getDate() };
+    });
+  }, []);
 
   // Fetch live weather on mount
   useEffect(() => {
