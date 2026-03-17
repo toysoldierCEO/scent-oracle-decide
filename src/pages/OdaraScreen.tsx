@@ -384,11 +384,11 @@ const OdaraScreen = () => {
                     boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                   }}
                 >
-                  <p className="text-[14px] font-medium text-foreground/90 mb-2 tracking-wide">
+                  <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
                     {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
                   <span
-                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1.5"
+                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
                     style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
                   >
                     {activeLayer.mode}
