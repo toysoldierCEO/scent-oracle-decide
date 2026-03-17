@@ -32,6 +32,7 @@ interface OracleData {
     mixing_rule?: string;
     why_it_works?: string;
     strength_note?: string;
+    dominance_level?: 'low' | 'medium' | 'high';
     reason: string;
   } | null;
   alternates?: {
