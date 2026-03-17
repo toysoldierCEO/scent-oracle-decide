@@ -639,14 +639,6 @@ const OdaraScreen = () => {
             </AnimatePresence>
           </div>
 
-          {/* Dislike control */}
-          <button
-            onClick={handleDislike}
-            disabled={isBusy}
-            className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.15em] hover:text-muted-foreground transition-colors duration-300 disabled:opacity-30"
-          >
-            {actionState === "disliking" ? "Removing…" : "Don't show again"}
-          </button>
         </footer>
 
         {/* 7-Day Forecast Strip */}
