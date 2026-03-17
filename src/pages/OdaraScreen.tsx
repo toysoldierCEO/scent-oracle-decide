@@ -118,9 +118,10 @@ const OdaraScreen = () => {
     setExitDirection(null);
     try {
       const userId = await getUserId();
+      const t = temp ?? effectiveTemperature;
       const { data, error: rpcError } = await supabase.rpc(
         "get_todays_oracle_v3",
-        { p_user_id: userId, p_temperature: temp ?? selectedTemperature, p_context: ctx ?? selectedContext }
+        { p_user_id: userId, p_temperature: t, p_context: ctx ?? selectedContext }
       );
       if (rpcError) throw rpcError;
       setOracle(data as unknown as OracleData);
@@ -131,7 +132,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [getUserId, selectedContext, selectedTemperature]);
+  }, [getUserId, selectedContext, effectiveTemperature]);
 
   useEffect(() => {
     fetchOracle();
