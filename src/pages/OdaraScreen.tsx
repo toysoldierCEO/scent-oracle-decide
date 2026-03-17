@@ -30,12 +30,11 @@ const OdaraScreen = () => {
         const userId = user?.id ?? "00000000-0000-0000-0000-000000000000";
 
         const { data, error: rpcError } = await supabase.rpc(
-          "get_todays_oracle_v3" as any,
+          "get_todays_oracle_v3",
           {
             p_user_id: userId,
             p_temperature: 40,
             p_context: "hangout",
-            p_brand: null,
           }
         );
 
