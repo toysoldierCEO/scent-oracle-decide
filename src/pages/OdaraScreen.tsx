@@ -388,26 +388,6 @@ const OdaraScreen = () => {
                 })}
               </div>
 
-              {/* Auto button */}
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={() => {
-                    setManualTemperatureOverride(null);
-                    const t = liveTemperature ?? 40;
-                    setSelectedTemperature(t);
-                    fetchOracle(selectedContext, t);
-                  }}
-                  disabled={isBusy || loading}
-                  className={`text-[9px] uppercase tracking-[0.15em] px-3 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                    manualTemperatureOverride === null
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground/40 hover:text-muted-foreground"
-                  }`}
-                  style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-                >
-                  {weatherLoading ? "…" : `Auto · ${liveTemperature ?? 40}°`}
-                </button>
-              </div>
             </div>
           );
         })()}
