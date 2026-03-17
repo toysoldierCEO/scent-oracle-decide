@@ -407,7 +407,7 @@ const OdaraScreen = () => {
                         transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
                         className="w-full overflow-hidden"
                       >
-                        <div className="pt-3 mt-3 space-y-2.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div className="pt-2 mt-2 space-y-1.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                           {/* Mood selector */}
                           <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
                             {LAYER_MOODS.map((mood) => (
