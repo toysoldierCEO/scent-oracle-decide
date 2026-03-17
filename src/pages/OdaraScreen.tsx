@@ -13,10 +13,18 @@ interface OracleData {
   };
   layer?: {
     base_id?: string;
-    base?: string;
+    anchor_name?: string;
     top_id?: string;
+    top_name?: string;
     top: string;
     mode: string;
+    anchor_sprays?: number;
+    top_sprays?: number;
+    anchor_placement?: string;
+    top_placement?: string;
+    mixing_rule?: string;
+    why_it_works?: string;
+    strength_note?: string;
     reason: string;
   } | null;
   alternates?: {
