@@ -333,46 +333,85 @@ const OdaraScreen = () => {
           ))}
         </div>
 
-        {/* Temperature chips */}
-        <div className="flex gap-1.5 mb-6">
-          {/* Auto chip — uses live weather */}
-          <button
-            onClick={() => {
-              setManualTemperatureOverride(null);
-              const t = liveTemperature ?? 40;
-              setSelectedTemperature(t);
-              fetchOracle(selectedContext, t);
-            }}
-            disabled={isBusy || loading}
-            className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-              manualTemperatureOverride === null
-                ? "bg-foreground/10 text-foreground"
-                : "text-muted-foreground/40 hover:text-muted-foreground"
-            }`}
-            style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-          >
-            {weatherLoading ? "…" : `${liveTemperature ?? 40}°`}
-          </button>
-          {TEMPERATURES.map((temp) => (
-            <button
-              key={temp}
-              onClick={() => {
-                setManualTemperatureOverride(temp);
-                setSelectedTemperature(temp);
-                fetchOracle(selectedContext, temp);
-              }}
-              disabled={isBusy || loading}
-              className={`text-[10px] font-mono px-2.5 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                manualTemperatureOverride === temp
-                  ? "bg-foreground/10 text-foreground"
-                  : "text-muted-foreground/40 hover:text-muted-foreground"
-              }`}
-              style={manualTemperatureOverride === temp ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-            >
-              {temp}°
-            </button>
-          ))}
-        </div>
+        {/* Temperature Scale */}
+        {(() => {
+          const MIN_TEMP = 30;
+          const MAX_TEMP = 100;
+          const BENCHMARKS = [35, 50, 65, 80];
+          const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+          const pct = ((clamp(effectiveTemperature, MIN_TEMP, MAX_TEMP) - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+
+          return (
+            <div className="w-full max-w-md mb-6 px-2">
+              {/* Indicator + label */}
+              <div className="relative h-8 mb-1">
+                <motion.div
+                  className="absolute flex flex-col items-center -translate-x-1/2"
+                  style={{ left: `${pct}%` }}
+                  animate={{ left: `${pct}%` }}
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                >
+                  <span className="text-[11px] font-mono font-bold text-foreground mb-1 select-none">
+                    {effectiveTemperature}°
+                  </span>
+                  <div
+                    className="w-3 h-3 rounded-full bg-foreground"
+                    style={{
+                      boxShadow: "0 0 8px 2px hsl(var(--family-accent) / 0.4), 0 0 20px 4px hsl(var(--family-accent) / 0.15)",
+                    }}
+                  />
+                </motion.div>
+              </div>
+
+              {/* Track */}
+              <div className="relative w-full h-[2px] rounded-full bg-foreground/10">
+                {/* Benchmark ticks */}
+                {BENCHMARKS.map((temp) => {
+                  const tickPct = ((temp - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)) * 100;
+                  return (
+                    <button
+                      key={temp}
+                      onClick={() => {
+                        setManualTemperatureOverride(temp);
+                        setSelectedTemperature(temp);
+                        fetchOracle(selectedContext, temp);
+                      }}
+                      disabled={isBusy || loading}
+                      className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
+                      style={{ left: `${tickPct}%` }}
+                    >
+                      <div className="w-[3px] h-[10px] rounded-full bg-foreground/20 group-hover:bg-foreground/40 transition-colors" />
+                      <span className="text-[9px] font-mono text-muted-foreground/40 mt-1 group-hover:text-muted-foreground/70 transition-colors select-none">
+                        {temp}°
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Auto button */}
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={() => {
+                    setManualTemperatureOverride(null);
+                    const t = liveTemperature ?? 40;
+                    setSelectedTemperature(t);
+                    fetchOracle(selectedContext, t);
+                  }}
+                  disabled={isBusy || loading}
+                  className={`text-[9px] uppercase tracking-[0.15em] px-3 py-1 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                    manualTemperatureOverride === null
+                      ? "bg-foreground/10 text-foreground"
+                      : "text-muted-foreground/40 hover:text-muted-foreground"
+                  }`}
+                  style={manualTemperatureOverride === null ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+                >
+                  {weatherLoading ? "…" : `Auto · ${liveTemperature ?? 40}°`}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Swipeable Hero Card */}
         <div className="relative w-full max-w-md">
