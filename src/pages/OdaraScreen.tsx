@@ -374,12 +374,25 @@ const OdaraScreen = () => {
   const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
+  // Background tint based on current fragrance family
+  const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
+
   const handleForecastDayTap = (index: number) => {
-    setSelectedForecastDay(index);
-    setAccepted(false);
-    setLayerSheetOpen(false);
-    setCardKey((k) => k + 1);
-    setExitDirection(null);
+    if (index === selectedForecastDay) return;
+    setForecastTransition(true);
+    // Brief outgoing fade
+    setTimeout(() => {
+      setSelectedForecastDay(index);
+      setAccepted(false);
+      setLayerSheetOpen(false);
+      setCardKey((k) => k + 1);
+      setExitDirection(null);
+      // Update displayed temperature for the selected day
+      const dayTemp = forecastDays[index]?.temperature;
+      if (dayTemp != null) setDisplayedTemperature(dayTemp);
+      else setDisplayedTemperature(null);
+      setTimeout(() => setForecastTransition(false), 50);
+    }, 150);
   };
 
   return (
