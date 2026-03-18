@@ -534,15 +534,21 @@ const OdaraScreen = () => {
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.9}
               onDragEnd={handleDragEnd}
-              initial={{ opacity: 0, scale: 0.96, x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
+              initial={{
+                opacity: 0,
+                y: exitDirection ? 0 : 5,
+                x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0,
+                scale: 0.96,
+              }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
               exit={{
                 opacity: 0,
                 x: exitDirection === "left" ? -300 : exitDirection === "right" ? 300 : 0,
-                scale: 0.95,
-                transition: { duration: 0.3 },
+                y: exitDirection ? 0 : -3,
+                scale: 0.97,
+                transition: { duration: exitDirection ? 0.3 : 0.15 },
               }}
-              transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+              transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
               className="w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center cursor-grab active:cursor-grabbing touch-pan-y"
               style={{
                 x,
