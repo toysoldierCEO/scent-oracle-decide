@@ -1104,7 +1104,7 @@ const OdaraScreen = () => {
                   {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
                     <div className="mb-6 space-y-3">
-                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
                       {profile?.top_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
