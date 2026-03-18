@@ -498,17 +498,37 @@ const OdaraScreen = () => {
   }, [fetchOracle]);
 
   const handleAccept = useCallback(async () => {
-    if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
+    if (actionState !== "idle") return;
+
+    // Determine which fragrance to accept based on current view
+    const isViewingForecastNow = selectedForecastDay > 0;
+    const entry = isViewingForecastNow ? forecastDays[selectedForecastDay]?.fragrance : oracle?.today_pick;
+    if (!entry?.fragrance_id) return;
+
     setActionState("accepting");
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
         p_user: userId,
-        p_fragrance_id: oracle.today_pick.fragrance_id,
-        p_context: "hangout",
+        p_fragrance_id: entry.fragrance_id,
+        p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
+
+      // Save undo state
+      undoPrevState.current = { dayIndex: selectedForecastDay, accepted: false };
+
+      // Mark this day as accepted
+      setAcceptedDays((prev) => new Set(prev).add(selectedForecastDay));
       setAccepted(true);
+
+      // Show undo pill
+      setUndoVisible(true);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => {
+        setUndoVisible(false);
+        undoPrevState.current = null;
+      }, 3000);
     } catch (e) {
       console.error("Accept failed:", e);
       toast.error("Couldn't lock in — try again");
@@ -516,7 +536,22 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, getUserId]);
+  }, [actionState, oracle, getUserId, selectedForecastDay, forecastDays, selectedContext]);
+
+  const handleUndo = useCallback(() => {
+    if (!undoPrevState.current) return;
+    const prev = undoPrevState.current;
+    setAcceptedDays((s) => {
+      const next = new Set(s);
+      next.delete(prev.dayIndex);
+      return next;
+    });
+    setAccepted(false);
+    setUndoVisible(false);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoPrevState.current = null;
+    toast("Selection undone");
+  }, []);
 
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
