@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useMotionValue, PanInfo } from "framer-motion";
+import { motion, AnimatePresence, PanInfo } from "framer-motion";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
