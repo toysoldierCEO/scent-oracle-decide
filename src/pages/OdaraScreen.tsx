@@ -102,7 +102,7 @@ function buildForecastDays(): ForecastDay[] {
     { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.' },
     { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.' },
     { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.' },
-    null, // Day 7 unassigned
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.' },
   ];
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -793,17 +793,19 @@ const OdaraScreen = () => {
             {/* Day markers */}
             <div className="flex justify-between relative">
               {forecastDays.map((d, i) => {
+                const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
                 const familyColor = d.fragrance
-                  ? FAMILY_COLORS[d.fragrance.family] ?? "rgba(255,255,255,0.12)"
-                  : "rgba(255,255,255,0.08)";
+                  ? (FAMILY_COLORS[d.fragrance.family] ?? FALLBACK_ORB_COLOR)
+                  : FALLBACK_ORB_COLOR;
                 const isSelected = selectedForecastDay === i;
+                const hasFragrance = !!d.fragrance;
                 return (
                   <button
                     key={i}
                     onClick={() => handleForecastDayTap(i)}
                     className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
                   >
-                    {/* Family-coded dot */}
+                    {/* Family-coded dot — always rendered */}
                     <div
                       className="rounded-full transition-all duration-300"
                       style={{
@@ -812,10 +814,10 @@ const OdaraScreen = () => {
                         background: familyColor,
                         boxShadow: isSelected
                           ? `0 0 6px 2px ${familyColor}44`
-                          : d.fragrance
+                          : hasFragrance
                             ? `0 0 3px 1px ${familyColor}22`
-                            : "none",
-                        opacity: d.fragrance ? 1 : 0.3,
+                            : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
+                        opacity: hasFragrance ? 1 : 0.5,
                       }}
                     />
                     <div className="flex flex-col items-center gap-1">
