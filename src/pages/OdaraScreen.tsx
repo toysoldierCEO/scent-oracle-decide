@@ -407,6 +407,14 @@ const OdaraScreen = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Undo system
+  const [undoVisible, setUndoVisible] = useState(false);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoPrevState = useRef<{ dayIndex: number; accepted: boolean } | null>(null);
+
+  // Cover flow drag
+  const coverFlowX = useMotionValue(0);
+
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
   // Build forecast days
