@@ -823,7 +823,7 @@ const OdaraScreen = () => {
               }}
             >
               {isViewingForecast && (
-                <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 mb-2 select-none">
+                <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 select-none">
                   {forecastEntry.label} · {forecastEntry.day}
                 </span>
               )}
