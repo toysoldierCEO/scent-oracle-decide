@@ -65,6 +65,60 @@ const SWIPE_VELOCITY = 300;
 const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
 
+/* ── Fragrance family → color mapping ── */
+const FAMILY_COLORS: Record<string, string> = {
+  "oud-amber": "#C08A3E",
+  "fresh-blue": "#5B9BD5",
+  "woody-clean": "#8A9BAE",
+  "sweet-gourmand": "#D4A056",
+  "dark-leather": "#3A3A3A",
+  "tobacco-boozy": "#6B4226",
+  "floral-musk": "#C4A0B9",
+  "citrus-aromatic": "#B8C94E",
+};
+
+/* ── 7-day forecast mock data ── */
+interface ForecastDay {
+  label: string;
+  day: number;
+  fragrance: {
+    fragrance_id: string;
+    name: string;
+    family: string;
+    reason: string;
+  } | null;
+  layer: Record<LayerMood, LayerOption> | null;
+  alternates: { fragrance_id?: string; name: string; family?: string; reason?: string }[] | null;
+}
+
+function buildForecastDays(): ForecastDay[] {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+
+  const weekFragrances = [
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.' },
+    null, // Day 7 unassigned
+  ];
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const frag = weekFragrances[i];
+    return {
+      label: dayNames[d.getDay()],
+      day: d.getDate(),
+      fragrance: frag,
+      layer: i === 0 ? null : null, // only today has layer from oracle
+      alternates: null,
+    };
+  });
+}
+
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [loading, setLoading] = useState(true);
