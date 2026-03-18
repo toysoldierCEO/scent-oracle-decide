@@ -397,7 +397,13 @@ const OdaraScreen = () => {
 
   return (
     <div className="dark">
-      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden relative">
+        {/* Subtle background tint overlay */}
+        <motion.div
+          className="absolute inset-0 pointer-events-none z-0"
+          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}0D` : "transparent" }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
+        />
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
