@@ -1103,23 +1103,23 @@ const OdaraScreen = () => {
 
                   {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
-                    <div className="mb-6 space-y-3">
-                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
+                    <div className="mt-6 mb-6 space-y-3">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
                       {profile?.top_notes && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Top</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
                         </div>
                       )}
                       {profile?.heart_notes && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Heart</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
                         </div>
                       )}
                       {profile?.base_notes && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Base</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Base</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
                         </div>
                       )}
@@ -1128,17 +1128,17 @@ const OdaraScreen = () => {
 
                   {/* Performance */}
                   {(profile?.longevity_score != null || profile?.projection_score != null) && (
-                    <div className="mb-6 grid grid-cols-2 gap-4">
-                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
+                    <div className="mt-8 mb-6 grid grid-cols-2 gap-4">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 col-span-2">Performance</span>
                       {profile?.longevity_score != null && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.longevity_score)}</p>
                         </div>
                       )}
                       {profile?.projection_score != null && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.projection_score)}</p>
                         </div>
                       )}
@@ -1147,16 +1147,16 @@ const OdaraScreen = () => {
 
                   {/* Wardrobe Role & Weather */}
                   {(profile?.wardrobe_role || profile?.weather) && (
-                    <div className="mb-4 grid grid-cols-2 gap-4">
+                    <div className="mt-8 mb-4 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Role</span>
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Role</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.wardrobe_role}</p>
                         </div>
                       )}
                       {profile.weather && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Weather</span>
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Weather</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.weather}</p>
                         </div>
                       )}
@@ -1164,8 +1164,8 @@ const OdaraScreen = () => {
                   )}
 
                   {/* Why it fits */}
-                  <div className="mb-2">
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block mb-1">Why it fits</span>
+                  <div className="mt-8 mb-2">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Why it fits</span>
                     <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
                   </div>
                 </motion.div>
