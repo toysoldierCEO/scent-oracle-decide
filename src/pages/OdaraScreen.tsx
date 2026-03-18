@@ -1142,12 +1142,16 @@ const OdaraScreen = () => {
                     ? 0.25 + handoffGlow * 0.2
                     : 0.25;
 
+                const isLayered = d.dailySet?.is_layered ?? false;
+                const layerFamily = d.dailySet?.layer?.family;
+                const layerColor = layerFamily ? (FAMILY_COLORS[layerFamily] ?? FALLBACK_ORB_COLOR) : FALLBACK_ORB_COLOR;
+
                 return (
                   <button
                     key={i}
                     onClick={() => handleForecastDayTap(i)}
-                    className="flex flex-col items-center bg-transparent border-none outline-none cursor-pointer"
-                    style={{ gap: "4px", padding: "0 2px", minWidth: "28px" }}
+                    className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
+                    style={{ minWidth: "28px", width: "28px" }}
                   >
                     {/* Weekday label */}
                     <span
@@ -1157,6 +1161,7 @@ const OdaraScreen = () => {
                         letterSpacing: "0.08em",
                         color: `rgba(255,255,255,${labelOpacity})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 400,
+                        marginBottom: "3px",
                       }}
                     >
                       {d.label}
@@ -1168,37 +1173,60 @@ const OdaraScreen = () => {
                       style={{
                         fontSize: "9px",
                         color: `rgba(255,255,255,${dateOpacity})`,
+                        marginBottom: "5px",
                       }}
                     >
                       {d.day}
                     </span>
 
-                    {/* Family-coded orb */}
-                    <motion.div
-                      className="rounded-full"
-                      animate={{
-                        width: isSelected ? "7px" : "5px",
-                        height: isSelected ? "7px" : "5px",
-                        scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
-                        boxShadow: isSelected
-                          ? `0 0 8px 3px ${familyColor}55`
-                          : isNextTarget
-                            ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
-                            : hasFragrance
-                              ? `0 0 3px 1px ${familyColor}22`
-                              : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
-                        opacity: hasFragrance ? 1 : 0.5,
-                      }}
-                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                      style={{ background: familyColor }}
-                    />
+                    {/* Dot container — fixed height, centered */}
+                    <div className="flex flex-col items-center justify-center" style={{ height: "18px", gap: "2px" }}>
+                      {/* Primary family-coded orb */}
+                      <motion.div
+                        className="rounded-full"
+                        animate={{
+                          width: isSelected ? "7px" : "5px",
+                          height: isSelected ? "7px" : "5px",
+                          scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
+                          boxShadow: isSelected
+                            ? `0 0 8px 3px ${familyColor}55`
+                            : isNextTarget
+                              ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
+                              : hasFragrance
+                                ? `0 0 3px 1px ${familyColor}22`
+                                : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
+                          opacity: hasFragrance ? 1 : 0.5,
+                        }}
+                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                        style={{ background: familyColor }}
+                      />
+
+                      {/* Secondary layer orb (smaller) */}
+                      {isLayered && (
+                        <motion.div
+                          className="rounded-full"
+                          initial={{ opacity: 0, scale: 0 }}
+                          animate={{
+                            opacity: 0.8,
+                            scale: 1,
+                            width: isSelected ? "5px" : "4px",
+                            height: isSelected ? "5px" : "4px",
+                            boxShadow: isSelected
+                              ? `0 0 6px 2px ${layerColor}44`
+                              : `0 0 2px 1px ${layerColor}22`,
+                          }}
+                          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                          style={{ background: layerColor }}
+                        />
+                      )}
+                    </div>
 
                     {/* Selected underline */}
                     {isSelected && (
                       <motion.div
                         layoutId="forecastUnderline"
                         className="rounded-full"
-                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)" }}
+                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
                       />
                     )}
                   </button>
