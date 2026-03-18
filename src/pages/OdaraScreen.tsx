@@ -457,10 +457,8 @@ const OdaraScreen = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // Cover flow uses its own drag; these are kept minimal for compatibility
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 0, 200], [-8, 0, 8]);
-  const acceptOpacity = useTransform(x, [0, SWIPE_THRESHOLD], [0, 1]);
-  const skipOpacity = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
 
   // Accepted days tracking (which forecast days have been locked in)
   const [acceptedDays, setAcceptedDays] = useState<Set<number>>(new Set());
