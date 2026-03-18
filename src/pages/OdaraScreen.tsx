@@ -1150,7 +1150,7 @@ const OdaraScreen = () => {
                     <div className="mt-8 mb-4 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Role</span>
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Role</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.wardrobe_role}</p>
                         </div>
                       )}
