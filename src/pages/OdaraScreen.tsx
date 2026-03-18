@@ -666,7 +666,7 @@ const OdaraScreen = () => {
         {/* Subtle background tint overlay */}
         <motion.div
           className="absolute inset-0 pointer-events-none z-0"
-          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}0D` : "transparent" }}
+          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}08` : "transparent" }}
           transition={{ duration: 0.4, ease: "easeInOut" }}
         />
         {/* Header */}
@@ -1065,7 +1065,7 @@ const OdaraScreen = () => {
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
           }}
         >
-          <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/40 block text-center mb-3">
+          <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
             Forecast
           </span>
           <div className="relative">
@@ -1159,9 +1159,9 @@ const OdaraScreen = () => {
                       style={{
                         fontSize: "11px",
                         letterSpacing: "0.1em",
-                        color: `rgba(255,255,255,${labelOpacity})`,
-                        fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 400,
-                        marginBottom: "3px",
+                        color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
+                        fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
+                        marginBottom: "6px",
                       }}
                     >
                       {d.label}
@@ -1171,22 +1171,23 @@ const OdaraScreen = () => {
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
                       style={{
-                        fontSize: "11px",
-                        color: `rgba(255,255,255,${dateOpacity})`,
-                        marginBottom: "5px",
+                        fontSize: "13px",
+                        fontWeight: isSelected ? 600 : 500,
+                        color: `rgba(255,255,255,${Math.min(dateOpacity + 0.15, 1)})`,
+                        marginBottom: "7px",
                       }}
                     >
                       {d.day}
                     </span>
 
                     {/* Dot container — fixed height, centered */}
-                    <div className="flex flex-col items-center justify-center" style={{ height: "22px", gap: "4px" }}>
+                    <div className="flex flex-col items-center justify-center" style={{ height: "26px", gap: "6px" }}>
                       {/* Primary family-coded orb */}
                       <motion.div
                         className="rounded-full"
                         animate={{
-                          width: isSelected ? "8px" : "6px",
-                          height: isSelected ? "8px" : "6px",
+                          width: isSelected ? "9px" : "7px",
+                          height: isSelected ? "9px" : "7px",
                           scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
                           boxShadow: isSelected
                             ? `0 0 8px 3px ${familyColor}55`
@@ -1209,8 +1210,8 @@ const OdaraScreen = () => {
                           animate={{
                             opacity: 0.85,
                             scale: 1,
-                            width: isSelected ? "6px" : "5px",
-                            height: isSelected ? "6px" : "5px",
+                          width: isSelected ? "7px" : "6px",
+                            height: isSelected ? "7px" : "6px",
                             boxShadow: isSelected
                               ? `0 0 6px 2px ${layerColor}44`
                               : `0 0 2px 1px ${layerColor}22`,
