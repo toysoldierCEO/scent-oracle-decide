@@ -136,6 +136,7 @@ const OdaraScreen = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
+  const [selectedForecastDay, setSelectedForecastDay] = useState(0);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
