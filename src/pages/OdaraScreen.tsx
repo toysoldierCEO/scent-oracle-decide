@@ -848,14 +848,17 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className={`w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center ${
+                    className={`w-full rounded-[32px] p-8 flex flex-col items-center ${
                       isCenter ? "cursor-pointer" : ""
                     }`}
                     style={{
-                      background: "var(--glass-bg)",
+                      background: isCenter
+                        ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
+                        : "rgba(10,10,12,0.75)",
+                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(20px)",
                       boxShadow: isCenter
-                        ? "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)"
-                        : "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255,255,255,0.06)",
+                        ? "0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.08)"
+                        : "0 10px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)",
                     }}
                   >
                     {/* Day/date label */}
