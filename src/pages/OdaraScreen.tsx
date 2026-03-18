@@ -783,10 +783,39 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack */}
         <div className="relative w-full max-w-lg mt-3 overflow-visible" style={{ perspective: "1200px" }}>
-          {/* Card stack container */}
+          {/* Card stack container — handles swipe at this level */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px" }}
+            style={{ minHeight: "420px", touchAction: "pan-y" }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.15}
+            onDragEnd={(_, info: PanInfo) => {
+              const { offset, velocity } = info;
+              const threshold = 50;
+              const velThreshold = 200;
+              if (
+                (offset.x < -threshold || velocity.x < -velThreshold) &&
+                selectedForecastDay < forecastDays.length - 1
+              ) {
+                const next = selectedForecastDay + 1;
+                setSelectedForecastDay(next);
+                setAccepted(acceptedDays.has(next));
+                setLayerSheetOpen(false);
+                const dayTemp = forecastDays[next]?.temperature;
+                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+              } else if (
+                (offset.x > threshold || velocity.x > velThreshold) &&
+                selectedForecastDay > 0
+              ) {
+                const prev = selectedForecastDay - 1;
+                setSelectedForecastDay(prev);
+                setAccepted(acceptedDays.has(prev));
+                setLayerSheetOpen(false);
+                const dayTemp = forecastDays[prev]?.temperature;
+                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+              }
+            }}
           >
             {forecastDays.map((dayData, i) => {
               const offset = i - selectedForecastDay;
