@@ -93,90 +93,81 @@ interface FragranceProfile {
   top_notes?: string[];
   heart_notes?: string[];
   base_notes?: string[];
-  vibe?: string;
   wardrobe_role?: string;
-  longevity?: string;
-  projection?: string;
+  longevity_score?: number; // 0–1
+  projection_score?: number; // 0–1
   weather?: string;
+}
+
+function performanceLabel(score: number): string {
+  if (score <= 0.33) return "Soft";
+  if (score <= 0.66) return "Moderate";
+  return "Strong";
 }
 
 const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
   "Valley of the Kings": {
-    brand: "Maison Royale",
     top_notes: ["Saffron", "Pink Pepper", "Bergamot"],
     heart_notes: ["Rose Absolute", "Oud"],
     base_notes: ["Amber", "Sandalwood", "Musk"],
-    vibe: "A regal, commanding presence — ancient temples bathed in golden light.",
     wardrobe_role: "Signature evening anchor",
-    longevity: "10–12 hours",
-    projection: "Strong — 3–4 ft radius",
-    weather: "Cool to cold",
+    longevity_score: 0.9,
+    projection_score: 0.85,
+    weather: "Best in cool → cold weather",
   },
   "Agar": {
-    brand: "Atelier Niche",
     top_notes: ["Elemi", "Green Cardamom"],
     heart_notes: ["Agarwood", "Cedar Atlas"],
     base_notes: ["Vetiver", "White Musk"],
-    vibe: "A quiet walk through a cedar forest after rain.",
     wardrobe_role: "Versatile daily wear",
-    longevity: "7–9 hours",
-    projection: "Moderate — close to skin",
-    weather: "Mild to warm",
+    longevity_score: 0.6,
+    projection_score: 0.45,
+    weather: "Best in mild → warm weather",
   },
   "Noire Absolu": {
-    brand: "Cuir Collection",
     top_notes: ["Black Pepper", "Juniper"],
     heart_notes: ["Leather", "Iris"],
     base_notes: ["Castoreum", "Patchouli", "Benzoin"],
-    vibe: "Midnight in a leather-bound study — raw, intense, unapologetic.",
     wardrobe_role: "Power move — formal nights",
-    longevity: "12+ hours",
-    projection: "Beast mode",
-    weather: "Cold",
+    longevity_score: 0.95,
+    projection_score: 0.9,
+    weather: "Best in cold weather",
   },
   "Santal Sérénade": {
-    brand: "Les Harmonies",
     top_notes: ["Coconut Milk", "Cardamom"],
     heart_notes: ["Sandalwood", "Tonka Bean"],
     base_notes: ["Vanilla", "Cashmeran"],
-    vibe: "Cashmere on skin — creamy, warm, effortlessly inviting.",
     wardrobe_role: "Comfort scent — close encounters",
-    longevity: "8–10 hours",
-    projection: "Intimate — skin scent",
-    weather: "Cool to mild",
+    longevity_score: 0.7,
+    projection_score: 0.3,
+    weather: "Best in cool → mild weather",
   },
   "Hafez 1984": {
-    brand: "Orient Express",
     top_notes: ["Cinnamon", "Dried Plum"],
     heart_notes: ["Tobacco Leaf", "Dark Rum"],
     base_notes: ["Labdanum", "Oud", "Smoky Birch"],
-    vibe: "A dimly lit lounge, whiskey in hand, old jazz playing.",
     wardrobe_role: "Night out anchor",
-    longevity: "10–14 hours",
-    projection: "Strong — fills a room",
-    weather: "Cold to cool",
+    longevity_score: 0.85,
+    projection_score: 0.8,
+    weather: "Best in cold → cool weather",
   },
   "Mystere 28": {
-    brand: "Aqua Moderna",
     top_notes: ["Sea Salt", "Grapefruit", "Mint"],
     heart_notes: ["Lavender", "Geranium"],
     base_notes: ["Ambroxan", "White Cedar"],
-    vibe: "Mediterranean coast at dawn — clean, bright, alive.",
     wardrobe_role: "Daytime refresh — casual wear",
-    longevity: "6–8 hours",
-    projection: "Moderate — social range",
-    weather: "Warm to hot",
+    longevity_score: 0.45,
+    projection_score: 0.5,
+    weather: "Best in warm → hot weather",
   },
   "Amber Dusk": {
-    brand: "Maison Royale",
     top_notes: ["Mandarin", "Ginger"],
     heart_notes: ["Amber", "Frankincense"],
     base_notes: ["Labdanum", "Vanilla", "Musk"],
-    vibe: "Golden hour fading into a warm evening embrace.",
     wardrobe_role: "Transitional — day to night",
-    longevity: "8–10 hours",
-    projection: "Moderate",
-    weather: "Cool to mild",
+    longevity_score: 0.65,
+    projection_score: 0.5,
+    weather: "Best in cool → mild weather",
   },
 };
 
@@ -1110,32 +1101,23 @@ const OdaraScreen = () => {
                     </span>
                   </div>
 
-                  {/* Vibe */}
-                  {profile?.vibe && (
-                    <div className="mb-6">
-                      <p className="text-sm text-foreground/70 leading-relaxed text-center italic">
-                        "{profile.vibe}"
-                      </p>
-                    </div>
-                  )}
-
                   {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
                     <div className="mb-6 space-y-3">
                       <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
-                      {profile.top_notes && (
+                      {profile?.top_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
                         </div>
                       )}
-                      {profile.heart_notes && (
+                      {profile?.heart_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
                         </div>
                       )}
-                      {profile.base_notes && (
+                      {profile?.base_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Base</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
@@ -1145,19 +1127,19 @@ const OdaraScreen = () => {
                   )}
 
                   {/* Performance */}
-                  {(profile?.longevity || profile?.projection) && (
+                  {(profile?.longevity_score != null || profile?.projection_score != null) && (
                     <div className="mb-6 grid grid-cols-2 gap-4">
                       <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
-                      {profile.longevity && (
+                      {profile?.longevity_score != null && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.longevity}</p>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.longevity_score)}</p>
                         </div>
                       )}
-                      {profile.projection && (
+                      {profile?.projection_score != null && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.projection}</p>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.projection_score)}</p>
                         </div>
                       )}
                     </div>
