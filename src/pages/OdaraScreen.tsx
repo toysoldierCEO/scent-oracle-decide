@@ -1113,7 +1113,7 @@ const OdaraScreen = () => {
                       )}
                       {profile?.heart_notes && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Heart</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
                         </div>
                       )}
