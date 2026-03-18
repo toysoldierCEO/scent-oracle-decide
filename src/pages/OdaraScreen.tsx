@@ -1103,45 +1103,6 @@ const OdaraScreen = () => {
             })}
           </motion.div>
 
-          {/* Cover flow swipe area — invisible touch target */}
-          <div
-            className="absolute inset-0 z-20"
-            style={{ pointerEvents: "none" }}
-          >
-            <motion.div
-              className="w-full h-full"
-              style={{ pointerEvents: "auto", touchAction: "pan-y" }}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.15}
-              onDragEnd={(_, info: PanInfo) => {
-                const { offset, velocity } = info;
-                const threshold = 50;
-                const velThreshold = 200;
-                if (
-                  (offset.x < -threshold || velocity.x < -velThreshold) &&
-                  selectedForecastDay < forecastDays.length - 1
-                ) {
-                  const next = selectedForecastDay + 1;
-                  setSelectedForecastDay(next);
-                  setAccepted(acceptedDays.has(next));
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[next]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
-                } else if (
-                  (offset.x > threshold || velocity.x > velThreshold) &&
-                  selectedForecastDay > 0
-                ) {
-                  const prev = selectedForecastDay - 1;
-                  setSelectedForecastDay(prev);
-                  setAccepted(acceptedDays.has(prev));
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[prev]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
-                }
-              }}
-            />
-          </div>
 
           {/* Locked In + Undo Pill */}
           <AnimatePresence>
