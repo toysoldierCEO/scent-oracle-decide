@@ -462,6 +462,9 @@ const OdaraScreen = () => {
   const acceptOpacity = useTransform(x, [0, SWIPE_THRESHOLD], [0, 1]);
   const skipOpacity = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
 
+  // Accepted days tracking (which forecast days have been locked in)
+  const [acceptedDays, setAcceptedDays] = useState<Set<number>>(new Set());
+
   const getUserId = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
