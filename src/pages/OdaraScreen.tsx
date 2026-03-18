@@ -87,6 +87,7 @@ interface ForecastDay {
     family: string;
     reason: string;
   } | null;
+  temperature: number;
   layer: Record<LayerMood, LayerOption> | null;
   alternates: { fragrance_id?: string; name: string; family?: string; reason?: string }[] | null;
 }
