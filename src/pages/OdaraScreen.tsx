@@ -868,13 +868,6 @@ const OdaraScreen = () => {
                     transformStyle: "preserve-3d",
                     pointerEvents: isCenter ? "auto" : "none",
                   }}
-                  // Tap center card to accept
-                  onClick={() => {
-                    if (!isCenter || isDayAccepted) return;
-                    // Check if it was a long press (don't accept)
-                    if (longPressTimer.current) return;
-                    handleAccept();
-                  }}
                 >
                   <div
                     className={`w-full rounded-[32px] p-8 flex flex-col items-center ${
