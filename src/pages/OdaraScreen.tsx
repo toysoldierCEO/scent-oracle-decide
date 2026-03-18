@@ -527,6 +527,11 @@ const OdaraScreen = () => {
                 boxShadow: "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)",
               }}
             >
+              {isViewingForecast && (
+                <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 mb-2 select-none">
+                  {forecastEntry.label} · {forecastEntry.day}
+                </span>
+              )}
               <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
                 {today_pick.name}
               </h1>
