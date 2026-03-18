@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Star, X } from "lucide-react";
+import { Star, X, Undo2 } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
