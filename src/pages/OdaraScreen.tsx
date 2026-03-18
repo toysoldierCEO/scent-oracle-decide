@@ -786,34 +786,59 @@ const OdaraScreen = () => {
           {/* Card stack container — handles swipe at this level */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px", touchAction: "pan-y" }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
+            style={{ minHeight: "420px", touchAction: "none" }}
+            drag
+            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
             dragElastic={0.15}
             onDragEnd={(_, info: PanInfo) => {
               const { offset, velocity } = info;
+              const absX = Math.abs(offset.x);
+              const absY = Math.abs(offset.y);
               const threshold = 50;
               const velThreshold = 200;
-              if (
-                (offset.x < -threshold || velocity.x < -velThreshold) &&
-                selectedForecastDay < forecastDays.length - 1
-              ) {
-                const next = selectedForecastDay + 1;
-                setSelectedForecastDay(next);
-                setAccepted(acceptedDays.has(next));
-                setLayerSheetOpen(false);
-                const dayTemp = forecastDays[next]?.temperature;
-                if (dayTemp != null) setDisplayedTemperature(dayTemp);
-              } else if (
-                (offset.x > threshold || velocity.x > velThreshold) &&
-                selectedForecastDay > 0
-              ) {
-                const prev = selectedForecastDay - 1;
-                setSelectedForecastDay(prev);
-                setAccepted(acceptedDays.has(prev));
-                setLayerSheetOpen(false);
-                const dayTemp = forecastDays[prev]?.temperature;
-                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+
+              // Determine dominant gesture axis
+              const isHorizontal = absX > absY * 1.2;
+              const isVertical = absY > absX * 1.2;
+
+              if (isHorizontal) {
+                // Horizontal = browse forecast days
+                if (
+                  (offset.x < -threshold || velocity.x < -velThreshold) &&
+                  selectedForecastDay < forecastDays.length - 1
+                ) {
+                  const next = selectedForecastDay + 1;
+                  setSelectedForecastDay(next);
+                  setAccepted(acceptedDays.has(next));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[next]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                } else if (
+                  (offset.x > threshold || velocity.x > velThreshold) &&
+                  selectedForecastDay > 0
+                ) {
+                  const prev = selectedForecastDay - 1;
+                  setSelectedForecastDay(prev);
+                  setAccepted(acceptedDays.has(prev));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[prev]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                }
+              } else if (isVertical) {
+                // Swipe UP = accept / lock in
+                if (
+                  (offset.y < -threshold || velocity.y < -velThreshold) &&
+                  !acceptedDays.has(selectedForecastDay)
+                ) {
+                  handleAccept();
+                }
+                // Swipe DOWN = skip / not today
+                else if (
+                  (offset.y > threshold || velocity.y > velThreshold) &&
+                  !acceptedDays.has(selectedForecastDay)
+                ) {
+                  handleSkip();
+                }
               }
             }}
           >
