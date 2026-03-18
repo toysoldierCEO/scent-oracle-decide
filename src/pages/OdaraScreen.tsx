@@ -174,6 +174,134 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
 const LONG_PRESS_DURATION = 500;
 
 /* ── 7-day forecast mock data ── */
+/* ── Layer compatibility engine ── */
+interface FragranceEntry {
+  fragrance_id: string;
+  name: string;
+  family: string;
+  reason: string;
+  longevity_score: number;
+  projection_score: number;
+}
+
+// Compatibility matrix: family → compatible families with score
+const LAYER_COMPATIBILITY: Record<string, { family: string; score: number }[]> = {
+  "oud-amber": [
+    { family: "sweet-gourmand", score: 0.88 },
+    { family: "woody-clean", score: 0.82 },
+    { family: "tobacco-boozy", score: 0.75 },
+  ],
+  "fresh-blue": [
+    { family: "woody-clean", score: 0.90 },
+    { family: "citrus-aromatic", score: 0.85 },
+  ],
+  "woody-clean": [
+    { family: "fresh-blue", score: 0.88 },
+    { family: "oud-amber", score: 0.80 },
+    { family: "floral-musk", score: 0.78 },
+  ],
+  "sweet-gourmand": [
+    { family: "oud-amber", score: 0.85 },
+    { family: "tobacco-boozy", score: 0.82 },
+    { family: "woody-clean", score: 0.72 },
+  ],
+  "dark-leather": [
+    { family: "tobacco-boozy", score: 0.88 },
+    { family: "oud-amber", score: 0.80 },
+    { family: "woody-clean", score: 0.75 },
+  ],
+  "tobacco-boozy": [
+    { family: "sweet-gourmand", score: 0.86 },
+    { family: "dark-leather", score: 0.84 },
+    { family: "oud-amber", score: 0.78 },
+  ],
+  "floral-musk": [
+    { family: "woody-clean", score: 0.85 },
+    { family: "fresh-blue", score: 0.80 },
+  ],
+  "citrus-aromatic": [
+    { family: "fresh-blue", score: 0.88 },
+    { family: "woody-clean", score: 0.82 },
+  ],
+};
+
+interface DailySet {
+  base: FragranceEntry;
+  layer: FragranceEntry | null;
+  mode: string | null;
+  confidence: number;
+  reasoning: string;
+  is_layered: boolean;
+}
+
+function computeDominanceSafety(base: FragranceEntry, layer: FragranceEntry): number {
+  // Layer should not overpower base
+  const projDelta = layer.projection_score - base.projection_score;
+  if (projDelta > 0.3) return 0.2; // layer too strong
+  if (projDelta > 0.15) return 0.5;
+  if (projDelta > 0) return 0.75;
+  return 1.0; // layer is softer — safe
+}
+
+function recommendDailySet(
+  base: FragranceEntry,
+  candidates: FragranceEntry[],
+  dayIndex: number,
+): DailySet {
+  const baseFamily = base.family;
+  const compatEntries = LAYER_COMPATIBILITY[baseFamily] ?? [];
+
+  let bestLayer: FragranceEntry | null = null;
+  let bestScore = 0;
+  let bestCompat = 0;
+  let bestDominance = 0;
+
+  for (const candidate of candidates) {
+    if (candidate.fragrance_id === base.fragrance_id) continue;
+
+    const compatMatch = compatEntries.find(c => c.family === candidate.family);
+    if (!compatMatch) continue;
+
+    const compatibility = compatMatch.score;
+    const dominanceSafety = computeDominanceSafety(base, candidate);
+    const rotationValue = 1 - (dayIndex % 3) * 0.1; // slight variation
+
+    const score =
+      0.45 * 0.85 + // base_score (already selected)
+      0.20 * compatibility +
+      0.15 * dominanceSafety +
+      0.10 * 0.8 + // context_fit placeholder
+      0.10 * rotationValue;
+
+    if (score > bestScore && dominanceSafety > 0.4 && compatibility > 0.7) {
+      bestScore = score;
+      bestLayer = candidate;
+      bestCompat = compatibility;
+      bestDominance = dominanceSafety;
+    }
+  }
+
+  if (bestLayer && bestScore > 0.65) {
+    return {
+      base,
+      layer: bestLayer,
+      mode: "balance",
+      confidence: Math.round(bestScore * 100) / 100,
+      reasoning: `${bestLayer.name} complements ${base.name} — compatible families with safe projection ratio.`,
+      is_layered: true,
+    };
+  }
+
+  return {
+    base,
+    layer: null,
+    mode: null,
+    confidence: Math.round((0.45 * 0.85 + 0.10 * 0.8 + 0.10 * 0.9) * 100) / 100,
+    reasoning: `${base.name} wears best solo today — no layer improves the set.`,
+    is_layered: false,
+  };
+}
+
 interface ForecastDay {
   label: string;
   day: number;
@@ -186,33 +314,72 @@ interface ForecastDay {
   temperature: number;
   layer: Record<LayerMood, LayerOption> | null;
   alternates: { fragrance_id?: string; name: string; family?: string; reason?: string }[] | null;
+  dailySet: DailySet | null;
 }
 
 function buildForecastDays(): ForecastDay[] {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
 
-  const weekFragrances: { fragrance_id: string; name: string; family: string; reason: string; temperature: number }[] = [
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.', temperature: 42 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.', temperature: 55 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.', temperature: 38 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.', temperature: 62 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.', temperature: 45 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.', temperature: 72 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.', temperature: 48 },
+  const weekFragrances: (FragranceEntry & { temperature: number; reason: string })[] = [
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.', temperature: 42, longevity_score: 0.9, projection_score: 0.85 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.', temperature: 55, longevity_score: 0.6, projection_score: 0.45 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.', temperature: 38, longevity_score: 0.95, projection_score: 0.9 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.', temperature: 62, longevity_score: 0.7, projection_score: 0.3 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.', temperature: 45, longevity_score: 0.85, projection_score: 0.8 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.', temperature: 72, longevity_score: 0.45, projection_score: 0.5 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.', temperature: 48, longevity_score: 0.65, projection_score: 0.5 },
   ];
+
+  const allEntries: FragranceEntry[] = weekFragrances.map(f => ({
+    fragrance_id: f.fragrance_id, name: f.name, family: f.family, reason: f.reason,
+    longevity_score: f.longevity_score, projection_score: f.projection_score,
+  }));
 
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
     const frag = weekFragrances[i];
+    const baseEntry: FragranceEntry = {
+      fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason,
+      longevity_score: frag.longevity_score, projection_score: frag.projection_score,
+    };
+    const dailySet = recommendDailySet(baseEntry, allEntries, i);
+
+    // Build layer map from daily set if layered
+    let layerMap: Record<LayerMood, LayerOption> | null = null;
+    if (dailySet.is_layered && dailySet.layer) {
+      const layerOption: LayerOption = {
+        base_id: frag.fragrance_id,
+        anchor_name: frag.name,
+        top_id: dailySet.layer.fragrance_id,
+        top_name: dailySet.layer.name,
+        top: `Layer with ${dailySet.layer.name}`,
+        mode: "balance",
+        reason: dailySet.reasoning,
+        why_it_works: dailySet.reasoning,
+        anchor_sprays: 3,
+        top_sprays: 1,
+        anchor_placement: "Neck, chest",
+        top_placement: "Wrists",
+        strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
+      };
+      layerMap = {
+        balanced: layerOption,
+        bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
+        smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
+        wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
+      };
+    }
+
     return {
       label: dayNames[d.getDay()],
       day: d.getDate(),
       fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
       temperature: frag.temperature,
-      layer: null,
+      layer: layerMap,
       alternates: null,
+      dailySet,
     };
   });
 }
