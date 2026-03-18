@@ -669,13 +669,26 @@ const OdaraScreen = () => {
                   {forecastEntry.label} · {forecastEntry.day}
                 </span>
               )}
-              <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                {today_pick.name}
-              </h1>
+              {/* Long-press target for fragrance profile */}
+              <div
+                className="flex flex-col items-center select-none"
+                onPointerDown={() => {
+                  longPressTimer.current = setTimeout(() => {
+                    setProfileOpen(true);
+                  }, LONG_PRESS_DURATION);
+                }}
+                onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
+                onPointerLeave={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
+                  {today_pick.name}
+                </h1>
 
-              <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
-                {today_pick.family}
-              </p>
+                <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
+                  {today_pick.family}
+                </p>
+              </div>
 
               <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
                 {today_pick.reason}
