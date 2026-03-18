@@ -77,6 +77,111 @@ const FAMILY_COLORS: Record<string, string> = {
   "citrus-aromatic": "#B8C94E",
 };
 
+const FAMILY_LABELS: Record<string, string> = {
+  "oud-amber": "Oud & Amber",
+  "fresh-blue": "Fresh & Aquatic",
+  "woody-clean": "Woody & Clean",
+  "sweet-gourmand": "Sweet & Gourmand",
+  "dark-leather": "Dark Leather",
+  "tobacco-boozy": "Tobacco & Boozy",
+  "floral-musk": "Floral & Musk",
+  "citrus-aromatic": "Citrus & Aromatic",
+};
+
+interface FragranceProfile {
+  brand?: string;
+  top_notes?: string[];
+  heart_notes?: string[];
+  base_notes?: string[];
+  vibe?: string;
+  wardrobe_role?: string;
+  longevity?: string;
+  projection?: string;
+  weather?: string;
+}
+
+const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
+  "Valley of the Kings": {
+    brand: "Maison Royale",
+    top_notes: ["Saffron", "Pink Pepper", "Bergamot"],
+    heart_notes: ["Rose Absolute", "Oud"],
+    base_notes: ["Amber", "Sandalwood", "Musk"],
+    vibe: "A regal, commanding presence — ancient temples bathed in golden light.",
+    wardrobe_role: "Signature evening anchor",
+    longevity: "10–12 hours",
+    projection: "Strong — 3–4 ft radius",
+    weather: "Cool to cold",
+  },
+  "Agar": {
+    brand: "Atelier Niche",
+    top_notes: ["Elemi", "Green Cardamom"],
+    heart_notes: ["Agarwood", "Cedar Atlas"],
+    base_notes: ["Vetiver", "White Musk"],
+    vibe: "A quiet walk through a cedar forest after rain.",
+    wardrobe_role: "Versatile daily wear",
+    longevity: "7–9 hours",
+    projection: "Moderate — close to skin",
+    weather: "Mild to warm",
+  },
+  "Noire Absolu": {
+    brand: "Cuir Collection",
+    top_notes: ["Black Pepper", "Juniper"],
+    heart_notes: ["Leather", "Iris"],
+    base_notes: ["Castoreum", "Patchouli", "Benzoin"],
+    vibe: "Midnight in a leather-bound study — raw, intense, unapologetic.",
+    wardrobe_role: "Power move — formal nights",
+    longevity: "12+ hours",
+    projection: "Beast mode",
+    weather: "Cold",
+  },
+  "Santal Sérénade": {
+    brand: "Les Harmonies",
+    top_notes: ["Coconut Milk", "Cardamom"],
+    heart_notes: ["Sandalwood", "Tonka Bean"],
+    base_notes: ["Vanilla", "Cashmeran"],
+    vibe: "Cashmere on skin — creamy, warm, effortlessly inviting.",
+    wardrobe_role: "Comfort scent — close encounters",
+    longevity: "8–10 hours",
+    projection: "Intimate — skin scent",
+    weather: "Cool to mild",
+  },
+  "Hafez 1984": {
+    brand: "Orient Express",
+    top_notes: ["Cinnamon", "Dried Plum"],
+    heart_notes: ["Tobacco Leaf", "Dark Rum"],
+    base_notes: ["Labdanum", "Oud", "Smoky Birch"],
+    vibe: "A dimly lit lounge, whiskey in hand, old jazz playing.",
+    wardrobe_role: "Night out anchor",
+    longevity: "10–14 hours",
+    projection: "Strong — fills a room",
+    weather: "Cold to cool",
+  },
+  "Mystere 28": {
+    brand: "Aqua Moderna",
+    top_notes: ["Sea Salt", "Grapefruit", "Mint"],
+    heart_notes: ["Lavender", "Geranium"],
+    base_notes: ["Ambroxan", "White Cedar"],
+    vibe: "Mediterranean coast at dawn — clean, bright, alive.",
+    wardrobe_role: "Daytime refresh — casual wear",
+    longevity: "6–8 hours",
+    projection: "Moderate — social range",
+    weather: "Warm to hot",
+  },
+  "Amber Dusk": {
+    brand: "Maison Royale",
+    top_notes: ["Mandarin", "Ginger"],
+    heart_notes: ["Amber", "Frankincense"],
+    base_notes: ["Labdanum", "Vanilla", "Musk"],
+    vibe: "Golden hour fading into a warm evening embrace.",
+    wardrobe_role: "Transitional — day to night",
+    longevity: "8–10 hours",
+    projection: "Moderate",
+    weather: "Cool to mild",
+  },
+};
+
+const LONG_PRESS_DURATION = 500;
+
 /* ── 7-day forecast mock data ── */
 interface ForecastDay {
   label: string;
