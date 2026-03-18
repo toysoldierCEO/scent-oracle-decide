@@ -1138,7 +1138,7 @@ const OdaraScreen = () => {
                       )}
                       {profile?.projection_score != null && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.projection_score)}</p>
                         </div>
                       )}
