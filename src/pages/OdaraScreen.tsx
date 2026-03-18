@@ -486,25 +486,31 @@ const OdaraScreen = () => {
                   }}
                 >
                   {/* Save star */}
-                  <button
+                  <motion.button
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerSaved((s) => !s);
                       toast(layerSaved ? "Combo unsaved" : "Combo saved");
                     }}
-                    className="absolute top-3 right-3 p-1 transition-all duration-200 hover:scale-110"
+                    whileTap={{ scale: 1.3 }}
+                    className="absolute top-3 right-3 p-1"
                   >
-                    <Star
-                      size={14}
-                      className={`transition-all duration-200 ${
-                        layerSaved
-                          ? "text-foreground fill-foreground/80"
-                          : "text-muted-foreground/30 hover:text-muted-foreground/60"
-                      }`}
-                    />
-                  </button>
+                    <motion.div
+                      animate={layerSaved ? { scale: [1, 1.25, 1] } : { scale: 1 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Star
+                        size={14}
+                        className={`transition-all duration-200 ${
+                          layerSaved
+                            ? "text-foreground fill-foreground/80 drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]"
+                            : "text-muted-foreground/30 hover:text-muted-foreground/60"
+                        }`}
+                      />
+                    </motion.div>
+                  </motion.button>
 
-                  <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
+                  <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
                     {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
                   </p>
                   <span
@@ -517,7 +523,7 @@ const OdaraScreen = () => {
                     {layerSheetOpen ? "tap to close" : "tap for details"}
                   </span>
 
-                  {/* Inline expanded details */}
+                  {/* Expanded details */}
                   <AnimatePresence initial={false}>
                     {layerSheetOpen && (
                       <motion.div
@@ -527,7 +533,7 @@ const OdaraScreen = () => {
                         transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
                         className="w-full overflow-hidden"
                       >
-                        <div className="pt-2 mt-2 space-y-1.5 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                           {/* Mood selector */}
                           <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
                             {LAYER_MOODS.map((mood) => (
@@ -546,61 +552,62 @@ const OdaraScreen = () => {
                             ))}
                           </div>
 
-                          {/* Mode */}
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Mode</span>
-                            <span className="text-[11px] text-foreground/80 capitalize">{activeLayer.mode}</span>
+                          {/* ROLE */}
+                          <div>
+                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Role</span>
+                            <p className="text-[11px] text-foreground/75 mt-0.5 leading-relaxed">
+                              {activeLayer.top_name} acts as {activeLayer.mode === 'balance' ? 'a balancing accent' : activeLayer.mode === 'amplify' ? 'a bold amplifier' : activeLayer.mode === 'soften' ? 'a softening layer' : 'a contrasting element'} to {activeLayer.anchor_name ?? today_pick.name}
+                            </p>
                           </div>
 
-                          {/* How to wear */}
+                          {/* WHY THIS WORKS */}
+                          {(activeLayer.why_it_works || activeLayer.reason) && (
+                            <div>
+                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Why this works</span>
+                              <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
+                                {activeLayer.why_it_works ?? activeLayer.reason}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* SPRAY ORDER */}
                           {(activeLayer.anchor_sprays != null && activeLayer.top_sprays != null) && (
                             <div>
-                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">How to wear</span>
-                              <div className="mt-1 space-y-0.5">
-                                <p className="text-[11px] text-foreground/75">
-                                  <span className="font-mono text-foreground/90">{activeLayer.anchor_sprays}×</span> {activeLayer.anchor_name ?? today_pick.name}
-                                </p>
-                                <p className="text-[11px] text-foreground/75">
-                                  <span className="font-mono text-foreground/90">{activeLayer.top_sprays}×</span> {activeLayer.top_name}
-                                </p>
+                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Spray order</span>
+                              <div className="mt-1 space-y-1">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">01</span>
+                                  <div>
+                                    <p className="text-[11px] text-foreground/80">
+                                      <span className="font-mono">{activeLayer.anchor_sprays}×</span> {activeLayer.anchor_name ?? today_pick.name}
+                                    </p>
+                                    {activeLayer.anchor_placement && (
+                                      <p className="text-[10px] text-muted-foreground/45">{activeLayer.anchor_placement}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">02</span>
+                                  <div>
+                                    <p className="text-[11px] text-foreground/80">
+                                      <span className="font-mono">{activeLayer.top_sprays}×</span> {activeLayer.top_name}
+                                    </p>
+                                    {activeLayer.top_placement && (
+                                      <p className="text-[10px] text-muted-foreground/45">{activeLayer.top_placement}</p>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           )}
 
-                          {/* Placement */}
-                          {(activeLayer.anchor_placement || activeLayer.top_placement) && (
-                            <div>
-                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Placement</span>
-                              <div className="mt-1 space-y-0.5">
-                                {activeLayer.anchor_placement && (
-                                  <p className="text-[11px] text-muted-foreground/60">
-                                    <span className="text-foreground/65">{activeLayer.anchor_name ?? today_pick.name}</span>
-                                    <span className="text-muted-foreground/30"> → </span>{activeLayer.anchor_placement}
-                                  </p>
-                                )}
-                                {activeLayer.top_placement && (
-                                  <p className="text-[11px] text-muted-foreground/60">
-                                    <span className="text-foreground/65">{activeLayer.top_name}</span>
-                                    <span className="text-muted-foreground/30"> → </span>{activeLayer.top_placement}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Strength note */}
-                          {activeLayer.strength_note && (
-                            <p className="text-[10px] text-muted-foreground/45 italic leading-snug">
-                              ⚠ {activeLayer.strength_note}
+                          {/* RESULT */}
+                          <div>
+                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Result</span>
+                            <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
+                              {activeLayer.strength_note ?? `A ${activeLayer.mode} blend of ${activeLayer.anchor_name ?? today_pick.name} and ${activeLayer.top_name}`}
                             </p>
-                          )}
-
-                          {/* Why it works — condensed */}
-                          {(activeLayer.why_it_works || activeLayer.reason) && (
-                            <p className="text-[10px] text-muted-foreground/40 leading-snug">
-                              {activeLayer.why_it_works ?? activeLayer.reason}
-                            </p>
-                          )}
+                          </div>
                         </div>
                       </motion.div>
                     )}
