@@ -402,7 +402,7 @@ const OdaraScreen = () => {
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
-  const [forecastTransition, setForecastTransition] = useState(false);
+  
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
