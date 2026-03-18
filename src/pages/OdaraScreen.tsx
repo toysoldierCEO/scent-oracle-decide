@@ -112,6 +112,8 @@ interface FragranceProfile {
   longevity_score?: number;
   projection_score?: number;
   weather?: string;
+  secondary_weather?: string;
+  bottle_url?: string;
 }
 
 function performanceLabel(score: number): string {
