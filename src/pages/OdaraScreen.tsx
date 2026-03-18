@@ -370,20 +370,13 @@ const OdaraScreen = () => {
   const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
-  // Handler for forecast day tap
-  const handleForecastDayTap = useCallback((index: number) => {
+  const handleForecastDayTap = (index: number) => {
     setSelectedForecastDay(index);
     setAccepted(false);
     setLayerSheetOpen(false);
     setCardKey((k) => k + 1);
     setExitDirection(null);
-    // If tapping back to today (index 0), oracle data is already loaded
-    if (index === 0) {
-      // Update forecast day 0 layer data from oracle
-      forecastDays[0].layer = layerMap ?? null;
-      forecastDays[0].alternates = oracleAlternates ?? null;
-    }
-  }, [forecastDays, layerMap, oracleAlternates]);
+  };
 
   return (
     <div className="dark">
