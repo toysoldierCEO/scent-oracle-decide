@@ -666,7 +666,7 @@ const OdaraScreen = () => {
         {/* Subtle background tint overlay */}
         <motion.div
           className="absolute inset-0 pointer-events-none z-0"
-          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}0D` : "transparent" }}
+          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}08` : "transparent" }}
           transition={{ duration: 0.4, ease: "easeInOut" }}
         />
         {/* Header */}
