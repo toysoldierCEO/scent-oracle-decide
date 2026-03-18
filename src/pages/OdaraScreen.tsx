@@ -1164,8 +1164,8 @@ const OdaraScreen = () => {
                   )}
 
                   {/* Why it fits */}
-                  <div className="mb-2">
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block mb-1">Why it fits</span>
+                  <div className="mt-8 mb-2">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Why it fits</span>
                     <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
                   </div>
                 </motion.div>
