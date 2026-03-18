@@ -863,13 +863,13 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Cover flow transforms
-              const scale = isCenter ? 1 : Math.max(0.78, 1 - absOffset * 0.1);
-              const rotateY = offset * -24;
-              const translateX = offset * 85;
-              const translateZ = isCenter ? 40 : -absOffset * 70;
-              const opacity = isCenter ? 1 : Math.max(0.25, 0.85 - absOffset * 0.3);
-              const blur = isCenter ? 0 : Math.min(absOffset * 4, 10);
+              // Cover flow transforms — Apple-style visible side cards
+              const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
+              const rotateY = offset * -22;
+              const translateX = offset * 90;
+              const translateZ = isCenter ? 40 : -absOffset * 50;
+              const opacity = isCenter ? 1 : Math.max(0.55, 0.75 - absOffset * 0.12);
+              const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
               const zIndex = 10 - absOffset;
 
               return (
