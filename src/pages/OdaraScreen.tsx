@@ -1101,32 +1101,23 @@ const OdaraScreen = () => {
                     </span>
                   </div>
 
-                  {/* Vibe */}
-                  {profile?.vibe && (
-                    <div className="mb-6">
-                      <p className="text-sm text-foreground/70 leading-relaxed text-center italic">
-                        "{profile.vibe}"
-                      </p>
-                    </div>
-                  )}
-
                   {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
                     <div className="mb-6 space-y-3">
                       <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
-                      {profile.top_notes && (
+                      {profile?.top_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
                         </div>
                       )}
-                      {profile.heart_notes && (
+                      {profile?.heart_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
                         </div>
                       )}
-                      {profile.base_notes && (
+                      {profile?.base_notes && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Base</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
@@ -1136,19 +1127,19 @@ const OdaraScreen = () => {
                   )}
 
                   {/* Performance */}
-                  {(profile?.longevity || profile?.projection) && (
+                  {(profile?.longevity_score != null || profile?.projection_score != null) && (
                     <div className="mb-6 grid grid-cols-2 gap-4">
                       <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
-                      {profile.longevity && (
+                      {profile?.longevity_score != null && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.longevity}</p>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.longevity_score)}</p>
                         </div>
                       )}
-                      {profile.projection && (
+                      {profile?.projection_score != null && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.projection}</p>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.projection_score)}</p>
                         </div>
                       )}
                     </div>
