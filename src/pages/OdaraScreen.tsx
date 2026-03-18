@@ -1279,6 +1279,7 @@ const OdaraScreen = () => {
             const profile = FRAGRANCE_PROFILES[today_pick.name];
             const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
             const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
+            const familyTint = FAMILY_TINTS[today_pick.family] ?? DEFAULT_TINT;
             return (
               <motion.div
                 key="profile-overlay"
@@ -1295,7 +1296,7 @@ const OdaraScreen = () => {
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
-                  className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto"
+                  className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto relative"
                   style={{
                     maxHeight: "85vh",
                     background: "hsl(var(--background))",
@@ -1309,26 +1310,63 @@ const OdaraScreen = () => {
 
                   <button
                     onClick={() => setProfileOpen(false)}
-                    className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                    className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors z-10"
                   >
                     <X size={18} />
                   </button>
 
-                  <div className="text-center mb-6">
-                    <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
-                    {profile?.brand && (
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">{profile.brand}</p>
+                  {/* Top section: Name + Family + Bottle */}
+                  <div className="relative mb-6">
+                    {/* Bottle image — top right */}
+                    {profile?.bottle_url && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
+                        className="absolute -top-2 right-0 z-0"
+                        style={{ width: "25%", maxWidth: "100px" }}
+                      >
+                        <div
+                          className="relative rounded-xl overflow-hidden"
+                          style={{
+                            boxShadow: `0 8px 24px -6px rgba(0,0,0,0.4), 0 0 20px -4px ${familyTint.glow}`,
+                          }}
+                        >
+                          <img
+                            src={profile.bottle_url}
+                            alt={`${today_pick.name} bottle`}
+                            className="w-full h-auto object-cover"
+                            style={{ aspectRatio: "2/3" }}
+                          />
+                          {/* Family glow overlay */}
+                          <div
+                            className="absolute inset-0 pointer-events-none"
+                            style={{
+                              background: `linear-gradient(180deg, transparent 40%, ${familyColor}15 100%)`,
+                            }}
+                          />
+                        </div>
+                      </motion.div>
                     )}
-                    <span
-                      className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
-                      style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
-                    >
-                      {familyLabel}
-                    </span>
+
+                    {/* Name + family — left aligned to leave room for bottle */}
+                    <div style={{ paddingRight: profile?.bottle_url ? "30%" : "0" }}>
+                      <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
+                      {profile?.brand && (
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">{profile.brand}</p>
+                      )}
+                      <span
+                        className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
+                        style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
+                      >
+                        {familyLabel}
+                      </span>
+                    </div>
                   </div>
 
+                  {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
-                    <div className="mt-6 mb-6 space-y-3">
+                    <div className="mb-8 space-y-3">
                       <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
                       {profile?.top_notes && (
                         <div>
@@ -1351,42 +1389,84 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
+                  {/* Performance Bars */}
                   {(profile?.longevity_score != null || profile?.projection_score != null) && (
-                    <div className="mt-8 mb-6 grid grid-cols-2 gap-4">
-                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 col-span-2">Performance</span>
-                      {profile?.longevity_score != null && (
-                        <div>
-                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.longevity_score)}</p>
-                        </div>
-                      )}
-                      {profile?.projection_score != null && (
-                        <div>
-                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.projection_score)}</p>
-                        </div>
-                      )}
+                    <div className="mb-8">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-3">Performance</span>
+                      <div className="space-y-4">
+                        {profile?.longevity_score != null && (
+                          <div>
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
+                              <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.longevity_score * 10)}/10</span>
+                            </div>
+                            <div
+                              className="w-full h-[6px] rounded-full overflow-hidden"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                            >
+                              <motion.div
+                                className="h-full rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${profile.longevity_score * 100}%` }}
+                                transition={{ duration: 0.5, delay: 0.2, ease: [0.2, 0, 0, 1] }}
+                                style={{
+                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {profile?.projection_score != null && (
+                          <div>
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
+                              <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.projection_score * 10)}/10</span>
+                            </div>
+                            <div
+                              className="w-full h-[6px] rounded-full overflow-hidden"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                            >
+                              <motion.div
+                                className="h-full rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${profile.projection_score * 100}%` }}
+                                transition={{ duration: 0.5, delay: 0.35, ease: [0.2, 0, 0, 1] }}
+                                style={{
+                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
+                  {/* Role + Weather (two-tier) */}
                   {(profile?.wardrobe_role || profile?.weather) && (
-                    <div className="mt-8 mb-4 grid grid-cols-2 gap-4">
+                    <div className="mb-8 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
                           <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Role</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.wardrobe_role}</p>
+                          <p className="text-[12px] text-foreground/80 mt-1">{profile.wardrobe_role}</p>
                         </div>
                       )}
                       {profile.weather && (
                         <div>
                           <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Weather</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.weather}</p>
+                          <p className="text-[12px] text-foreground/80 mt-1">{profile.weather}</p>
+                          {profile.secondary_weather && (
+                            <p className="text-[11px] text-muted-foreground/50 mt-0.5 italic">{profile.secondary_weather}</p>
+                          )}
                         </div>
                       )}
                     </div>
                   )}
 
-                  <div className="mt-8 mb-2">
+                  {/* Why it fits */}
+                  <div className="mb-2">
                     <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Why it fits</span>
                     <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
                   </div>
