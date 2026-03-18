@@ -914,26 +914,27 @@ const OdaraScreen = () => {
             {/* Track line */}
             <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
             
-            {/* Continuous orb with handoff fade */}
+            {/* Continuous orb with midnight handoff fade */}
             {(() => {
               const totalSegments = 6;
-              const pct = (orbPosition / totalSegments) * 100;
-              // Fade zone: orb fades out in the last 15% before reaching next day marker
-              const progressInSegment = orbPosition % 1;
-              const FADE_START = 0.82;
-              const orbOpacity = progressInSegment >= FADE_START
-                ? 1 - ((progressInSegment - FADE_START) / (1 - FADE_START))
+              // orbPosition: 0 at midnight → 1 at next midnight
+              // Fade zone: last 20% of day (roughly 8pm–midnight)
+              const FADE_START = 0.80;
+              const progressInDay = orbPosition; // 0→1 within current day
+              const orbFade = progressInDay >= FADE_START
+                ? 1 - ((progressInDay - FADE_START) / (1 - FADE_START))
                 : 1;
-              // Clamp position so orb stops short of the next day marker
-              const clampedPct = Math.min(pct, ((Math.floor(orbPosition) + FADE_START) / totalSegments) * 100 + ((1 - FADE_START) / totalSegments) * 100 * 0.5);
+              // Clamp position: orb stops at 90% of the way to next day marker max
+              const maxProgress = FADE_START + (1 - FADE_START) * 0.4; // ~0.88 — never reaches day 1
+              const clampedProgress = Math.min(progressInDay, maxProgress);
+              const pct = (clampedProgress / totalSegments) * 100;
               return (
                 <div
-                  className="absolute top-[2px] z-10"
+                  className="absolute top-[2px] z-10 pointer-events-none"
                   style={{
-                    left: `calc(12px + ${clampedPct / 100} * (100% - 24px))`,
+                    left: `calc(12px + ${pct / 100} * (100% - 24px))`,
                     transform: "translateX(-50%)",
-                    opacity: Math.max(0, orbOpacity),
-                    transition: "opacity 0.3s ease-out",
+                    opacity: Math.max(0, orbFade),
                   }}
                 >
                   <div
@@ -942,7 +943,7 @@ const OdaraScreen = () => {
                       width: "7px",
                       height: "7px",
                       background: "white",
-                      boxShadow: `0 0 4px 2px rgba(255,255,255,${0.15 * orbOpacity}), 0 0 10px 4px rgba(255,255,255,${0.06 * orbOpacity})`,
+                      boxShadow: `0 0 4px 2px rgba(255,255,255,${(0.15 * orbFade).toFixed(3)}), 0 0 10px 4px rgba(255,255,255,${(0.06 * orbFade).toFixed(3)})`,
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
                   />
