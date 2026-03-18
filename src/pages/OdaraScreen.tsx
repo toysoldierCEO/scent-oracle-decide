@@ -794,16 +794,26 @@ const OdaraScreen = () => {
             {/* Track line */}
             <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
             
-            {/* Continuous orb */}
+            {/* Continuous orb with handoff fade */}
             {(() => {
               const totalSegments = 6;
               const pct = (orbPosition / totalSegments) * 100;
+              // Fade zone: orb fades out in the last 15% before reaching next day marker
+              const progressInSegment = orbPosition % 1;
+              const FADE_START = 0.82;
+              const orbOpacity = progressInSegment >= FADE_START
+                ? 1 - ((progressInSegment - FADE_START) / (1 - FADE_START))
+                : 1;
+              // Clamp position so orb stops short of the next day marker
+              const clampedPct = Math.min(pct, ((Math.floor(orbPosition) + FADE_START) / totalSegments) * 100 + ((1 - FADE_START) / totalSegments) * 100 * 0.5);
               return (
                 <div
                   className="absolute top-[2px] z-10"
                   style={{
-                    left: `calc(12px + ${pct / 100} * (100% - 24px))`,
+                    left: `calc(12px + ${clampedPct / 100} * (100% - 24px))`,
                     transform: "translateX(-50%)",
+                    opacity: Math.max(0, orbOpacity),
+                    transition: "opacity 0.3s ease-out",
                   }}
                 >
                   <div
@@ -812,7 +822,7 @@ const OdaraScreen = () => {
                       width: "7px",
                       height: "7px",
                       background: "white",
-                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
+                      boxShadow: `0 0 4px 2px rgba(255,255,255,${0.15 * orbOpacity}), 0 0 10px 4px rgba(255,255,255,${0.06 * orbOpacity})`,
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
                   />
@@ -829,6 +839,32 @@ const OdaraScreen = () => {
                   : FALLBACK_ORB_COLOR;
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
+
+                // Handoff: compute how much the approaching orb illuminates this day
+                // The orb is approaching day i when orbPosition is between (i-0.18) and i
+                const FADE_ZONE = 0.18;
+                const distToDay = i - orbPosition;
+                const isNextTarget = distToDay > 0 && distToDay <= FADE_ZONE;
+                const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
+                // Is this the day the orb is currently on (just passed)?
+                const isCurrentOrbDay = i === Math.floor(orbPosition) && orbPosition - i < FADE_ZONE;
+
+                // Dynamic opacity based on handoff + selection + current day
+                const labelOpacity = isSelected
+                  ? 0.85
+                  : isCurrentOrbDay
+                    ? 0.55
+                    : isNextTarget
+                      ? 0.35 + handoffGlow * 0.3
+                      : i === 0
+                        ? 0.55
+                        : 0.35;
+                const dateOpacity = isSelected
+                  ? 0.6
+                  : isNextTarget
+                    ? 0.25 + handoffGlow * 0.2
+                    : 0.25;
+
                 return (
                   <button
                     key={i}
@@ -842,12 +878,8 @@ const OdaraScreen = () => {
                       style={{
                         fontSize: "10px",
                         letterSpacing: "0.08em",
-                        color: isSelected
-                          ? "rgba(255,255,255,0.85)"
-                          : i === 0
-                            ? "rgba(255,255,255,0.55)"
-                            : "rgba(255,255,255,0.35)",
-                        fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
+                        color: `rgba(255,255,255,${labelOpacity})`,
+                        fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 400,
                       }}
                     >
                       {d.label}
@@ -858,9 +890,7 @@ const OdaraScreen = () => {
                       className="font-mono text-center leading-none transition-all duration-200"
                       style={{
                         fontSize: "9px",
-                        color: isSelected
-                          ? "rgba(255,255,255,0.6)"
-                          : "rgba(255,255,255,0.25)",
+                        color: `rgba(255,255,255,${dateOpacity})`,
                       }}
                     >
                       {d.day}
@@ -872,12 +902,14 @@ const OdaraScreen = () => {
                       animate={{
                         width: isSelected ? "7px" : "5px",
                         height: isSelected ? "7px" : "5px",
-                        scale: isSelected ? 1.1 : 1,
+                        scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
                         boxShadow: isSelected
                           ? `0 0 8px 3px ${familyColor}55`
-                          : hasFragrance
-                            ? `0 0 3px 1px ${familyColor}22`
-                            : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
+                          : isNextTarget
+                            ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
+                            : hasFragrance
+                              ? `0 0 3px 1px ${familyColor}22`
+                              : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
                         opacity: hasFragrance ? 1 : 0.5,
                       }}
                       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
