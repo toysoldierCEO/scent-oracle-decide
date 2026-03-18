@@ -1132,7 +1132,7 @@ const OdaraScreen = () => {
                       <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 col-span-2">Performance</span>
                       {profile?.longevity_score != null && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{performanceLabel(profile.longevity_score)}</p>
                         </div>
                       )}
