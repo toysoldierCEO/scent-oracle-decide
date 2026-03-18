@@ -1107,7 +1107,7 @@ const OdaraScreen = () => {
                       <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
                       {profile?.top_notes && (
                         <div>
-                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
+                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Top</span>
                           <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
                         </div>
                       )}
