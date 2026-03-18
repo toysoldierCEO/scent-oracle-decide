@@ -906,11 +906,11 @@ const OdaraScreen = () => {
                     style={{
                       background: isCenter
                         ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
-                        : "rgba(10,10,12,0.75)",
-                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(20px)",
+                        : "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%), rgba(18,18,22,0.82)",
+                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(16px) saturate(1.1)",
                       boxShadow: isCenter
                         ? "0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.08)"
-                        : "0 10px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)",
+                        : "0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.06)",
                     }}
                   >
                     {/* Day/date label */}
