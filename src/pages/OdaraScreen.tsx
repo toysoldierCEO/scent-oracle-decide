@@ -1,9 +1,9 @@
-import { motion, AnimatePresence, PanInfo } from "framer-motion";
+import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Star, X, Undo2 } from "lucide-react";
+import { Star, X, ChevronUp, ChevronDown } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -63,17 +63,33 @@ type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
 
-/* ── Fragrance family → color mapping ── */
+/* ── Fragrance family → color mapping (expanded with tint HSL values) ── */
 const FAMILY_COLORS: Record<string, string> = {
   "oud-amber": "#C08A3E",
   "fresh-blue": "#5B9BD5",
-  "woody-clean": "#8A9BAE",
+  "woody-clean": "#6B9B7A",
   "sweet-gourmand": "#D4A056",
-  "dark-leather": "#3A3A3A",
+  "dark-leather": "#8B3A3A",
   "tobacco-boozy": "#6B4226",
   "floral-musk": "#C4A0B9",
   "citrus-aromatic": "#B8C94E",
+  "citrus-cologne": "#E8D44D",
 };
+
+/* Family → tint colors for card backgrounds (subtle, desaturated) */
+const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string }> = {
+  "fresh-blue":      { bg: "rgba(91,155,213,0.06)",  glow: "rgba(91,155,213,0.15)",  border: "rgba(91,155,213,0.12)" },
+  "sweet-gourmand":  { bg: "rgba(212,160,86,0.06)",  glow: "rgba(212,160,86,0.15)",  border: "rgba(212,160,86,0.12)" },
+  "oud-amber":       { bg: "rgba(192,138,62,0.07)",  glow: "rgba(192,138,62,0.18)",  border: "rgba(192,138,62,0.14)" },
+  "dark-leather":    { bg: "rgba(139,58,58,0.06)",   glow: "rgba(139,58,58,0.15)",   border: "rgba(139,58,58,0.12)" },
+  "woody-clean":     { bg: "rgba(107,155,122,0.06)", glow: "rgba(107,155,122,0.15)", border: "rgba(107,155,122,0.12)" },
+  "tobacco-boozy":   { bg: "rgba(107,66,38,0.07)",   glow: "rgba(107,66,38,0.18)",   border: "rgba(107,66,38,0.14)" },
+  "citrus-cologne":  { bg: "rgba(232,212,77,0.05)",  glow: "rgba(232,212,77,0.12)",  border: "rgba(232,212,77,0.10)" },
+  "citrus-aromatic": { bg: "rgba(184,201,78,0.05)",  glow: "rgba(184,201,78,0.12)",  border: "rgba(184,201,78,0.10)" },
+  "floral-musk":     { bg: "rgba(196,160,185,0.05)", glow: "rgba(196,160,185,0.12)", border: "rgba(196,160,185,0.10)" },
+};
+
+const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)" };
 
 const FAMILY_LABELS: Record<string, string> = {
   "oud-amber": "Oud & Amber",
@@ -84,6 +100,7 @@ const FAMILY_LABELS: Record<string, string> = {
   "tobacco-boozy": "Tobacco & Boozy",
   "floral-musk": "Floral & Musk",
   "citrus-aromatic": "Citrus & Aromatic",
+  "citrus-cologne": "Citrus Cologne",
 };
 
 interface FragranceProfile {
@@ -92,8 +109,8 @@ interface FragranceProfile {
   heart_notes?: string[];
   base_notes?: string[];
   wardrobe_role?: string;
-  longevity_score?: number; // 0–1
-  projection_score?: number; // 0–1
+  longevity_score?: number;
+  projection_score?: number;
   weather?: string;
 }
 
@@ -169,9 +186,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
   },
 };
 
-const LONG_PRESS_DURATION = 500;
+const LONG_PRESS_DURATION = 450;
 
-/* ── 7-day forecast mock data ── */
 /* ── Layer compatibility engine ── */
 interface FragranceEntry {
   fragrance_id: string;
@@ -182,7 +198,6 @@ interface FragranceEntry {
   projection_score: number;
 }
 
-// Compatibility matrix: family → compatible families with score
 const LAYER_COMPATIBILITY: Record<string, { family: string; score: number }[]> = {
   "oud-amber": [
     { family: "sweet-gourmand", score: 0.88 },
@@ -233,12 +248,11 @@ interface DailySet {
 }
 
 function computeDominanceSafety(base: FragranceEntry, layer: FragranceEntry): number {
-  // Layer should not overpower base
   const projDelta = layer.projection_score - base.projection_score;
-  if (projDelta > 0.3) return 0.2; // layer too strong
+  if (projDelta > 0.3) return 0.2;
   if (projDelta > 0.15) return 0.5;
   if (projDelta > 0) return 0.75;
-  return 1.0; // layer is softer — safe
+  return 1.0;
 }
 
 function recommendDailySet(
@@ -251,39 +265,24 @@ function recommendDailySet(
 
   let bestLayer: FragranceEntry | null = null;
   let bestScore = 0;
-  let bestCompat = 0;
-  let bestDominance = 0;
 
   for (const candidate of candidates) {
     if (candidate.fragrance_id === base.fragrance_id) continue;
-
     const compatMatch = compatEntries.find(c => c.family === candidate.family);
     if (!compatMatch) continue;
-
     const compatibility = compatMatch.score;
     const dominanceSafety = computeDominanceSafety(base, candidate);
-    const rotationValue = 1 - (dayIndex % 3) * 0.1; // slight variation
-
-    const score =
-      0.45 * 0.85 + // base_score (already selected)
-      0.20 * compatibility +
-      0.15 * dominanceSafety +
-      0.10 * 0.8 + // context_fit placeholder
-      0.10 * rotationValue;
-
+    const rotationValue = 1 - (dayIndex % 3) * 0.1;
+    const score = 0.45 * 0.85 + 0.20 * compatibility + 0.15 * dominanceSafety + 0.10 * 0.8 + 0.10 * rotationValue;
     if (score > bestScore && dominanceSafety > 0.4 && compatibility > 0.7) {
       bestScore = score;
       bestLayer = candidate;
-      bestCompat = compatibility;
-      bestDominance = dominanceSafety;
     }
   }
 
   if (bestLayer && bestScore > 0.65) {
     return {
-      base,
-      layer: bestLayer,
-      mode: "balance",
+      base, layer: bestLayer, mode: "balance",
       confidence: Math.round(bestScore * 100) / 100,
       reasoning: `${bestLayer.name} complements ${base.name} — compatible families with safe projection ratio.`,
       is_layered: true,
@@ -291,9 +290,7 @@ function recommendDailySet(
   }
 
   return {
-    base,
-    layer: null,
-    mode: null,
+    base, layer: null, mode: null,
     confidence: Math.round((0.45 * 0.85 + 0.10 * 0.8 + 0.10 * 0.9) * 100) / 100,
     reasoning: `${base.name} wears best solo today — no layer improves the set.`,
     is_layered: false,
@@ -344,22 +341,15 @@ function buildForecastDays(): ForecastDay[] {
     };
     const dailySet = recommendDailySet(baseEntry, allEntries, i);
 
-    // Build layer map from daily set if layered
     let layerMap: Record<LayerMood, LayerOption> | null = null;
     if (dailySet.is_layered && dailySet.layer) {
       const layerOption: LayerOption = {
-        base_id: frag.fragrance_id,
-        anchor_name: frag.name,
-        top_id: dailySet.layer.fragrance_id,
-        top_name: dailySet.layer.name,
-        top: `Layer with ${dailySet.layer.name}`,
-        mode: "balance",
-        reason: dailySet.reasoning,
-        why_it_works: dailySet.reasoning,
-        anchor_sprays: 3,
-        top_sprays: 1,
-        anchor_placement: "Neck, chest",
-        top_placement: "Wrists",
+        base_id: frag.fragrance_id, anchor_name: frag.name,
+        top_id: dailySet.layer.fragrance_id, top_name: dailySet.layer.name,
+        top: `Layer with ${dailySet.layer.name}`, mode: "balance",
+        reason: dailySet.reasoning, why_it_works: dailySet.reasoning,
+        anchor_sprays: 3, top_sprays: 1,
+        anchor_placement: "Neck, chest", top_placement: "Wrists",
         strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
       };
       layerMap = {
@@ -371,13 +361,9 @@ function buildForecastDays(): ForecastDay[] {
     }
 
     return {
-      label: dayNames[d.getDay()],
-      day: d.getDate(),
+      label: dayNames[d.getDay()], day: d.getDate(),
       fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
-      temperature: frag.temperature,
-      layer: layerMap,
-      alternates: null,
-      dailySet,
+      temperature: frag.temperature, layer: layerMap, alternates: null, dailySet,
     };
   });
 }
@@ -387,7 +373,6 @@ const OdaraScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionState, setActionState] = useState<ActionState>("idle");
-  const [accepted, setAccepted] = useState(false);
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
@@ -400,23 +385,22 @@ const OdaraScreen = () => {
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
-  
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Undo system
-  const [undoVisible, setUndoVisible] = useState(false);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoPrevState = useRef<{ dayIndex: number; accepted: boolean } | null>(null);
+  // Swipe feedback state
+  const [swipeFeedback, setSwipeFeedback] = useState<"up" | "down" | null>(null);
 
+  // Direction locking for gestures
+  const dragDirection = useRef<"none" | "horizontal" | "vertical">("none");
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const LOCK_THRESHOLD = 12; // px before direction locks
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
-
-  // Build forecast days
   const forecastDays = useMemo(() => buildForecastDays(), []);
 
-  // Continuous timepiece orb position (requestAnimationFrame)
+  // Continuous timepiece orb position
   const [orbPosition, setOrbPosition] = useState(0);
   useEffect(() => {
     let raf: number;
@@ -426,8 +410,6 @@ const OdaraScreen = () => {
       startOfDay.setHours(0, 0, 0, 0);
       const msInDay = 24 * 60 * 60 * 1000;
       const dayProgress = (now.getTime() - startOfDay.getTime()) / msInDay;
-      // Position: dayProgress maps to the space between day 0 and day 1 markers
-      // Full range is 0 (start of today) to 7 (end of 7th day)
       setOrbPosition(dayProgress);
       raf = requestAnimationFrame(tick);
     };
@@ -440,22 +422,11 @@ const OdaraScreen = () => {
     let cancelled = false;
     setWeatherLoading(true);
     fetchLiveTemperature()
-      .then((temp) => {
-        if (!cancelled) {
-          setLiveTemperature(temp);
-          setSelectedTemperature(temp);
-        }
-      })
-      .catch(() => {
-        // silently fall back to 40
-      })
+      .then((temp) => { if (!cancelled) { setLiveTemperature(temp); setSelectedTemperature(temp); } })
+      .catch(() => {})
       .finally(() => { if (!cancelled) setWeatherLoading(false); });
     return () => { cancelled = true; };
   }, []);
-
-
-  // Accepted days tracking (which forecast days have been locked in)
-  const [acceptedDays, setAcceptedDays] = useState<Set<number>>(new Set());
 
   const getUserId = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -465,7 +436,6 @@ const OdaraScreen = () => {
   const fetchOracle = useCallback(async (ctx?: string, temp?: number) => {
     setLoading(true);
     setError(false);
-    setAccepted(false);
     setExitDirection(null);
     try {
       const userId = await getUserId();
@@ -485,19 +455,17 @@ const OdaraScreen = () => {
     }
   }, [getUserId, selectedContext, effectiveTemperature]);
 
-  useEffect(() => {
-    fetchOracle();
-  }, [fetchOracle]);
+  useEffect(() => { fetchOracle(); }, [fetchOracle]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
-
-    // Determine which fragrance to accept based on current view
     const isViewingForecastNow = selectedForecastDay > 0;
     const entry = isViewingForecastNow ? forecastDays[selectedForecastDay]?.fragrance : oracle?.today_pick;
     if (!entry?.fragrance_id) return;
 
     setActionState("accepting");
+    // Show swipe-up feedback
+    setSwipeFeedback("up");
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
@@ -506,48 +474,21 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-
-      // Save undo state
-      undoPrevState.current = { dayIndex: selectedForecastDay, accepted: false };
-
-      // Mark this day as accepted
-      setAcceptedDays((prev) => new Set(prev).add(selectedForecastDay));
-      setAccepted(true);
-
-      // Show undo pill
-      setUndoVisible(true);
-      if (undoTimer.current) clearTimeout(undoTimer.current);
-      undoTimer.current = setTimeout(() => {
-        setUndoVisible(false);
-        undoPrevState.current = null;
-      }, 3000);
+      toast.success(`${entry.name} — wearing today`);
     } catch (e) {
       console.error("Accept failed:", e);
-      toast.error("Couldn't lock in — try again");
+      toast.error("Couldn't confirm — try again");
     } finally {
+      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
   }, [actionState, oracle, getUserId, selectedForecastDay, forecastDays, selectedContext]);
 
-  const handleUndo = useCallback(() => {
-    if (!undoPrevState.current) return;
-    const prev = undoPrevState.current;
-    setAcceptedDays((s) => {
-      const next = new Set(s);
-      next.delete(prev.dayIndex);
-      return next;
-    });
-    setAccepted(false);
-    setUndoVisible(false);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    undoPrevState.current = null;
-    toast("Selection undone");
-  }, []);
-
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
+    setSwipeFeedback("down");
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
@@ -556,24 +497,23 @@ const OdaraScreen = () => {
         p_context: "hangout",
       });
       if (rpcError) throw rpcError;
+      toast("Skipped — next option");
       await fetchOracle();
     } catch (e) {
       console.error("Skip failed:", e);
       toast.error("Couldn't skip — try again");
     } finally {
+      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
   }, [actionState, oracle, getUserId, fetchOracle]);
 
-
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !oracle) return;
     setActionState("rebuilding");
-
     const oldPick = oracle.today_pick;
     const remainingAlts = (oracle.alternates ?? []).filter((a) => a.name !== alt.name);
-    // Add old hero into alternates, removing duplicates
     const newAlts = [
       { fragrance_id: oldPick.fragrance_id, name: oldPick.name, family: oldPick.family, reason: oldPick.reason },
       ...remainingAlts,
@@ -583,16 +523,14 @@ const OdaraScreen = () => {
     setTimeout(() => {
       setOracle({
         today_pick: { fragrance_id: alt.fragrance_id, name: alt.name, family: alt.family ?? "", reason: alt.reason ?? "" },
-        layer: null, // no layer data for frontend-local rebuild
+        layer: null,
         alternates: newAlts.slice(0, 3),
       });
-      setAccepted(false);
       setExitDirection(null);
       setCardKey((k) => k + 1);
       setActionState("idle");
     }, 300);
   }, [actionState, oracle]);
-
 
   const isBusy = actionState !== "idle";
 
@@ -643,7 +581,6 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  // When a forecast day is selected, show that day's fragrance; day 0 = oracle data
   const isViewingForecast = selectedForecastDay > 0;
   const forecastEntry = forecastDays[selectedForecastDay];
   const today_pick = isViewingForecast && forecastEntry?.fragrance
@@ -655,13 +592,11 @@ const OdaraScreen = () => {
   const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
-  // Background tint based on current fragrance family
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
     setSelectedForecastDay(index);
-    setAccepted(acceptedDays.has(index));
     setLayerSheetOpen(false);
     setCardKey((k) => k + 1);
     setExitDirection(null);
@@ -715,17 +650,10 @@ const OdaraScreen = () => {
           const tempToShow = displayedTemperature ?? effectiveTemperature;
           const pct = ((clamp(tempToShow, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
-          // Scent behavior label
-          const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
-
           return (
             <div className="w-full max-w-md mb-6 px-2">
-              {/* Track + Orb + Temp label */}
               <div className="relative w-full" style={{ height: "40px" }}>
-                {/* Track line */}
                 <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "25px" }} />
-
-                {/* Orb on track with temperature above */}
                 <motion.div
                   className="absolute -translate-x-1/2 flex flex-col items-center"
                   style={{ top: "0px" }}
@@ -740,8 +668,7 @@ const OdaraScreen = () => {
                     whileHover={{ scale: 1.4, boxShadow: "0 0 6px 3px rgba(255,255,255,0.25), 0 0 14px 6px rgba(255,255,255,0.1)" }}
                     whileTap={{ scale: 1.2 }}
                     style={{
-                      width: "7px",
-                      height: "7px",
+                      width: "7px", height: "7px",
                       background: "white",
                       boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
                       animation: "orbBreathe 4s ease-in-out infinite",
@@ -750,9 +677,7 @@ const OdaraScreen = () => {
                 </motion.div>
               </div>
 
-              {/* Benchmarks below track */}
               <div className="relative w-full mt-1" style={{ height: "20px" }}>
-                {/* Benchmark ticks */}
                 {BENCHMARKS.map((temp) => {
                   const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
                   return (
@@ -775,7 +700,6 @@ const OdaraScreen = () => {
                   );
                 })}
               </div>
-
             </div>
           );
         })()}
@@ -783,10 +707,52 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack */}
         <div className="relative w-full max-w-lg mt-3 overflow-visible" style={{ perspective: "1200px" }}>
-          {/* Card stack container — handles swipe at this level */}
+          {/* Gesture hint indicators */}
+          <AnimatePresence>
+            {swipeFeedback === "up" && (
+              <motion.div
+                key="feedback-up"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: -8 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+                className="absolute -top-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
+              >
+                <ChevronUp size={14} className="text-foreground/60" />
+                <span className="text-[11px] uppercase tracking-[0.15em] text-foreground/80 font-medium">Wearing this</span>
+              </motion.div>
+            )}
+            {swipeFeedback === "down" && (
+              <motion.div
+                key="feedback-down"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 8 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+                className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
+              >
+                <ChevronDown size={14} className="text-muted-foreground/60" />
+                <span className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/60 font-medium">Not today</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
             style={{ minHeight: "420px", touchAction: "none" }}
+            onPointerDown={(e) => {
+              dragDirection.current = "none";
+              dragStart.current = { x: e.clientX, y: e.clientY };
+            }}
+            onPointerMove={(e) => {
+              if (!dragStart.current || dragDirection.current !== "none") return;
+              const dx = Math.abs(e.clientX - dragStart.current.x);
+              const dy = Math.abs(e.clientY - dragStart.current.y);
+              if (dx > LOCK_THRESHOLD || dy > LOCK_THRESHOLD) {
+                dragDirection.current = dx > dy ? "horizontal" : "vertical";
+              }
+            }}
             drag
             dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
             dragElastic={0.15}
@@ -794,49 +760,46 @@ const OdaraScreen = () => {
               const { offset, velocity } = info;
               const absX = Math.abs(offset.x);
               const absY = Math.abs(offset.y);
-              const threshold = 50;
-              const velThreshold = 200;
 
-              // Determine dominant gesture axis
-              const isHorizontal = absX > absY * 1.2;
-              const isVertical = absY > absX * 1.2;
+              // Use the locked direction, or fall back to dominant axis
+              const dir = dragDirection.current !== "none"
+                ? dragDirection.current
+                : (absX > absY ? "horizontal" : "vertical");
 
-              if (isHorizontal) {
-                // Horizontal = browse forecast days
+              dragDirection.current = "none";
+              dragStart.current = null;
+
+              if (dir === "horizontal") {
+                const hThreshold = 50;
+                const hVel = 200;
                 if (
-                  (offset.x < -threshold || velocity.x < -velThreshold) &&
+                  (offset.x < -hThreshold || velocity.x < -hVel) &&
                   selectedForecastDay < forecastDays.length - 1
                 ) {
                   const next = selectedForecastDay + 1;
                   setSelectedForecastDay(next);
-                  setAccepted(acceptedDays.has(next));
                   setLayerSheetOpen(false);
                   const dayTemp = forecastDays[next]?.temperature;
                   if (dayTemp != null) setDisplayedTemperature(dayTemp);
                 } else if (
-                  (offset.x > threshold || velocity.x > velThreshold) &&
+                  (offset.x > hThreshold || velocity.x > hVel) &&
                   selectedForecastDay > 0
                 ) {
                   const prev = selectedForecastDay - 1;
                   setSelectedForecastDay(prev);
-                  setAccepted(acceptedDays.has(prev));
                   setLayerSheetOpen(false);
                   const dayTemp = forecastDays[prev]?.temperature;
                   if (dayTemp != null) setDisplayedTemperature(dayTemp);
                 }
-              } else if (isVertical) {
-                // Swipe UP = accept / lock in
-                if (
-                  (offset.y < -threshold || velocity.y < -velThreshold) &&
-                  !acceptedDays.has(selectedForecastDay)
-                ) {
+              } else if (dir === "vertical") {
+                const vThreshold = 60;
+                const vVel = 200;
+                // Swipe UP = accept / wear
+                if (offset.y < -vThreshold || velocity.y < -vVel) {
                   handleAccept();
                 }
-                // Swipe DOWN = skip / not today
-                else if (
-                  (offset.y > threshold || velocity.y > velThreshold) &&
-                  !acceptedDays.has(selectedForecastDay)
-                ) {
+                // Swipe DOWN = skip
+                else if (offset.y > vThreshold || velocity.y > vVel) {
                   handleSkip();
                 }
               }
@@ -847,23 +810,22 @@ const OdaraScreen = () => {
               const absOffset = Math.abs(offset);
               const isCenter = offset === 0;
 
-              // Only render cards within visible range
               if (absOffset > 3) return null;
 
-              // Resolve card data
-              const cardPick = i === 0 && oracle
-                ? oraclePick
-                : dayData.fragrance;
+              const cardPick = i === 0 && oracle ? oraclePick : dayData.fragrance;
               const cardLayerMap = i === 0 ? layerMap : dayData.layer;
               const cardAlternates = i === 0 ? oracleAlternates : dayData.alternates;
               const cardHasLayer = cardLayerMap != null;
               const cardActiveLayer = cardHasLayer ? cardLayerMap[selectedMood] : null;
               const cardHasAlternates = cardAlternates != null && cardAlternates.length > 0;
-              const isDayAccepted = acceptedDays.has(i);
 
               if (!cardPick) return null;
 
-              // Cover flow transforms — Apple-style visible side cards
+              // Family color tinting
+              const familyTint = FAMILY_TINTS[cardPick.family] ?? DEFAULT_TINT;
+              const familyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
+
+              // Cover flow transforms
               const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
               const rotateY = offset * -22;
               const translateX = offset * 90;
@@ -872,15 +834,25 @@ const OdaraScreen = () => {
               const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
               const zIndex = 10 - absOffset;
 
+              // Swipe feedback animation for center card
+              const feedbackY = isCenter && swipeFeedback === "up" ? -8 : isCenter && swipeFeedback === "down" ? 8 : 0;
+              const feedbackScale = isCenter && swipeFeedback ? 0.97 : scale;
+              const feedbackGlow = isCenter && swipeFeedback === "up"
+                ? `0 -8px 30px -5px ${familyColor}30`
+                : isCenter && swipeFeedback === "down"
+                  ? `0 8px 20px -5px rgba(0,0,0,0.4)`
+                  : "";
+
               return (
                 <motion.div
                   key={`coverflow-${i}`}
                   className="absolute w-full max-w-md"
                   animate={{
                     x: translateX,
+                    y: feedbackY,
                     rotateY,
-                    scale,
-                    opacity,
+                    scale: feedbackScale,
+                    opacity: isCenter && swipeFeedback === "down" ? 0.6 : opacity,
                     z: translateZ,
                   }}
                   transition={{
@@ -899,18 +871,18 @@ const OdaraScreen = () => {
                       isCenter ? "cursor-pointer" : ""
                     }`}
                     onClick={() => {
-                      if (!isCenter || isDayAccepted) return;
+                      if (!isCenter) return;
                       if (longPressTimer.current) return;
                       handleAccept();
                     }}
                     style={{
                       background: isCenter
-                        ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
-                        : "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%), rgba(18,18,22,0.82)",
+                        ? `linear-gradient(180deg, ${familyTint.bg} 0%, rgba(255,255,255,0.02) 50%, ${familyTint.bg} 100%), rgba(10,10,12,0.88)`
+                        : `linear-gradient(180deg, ${familyTint.bg} 0%, rgba(255,255,255,0.01) 100%), rgba(18,18,22,0.82)`,
                       backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(16px) saturate(1.1)",
                       boxShadow: isCenter
-                        ? "0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.08)"
-                        : "0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.06)",
+                        ? `0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px ${familyTint.border}, 0 0 40px -10px ${familyTint.glow}${feedbackGlow ? `, ${feedbackGlow}` : ""}`
+                        : `0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px ${familyTint.border}`,
                     }}
                   >
                     {/* Day/date label */}
@@ -948,7 +920,11 @@ const OdaraScreen = () => {
                         {cardPick.name}
                       </h1>
 
-                      <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
+                      {/* Family label with color accent */}
+                      <p
+                        className="text-xs text-center tracking-[0.2em] mb-5 uppercase select-none"
+                        style={{ color: familyColor }}
+                      >
                         {cardPick.family}
                       </p>
                     </div>
@@ -1037,7 +1013,6 @@ const OdaraScreen = () => {
                                   ))}
                                 </div>
 
-                                {/* ROLE */}
                                 <div>
                                   <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Role</span>
                                   <p className="text-[11px] text-foreground/75 mt-0.5 leading-relaxed">
@@ -1045,7 +1020,6 @@ const OdaraScreen = () => {
                                   </p>
                                 </div>
 
-                                {/* WHY THIS WORKS */}
                                 {(cardActiveLayer.why_it_works || cardActiveLayer.reason) && (
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Why this works</span>
@@ -1055,7 +1029,6 @@ const OdaraScreen = () => {
                                   </div>
                                 )}
 
-                                {/* SPRAY ORDER */}
                                 {(cardActiveLayer.anchor_sprays != null && cardActiveLayer.top_sprays != null) && (
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Spray order</span>
@@ -1086,7 +1059,6 @@ const OdaraScreen = () => {
                                   </div>
                                 )}
 
-                                {/* RESULT */}
                                 <div>
                                   <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Result</span>
                                   <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
@@ -1100,7 +1072,7 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
-                    {/* Alternates (Also works with) — only on center */}
+                    {/* Alternates */}
                     {isCenter && cardHasAlternates && (
                       <div className="flex gap-2 justify-center mb-2 flex-wrap">
                         <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40 w-full text-center mb-1">Also works with</span>
@@ -1127,37 +1099,6 @@ const OdaraScreen = () => {
               );
             })}
           </motion.div>
-
-
-          {/* Locked In + Undo Pill */}
-          <AnimatePresence>
-            {(accepted || undoVisible) && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-                className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3"
-              >
-                <span className="text-[11px] font-medium uppercase tracking-[0.15em] text-foreground/80">
-                  Locked in ✓
-                </span>
-                {undoVisible && (
-                  <motion.button
-                    initial={{ opacity: 0, x: -5 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    onClick={handleUndo}
-                    className="flex items-center gap-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground/60 hover:text-foreground/80 transition-colors px-3 py-1.5 rounded-full"
-                    style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.1)" }}
-                  >
-                    <Undo2 size={11} />
-                    Undo
-                  </motion.button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Spacer before forecast */}
@@ -1175,21 +1116,17 @@ const OdaraScreen = () => {
             Forecast
           </span>
           <div className="relative">
-            {/* Track line */}
             <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
-            
-            {/* Continuous orb with midnight handoff fade */}
+
+            {/* Continuous orb */}
             {(() => {
               const totalSegments = 6;
-              // orbPosition: 0 at midnight → 1 at next midnight
-              // Fade zone: last 20% of day (roughly 8pm–midnight)
               const FADE_START = 0.80;
-              const progressInDay = orbPosition; // 0→1 within current day
+              const progressInDay = orbPosition;
               const orbFade = progressInDay >= FADE_START
                 ? 1 - ((progressInDay - FADE_START) / (1 - FADE_START))
                 : 1;
-              // Clamp position: orb stops at 90% of the way to next day marker max
-              const maxProgress = FADE_START + (1 - FADE_START) * 0.4; // ~0.88 — never reaches day 1
+              const maxProgress = FADE_START + (1 - FADE_START) * 0.4;
               const clampedProgress = Math.min(progressInDay, maxProgress);
               const pct = (clampedProgress / totalSegments) * 100;
               return (
@@ -1204,8 +1141,7 @@ const OdaraScreen = () => {
                   <div
                     className="rounded-full"
                     style={{
-                      width: "7px",
-                      height: "7px",
+                      width: "7px", height: "7px",
                       background: "white",
                       boxShadow: `0 0 4px 2px rgba(255,255,255,${(0.15 * orbFade).toFixed(3)}), 0 0 10px 4px rgba(255,255,255,${(0.06 * orbFade).toFixed(3)})`,
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
@@ -1225,28 +1161,14 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                // Handoff: day 1 brightens as orb fades (last 20% of day = 8pm–midnight)
                 const FADE_ZONE = 0.20;
                 const distToDay = i - orbPosition;
                 const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
                 const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
                 const isCurrentOrbDay = i === 0;
 
-                // Dynamic opacity based on handoff + selection + current day
-                const labelOpacity = isSelected
-                  ? 0.95
-                  : isCurrentOrbDay
-                    ? 0.65
-                    : isNextTarget
-                      ? 0.45 + handoffGlow * 0.3
-                      : i === 0
-                        ? 0.65
-                        : 0.45;
-                const dateOpacity = isSelected
-                  ? 0.75
-                  : isNextTarget
-                    ? 0.35 + handoffGlow * 0.2
-                    : 0.35;
+                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 : isNextTarget ? 0.45 + handoffGlow * 0.3 : 0.45;
+                const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
 
                 const isLayered = d.dailySet?.is_layered ?? false;
                 const layerFamily = d.dailySet?.layer?.family;
@@ -1259,12 +1181,10 @@ const OdaraScreen = () => {
                     className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
                     style={{ minWidth: "28px", width: "28px" }}
                   >
-                    {/* Weekday label */}
                     <span
                       className="font-mono transition-all duration-200 text-center leading-none"
                       style={{
-                        fontSize: "11px",
-                        letterSpacing: "0.1em",
+                        fontSize: "11px", letterSpacing: "0.1em",
                         color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
                         marginBottom: "6px",
@@ -1273,7 +1193,6 @@ const OdaraScreen = () => {
                       {d.label}
                     </span>
 
-                    {/* Date number */}
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
                       style={{
@@ -1286,9 +1205,7 @@ const OdaraScreen = () => {
                       {d.day}
                     </span>
 
-                    {/* Dot container — fixed height, centered */}
                     <div className="flex flex-col items-center justify-center" style={{ height: "26px", gap: "6px" }}>
-                      {/* Primary family-coded orb */}
                       <motion.div
                         className="rounded-full"
                         animate={{
@@ -1308,15 +1225,13 @@ const OdaraScreen = () => {
                         style={{ background: familyColor }}
                       />
 
-                      {/* Secondary layer orb (smaller) */}
                       {isLayered && (
                         <motion.div
                           className="rounded-full"
                           initial={{ opacity: 0, scale: 0 }}
                           animate={{
-                            opacity: 0.85,
-                            scale: 1,
-                          width: isSelected ? "7px" : "6px",
+                            opacity: 0.85, scale: 1,
+                            width: isSelected ? "7px" : "6px",
                             height: isSelected ? "7px" : "6px",
                             boxShadow: isSelected
                               ? `0 0 6px 2px ${layerColor}44`
@@ -1328,7 +1243,6 @@ const OdaraScreen = () => {
                       )}
                     </div>
 
-                    {/* Selected underline */}
                     {isSelected && (
                       <motion.div
                         layoutId="forecastUnderline"
@@ -1373,12 +1287,10 @@ const OdaraScreen = () => {
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Handle */}
                   <div className="flex justify-center mb-4">
                     <div className="w-10 h-1 rounded-full bg-foreground/15" />
                   </div>
 
-                  {/* Close */}
                   <button
                     onClick={() => setProfileOpen(false)}
                     className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors"
@@ -1386,7 +1298,6 @@ const OdaraScreen = () => {
                     <X size={18} />
                   </button>
 
-                  {/* Header */}
                   <div className="text-center mb-6">
                     <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
                     {profile?.brand && (
@@ -1394,16 +1305,12 @@ const OdaraScreen = () => {
                     )}
                     <span
                       className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
-                      style={{
-                        color: familyColor,
-                        boxShadow: `inset 0 0 0 1px ${familyColor}33`,
-                      }}
+                      style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
                     >
                       {familyLabel}
                     </span>
                   </div>
 
-                  {/* Note Pyramid */}
                   {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
                     <div className="mt-6 mb-6 space-y-3">
                       <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
@@ -1428,7 +1335,6 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Performance */}
                   {(profile?.longevity_score != null || profile?.projection_score != null) && (
                     <div className="mt-8 mb-6 grid grid-cols-2 gap-4">
                       <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 col-span-2">Performance</span>
@@ -1447,7 +1353,6 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Wardrobe Role & Weather */}
                   {(profile?.wardrobe_role || profile?.weather) && (
                     <div className="mt-8 mb-4 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
@@ -1465,7 +1370,6 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Why it fits */}
                   <div className="mt-8 mb-2">
                     <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Why it fits</span>
                     <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
