@@ -357,34 +357,23 @@ const OdaraScreen = () => {
 
           return (
             <div className="w-full max-w-md mb-6 px-2">
-              {/* Context label */}
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 select-none">
-                  Temperature → Scent
-                </span>
-              </div>
+              {/* Track + Orb + Temp label */}
+              <div className="relative w-full" style={{ height: "40px" }}>
+                {/* Track line */}
+                <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "25px" }} />
 
-              {/* Dynamic label */}
-              <div className="flex items-center justify-center mb-2">
-                <span className="text-[10px] font-mono text-muted-foreground/60 select-none">
-                  {effectiveTemperature}° · {effectiveTemperature <= 50 ? "Cold" : effectiveTemperature <= 70 ? "Warm" : "Hot"} → {scentBehavior}
-                </span>
-              </div>
-
-              {/* Track + Orb */}
-              <div className="relative w-full" style={{ height: "28px" }}>
-                {/* Track line at vertical center */}
-                <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "13px" }} />
-
-                {/* Orb on track */}
+                {/* Orb on track with temperature above */}
                 <motion.div
                   className="absolute -translate-x-1/2 flex flex-col items-center"
-                  style={{ left: `${pct}%`, top: "7px" }}
+                  style={{ left: `${pct}%`, top: "0px" }}
                   animate={{ left: `${pct}%` }}
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 >
+                  <span className="text-[10px] font-mono text-muted-foreground/70 select-none mb-1">
+                    {effectiveTemperature}°
+                  </span>
                   <motion.div
-                    className="rounded-full cursor-grab active:cursor-grabbing"
+                    className="rounded-full"
                     whileHover={{ scale: 1.4, boxShadow: "0 0 6px 3px rgba(255,255,255,0.25), 0 0 14px 6px rgba(255,255,255,0.1)" }}
                     whileTap={{ scale: 1.2 }}
                     style={{
