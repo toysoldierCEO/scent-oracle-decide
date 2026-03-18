@@ -139,16 +139,8 @@ const OdaraScreen = () => {
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
-  // Generate forecast days (today + next 6 = 7 total)
-  const forecastDays = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      return { label: days[d.getDay()], day: d.getDate() };
-    });
-  }, []);
+  // Build forecast days
+  const forecastDays = useMemo(() => buildForecastDays(), []);
 
   // Continuous timepiece orb position (requestAnimationFrame)
   const [orbPosition, setOrbPosition] = useState(0);
