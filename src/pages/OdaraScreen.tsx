@@ -437,7 +437,8 @@ const OdaraScreen = () => {
           const TRACK_MAX = 87;
           const BENCHMARKS = [35, 50, 65, 80];
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-          const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
+          const tempToShow = displayedTemperature ?? effectiveTemperature;
+          const pct = ((clamp(tempToShow, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
           // Scent behavior label
           const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
