@@ -87,6 +87,7 @@ interface ForecastDay {
     family: string;
     reason: string;
   } | null;
+  temperature: number;
   layer: Record<LayerMood, LayerOption> | null;
   alternates: { fragrance_id?: string; name: string; family?: string; reason?: string }[] | null;
 }
@@ -95,14 +96,14 @@ function buildForecastDays(): ForecastDay[] {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
 
-  const weekFragrances = [
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.' },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.' },
+  const weekFragrances: { fragrance_id: string; name: string; family: string; reason: string; temperature: number }[] = [
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.', temperature: 42 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.', temperature: 55 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.', temperature: 38 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.', temperature: 62 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.', temperature: 45 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.', temperature: 72 },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.', temperature: 48 },
   ];
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -112,8 +113,9 @@ function buildForecastDays(): ForecastDay[] {
     return {
       label: dayNames[d.getDay()],
       day: d.getDate(),
-      fragrance: frag,
-      layer: i === 0 ? null : null, // only today has layer from oracle
+      fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
+      temperature: frag.temperature,
+      layer: null,
       alternates: null,
     };
   });
@@ -137,6 +139,8 @@ const OdaraScreen = () => {
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
+  const [forecastTransition, setForecastTransition] = useState(false);
+  const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
@@ -370,17 +374,36 @@ const OdaraScreen = () => {
   const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
 
+  // Background tint based on current fragrance family
+  const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
+
   const handleForecastDayTap = (index: number) => {
-    setSelectedForecastDay(index);
-    setAccepted(false);
-    setLayerSheetOpen(false);
-    setCardKey((k) => k + 1);
-    setExitDirection(null);
+    if (index === selectedForecastDay) return;
+    setForecastTransition(true);
+    // Brief outgoing fade
+    setTimeout(() => {
+      setSelectedForecastDay(index);
+      setAccepted(false);
+      setLayerSheetOpen(false);
+      setCardKey((k) => k + 1);
+      setExitDirection(null);
+      // Update displayed temperature for the selected day
+      const dayTemp = forecastDays[index]?.temperature;
+      if (dayTemp != null) setDisplayedTemperature(dayTemp);
+      else setDisplayedTemperature(null);
+      setTimeout(() => setForecastTransition(false), 50);
+    }, 150);
   };
 
   return (
     <div className="dark">
-      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden relative">
+        {/* Subtle background tint overlay */}
+        <motion.div
+          className="absolute inset-0 pointer-events-none z-0"
+          animate={{ backgroundColor: bgTintColor ? `${bgTintColor}0D` : "transparent" }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
+        />
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
@@ -414,7 +437,8 @@ const OdaraScreen = () => {
           const TRACK_MAX = 87;
           const BENCHMARKS = [35, 50, 65, 80];
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-          const pct = ((clamp(effectiveTemperature, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
+          const tempToShow = displayedTemperature ?? effectiveTemperature;
+          const pct = ((clamp(tempToShow, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
 
           // Scent behavior label
           const scentBehavior = effectiveTemperature <= 40 ? "Dense" : effectiveTemperature <= 55 ? "Rich" : effectiveTemperature <= 70 ? "Balanced" : "Light";
@@ -429,12 +453,12 @@ const OdaraScreen = () => {
                 {/* Orb on track with temperature above */}
                 <motion.div
                   className="absolute -translate-x-1/2 flex flex-col items-center"
-                  style={{ left: `${pct}%`, top: "0px" }}
+                  style={{ top: "0px" }}
                   animate={{ left: `${pct}%` }}
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                 >
                   <span className="text-[10px] font-mono text-muted-foreground/70 select-none mb-1">
-                    {effectiveTemperature}°
+                    {tempToShow}°
                   </span>
                   <motion.div
                     className="rounded-full"
@@ -510,15 +534,21 @@ const OdaraScreen = () => {
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.9}
               onDragEnd={handleDragEnd}
-              initial={{ opacity: 0, scale: 0.96, x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
+              initial={{
+                opacity: 0,
+                y: exitDirection ? 0 : 5,
+                x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0,
+                scale: 0.96,
+              }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
               exit={{
                 opacity: 0,
                 x: exitDirection === "left" ? -300 : exitDirection === "right" ? 300 : 0,
-                scale: 0.95,
-                transition: { duration: 0.3 },
+                y: exitDirection ? 0 : -3,
+                scale: 0.97,
+                transition: { duration: exitDirection ? 0.3 : 0.15 },
               }}
-              transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+              transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
               className="w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center cursor-grab active:cursor-grabbing touch-pan-y"
               style={{
                 x,
@@ -806,19 +836,21 @@ const OdaraScreen = () => {
                     className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
                   >
                     {/* Family-coded dot — always rendered */}
-                    <div
-                      className="rounded-full transition-all duration-300"
-                      style={{
-                        width: isSelected ? "6px" : "5px",
-                        height: isSelected ? "6px" : "5px",
-                        background: familyColor,
+                    <motion.div
+                      className="rounded-full"
+                      animate={{
+                        width: isSelected ? "7px" : "5px",
+                        height: isSelected ? "7px" : "5px",
+                        scale: isSelected ? 1.1 : 1,
                         boxShadow: isSelected
-                          ? `0 0 6px 2px ${familyColor}44`
+                          ? `0 0 8px 3px ${familyColor}55`
                           : hasFragrance
                             ? `0 0 3px 1px ${familyColor}22`
                             : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
                         opacity: hasFragrance ? 1 : 0.5,
                       }}
+                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ background: familyColor }}
                     />
                     <div className="flex flex-col items-center gap-1">
                       <span
