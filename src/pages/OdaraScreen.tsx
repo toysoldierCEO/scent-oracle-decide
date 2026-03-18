@@ -1210,8 +1210,8 @@ const OdaraScreen = () => {
                           animate={{
                             opacity: 0.85,
                             scale: 1,
-                            width: isSelected ? "6px" : "5px",
-                            height: isSelected ? "6px" : "5px",
+                          width: isSelected ? "7px" : "6px",
+                            height: isSelected ? "7px" : "6px",
                             boxShadow: isSelected
                               ? `0 0 6px 2px ${layerColor}44`
                               : `0 0 2px 1px ${layerColor}22`,
