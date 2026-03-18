@@ -131,6 +131,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.9,
     projection_score: 0.85,
     weather: "Best in cool → cold weather",
+    secondary_weather: "Also works in crisp autumn evenings",
+    bottle_url: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=200&h=300&fit=crop",
   },
   "Agar": {
     top_notes: ["Elemi", "Green Cardamom"],
@@ -140,6 +142,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.6,
     projection_score: 0.45,
     weather: "Best in mild → warm weather",
+    secondary_weather: "Also works in early spring",
+    bottle_url: "https://images.unsplash.com/photo-1594035910387-fbd1a485b12e?w=200&h=300&fit=crop",
   },
   "Noire Absolu": {
     top_notes: ["Black Pepper", "Juniper"],
@@ -149,6 +153,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.95,
     projection_score: 0.9,
     weather: "Best in cold weather",
+    secondary_weather: "Also works in late autumn",
+    bottle_url: "https://images.unsplash.com/photo-1523293182086-7651a899d37f?w=200&h=300&fit=crop",
   },
   "Santal Sérénade": {
     top_notes: ["Coconut Milk", "Cardamom"],
@@ -158,6 +164,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.7,
     projection_score: 0.3,
     weather: "Best in cool → mild weather",
+    secondary_weather: "Also works in dry winter days",
+    bottle_url: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=200&h=300&fit=crop",
   },
   "Hafez 1984": {
     top_notes: ["Cinnamon", "Dried Plum"],
@@ -167,6 +175,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.85,
     projection_score: 0.8,
     weather: "Best in cold → cool weather",
+    secondary_weather: "Also works in rainy evenings",
+    bottle_url: "https://images.unsplash.com/photo-1587017539504-67cfbddac569?w=200&h=300&fit=crop",
   },
   "Mystere 28": {
     top_notes: ["Sea Salt", "Grapefruit", "Mint"],
@@ -176,6 +186,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.45,
     projection_score: 0.5,
     weather: "Best in warm → hot weather",
+    secondary_weather: "Also works in humid spring days",
+    bottle_url: "https://images.unsplash.com/photo-1595425970377-c9703cf48b6d?w=200&h=300&fit=crop",
   },
   "Amber Dusk": {
     top_notes: ["Mandarin", "Ginger"],
@@ -185,6 +197,8 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     longevity_score: 0.65,
     projection_score: 0.5,
     weather: "Best in cool → mild weather",
+    secondary_weather: "Also works in early spring evenings",
+    bottle_url: "https://images.unsplash.com/photo-1594035910387-fbd1a485b12e?w=200&h=300&fit=crop",
   },
 };
 
