@@ -412,8 +412,6 @@ const OdaraScreen = () => {
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoPrevState = useRef<{ dayIndex: number; accepted: boolean } | null>(null);
 
-  // Cover flow drag
-  const coverFlowX = useMotionValue(0);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
