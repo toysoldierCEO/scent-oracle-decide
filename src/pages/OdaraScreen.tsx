@@ -453,12 +453,12 @@ const OdaraScreen = () => {
                 {/* Orb on track with temperature above */}
                 <motion.div
                   className="absolute -translate-x-1/2 flex flex-col items-center"
-                  style={{ left: `${pct}%`, top: "0px" }}
+                  style={{ top: "0px" }}
                   animate={{ left: `${pct}%` }}
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                 >
                   <span className="text-[10px] font-mono text-muted-foreground/70 select-none mb-1">
-                    {effectiveTemperature}°
+                    {tempToShow}°
                   </span>
                   <motion.div
                     className="rounded-full"
