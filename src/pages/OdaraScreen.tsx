@@ -836,19 +836,21 @@ const OdaraScreen = () => {
                     className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
                   >
                     {/* Family-coded dot — always rendered */}
-                    <div
-                      className="rounded-full transition-all duration-300"
-                      style={{
-                        width: isSelected ? "6px" : "5px",
-                        height: isSelected ? "6px" : "5px",
-                        background: familyColor,
+                    <motion.div
+                      className="rounded-full"
+                      animate={{
+                        width: isSelected ? "7px" : "5px",
+                        height: isSelected ? "7px" : "5px",
+                        scale: isSelected ? 1.1 : 1,
                         boxShadow: isSelected
-                          ? `0 0 6px 2px ${familyColor}44`
+                          ? `0 0 8px 3px ${familyColor}55`
                           : hasFragrance
                             ? `0 0 3px 1px ${familyColor}22`
                             : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
                         opacity: hasFragrance ? 1 : 0.5,
                       }}
+                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ background: familyColor }}
                     />
                     <div className="flex flex-col items-center gap-1">
                       <span
