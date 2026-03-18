@@ -1180,13 +1180,13 @@ const OdaraScreen = () => {
                     </span>
 
                     {/* Dot container — fixed height, centered */}
-                    <div className="flex flex-col items-center justify-center" style={{ height: "18px", gap: "2px" }}>
+                    <div className="flex flex-col items-center justify-center" style={{ height: "22px", gap: "4px" }}>
                       {/* Primary family-coded orb */}
                       <motion.div
                         className="rounded-full"
                         animate={{
-                          width: isSelected ? "7px" : "5px",
-                          height: isSelected ? "7px" : "5px",
+                          width: isSelected ? "8px" : "6px",
+                          height: isSelected ? "8px" : "6px",
                           scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
                           boxShadow: isSelected
                             ? `0 0 8px 3px ${familyColor}55`
@@ -1207,10 +1207,10 @@ const OdaraScreen = () => {
                           className="rounded-full"
                           initial={{ opacity: 0, scale: 0 }}
                           animate={{
-                            opacity: 0.8,
+                            opacity: 0.85,
                             scale: 1,
-                            width: isSelected ? "5px" : "4px",
-                            height: isSelected ? "5px" : "4px",
+                            width: isSelected ? "6px" : "5px",
+                            height: isSelected ? "6px" : "5px",
                             boxShadow: isSelected
                               ? `0 0 6px 2px ${layerColor}44`
                               : `0 0 2px 1px ${layerColor}22`,
