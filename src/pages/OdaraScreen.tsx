@@ -599,28 +599,6 @@ const OdaraScreen = () => {
     }, 300);
   }, [actionState, oracle]);
 
-  const handleDragEnd = useCallback(
-    (_: any, info: PanInfo) => {
-      if (swipeLocked.current || actionState !== "idle") return;
-
-      const { offset, velocity } = info;
-      const swipedRight =
-        offset.x > SWIPE_THRESHOLD || (offset.x > 40 && velocity.x > SWIPE_VELOCITY);
-      const swipedLeft =
-        offset.x < -SWIPE_THRESHOLD || (offset.x < -40 && velocity.x < -SWIPE_VELOCITY);
-
-      if (swipedRight && !accepted) {
-        swipeLocked.current = true;
-        setExitDirection("right");
-        handleAccept();
-      } else if (swipedLeft) {
-        swipeLocked.current = true;
-        setExitDirection("left");
-        handleSkip();
-      }
-    },
-    [actionState, accepted, handleAccept, handleSkip]
-  );
 
   const isBusy = actionState !== "idle";
 
