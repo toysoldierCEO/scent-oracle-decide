@@ -810,12 +810,12 @@ const OdaraScreen = () => {
               if (!cardPick) return null;
 
               // Cover flow transforms
-              const scale = isCenter ? 1 : Math.max(0.82, 1 - absOffset * 0.08);
-              const rotateY = offset * -22; // left cards rotate +, right cards rotate -
-              const translateX = offset * 85; // horizontal spacing
-              const translateZ = isCenter ? 40 : -absOffset * 60;
-              const opacity = isCenter ? 1 : Math.max(0.45, 1 - absOffset * 0.25);
-              const blur = isCenter ? 0 : Math.min(absOffset * 2.5, 6);
+              const scale = isCenter ? 1 : Math.max(0.78, 1 - absOffset * 0.1);
+              const rotateY = offset * -24;
+              const translateX = offset * 85;
+              const translateZ = isCenter ? 40 : -absOffset * 70;
+              const opacity = isCenter ? 1 : Math.max(0.25, 0.85 - absOffset * 0.3);
+              const blur = isCenter ? 0 : Math.min(absOffset * 4, 10);
               const zIndex = 10 - absOffset;
 
               return (
