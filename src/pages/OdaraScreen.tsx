@@ -833,9 +833,40 @@ const OdaraScreen = () => {
                   <button
                     key={i}
                     onClick={() => handleForecastDayTap(i)}
-                    className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
+                    className="flex flex-col items-center bg-transparent border-none outline-none cursor-pointer"
+                    style={{ gap: "4px", padding: "0 2px", minWidth: "28px" }}
                   >
-                    {/* Family-coded dot — always rendered */}
+                    {/* Weekday label */}
+                    <span
+                      className="font-mono transition-all duration-200 text-center leading-none"
+                      style={{
+                        fontSize: "10px",
+                        letterSpacing: "0.08em",
+                        color: isSelected
+                          ? "rgba(255,255,255,0.85)"
+                          : i === 0
+                            ? "rgba(255,255,255,0.55)"
+                            : "rgba(255,255,255,0.35)",
+                        fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
+                      }}
+                    >
+                      {d.label}
+                    </span>
+
+                    {/* Date number */}
+                    <span
+                      className="font-mono text-center leading-none transition-all duration-200"
+                      style={{
+                        fontSize: "9px",
+                        color: isSelected
+                          ? "rgba(255,255,255,0.6)"
+                          : "rgba(255,255,255,0.25)",
+                      }}
+                    >
+                      {d.day}
+                    </span>
+
+                    {/* Family-coded orb */}
                     <motion.div
                       className="rounded-full"
                       animate={{
@@ -852,30 +883,15 @@ const OdaraScreen = () => {
                       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                       style={{ background: familyColor }}
                     />
-                    <div className="flex flex-col items-center gap-1">
-                      <span
-                        className="font-mono transition-all duration-200"
-                        style={{
-                          fontSize: "10px",
-                          letterSpacing: "0.08em",
-                          color: isSelected
-                            ? "rgba(255,255,255,0.85)"
-                            : i === 0
-                              ? "rgba(255,255,255,0.55)"
-                              : "rgba(255,255,255,0.35)",
-                          fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
-                        }}
-                      >
-                        {d.label}
-                      </span>
-                      {isSelected && (
-                        <motion.div
-                          layoutId="forecastUnderline"
-                          className="w-3.5 h-px rounded-full"
-                          style={{ background: "rgba(255,255,255,0.3)" }}
-                        />
-                      )}
-                    </div>
+
+                    {/* Selected underline */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="forecastUnderline"
+                        className="rounded-full"
+                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)" }}
+                      />
+                    )}
                   </button>
                 );
               })}
