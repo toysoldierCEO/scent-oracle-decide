@@ -961,14 +961,12 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                // Handoff: compute how much the approaching orb illuminates this day
-                // The orb is approaching day i when orbPosition is between (i-0.18) and i
-                const FADE_ZONE = 0.18;
+                // Handoff: day 1 brightens as orb fades (last 20% of day = 8pm–midnight)
+                const FADE_ZONE = 0.20;
                 const distToDay = i - orbPosition;
-                const isNextTarget = distToDay > 0 && distToDay <= FADE_ZONE;
+                const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
                 const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
-                // Is this the day the orb is currently on (just passed)?
-                const isCurrentOrbDay = i === Math.floor(orbPosition) && orbPosition - i < FADE_ZONE;
+                const isCurrentOrbDay = i === 0;
 
                 // Dynamic opacity based on handoff + selection + current day
                 const labelOpacity = isSelected
