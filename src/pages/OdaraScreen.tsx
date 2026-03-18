@@ -1128,8 +1128,8 @@ const OdaraScreen = () => {
 
                   {/* Performance */}
                   {(profile?.longevity_score != null || profile?.projection_score != null) && (
-                    <div className="mb-6 grid grid-cols-2 gap-4">
-                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
+                    <div className="mt-8 mb-6 grid grid-cols-2 gap-4">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 col-span-2">Performance</span>
                       {profile?.longevity_score != null && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
