@@ -787,32 +787,59 @@ const OdaraScreen = () => {
 
             {/* Day markers */}
             <div className="flex justify-between relative">
-              {forecastDays.map((d, i) => (
-                <div key={i} className="flex flex-col items-center gap-2.5">
-                  <div
-                    className="w-[5px] h-[5px] rounded-full"
-                    style={{
-                      background: i === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.12)",
-                    }}
-                  />
-                  <div className="flex flex-col items-center gap-1">
-                    <span
-                      className="font-mono"
+              {forecastDays.map((d, i) => {
+                const familyColor = d.fragrance
+                  ? FAMILY_COLORS[d.fragrance.family] ?? "rgba(255,255,255,0.12)"
+                  : "rgba(255,255,255,0.08)";
+                const isSelected = selectedForecastDay === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleForecastDayTap(i)}
+                    className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
+                  >
+                    {/* Family-coded dot */}
+                    <div
+                      className="rounded-full transition-all duration-300"
                       style={{
-                        fontSize: "10px",
-                        letterSpacing: "0.08em",
-                        color: i === 0 ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
-                        fontWeight: i === 0 ? 500 : 400,
+                        width: isSelected ? "6px" : "5px",
+                        height: isSelected ? "6px" : "5px",
+                        background: familyColor,
+                        boxShadow: isSelected
+                          ? `0 0 6px 2px ${familyColor}44`
+                          : d.fragrance
+                            ? `0 0 3px 1px ${familyColor}22`
+                            : "none",
+                        opacity: d.fragrance ? 1 : 0.3,
                       }}
-                    >
-                      {d.label}
-                    </span>
-                    {i === 0 && (
-                      <div className="w-3 h-px rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-                    )}
-                  </div>
-                </div>
-              ))}
+                    />
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className="font-mono transition-all duration-200"
+                        style={{
+                          fontSize: "10px",
+                          letterSpacing: "0.08em",
+                          color: isSelected
+                            ? "rgba(255,255,255,0.85)"
+                            : i === 0
+                              ? "rgba(255,255,255,0.55)"
+                              : "rgba(255,255,255,0.35)",
+                          fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
+                        }}
+                      >
+                        {i === 0 ? "Today" : d.label}
+                      </span>
+                      {isSelected && (
+                        <motion.div
+                          layoutId="forecastUnderline"
+                          className="w-3.5 h-px rounded-full"
+                          style={{ background: "rgba(255,255,255,0.3)" }}
+                        />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
