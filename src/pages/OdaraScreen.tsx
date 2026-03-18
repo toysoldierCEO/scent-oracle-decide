@@ -1157,8 +1157,8 @@ const OdaraScreen = () => {
                     <span
                       className="font-mono transition-all duration-200 text-center leading-none"
                       style={{
-                        fontSize: "10px",
-                        letterSpacing: "0.08em",
+                        fontSize: "11px",
+                        letterSpacing: "0.1em",
                         color: `rgba(255,255,255,${labelOpacity})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 400,
                         marginBottom: "3px",
@@ -1171,7 +1171,7 @@ const OdaraScreen = () => {
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
                       style={{
-                        fontSize: "9px",
+                        fontSize: "11px",
                         color: `rgba(255,255,255,${dateOpacity})`,
                         marginBottom: "5px",
                       }}
