@@ -356,10 +356,34 @@ const OdaraScreen = () => {
     );
   }
 
-  const { today_pick, layer: layerMap, alternates } = oracle;
-  const hasLayer = layerMap != null;
-  const activeLayer = hasLayer ? layerMap[selectedMood] : null;
+  const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
+
+  // When a forecast day is selected, show that day's fragrance; day 0 = oracle data
+  const isViewingForecast = selectedForecastDay > 0;
+  const forecastEntry = forecastDays[selectedForecastDay];
+  const today_pick = isViewingForecast && forecastEntry?.fragrance
+    ? forecastEntry.fragrance
+    : oraclePick;
+  const currentLayerMap = isViewingForecast ? forecastEntry?.layer ?? null : layerMap;
+  const alternates = isViewingForecast ? forecastEntry?.alternates : oracleAlternates;
+  const hasLayer = currentLayerMap != null;
+  const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
+
+  // Handler for forecast day tap
+  const handleForecastDayTap = useCallback((index: number) => {
+    setSelectedForecastDay(index);
+    setAccepted(false);
+    setLayerSheetOpen(false);
+    setCardKey((k) => k + 1);
+    setExitDirection(null);
+    // If tapping back to today (index 0), oracle data is already loaded
+    if (index === 0) {
+      // Update forecast day 0 layer data from oracle
+      forecastDays[0].layer = layerMap ?? null;
+      forecastDays[0].alternates = oracleAlternates ?? null;
+    }
+  }, [forecastDays, layerMap, oracleAlternates]);
 
   return (
     <div className="dark">
