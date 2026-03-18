@@ -786,34 +786,59 @@ const OdaraScreen = () => {
           {/* Card stack container — handles swipe at this level */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px", touchAction: "pan-y" }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
+            style={{ minHeight: "420px", touchAction: "none" }}
+            drag
+            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
             dragElastic={0.15}
             onDragEnd={(_, info: PanInfo) => {
               const { offset, velocity } = info;
+              const absX = Math.abs(offset.x);
+              const absY = Math.abs(offset.y);
               const threshold = 50;
               const velThreshold = 200;
-              if (
-                (offset.x < -threshold || velocity.x < -velThreshold) &&
-                selectedForecastDay < forecastDays.length - 1
-              ) {
-                const next = selectedForecastDay + 1;
-                setSelectedForecastDay(next);
-                setAccepted(acceptedDays.has(next));
-                setLayerSheetOpen(false);
-                const dayTemp = forecastDays[next]?.temperature;
-                if (dayTemp != null) setDisplayedTemperature(dayTemp);
-              } else if (
-                (offset.x > threshold || velocity.x > velThreshold) &&
-                selectedForecastDay > 0
-              ) {
-                const prev = selectedForecastDay - 1;
-                setSelectedForecastDay(prev);
-                setAccepted(acceptedDays.has(prev));
-                setLayerSheetOpen(false);
-                const dayTemp = forecastDays[prev]?.temperature;
-                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+
+              // Determine dominant gesture axis
+              const isHorizontal = absX > absY * 1.2;
+              const isVertical = absY > absX * 1.2;
+
+              if (isHorizontal) {
+                // Horizontal = browse forecast days
+                if (
+                  (offset.x < -threshold || velocity.x < -velThreshold) &&
+                  selectedForecastDay < forecastDays.length - 1
+                ) {
+                  const next = selectedForecastDay + 1;
+                  setSelectedForecastDay(next);
+                  setAccepted(acceptedDays.has(next));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[next]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                } else if (
+                  (offset.x > threshold || velocity.x > velThreshold) &&
+                  selectedForecastDay > 0
+                ) {
+                  const prev = selectedForecastDay - 1;
+                  setSelectedForecastDay(prev);
+                  setAccepted(acceptedDays.has(prev));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[prev]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                }
+              } else if (isVertical) {
+                // Swipe UP = accept / lock in
+                if (
+                  (offset.y < -threshold || velocity.y < -velThreshold) &&
+                  !acceptedDays.has(selectedForecastDay)
+                ) {
+                  handleAccept();
+                }
+                // Swipe DOWN = skip / not today
+                else if (
+                  (offset.y > threshold || velocity.y > velThreshold) &&
+                  !acceptedDays.has(selectedForecastDay)
+                ) {
+                  handleSkip();
+                }
               }
             }}
           >
@@ -838,13 +863,13 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Cover flow transforms
-              const scale = isCenter ? 1 : Math.max(0.78, 1 - absOffset * 0.1);
-              const rotateY = offset * -24;
-              const translateX = offset * 85;
-              const translateZ = isCenter ? 40 : -absOffset * 70;
-              const opacity = isCenter ? 1 : Math.max(0.25, 0.85 - absOffset * 0.3);
-              const blur = isCenter ? 0 : Math.min(absOffset * 4, 10);
+              // Cover flow transforms — Apple-style visible side cards
+              const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
+              const rotateY = offset * -22;
+              const translateX = offset * 90;
+              const translateZ = isCenter ? 40 : -absOffset * 50;
+              const opacity = isCenter ? 1 : Math.max(0.55, 0.75 - absOffset * 0.12);
+              const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
               const zIndex = 10 - absOffset;
 
               return (
@@ -881,11 +906,11 @@ const OdaraScreen = () => {
                     style={{
                       background: isCenter
                         ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
-                        : "rgba(10,10,12,0.75)",
-                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(20px)",
+                        : "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%), rgba(18,18,22,0.82)",
+                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(16px) saturate(1.1)",
                       boxShadow: isCenter
                         ? "0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.08)"
-                        : "0 10px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)",
+                        : "0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.06)",
                     }}
                   >
                     {/* Day/date label */}
