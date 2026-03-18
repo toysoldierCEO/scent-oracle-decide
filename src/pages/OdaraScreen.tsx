@@ -59,8 +59,6 @@ const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
-const SWIPE_THRESHOLD = 100;
-const SWIPE_VELOCITY = 300;
 
 const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
