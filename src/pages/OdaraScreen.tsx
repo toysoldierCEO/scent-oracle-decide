@@ -783,10 +783,39 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack */}
         <div className="relative w-full max-w-lg mt-3 overflow-visible" style={{ perspective: "1200px" }}>
-          {/* Card stack container */}
+          {/* Card stack container — handles swipe at this level */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px" }}
+            style={{ minHeight: "420px", touchAction: "pan-y" }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.15}
+            onDragEnd={(_, info: PanInfo) => {
+              const { offset, velocity } = info;
+              const threshold = 50;
+              const velThreshold = 200;
+              if (
+                (offset.x < -threshold || velocity.x < -velThreshold) &&
+                selectedForecastDay < forecastDays.length - 1
+              ) {
+                const next = selectedForecastDay + 1;
+                setSelectedForecastDay(next);
+                setAccepted(acceptedDays.has(next));
+                setLayerSheetOpen(false);
+                const dayTemp = forecastDays[next]?.temperature;
+                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+              } else if (
+                (offset.x > threshold || velocity.x > velThreshold) &&
+                selectedForecastDay > 0
+              ) {
+                const prev = selectedForecastDay - 1;
+                setSelectedForecastDay(prev);
+                setAccepted(acceptedDays.has(prev));
+                setLayerSheetOpen(false);
+                const dayTemp = forecastDays[prev]?.temperature;
+                if (dayTemp != null) setDisplayedTemperature(dayTemp);
+              }
+            }}
           >
             {forecastDays.map((dayData, i) => {
               const offset = i - selectedForecastDay;
@@ -839,18 +868,16 @@ const OdaraScreen = () => {
                     transformStyle: "preserve-3d",
                     pointerEvents: isCenter ? "auto" : "none",
                   }}
-                  // Tap center card to accept
-                  onClick={() => {
-                    if (!isCenter || isDayAccepted) return;
-                    // Check if it was a long press (don't accept)
-                    if (longPressTimer.current) return;
-                    handleAccept();
-                  }}
                 >
                   <div
                     className={`w-full rounded-[32px] p-8 flex flex-col items-center ${
                       isCenter ? "cursor-pointer" : ""
                     }`}
+                    onClick={() => {
+                      if (!isCenter || isDayAccepted) return;
+                      if (longPressTimer.current) return;
+                      handleAccept();
+                    }}
                     style={{
                       background: isCenter
                         ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
@@ -1076,45 +1103,6 @@ const OdaraScreen = () => {
             })}
           </motion.div>
 
-          {/* Cover flow swipe area — invisible touch target */}
-          <div
-            className="absolute inset-0 z-20"
-            style={{ pointerEvents: "none" }}
-          >
-            <motion.div
-              className="w-full h-full"
-              style={{ pointerEvents: "auto", touchAction: "pan-y" }}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.15}
-              onDragEnd={(_, info: PanInfo) => {
-                const { offset, velocity } = info;
-                const threshold = 50;
-                const velThreshold = 200;
-                if (
-                  (offset.x < -threshold || velocity.x < -velThreshold) &&
-                  selectedForecastDay < forecastDays.length - 1
-                ) {
-                  const next = selectedForecastDay + 1;
-                  setSelectedForecastDay(next);
-                  setAccepted(acceptedDays.has(next));
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[next]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
-                } else if (
-                  (offset.x > threshold || velocity.x > velThreshold) &&
-                  selectedForecastDay > 0
-                ) {
-                  const prev = selectedForecastDay - 1;
-                  setSelectedForecastDay(prev);
-                  setAccepted(acceptedDays.has(prev));
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[prev]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
-                }
-              }}
-            />
-          </div>
 
           {/* Locked In + Undo Pill */}
           <AnimatePresence>
