@@ -817,291 +817,371 @@ const OdaraScreen = () => {
         })()}
 
 
-        {/* Swipeable Hero Card */}
-        <div className="relative w-full max-w-md mt-3">
-          {/* Swipe hint labels */}
+        {/* Cover Flow Card Stack */}
+        <div className="relative w-full max-w-lg mt-3 overflow-visible" style={{ perspective: "1200px" }}>
+          {/* Card stack container */}
           <motion.div
-            className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-10"
-            aria-hidden
+            className="flex items-center justify-center relative"
+            style={{ minHeight: "420px" }}
           >
-            <motion.span
-              style={{ opacity: skipOpacity }}
-              className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60"
-            >
-              Not today
-            </motion.span>
-            <motion.span
-              style={{ opacity: acceptOpacity }}
-              className="text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80"
-            >
-              Wear this
-            </motion.span>
-          </motion.div>
+            {forecastDays.map((dayData, i) => {
+              const offset = i - selectedForecastDay;
+              const absOffset = Math.abs(offset);
+              const isCenter = offset === 0;
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={cardKey}
-              drag={isBusy || accepted ? false : "x"}
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.9}
-              onDragEnd={handleDragEnd}
-              initial={{
-                opacity: 0,
-                y: exitDirection ? 0 : 5,
-                x: exitDirection === "left" ? 300 : exitDirection === "right" ? -300 : 0,
-                scale: 0.96,
-              }}
-              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-              exit={{
-                opacity: 0,
-                x: exitDirection === "left" ? -300 : exitDirection === "right" ? 300 : 0,
-                y: exitDirection ? 0 : -3,
-                scale: 0.97,
-                transition: { duration: exitDirection ? 0.3 : 0.15 },
-              }}
-              transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-              className="w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center cursor-grab active:cursor-grabbing touch-pan-y"
-              style={{
-                x,
-                rotate,
-                background: "var(--glass-bg)",
-                boxShadow: "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)",
-              }}
-            >
-              {isViewingForecast && (
-                <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 select-none">
-                  {forecastEntry.label} · {forecastEntry.day}
-                </span>
-              )}
-              {/* Long-press target for fragrance profile */}
-              <div
-                className="flex flex-col items-center select-none"
-                onPointerDown={() => {
-                  longPressTimer.current = setTimeout(() => {
-                    setProfileOpen(true);
-                  }, LONG_PRESS_DURATION);
-                }}
-                onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
-                onPointerLeave={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                  {today_pick.name}
-                </h1>
+              // Only render cards within visible range
+              if (absOffset > 3) return null;
 
-                <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
-                  {today_pick.family}
-                </p>
-              </div>
+              // Resolve card data
+              const cardPick = i === 0 && oracle
+                ? oraclePick
+                : dayData.fragrance;
+              const cardLayerMap = i === 0 ? layerMap : dayData.layer;
+              const cardAlternates = i === 0 ? oracleAlternates : dayData.alternates;
+              const cardHasLayer = cardLayerMap != null;
+              const cardActiveLayer = cardHasLayer ? cardLayerMap[selectedMood] : null;
+              const cardHasAlternates = cardAlternates != null && cardAlternates.length > 0;
+              const isDayAccepted = acceptedDays.has(i);
 
-              <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
-                {today_pick.reason}
-              </p>
+              if (!cardPick) return null;
 
-              {/* Layer Card — inline expand */}
-              {hasLayer && activeLayer && (
-                <div
-                  onClick={() => setLayerSheetOpen((o) => !o)}
-                  className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
+              // Cover flow transforms
+              const scale = isCenter ? 1 : Math.max(0.82, 1 - absOffset * 0.08);
+              const rotateY = offset * -22; // left cards rotate +, right cards rotate -
+              const translateX = offset * 85; // horizontal spacing
+              const translateZ = isCenter ? 40 : -absOffset * 60;
+              const opacity = isCenter ? 1 : Math.max(0.45, 1 - absOffset * 0.25);
+              const blur = isCenter ? 0 : Math.min(absOffset * 2.5, 6);
+              const zIndex = 10 - absOffset;
+
+              return (
+                <motion.div
+                  key={`coverflow-${i}`}
+                  className="absolute w-full max-w-md"
+                  animate={{
+                    x: translateX,
+                    rotateY,
+                    scale,
+                    opacity,
+                    z: translateZ,
+                  }}
+                  transition={{
+                    duration: 0.45,
+                    ease: [0.32, 0.72, 0, 1],
+                  }}
                   style={{
-                    background: "var(--sub-glass-bg)",
-                    boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                    zIndex,
+                    filter: blur > 0 ? `blur(${blur}px)` : undefined,
+                    transformStyle: "preserve-3d",
+                    pointerEvents: isCenter ? "auto" : "none",
+                  }}
+                  // Tap center card to accept
+                  onClick={() => {
+                    if (!isCenter || isDayAccepted) return;
+                    // Check if it was a long press (don't accept)
+                    if (longPressTimer.current) return;
+                    handleAccept();
                   }}
                 >
-                  {/* Save star */}
-                  <motion.button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLayerSaved((s) => !s);
-                      toast(layerSaved ? "Combo unsaved" : "Combo saved");
+                  <div
+                    className={`w-full rounded-[32px] p-8 backdrop-blur-2xl flex flex-col items-center ${
+                      isCenter ? "cursor-pointer" : ""
+                    }`}
+                    style={{
+                      background: "var(--glass-bg)",
+                      boxShadow: isCenter
+                        ? "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)"
+                        : "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255,255,255,0.06)",
                     }}
-                    whileTap={{ scale: 1.3 }}
-                    className="absolute top-3 right-3 p-1"
                   >
-                    <motion.div
-                      animate={layerSaved ? { scale: [1, 1.25, 1] } : { scale: 1 }}
-                      transition={{ duration: 0.2 }}
+                    {/* Day/date label */}
+                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 select-none">
+                      {dayData.label} · {dayData.day}
+                    </span>
+
+                    {/* Long-press target for fragrance profile */}
+                    <div
+                      className="flex flex-col items-center select-none"
+                      onPointerDown={(e) => {
+                        if (!isCenter) return;
+                        e.stopPropagation();
+                        longPressTimer.current = setTimeout(() => {
+                          setSelectedForecastDay(i);
+                          setProfileOpen(true);
+                          longPressTimer.current = null;
+                        }, LONG_PRESS_DURATION);
+                      }}
+                      onPointerUp={() => {
+                        if (longPressTimer.current) {
+                          clearTimeout(longPressTimer.current);
+                          longPressTimer.current = null;
+                        }
+                      }}
+                      onPointerLeave={() => {
+                        if (longPressTimer.current) {
+                          clearTimeout(longPressTimer.current);
+                          longPressTimer.current = null;
+                        }
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
                     >
-                      <Star
-                        size={14}
-                        className={`transition-all duration-200 ${
-                          layerSaved
-                            ? "text-foreground fill-foreground/80 drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]"
-                            : "text-muted-foreground/30 hover:text-muted-foreground/60"
-                        }`}
-                      />
-                    </motion.div>
-                  </motion.button>
+                      <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
+                        {cardPick.name}
+                      </h1>
 
-                  <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
-                    {activeLayer.top ?? `Enhance with ${activeLayer.top_name}`}
-                  </p>
-                  <span
-                    className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
-                    style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
-                  >
-                    {activeLayer.mode}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground/35 tracking-[0.1em]">
-                    {layerSheetOpen ? "tap to close" : "tap for details"}
-                  </span>
+                      <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
+                        {cardPick.family}
+                      </p>
+                    </div>
 
-                  {/* Expanded details */}
-                  <AnimatePresence initial={false}>
-                    {layerSheetOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-                        className="w-full overflow-hidden"
+                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
+                      {cardPick.reason}
+                    </p>
+
+                    {/* Layer Card — only on center */}
+                    {isCenter && cardHasLayer && cardActiveLayer && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLayerSheetOpen((o) => !o);
+                        }}
+                        className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
+                        style={{
+                          background: "var(--sub-glass-bg)",
+                          boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                        }}
                       >
-                        <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                          {/* Mood selector */}
-                          <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
-                            {LAYER_MOODS.map((mood) => (
-                              <button
-                                key={mood}
-                                onClick={() => setSelectedMood(mood)}
-                                className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
-                                  selectedMood === mood
-                                    ? "bg-foreground/10 text-foreground"
-                                    : "text-muted-foreground/40 hover:text-muted-foreground/70"
-                                }`}
-                                style={selectedMood === mood ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-                              >
-                                {mood}
-                              </button>
-                            ))}
-                          </div>
+                        {/* Save star */}
+                        <motion.button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLayerSaved((s) => !s);
+                            toast(layerSaved ? "Combo unsaved" : "Combo saved");
+                          }}
+                          whileTap={{ scale: 1.3 }}
+                          className="absolute top-3 right-3 p-1"
+                        >
+                          <motion.div
+                            animate={layerSaved ? { scale: [1, 1.25, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <Star
+                              size={14}
+                              className={`transition-all duration-200 ${
+                                layerSaved
+                                  ? "text-foreground fill-foreground/80 drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]"
+                                  : "text-muted-foreground/30 hover:text-muted-foreground/60"
+                              }`}
+                            />
+                          </motion.div>
+                        </motion.button>
 
-                          {/* ROLE */}
-                          <div>
-                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Role</span>
-                            <p className="text-[11px] text-foreground/75 mt-0.5 leading-relaxed">
-                              {activeLayer.top_name} acts as {activeLayer.mode === 'balance' ? 'a balancing accent' : activeLayer.mode === 'amplify' ? 'a bold amplifier' : activeLayer.mode === 'soften' ? 'a softening layer' : 'a contrasting element'} to {activeLayer.anchor_name ?? today_pick.name}
-                            </p>
-                          </div>
+                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
+                          {cardActiveLayer.top ?? `Enhance with ${cardActiveLayer.top_name}`}
+                        </p>
+                        <span
+                          className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
+                          style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
+                        >
+                          {cardActiveLayer.mode}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/35 tracking-[0.1em]">
+                          {layerSheetOpen ? "tap to close" : "tap for details"}
+                        </span>
 
-                          {/* WHY THIS WORKS */}
-                          {(activeLayer.why_it_works || activeLayer.reason) && (
-                            <div>
-                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Why this works</span>
-                              <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
-                                {activeLayer.why_it_works ?? activeLayer.reason}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* SPRAY ORDER */}
-                          {(activeLayer.anchor_sprays != null && activeLayer.top_sprays != null) && (
-                            <div>
-                              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Spray order</span>
-                              <div className="mt-1 space-y-1">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">01</span>
-                                  <div>
-                                    <p className="text-[11px] text-foreground/80">
-                                      <span className="font-mono">{activeLayer.anchor_sprays}×</span> {activeLayer.anchor_name ?? today_pick.name}
-                                    </p>
-                                    {activeLayer.anchor_placement && (
-                                      <p className="text-[10px] text-muted-foreground/45">{activeLayer.anchor_placement}</p>
-                                    )}
-                                  </div>
+                        {/* Expanded details */}
+                        <AnimatePresence initial={false}>
+                          {layerSheetOpen && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+                              className="w-full overflow-hidden"
+                            >
+                              <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                                {/* Mood selector */}
+                                <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
+                                  {LAYER_MOODS.map((mood) => (
+                                    <button
+                                      key={mood}
+                                      onClick={() => setSelectedMood(mood)}
+                                      className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+                                        selectedMood === mood
+                                          ? "bg-foreground/10 text-foreground"
+                                          : "text-muted-foreground/40 hover:text-muted-foreground/70"
+                                      }`}
+                                      style={selectedMood === mood ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
+                                    >
+                                      {mood}
+                                    </button>
+                                  ))}
                                 </div>
-                                <div className="flex items-start gap-2">
-                                  <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">02</span>
+
+                                {/* ROLE */}
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Role</span>
+                                  <p className="text-[11px] text-foreground/75 mt-0.5 leading-relaxed">
+                                    {cardActiveLayer.top_name} acts as {cardActiveLayer.mode === 'balance' ? 'a balancing accent' : cardActiveLayer.mode === 'amplify' ? 'a bold amplifier' : cardActiveLayer.mode === 'soften' ? 'a softening layer' : 'a contrasting element'} to {cardActiveLayer.anchor_name ?? cardPick.name}
+                                  </p>
+                                </div>
+
+                                {/* WHY THIS WORKS */}
+                                {(cardActiveLayer.why_it_works || cardActiveLayer.reason) && (
                                   <div>
-                                    <p className="text-[11px] text-foreground/80">
-                                      <span className="font-mono">{activeLayer.top_sprays}×</span> {activeLayer.top_name}
+                                    <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Why this works</span>
+                                    <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
+                                      {cardActiveLayer.why_it_works ?? cardActiveLayer.reason}
                                     </p>
-                                    {activeLayer.top_placement && (
-                                      <p className="text-[10px] text-muted-foreground/45">{activeLayer.top_placement}</p>
-                                    )}
                                   </div>
+                                )}
+
+                                {/* SPRAY ORDER */}
+                                {(cardActiveLayer.anchor_sprays != null && cardActiveLayer.top_sprays != null) && (
+                                  <div>
+                                    <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Spray order</span>
+                                    <div className="mt-1 space-y-1">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">01</span>
+                                        <div>
+                                          <p className="text-[11px] text-foreground/80">
+                                            <span className="font-mono">{cardActiveLayer.anchor_sprays}×</span> {cardActiveLayer.anchor_name ?? cardPick.name}
+                                          </p>
+                                          {cardActiveLayer.anchor_placement && (
+                                            <p className="text-[10px] text-muted-foreground/45">{cardActiveLayer.anchor_placement}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">02</span>
+                                        <div>
+                                          <p className="text-[11px] text-foreground/80">
+                                            <span className="font-mono">{cardActiveLayer.top_sprays}×</span> {cardActiveLayer.top_name}
+                                          </p>
+                                          {cardActiveLayer.top_placement && (
+                                            <p className="text-[10px] text-muted-foreground/45">{cardActiveLayer.top_placement}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* RESULT */}
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Result</span>
+                                  <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
+                                    {cardActiveLayer.strength_note ?? `A ${cardActiveLayer.mode} blend of ${cardActiveLayer.anchor_name ?? cardPick.name} and ${cardActiveLayer.top_name}`}
+                                  </p>
                                 </div>
                               </div>
-                            </div>
+                            </motion.div>
                           )}
-
-                          {/* RESULT */}
-                          <div>
-                            <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Result</span>
-                            <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
-                              {activeLayer.strength_note ?? `A ${activeLayer.mode} blend of ${activeLayer.anchor_name ?? today_pick.name} and ${activeLayer.top_name}`}
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
+                        </AnimatePresence>
+                      </div>
                     )}
-                  </AnimatePresence>
-                </div>
-              )}
 
-              {/* Alternates */}
-              {hasAlternates && (
-                <div className="flex gap-2 justify-center mb-2">
-                  {alternates!.map((alt) => (
-                    <motion.button
-                      key={alt.name}
-                      whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleAlternateTap(alt)}
-                      disabled={isBusy}
-                      className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
-                      style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
-                    >
-                      {alt.name}
-                    </motion.button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
+                    {/* Alternates (Also works with) — only on center */}
+                    {isCenter && cardHasAlternates && (
+                      <div className="flex gap-2 justify-center mb-2 flex-wrap">
+                        <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40 w-full text-center mb-1">Also works with</span>
+                        {cardAlternates!.map((alt) => (
+                          <motion.button
+                            key={alt.name}
+                            whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAlternateTap(alt);
+                            }}
+                            disabled={isBusy}
+                            className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
+                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
+                          >
+                            {alt.name}
+                          </motion.button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+
+          {/* Cover flow swipe area — invisible touch target */}
+          <div
+            className="absolute inset-0 z-20"
+            style={{ pointerEvents: "none" }}
+          >
+            <motion.div
+              className="w-full h-full"
+              style={{ pointerEvents: "auto", touchAction: "pan-y" }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.15}
+              onDragEnd={(_, info: PanInfo) => {
+                const { offset, velocity } = info;
+                const threshold = 50;
+                const velThreshold = 200;
+                if (
+                  (offset.x < -threshold || velocity.x < -velThreshold) &&
+                  selectedForecastDay < forecastDays.length - 1
+                ) {
+                  const next = selectedForecastDay + 1;
+                  setSelectedForecastDay(next);
+                  setAccepted(acceptedDays.has(next));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[next]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                } else if (
+                  (offset.x > threshold || velocity.x > velThreshold) &&
+                  selectedForecastDay > 0
+                ) {
+                  const prev = selectedForecastDay - 1;
+                  setSelectedForecastDay(prev);
+                  setAccepted(acceptedDays.has(prev));
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[prev]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                }
+              }}
+            />
+          </div>
+
+          {/* Locked In + Undo Pill */}
+          <AnimatePresence>
+            {(accepted || undoVisible) && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+                className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3"
+              >
+                <span className="text-[11px] font-medium uppercase tracking-[0.15em] text-foreground/80">
+                  Locked in ✓
+                </span>
+                {undoVisible && (
+                  <motion.button
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    onClick={handleUndo}
+                    className="flex items-center gap-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground/60 hover:text-foreground/80 transition-colors px-3 py-1.5 rounded-full"
+                    style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.1)" }}
+                  >
+                    <Undo2 size={11} />
+                    Undo
+                  </motion.button>
+                )}
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
-        {/* Footer */}
-        <footer className="flex flex-col items-center w-full max-w-md px-2 mt-auto pb-4 pt-8 gap-4">
-          <div className="flex items-center justify-between w-full">
-            <button
-              onClick={handleSkip}
-              disabled={isBusy}
-              className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 disabled:opacity-40"
-            >
-              {actionState === "skipping" ? "Skipping…" : "Not today"}
-            </button>
-
-            <AnimatePresence mode="wait">
-              {accepted ? (
-                <motion.span
-                  key="locked"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] text-foreground"
-                  style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.15)" }}
-                >
-                  Locked in ✓
-                </motion.span>
-              ) : (
-                <motion.button
-                  key="wear"
-                  whileTap={{ scale: 0.96 }}
-                  onClick={handleAccept}
-                  disabled={isBusy}
-                  className="px-8 py-4 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-shadow duration-300 disabled:opacity-60"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.9)",
-                    color: "hsl(var(--background))",
-                    boxShadow: "0 4px 20px rgba(255, 255, 255, 0.1)",
-                  }}
-                >
-                  {actionState === "accepting" ? "Locking in…" : "Wear this"}
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-
-        </footer>
+        {/* Spacer before forecast */}
+        <div className="mt-auto pt-8" />
 
         {/* 7-Day Forecast Timepiece */}
         <div
