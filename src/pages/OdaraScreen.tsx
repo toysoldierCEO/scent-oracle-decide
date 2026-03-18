@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Star } from "lucide-react";
+import { Star, X } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -77,6 +77,111 @@ const FAMILY_COLORS: Record<string, string> = {
   "citrus-aromatic": "#B8C94E",
 };
 
+const FAMILY_LABELS: Record<string, string> = {
+  "oud-amber": "Oud & Amber",
+  "fresh-blue": "Fresh & Aquatic",
+  "woody-clean": "Woody & Clean",
+  "sweet-gourmand": "Sweet & Gourmand",
+  "dark-leather": "Dark Leather",
+  "tobacco-boozy": "Tobacco & Boozy",
+  "floral-musk": "Floral & Musk",
+  "citrus-aromatic": "Citrus & Aromatic",
+};
+
+interface FragranceProfile {
+  brand?: string;
+  top_notes?: string[];
+  heart_notes?: string[];
+  base_notes?: string[];
+  vibe?: string;
+  wardrobe_role?: string;
+  longevity?: string;
+  projection?: string;
+  weather?: string;
+}
+
+const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
+  "Valley of the Kings": {
+    brand: "Maison Royale",
+    top_notes: ["Saffron", "Pink Pepper", "Bergamot"],
+    heart_notes: ["Rose Absolute", "Oud"],
+    base_notes: ["Amber", "Sandalwood", "Musk"],
+    vibe: "A regal, commanding presence — ancient temples bathed in golden light.",
+    wardrobe_role: "Signature evening anchor",
+    longevity: "10–12 hours",
+    projection: "Strong — 3–4 ft radius",
+    weather: "Cool to cold",
+  },
+  "Agar": {
+    brand: "Atelier Niche",
+    top_notes: ["Elemi", "Green Cardamom"],
+    heart_notes: ["Agarwood", "Cedar Atlas"],
+    base_notes: ["Vetiver", "White Musk"],
+    vibe: "A quiet walk through a cedar forest after rain.",
+    wardrobe_role: "Versatile daily wear",
+    longevity: "7–9 hours",
+    projection: "Moderate — close to skin",
+    weather: "Mild to warm",
+  },
+  "Noire Absolu": {
+    brand: "Cuir Collection",
+    top_notes: ["Black Pepper", "Juniper"],
+    heart_notes: ["Leather", "Iris"],
+    base_notes: ["Castoreum", "Patchouli", "Benzoin"],
+    vibe: "Midnight in a leather-bound study — raw, intense, unapologetic.",
+    wardrobe_role: "Power move — formal nights",
+    longevity: "12+ hours",
+    projection: "Beast mode",
+    weather: "Cold",
+  },
+  "Santal Sérénade": {
+    brand: "Les Harmonies",
+    top_notes: ["Coconut Milk", "Cardamom"],
+    heart_notes: ["Sandalwood", "Tonka Bean"],
+    base_notes: ["Vanilla", "Cashmeran"],
+    vibe: "Cashmere on skin — creamy, warm, effortlessly inviting.",
+    wardrobe_role: "Comfort scent — close encounters",
+    longevity: "8–10 hours",
+    projection: "Intimate — skin scent",
+    weather: "Cool to mild",
+  },
+  "Hafez 1984": {
+    brand: "Orient Express",
+    top_notes: ["Cinnamon", "Dried Plum"],
+    heart_notes: ["Tobacco Leaf", "Dark Rum"],
+    base_notes: ["Labdanum", "Oud", "Smoky Birch"],
+    vibe: "A dimly lit lounge, whiskey in hand, old jazz playing.",
+    wardrobe_role: "Night out anchor",
+    longevity: "10–14 hours",
+    projection: "Strong — fills a room",
+    weather: "Cold to cool",
+  },
+  "Mystere 28": {
+    brand: "Aqua Moderna",
+    top_notes: ["Sea Salt", "Grapefruit", "Mint"],
+    heart_notes: ["Lavender", "Geranium"],
+    base_notes: ["Ambroxan", "White Cedar"],
+    vibe: "Mediterranean coast at dawn — clean, bright, alive.",
+    wardrobe_role: "Daytime refresh — casual wear",
+    longevity: "6–8 hours",
+    projection: "Moderate — social range",
+    weather: "Warm to hot",
+  },
+  "Amber Dusk": {
+    brand: "Maison Royale",
+    top_notes: ["Mandarin", "Ginger"],
+    heart_notes: ["Amber", "Frankincense"],
+    base_notes: ["Labdanum", "Vanilla", "Musk"],
+    vibe: "Golden hour fading into a warm evening embrace.",
+    wardrobe_role: "Transitional — day to night",
+    longevity: "8–10 hours",
+    projection: "Moderate",
+    weather: "Cool to mild",
+  },
+};
+
+const LONG_PRESS_DURATION = 500;
+
 /* ── 7-day forecast mock data ── */
 interface ForecastDay {
   label: string;
@@ -141,6 +246,8 @@ const OdaraScreen = () => {
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [forecastTransition, setForecastTransition] = useState(false);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
@@ -562,13 +669,26 @@ const OdaraScreen = () => {
                   {forecastEntry.label} · {forecastEntry.day}
                 </span>
               )}
-              <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                {today_pick.name}
-              </h1>
+              {/* Long-press target for fragrance profile */}
+              <div
+                className="flex flex-col items-center select-none"
+                onPointerDown={() => {
+                  longPressTimer.current = setTimeout(() => {
+                    setProfileOpen(true);
+                  }, LONG_PRESS_DURATION);
+                }}
+                onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
+                onPointerLeave={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
+                  {today_pick.name}
+                </h1>
 
-              <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
-                {today_pick.family}
-              </p>
+                <p className="text-xs text-family-accent text-center tracking-[0.2em] mb-5 uppercase select-none">
+                  {today_pick.family}
+                </p>
+              </div>
 
               <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
                 {today_pick.reason}
@@ -794,26 +914,27 @@ const OdaraScreen = () => {
             {/* Track line */}
             <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
             
-            {/* Continuous orb with handoff fade */}
+            {/* Continuous orb with midnight handoff fade */}
             {(() => {
               const totalSegments = 6;
-              const pct = (orbPosition / totalSegments) * 100;
-              // Fade zone: orb fades out in the last 15% before reaching next day marker
-              const progressInSegment = orbPosition % 1;
-              const FADE_START = 0.82;
-              const orbOpacity = progressInSegment >= FADE_START
-                ? 1 - ((progressInSegment - FADE_START) / (1 - FADE_START))
+              // orbPosition: 0 at midnight → 1 at next midnight
+              // Fade zone: last 20% of day (roughly 8pm–midnight)
+              const FADE_START = 0.80;
+              const progressInDay = orbPosition; // 0→1 within current day
+              const orbFade = progressInDay >= FADE_START
+                ? 1 - ((progressInDay - FADE_START) / (1 - FADE_START))
                 : 1;
-              // Clamp position so orb stops short of the next day marker
-              const clampedPct = Math.min(pct, ((Math.floor(orbPosition) + FADE_START) / totalSegments) * 100 + ((1 - FADE_START) / totalSegments) * 100 * 0.5);
+              // Clamp position: orb stops at 90% of the way to next day marker max
+              const maxProgress = FADE_START + (1 - FADE_START) * 0.4; // ~0.88 — never reaches day 1
+              const clampedProgress = Math.min(progressInDay, maxProgress);
+              const pct = (clampedProgress / totalSegments) * 100;
               return (
                 <div
-                  className="absolute top-[2px] z-10"
+                  className="absolute top-[2px] z-10 pointer-events-none"
                   style={{
-                    left: `calc(12px + ${clampedPct / 100} * (100% - 24px))`,
+                    left: `calc(12px + ${pct / 100} * (100% - 24px))`,
                     transform: "translateX(-50%)",
-                    opacity: Math.max(0, orbOpacity),
-                    transition: "opacity 0.3s ease-out",
+                    opacity: Math.max(0, orbFade),
                   }}
                 >
                   <div
@@ -822,7 +943,7 @@ const OdaraScreen = () => {
                       width: "7px",
                       height: "7px",
                       background: "white",
-                      boxShadow: `0 0 4px 2px rgba(255,255,255,${0.15 * orbOpacity}), 0 0 10px 4px rgba(255,255,255,${0.06 * orbOpacity})`,
+                      boxShadow: `0 0 4px 2px rgba(255,255,255,${(0.15 * orbFade).toFixed(3)}), 0 0 10px 4px rgba(255,255,255,${(0.06 * orbFade).toFixed(3)})`,
                       animation: "orbBreathe 4s ease-in-out infinite 2s",
                     }}
                   />
@@ -840,14 +961,12 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                // Handoff: compute how much the approaching orb illuminates this day
-                // The orb is approaching day i when orbPosition is between (i-0.18) and i
-                const FADE_ZONE = 0.18;
+                // Handoff: day 1 brightens as orb fades (last 20% of day = 8pm–midnight)
+                const FADE_ZONE = 0.20;
                 const distToDay = i - orbPosition;
-                const isNextTarget = distToDay > 0 && distToDay <= FADE_ZONE;
+                const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
                 const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
-                // Is this the day the orb is currently on (just passed)?
-                const isCurrentOrbDay = i === Math.floor(orbPosition) && orbPosition - i < FADE_ZONE;
+                const isCurrentOrbDay = i === 0;
 
                 // Dynamic opacity based on handoff + selection + current day
                 const labelOpacity = isSelected
@@ -930,6 +1049,148 @@ const OdaraScreen = () => {
             </div>
           </div>
         </div>
+
+        {/* Fragrance Profile Sheet */}
+        <AnimatePresence>
+          {profileOpen && (() => {
+            const profile = FRAGRANCE_PROFILES[today_pick.name];
+            const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
+            const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
+            return (
+              <motion.div
+                key="profile-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="fixed inset-0 z-50 flex items-end justify-center"
+                style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+                onClick={() => setProfileOpen(false)}
+              >
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
+                  className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto"
+                  style={{
+                    maxHeight: "85vh",
+                    background: "hsl(var(--background))",
+                    boxShadow: "0 -10px 40px rgba(0,0,0,0.3)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Handle */}
+                  <div className="flex justify-center mb-4">
+                    <div className="w-10 h-1 rounded-full bg-foreground/15" />
+                  </div>
+
+                  {/* Close */}
+                  <button
+                    onClick={() => setProfileOpen(false)}
+                    className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+
+                  {/* Header */}
+                  <div className="text-center mb-6">
+                    <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
+                    {profile?.brand && (
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">{profile.brand}</p>
+                    )}
+                    <span
+                      className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
+                      style={{
+                        color: familyColor,
+                        boxShadow: `inset 0 0 0 1px ${familyColor}33`,
+                      }}
+                    >
+                      {familyLabel}
+                    </span>
+                  </div>
+
+                  {/* Vibe */}
+                  {profile?.vibe && (
+                    <div className="mb-6">
+                      <p className="text-sm text-foreground/70 leading-relaxed text-center italic">
+                        "{profile.vibe}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Note Pyramid */}
+                  {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
+                    <div className="mb-6 space-y-3">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
+                      {profile.top_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                      {profile.heart_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                      {profile.base_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Base</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Performance */}
+                  {(profile?.longevity || profile?.projection) && (
+                    <div className="mb-6 grid grid-cols-2 gap-4">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
+                      {profile.longevity && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.longevity}</p>
+                        </div>
+                      )}
+                      {profile.projection && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.projection}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Wardrobe Role & Weather */}
+                  {(profile?.wardrobe_role || profile?.weather) && (
+                    <div className="mb-4 grid grid-cols-2 gap-4">
+                      {profile.wardrobe_role && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Role</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.wardrobe_role}</p>
+                        </div>
+                      )}
+                      {profile.weather && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Weather</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.weather}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Why it fits */}
+                  <div className="mb-2">
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block mb-1">Why it fits</span>
+                    <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
       </div>
     </div>
   );
