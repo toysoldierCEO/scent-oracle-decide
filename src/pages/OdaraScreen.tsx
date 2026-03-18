@@ -65,6 +65,60 @@ const SWIPE_VELOCITY = 300;
 const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
 
+/* ── Fragrance family → color mapping ── */
+const FAMILY_COLORS: Record<string, string> = {
+  "oud-amber": "#C08A3E",
+  "fresh-blue": "#5B9BD5",
+  "woody-clean": "#8A9BAE",
+  "sweet-gourmand": "#D4A056",
+  "dark-leather": "#3A3A3A",
+  "tobacco-boozy": "#6B4226",
+  "floral-musk": "#C4A0B9",
+  "citrus-aromatic": "#B8C94E",
+};
+
+/* ── 7-day forecast mock data ── */
+interface ForecastDay {
+  label: string;
+  day: number;
+  fragrance: {
+    fragrance_id: string;
+    name: string;
+    family: string;
+    reason: string;
+  } | null;
+  layer: Record<LayerMood, LayerOption> | null;
+  alternates: { fragrance_id?: string; name: string; family?: string; reason?: string }[] | null;
+}
+
+function buildForecastDays(): ForecastDay[] {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+
+  const weekFragrances = [
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.' },
+    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.' },
+    null, // Day 7 unassigned
+  ];
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const frag = weekFragrances[i];
+    return {
+      label: dayNames[d.getDay()],
+      day: d.getDate(),
+      fragrance: frag,
+      layer: i === 0 ? null : null, // only today has layer from oracle
+      alternates: null,
+    };
+  });
+}
+
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,19 +136,12 @@ const OdaraScreen = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
+  const [selectedForecastDay, setSelectedForecastDay] = useState(0);
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
 
-  // Generate forecast days (today + next 6 = 7 total)
-  const forecastDays = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      return { label: days[d.getDay()], day: d.getDate() };
-    });
-  }, []);
+  // Build forecast days
+  const forecastDays = useMemo(() => buildForecastDays(), []);
 
   // Continuous timepiece orb position (requestAnimationFrame)
   const [orbPosition, setOrbPosition] = useState(0);
@@ -309,10 +356,27 @@ const OdaraScreen = () => {
     );
   }
 
-  const { today_pick, layer: layerMap, alternates } = oracle;
-  const hasLayer = layerMap != null;
-  const activeLayer = hasLayer ? layerMap[selectedMood] : null;
+  const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
+
+  // When a forecast day is selected, show that day's fragrance; day 0 = oracle data
+  const isViewingForecast = selectedForecastDay > 0;
+  const forecastEntry = forecastDays[selectedForecastDay];
+  const today_pick = isViewingForecast && forecastEntry?.fragrance
+    ? forecastEntry.fragrance
+    : oraclePick;
+  const currentLayerMap = isViewingForecast ? forecastEntry?.layer ?? null : layerMap;
+  const alternates = isViewingForecast ? forecastEntry?.alternates : oracleAlternates;
+  const hasLayer = currentLayerMap != null;
+  const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
   const hasAlternates = alternates != null && alternates.length > 0;
+
+  const handleForecastDayTap = (index: number) => {
+    setSelectedForecastDay(index);
+    setAccepted(false);
+    setLayerSheetOpen(false);
+    setCardKey((k) => k + 1);
+    setExitDirection(null);
+  };
 
   return (
     <div className="dark">
@@ -463,6 +527,11 @@ const OdaraScreen = () => {
                 boxShadow: "var(--shadow-glass), inset 0 0 0 1px hsl(var(--family-accent) / 0.12), 0 0 60px -20px hsl(var(--family-accent) / 0.08)",
               }}
             >
+              {isViewingForecast && (
+                <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 mb-2 select-none">
+                  {forecastEntry.label} · {forecastEntry.day}
+                </span>
+              )}
               <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
                 {today_pick.name}
               </h1>
@@ -723,32 +792,59 @@ const OdaraScreen = () => {
 
             {/* Day markers */}
             <div className="flex justify-between relative">
-              {forecastDays.map((d, i) => (
-                <div key={i} className="flex flex-col items-center gap-2.5">
-                  <div
-                    className="w-[5px] h-[5px] rounded-full"
-                    style={{
-                      background: i === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.12)",
-                    }}
-                  />
-                  <div className="flex flex-col items-center gap-1">
-                    <span
-                      className="font-mono"
+              {forecastDays.map((d, i) => {
+                const familyColor = d.fragrance
+                  ? FAMILY_COLORS[d.fragrance.family] ?? "rgba(255,255,255,0.12)"
+                  : "rgba(255,255,255,0.08)";
+                const isSelected = selectedForecastDay === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleForecastDayTap(i)}
+                    className="flex flex-col items-center gap-2.5 bg-transparent border-none outline-none cursor-pointer px-1 py-0"
+                  >
+                    {/* Family-coded dot */}
+                    <div
+                      className="rounded-full transition-all duration-300"
                       style={{
-                        fontSize: "10px",
-                        letterSpacing: "0.08em",
-                        color: i === 0 ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
-                        fontWeight: i === 0 ? 500 : 400,
+                        width: isSelected ? "6px" : "5px",
+                        height: isSelected ? "6px" : "5px",
+                        background: familyColor,
+                        boxShadow: isSelected
+                          ? `0 0 6px 2px ${familyColor}44`
+                          : d.fragrance
+                            ? `0 0 3px 1px ${familyColor}22`
+                            : "none",
+                        opacity: d.fragrance ? 1 : 0.3,
                       }}
-                    >
-                      {d.label}
-                    </span>
-                    {i === 0 && (
-                      <div className="w-3 h-px rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-                    )}
-                  </div>
-                </div>
-              ))}
+                    />
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className="font-mono transition-all duration-200"
+                        style={{
+                          fontSize: "10px",
+                          letterSpacing: "0.08em",
+                          color: isSelected
+                            ? "rgba(255,255,255,0.85)"
+                            : i === 0
+                              ? "rgba(255,255,255,0.55)"
+                              : "rgba(255,255,255,0.35)",
+                          fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
+                        }}
+                      >
+                        {i === 0 ? "Today" : d.label}
+                      </span>
+                      {isSelected && (
+                        <motion.div
+                          layoutId="forecastUnderline"
+                          className="w-3.5 h-px rounded-full"
+                          style={{ background: "rgba(255,255,255,0.3)" }}
+                        />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
