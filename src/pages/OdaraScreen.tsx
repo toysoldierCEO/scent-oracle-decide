@@ -690,20 +690,14 @@ const OdaraScreen = () => {
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
-    setForecastTransition(true);
-    // Brief outgoing fade
-    setTimeout(() => {
-      setSelectedForecastDay(index);
-      setAccepted(false);
-      setLayerSheetOpen(false);
-      setCardKey((k) => k + 1);
-      setExitDirection(null);
-      // Update displayed temperature for the selected day
-      const dayTemp = forecastDays[index]?.temperature;
-      if (dayTemp != null) setDisplayedTemperature(dayTemp);
-      else setDisplayedTemperature(null);
-      setTimeout(() => setForecastTransition(false), 50);
-    }, 150);
+    setSelectedForecastDay(index);
+    setAccepted(acceptedDays.has(index));
+    setLayerSheetOpen(false);
+    setCardKey((k) => k + 1);
+    setExitDirection(null);
+    const dayTemp = forecastDays[index]?.temperature;
+    if (dayTemp != null) setDisplayedTemperature(dayTemp);
+    else setDisplayedTemperature(null);
   };
 
   return (
