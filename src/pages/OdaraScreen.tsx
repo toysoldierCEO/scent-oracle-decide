@@ -1049,6 +1049,148 @@ const OdaraScreen = () => {
             </div>
           </div>
         </div>
+
+        {/* Fragrance Profile Sheet */}
+        <AnimatePresence>
+          {profileOpen && (() => {
+            const profile = FRAGRANCE_PROFILES[today_pick.name];
+            const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
+            const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
+            return (
+              <motion.div
+                key="profile-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="fixed inset-0 z-50 flex items-end justify-center"
+                style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+                onClick={() => setProfileOpen(false)}
+              >
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
+                  className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto"
+                  style={{
+                    maxHeight: "85vh",
+                    background: "hsl(var(--background))",
+                    boxShadow: "0 -10px 40px rgba(0,0,0,0.3)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Handle */}
+                  <div className="flex justify-center mb-4">
+                    <div className="w-10 h-1 rounded-full bg-foreground/15" />
+                  </div>
+
+                  {/* Close */}
+                  <button
+                    onClick={() => setProfileOpen(false)}
+                    className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+
+                  {/* Header */}
+                  <div className="text-center mb-6">
+                    <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
+                    {profile?.brand && (
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">{profile.brand}</p>
+                    )}
+                    <span
+                      className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
+                      style={{
+                        color: familyColor,
+                        boxShadow: `inset 0 0 0 1px ${familyColor}33`,
+                      }}
+                    >
+                      {familyLabel}
+                    </span>
+                  </div>
+
+                  {/* Vibe */}
+                  {profile?.vibe && (
+                    <div className="mb-6">
+                      <p className="text-sm text-foreground/70 leading-relaxed text-center italic">
+                        "{profile.vibe}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Note Pyramid */}
+                  {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
+                    <div className="mb-6 space-y-3">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block">Note Pyramid</span>
+                      {profile.top_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Top</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                      {profile.heart_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Heart</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                      {profile.base_notes && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Base</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Performance */}
+                  {(profile?.longevity || profile?.projection) && (
+                    <div className="mb-6 grid grid-cols-2 gap-4">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 col-span-2">Performance</span>
+                      {profile.longevity && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Longevity</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.longevity}</p>
+                        </div>
+                      )}
+                      {profile.projection && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Projection</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.projection}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Wardrobe Role & Weather */}
+                  {(profile?.wardrobe_role || profile?.weather) && (
+                    <div className="mb-4 grid grid-cols-2 gap-4">
+                      {profile.wardrobe_role && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Role</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.wardrobe_role}</p>
+                        </div>
+                      )}
+                      {profile.weather && (
+                        <div>
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Weather</span>
+                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.weather}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Why it fits */}
+                  <div className="mb-2">
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 block mb-1">Why it fits</span>
+                    <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
       </div>
     </div>
   );
