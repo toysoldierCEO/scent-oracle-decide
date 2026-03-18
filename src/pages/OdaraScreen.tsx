@@ -873,6 +873,11 @@ const OdaraScreen = () => {
                     className={`w-full rounded-[32px] p-8 flex flex-col items-center ${
                       isCenter ? "cursor-pointer" : ""
                     }`}
+                    onClick={() => {
+                      if (!isCenter || isDayAccepted) return;
+                      if (longPressTimer.current) return;
+                      handleAccept();
+                    }}
                     style={{
                       background: isCenter
                         ? "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%), rgba(10,10,12,0.88)"
