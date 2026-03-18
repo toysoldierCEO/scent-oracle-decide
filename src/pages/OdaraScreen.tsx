@@ -1147,7 +1147,7 @@ const OdaraScreen = () => {
 
                   {/* Wardrobe Role & Weather */}
                   {(profile?.wardrobe_role || profile?.weather) && (
-                    <div className="mb-4 grid grid-cols-2 gap-4">
+                    <div className="mt-8 mb-4 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">Role</span>
