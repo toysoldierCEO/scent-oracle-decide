@@ -832,7 +832,7 @@ const OdaraScreen = () => {
                           fontWeight: isSelected ? 600 : i === 0 ? 500 : 400,
                         }}
                       >
-                        {i === 0 ? "Today" : d.label}
+                        {d.label}
                       </span>
                       {isSelected && (
                         <motion.div
