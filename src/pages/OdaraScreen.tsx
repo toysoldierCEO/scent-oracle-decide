@@ -1128,19 +1128,19 @@ const OdaraScreen = () => {
 
                 // Dynamic opacity based on handoff + selection + current day
                 const labelOpacity = isSelected
-                  ? 0.85
+                  ? 0.95
                   : isCurrentOrbDay
-                    ? 0.55
+                    ? 0.65
                     : isNextTarget
-                      ? 0.35 + handoffGlow * 0.3
+                      ? 0.45 + handoffGlow * 0.3
                       : i === 0
-                        ? 0.55
-                        : 0.35;
+                        ? 0.65
+                        : 0.45;
                 const dateOpacity = isSelected
-                  ? 0.6
+                  ? 0.75
                   : isNextTarget
-                    ? 0.25 + handoffGlow * 0.2
-                    : 0.25;
+                    ? 0.35 + handoffGlow * 0.2
+                    : 0.35;
 
                 const isLayered = d.dailySet?.is_layered ?? false;
                 const layerFamily = d.dailySet?.layer?.family;
