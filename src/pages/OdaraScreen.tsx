@@ -990,7 +990,7 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className={`w-full rounded-[32px] p-8 flex flex-col items-center relative ${
+                    className={`w-full rounded-[24px] px-[22px] py-[18px] flex flex-col items-center relative ${
                       isCenter ? "cursor-pointer" : ""
                     }`}
                     onClick={() => {
