@@ -863,7 +863,7 @@ const OdaraScreen = () => {
           {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px", touchAction: "none" }}
+            style={{ minHeight: "400px", touchAction: "none" }}
             onPointerDown={(e) => {
               dragDirection.current = "none";
               dragStart.current = { x: e.clientX, y: e.clientY };
