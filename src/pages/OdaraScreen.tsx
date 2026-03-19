@@ -725,7 +725,7 @@ const OdaraScreen = () => {
 
   return (
     <div className="dark">
-      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden relative">
+      <div className="min-h-screen bg-background flex flex-col items-center px-6 py-0 overflow-hidden relative">
         {/* Subtle background tint overlay */}
         <motion.div
           className="absolute inset-0 pointer-events-none z-0"
@@ -825,7 +825,7 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
         <motion.div
-          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-0"
+          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-1 min-h-0"
           style={{ perspective: "1200px" }}
           animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
@@ -863,7 +863,7 @@ const OdaraScreen = () => {
           {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "400px", touchAction: "none", zIndex: 20, position: "relative" }}
+            style={{ minHeight: "400px", touchAction: "none" }}
             onPointerDown={(e) => {
               dragDirection.current = "none";
               dragStart.current = { x: e.clientX, y: e.clientY };
@@ -1282,18 +1282,13 @@ const OdaraScreen = () => {
         </motion.div>
 
         {/* Spacer before forecast — grows when layer is closed */}
-        <motion.div
-          className="shrink"
-          animate={{ flexGrow: layerSheetOpen ? 0 : 1, minHeight: layerSheetOpen ? 4 : 16 }}
-          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-        />
+        <div className="flex-grow" style={{ minHeight: layerSheetOpen ? 4 : 8 }} />
 
-        {/* 7-Day Forecast Timepiece — magnet: physically pushed down & compressed when layer expands */}
+        {/* 7-Day Forecast Timepiece — normal flow, always below main card */}
         <motion.div
-          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
+          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden flex-shrink-0 mt-auto"
           animate={{
             maxHeight: layerSheetOpen ? 54 : 180,
-            y: layerSheetOpen ? 24 : 0,
             paddingTop: layerSheetOpen ? 3 : 10,
             paddingBottom: layerSheetOpen ? 4 : 18,
             opacity: layerSheetOpen ? 0.55 : 1,
@@ -1304,8 +1299,6 @@ const OdaraScreen = () => {
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
             transformOrigin: "bottom center",
-            position: "relative",
-            zIndex: 5,
           }}
         >
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
