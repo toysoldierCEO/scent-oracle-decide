@@ -1291,7 +1291,6 @@ const OdaraScreen = () => {
         {/* 7-Day Forecast Timepiece — magnet: physically pushed down & compressed when layer expands */}
         <motion.div
           className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
-          style={{ position: "relative", zIndex: 5 }}
           animate={{
             maxHeight: layerSheetOpen ? 54 : 180,
             y: layerSheetOpen ? 24 : 0,
@@ -1305,6 +1304,8 @@ const OdaraScreen = () => {
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
             transformOrigin: "bottom center",
+            position: "relative",
+            zIndex: 5,
           }}
         >
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
