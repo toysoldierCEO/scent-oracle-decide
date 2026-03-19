@@ -970,6 +970,13 @@ const OdaraScreen = () => {
                         {cardPick.name}
                       </h1>
 
+                      {/* Brand name */}
+                      {FRAGRANCE_BRANDS[cardPick.name] && (
+                        <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
+                          {FRAGRANCE_BRANDS[cardPick.name]}
+                        </p>
+                      )}
+
                       {/* Family label with color accent */}
                       <p
                         className="text-xs text-center tracking-[0.2em] mb-5 uppercase select-none"
