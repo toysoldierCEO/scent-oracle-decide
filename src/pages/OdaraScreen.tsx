@@ -122,83 +122,116 @@ function performanceLabel(score: number): string {
   return "Strong";
 }
 
+/* Brand mapping */
+const FRAGRANCE_BRANDS: Record<string, string> = {
+  "Valley of the Kings": "Alexandria Fragrances",
+  "Agar": "Maison Alhambra",
+  "Noire Absolu": "Maison Alhambra",
+  "Santal Sérénade": "Maison Alhambra",
+  "Hafez 1984": "Alexandria Fragrances",
+  "Mystere 28": "Alexandria Fragrances",
+  "Amber Dusk": "Alexandria Fragrances",
+  "Cuir Sauvage": "Maison Alhambra",
+  "Oasis Elixir": "Alexandria Fragrances",
+};
+
+/* Wear context tags per fragrance */
+const FRAGRANCE_WEAR_TAGS: Record<string, string[]> = {
+  "Valley of the Kings": ["Date night", "Cold evenings", "Statement wear"],
+  "Agar": ["Daily driver", "Office safe", "Versatile"],
+  "Noire Absolu": ["Night out", "Power move", "Cold weather"],
+  "Santal Sérénade": ["Close encounters", "Cozy nights", "Indoor"],
+  "Hafez 1984": ["Evening signature", "Cool weather", "Night out"],
+  "Mystere 28": ["Daytime", "Casual", "Warm weather"],
+  "Amber Dusk": ["Day-to-night", "Transitional", "All-season"],
+  "Cuir Sauvage": ["Bold evening", "Statement", "Cool-cold weather"],
+  "Oasis Elixir": ["Warm weather", "Outdoor", "Weekend"],
+};
+
 const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
   "Valley of the Kings": {
+    brand: "Alexandria Fragrances",
     top_notes: ["Saffron", "Pink Pepper", "Bergamot"],
     heart_notes: ["Rose Absolute", "Oud"],
     base_notes: ["Amber", "Sandalwood", "Musk"],
-    wardrobe_role: "Signature evening anchor",
+    wardrobe_role: "Date night · Cold evenings · Statement wear",
     longevity_score: 0.9,
     projection_score: 0.85,
     weather: "Best in cool → cold weather",
-    secondary_weather: "Also works in crisp autumn evenings",
-    bottle_url: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in crisp autumn evenings",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.77498.jpg",
   },
   "Agar": {
+    brand: "Maison Alhambra",
     top_notes: ["Elemi", "Green Cardamom"],
     heart_notes: ["Agarwood", "Cedar Atlas"],
     base_notes: ["Vetiver", "White Musk"],
-    wardrobe_role: "Versatile daily wear",
+    wardrobe_role: "Daily driver · Office safe · Versatile",
     longevity_score: 0.6,
     projection_score: 0.45,
     weather: "Best in mild → warm weather",
-    secondary_weather: "Also works in early spring",
-    bottle_url: "https://images.unsplash.com/photo-1594035910387-fbd1a485b12e?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in early spring",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.65498.jpg",
   },
   "Noire Absolu": {
+    brand: "Maison Alhambra",
     top_notes: ["Black Pepper", "Juniper"],
     heart_notes: ["Leather", "Iris"],
     base_notes: ["Castoreum", "Patchouli", "Benzoin"],
-    wardrobe_role: "Power move — formal nights",
+    wardrobe_role: "Night out · Power move · Cold weather",
     longevity_score: 0.95,
     projection_score: 0.9,
     weather: "Best in cold weather",
-    secondary_weather: "Also works in late autumn",
-    bottle_url: "https://images.unsplash.com/photo-1523293182086-7651a899d37f?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in late autumn",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.65499.jpg",
   },
   "Santal Sérénade": {
+    brand: "Maison Alhambra",
     top_notes: ["Coconut Milk", "Cardamom"],
     heart_notes: ["Sandalwood", "Tonka Bean"],
     base_notes: ["Vanilla", "Cashmeran"],
-    wardrobe_role: "Comfort scent — close encounters",
+    wardrobe_role: "Close encounters · Cozy nights · Indoor",
     longevity_score: 0.7,
     projection_score: 0.3,
     weather: "Best in cool → mild weather",
-    secondary_weather: "Also works in dry winter days",
-    bottle_url: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in dry winter days",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.65500.jpg",
   },
   "Hafez 1984": {
+    brand: "Alexandria Fragrances",
     top_notes: ["Cinnamon", "Dried Plum"],
     heart_notes: ["Tobacco Leaf", "Dark Rum"],
     base_notes: ["Labdanum", "Oud", "Smoky Birch"],
-    wardrobe_role: "Night out anchor",
+    wardrobe_role: "Evening signature · Cool weather · Night out",
     longevity_score: 0.85,
     projection_score: 0.8,
     weather: "Best in cold → cool weather",
-    secondary_weather: "Also works in rainy evenings",
-    bottle_url: "https://images.unsplash.com/photo-1587017539504-67cfbddac569?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in rainy evenings",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.77499.jpg",
   },
   "Mystere 28": {
+    brand: "Alexandria Fragrances",
     top_notes: ["Sea Salt", "Grapefruit", "Mint"],
     heart_notes: ["Lavender", "Geranium"],
     base_notes: ["Ambroxan", "White Cedar"],
-    wardrobe_role: "Daytime refresh — casual wear",
+    wardrobe_role: "Daytime · Casual · Warm weather",
     longevity_score: 0.45,
     projection_score: 0.5,
     weather: "Best in warm → hot weather",
-    secondary_weather: "Also works in humid spring days",
-    bottle_url: "https://images.unsplash.com/photo-1595425970377-c9703cf48b6d?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in humid spring days",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.77500.jpg",
   },
   "Amber Dusk": {
+    brand: "Alexandria Fragrances",
     top_notes: ["Mandarin", "Ginger"],
     heart_notes: ["Amber", "Frankincense"],
     base_notes: ["Labdanum", "Vanilla", "Musk"],
-    wardrobe_role: "Transitional — day to night",
+    wardrobe_role: "Day-to-night · Transitional · All-season",
     longevity_score: 0.65,
     projection_score: 0.5,
     weather: "Best in cool → mild weather",
-    secondary_weather: "Also works in early spring evenings",
-    bottle_url: "https://images.unsplash.com/photo-1594035910387-fbd1a485b12e?w=200&h=300&fit=crop",
+    secondary_weather: "Also great in early spring evenings",
+    bottle_url: "https://fimgs.net/mdimg/perfume/375x500.65501.jpg",
   },
 };
 
@@ -392,7 +425,7 @@ const OdaraScreen = () => {
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
-  const [selectedContext, setSelectedContext] = useState<string>("hangout");
+  const [selectedContext, setSelectedContext] = useState<string>("daily");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
@@ -511,7 +544,7 @@ const OdaraScreen = () => {
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: oracle.today_pick.fragrance_id,
-        p_context: "hangout",
+        p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
       toast("Skipped — next option");
@@ -937,6 +970,13 @@ const OdaraScreen = () => {
                         {cardPick.name}
                       </h1>
 
+                      {/* Brand name */}
+                      {FRAGRANCE_BRANDS[cardPick.name] && (
+                        <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
+                          {FRAGRANCE_BRANDS[cardPick.name]}
+                        </p>
+                      )}
+
                       {/* Family label with color accent */}
                       <p
                         className="text-xs text-center tracking-[0.2em] mb-5 uppercase select-none"
@@ -964,8 +1004,8 @@ const OdaraScreen = () => {
                         }}
                       >
 
-                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
-                          {cardActiveLayer.top ?? `Enhance with ${cardActiveLayer.top_name}`}
+                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
+                          {cardActiveLayer.top_name ?? cardActiveLayer.top}
                         </p>
                         <span
                           className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
@@ -1486,12 +1526,12 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Role + Weather (two-tier) */}
+                  {/* Wear Context + Weather (two-tier) */}
                   {(profile?.wardrobe_role || profile?.weather) && (
                     <div className="mb-8 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
-                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Role</span>
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Wear it for</span>
                           <p className="text-[12px] text-foreground/80 mt-1">{profile.wardrobe_role}</p>
                         </div>
                       )}
@@ -1500,7 +1540,7 @@ const OdaraScreen = () => {
                           <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Weather</span>
                           <p className="text-[12px] text-foreground/80 mt-1">{profile.weather}</p>
                           {profile.secondary_weather && (
-                            <p className="text-[11px] text-muted-foreground/50 mt-0.5 italic">{profile.secondary_weather}</p>
+                            <p className="text-[11px] text-foreground/60 mt-1">{profile.secondary_weather}</p>
                           )}
                         </div>
                       )}
