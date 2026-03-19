@@ -551,7 +551,7 @@ const OdaraScreen = () => {
       await fetchOracle();
     } catch (e) {
       console.error("Skip failed:", e);
-      toast.error("Couldn't skip — try again");
+      console.warn("Couldn't skip — try again");
     } finally {
       setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
