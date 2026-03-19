@@ -2,7 +2,7 @@ import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
+
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
@@ -524,10 +524,10 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      toast.success(`${entry.name} — wearing today`);
+      // Silent success — UI state communicates the action
     } catch (e) {
       console.error("Accept failed:", e);
-      toast.error("Couldn't confirm — try again");
+      console.warn("Couldn't confirm — try again");
     } finally {
       setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
@@ -547,11 +547,11 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      toast("Skipped — next option");
+      // Silent — card transition communicates the skip
       await fetchOracle();
     } catch (e) {
       console.error("Skip failed:", e);
-      toast.error("Couldn't skip — try again");
+      console.warn("Couldn't skip — try again");
     } finally {
       setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
@@ -830,34 +830,8 @@ const OdaraScreen = () => {
           animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
-          {/* Gesture hint indicators */}
+          {/* Gesture hint indicators removed — state communicates via card transitions */}
           <AnimatePresence>
-            {swipeFeedback === "up" && (
-              <motion.div
-                key="feedback-up"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: -8 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-                className="absolute -top-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
-              >
-                <ChevronUp size={14} className="text-foreground/60" />
-                <span className="text-[11px] uppercase tracking-[0.15em] text-foreground/80 font-medium">Wearing this</span>
-              </motion.div>
-            )}
-            {swipeFeedback === "down" && (
-              <motion.div
-                key="feedback-down"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 8 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-                className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
-              >
-                <ChevronDown size={14} className="text-muted-foreground/60" />
-                <span className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/60 font-medium">Not today</span>
-              </motion.div>
-            )}
           </AnimatePresence>
 
           {/* Card stack container — custom gesture handling */}
@@ -1211,22 +1185,35 @@ const OdaraScreen = () => {
                     {isCenter && cardHasAlternates && (
                       <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
                         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
-                        {cardAlternates!.map((alt) => (
-                          <motion.button
-                            key={alt.name}
-                            whileHover={{ backgroundColor: "rgba(255,255,255,0.10)" }}
-                            whileTap={{ scale: 0.93 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAlternateTap(alt);
-                            }}
-                            disabled={isBusy}
-                            className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-colors disabled:opacity-40 font-medium"
-                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.12)", minHeight: "40px" }}
-                          >
-                            {alt.name}
-                          </motion.button>
-                        ))}
+                        {cardAlternates!.map((alt) => {
+                          const altFamily = alt.family ?? "";
+                          const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
+                          const altTint = FAMILY_TINTS[altFamily] ?? DEFAULT_TINT;
+                          const isSelected = oracle?.today_pick?.name === alt.name;
+                          return (
+                            <motion.button
+                              key={alt.name}
+                              whileTap={{ scale: 0.93 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlternateTap(alt);
+                              }}
+                              disabled={isBusy}
+                              className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
+                              style={{
+                                background: isSelected
+                                  ? `linear-gradient(135deg, ${altColor}18 0%, ${altColor}08 100%)`
+                                  : `linear-gradient(135deg, ${altColor}0A 0%, transparent 100%)`,
+                                boxShadow: isSelected
+                                  ? `inset 0 0 0 1px ${altColor}35, 0 0 12px -4px ${altColor}20`
+                                  : `inset 0 0 0 1px ${altColor}18`,
+                                minHeight: "40px",
+                              }}
+                            >
+                              {alt.name}
+                            </motion.button>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -1261,7 +1248,7 @@ const OdaraScreen = () => {
                           const willLock = !layerSaved;
                           setLayerSaved(willLock);
                           if (willLock) setLockPulse(true);
-                          toast(willLock ? "Locked in" : "Unlocked");
+                          // Silent — lock icon state communicates
                         }}
                         whileTap={{ scale: 1.15 }}
                         className="absolute bottom-5 right-5 p-2 rounded-full z-10"
