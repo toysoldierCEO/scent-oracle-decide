@@ -1425,28 +1425,8 @@ const OdaraScreen = () => {
                       {d.label}
                     </span>
 
-                    {/* White moving orb lane — only renders on today */}
-                    <div style={{ height: "11px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "3px" }}>
-                      {i === 0 && (() => {
-                        const FADE_START = 0.80;
-                        const progressInDay = orbPosition;
-                        const orbFade = progressInDay >= FADE_START
-                          ? 1 - ((progressInDay - FADE_START) / (1 - FADE_START))
-                          : 1;
-                        return (
-                          <div
-                            className="rounded-full"
-                            style={{
-                              width: "6px", height: "6px",
-                              background: "white",
-                              opacity: Math.max(0, orbFade),
-                              boxShadow: `0 0 4px 2px rgba(255,255,255,${(0.15 * orbFade).toFixed(3)}), 0 0 10px 4px rgba(255,255,255,${(0.06 * orbFade).toFixed(3)})`,
-                              animation: "orbBreathe 4s ease-in-out infinite 2s",
-                            }}
-                          />
-                        );
-                      })()}
-                    </div>
+                    {/* Orb lane spacer — orb is now absolutely positioned above */}
+                    <div style={{ height: "11px", marginBottom: "3px" }} />
 
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
