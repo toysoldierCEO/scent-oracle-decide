@@ -77,19 +77,19 @@ const FAMILY_COLORS: Record<string, string> = {
 };
 
 /* Family → tint colors for card backgrounds (subtle, desaturated) */
-const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string }> = {
-  "fresh-blue":      { bg: "rgba(91,155,213,0.06)",  glow: "rgba(91,155,213,0.15)",  border: "rgba(91,155,213,0.12)" },
-  "sweet-gourmand":  { bg: "rgba(212,160,86,0.06)",  glow: "rgba(212,160,86,0.15)",  border: "rgba(212,160,86,0.12)" },
-  "oud-amber":       { bg: "rgba(192,138,62,0.07)",  glow: "rgba(192,138,62,0.18)",  border: "rgba(192,138,62,0.14)" },
-  "dark-leather":    { bg: "rgba(139,58,58,0.06)",   glow: "rgba(139,58,58,0.15)",   border: "rgba(139,58,58,0.12)" },
-  "woody-clean":     { bg: "rgba(107,155,122,0.06)", glow: "rgba(107,155,122,0.15)", border: "rgba(107,155,122,0.12)" },
-  "tobacco-boozy":   { bg: "rgba(107,66,38,0.07)",   glow: "rgba(107,66,38,0.18)",   border: "rgba(107,66,38,0.14)" },
-  "citrus-cologne":  { bg: "rgba(232,212,77,0.05)",  glow: "rgba(232,212,77,0.12)",  border: "rgba(232,212,77,0.10)" },
-  "citrus-aromatic": { bg: "rgba(184,201,78,0.05)",  glow: "rgba(184,201,78,0.12)",  border: "rgba(184,201,78,0.10)" },
-  "floral-musk":     { bg: "rgba(196,160,185,0.05)", glow: "rgba(196,160,185,0.12)", border: "rgba(196,160,185,0.10)" },
+const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string; material: string }> = {
+  "fresh-blue":      { bg: "rgba(91,155,213,0.08)",  glow: "rgba(91,155,213,0.18)",  border: "rgba(91,155,213,0.14)", material: "rgba(70,130,190,0.06)" },
+  "sweet-gourmand":  { bg: "rgba(212,160,86,0.08)",  glow: "rgba(212,160,86,0.18)",  border: "rgba(212,160,86,0.14)", material: "rgba(180,130,60,0.07)" },
+  "oud-amber":       { bg: "rgba(192,138,62,0.10)",  glow: "rgba(192,138,62,0.22)",  border: "rgba(192,138,62,0.16)", material: "rgba(160,110,40,0.08)" },
+  "dark-leather":    { bg: "rgba(139,58,58,0.08)",   glow: "rgba(139,58,58,0.18)",   border: "rgba(139,58,58,0.14)", material: "rgba(120,40,50,0.07)" },
+  "woody-clean":     { bg: "rgba(107,155,122,0.08)", glow: "rgba(107,155,122,0.18)", border: "rgba(107,155,122,0.14)", material: "rgba(85,130,100,0.06)" },
+  "tobacco-boozy":   { bg: "rgba(107,66,38,0.10)",   glow: "rgba(107,66,38,0.22)",   border: "rgba(107,66,38,0.16)", material: "rgba(90,50,30,0.08)" },
+  "citrus-cologne":  { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
+  "citrus-aromatic": { bg: "rgba(184,201,78,0.07)",  glow: "rgba(184,201,78,0.15)",  border: "rgba(184,201,78,0.12)", material: "rgba(150,170,60,0.05)" },
+  "floral-musk":     { bg: "rgba(196,160,185,0.07)", glow: "rgba(196,160,185,0.15)", border: "rgba(196,160,185,0.12)", material: "rgba(170,130,160,0.05)" },
 };
 
-const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)" };
+const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
 
 const FAMILY_LABELS: Record<string, string> = {
   "oud-amber": "Oud & Amber",
