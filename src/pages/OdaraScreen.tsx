@@ -863,7 +863,7 @@ const OdaraScreen = () => {
           {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "420px", touchAction: "none" }}
+            style={{ minHeight: "400px", touchAction: "none" }}
             onPointerDown={(e) => {
               dragDirection.current = "none";
               dragStart.current = { x: e.clientX, y: e.clientY };
@@ -990,14 +990,7 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className={`w-full rounded-[32px] p-8 flex flex-col items-center relative ${
-                      isCenter ? "cursor-pointer" : ""
-                    }`}
-                    onClick={() => {
-                      if (!isCenter) return;
-                      if (longPressTimer.current) return;
-                      handleAccept();
-                    }}
+                    className={`w-full rounded-[32px] px-8 pt-6 pb-5 flex flex-col items-center relative`}
                     style={{
                       background: isCenter
                         ? `linear-gradient(180deg, rgba(255,255,255,0.05) 0%, ${familyTint.material} 35%, rgba(0,0,0,0.15) 100%), linear-gradient(180deg, ${familyTint.bg} 0%, transparent 40%), rgba(8,8,10,0.94)`
@@ -1299,10 +1292,10 @@ const OdaraScreen = () => {
         <motion.div
           className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
           animate={{
-            maxHeight: layerSheetOpen ? 60 : 200,
+            maxHeight: layerSheetOpen ? 54 : 180,
             y: layerSheetOpen ? 24 : 0,
-            paddingTop: layerSheetOpen ? 4 : 12,
-            paddingBottom: layerSheetOpen ? 6 : 24,
+            paddingTop: layerSheetOpen ? 3 : 10,
+            paddingBottom: layerSheetOpen ? 4 : 18,
             opacity: layerSheetOpen ? 0.55 : 1,
             scale: layerSheetOpen ? 0.97 : 1,
           }}
@@ -1382,50 +1375,54 @@ const OdaraScreen = () => {
                     className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
                     style={{ minWidth: "28px", width: "28px" }}
                   >
+                    {/* Weekday */}
                     <span
                       className="font-mono transition-all duration-200 text-center leading-none"
                       style={{
                         fontSize: "11px", letterSpacing: "0.1em",
                         color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
-                        marginBottom: "6px",
+                        marginBottom: "4px",
                       }}
                     >
                       {d.label}
                     </span>
 
+                    {/* Forecast orb — between weekday and date */}
+                    <motion.div
+                      className="rounded-full"
+                      animate={{
+                        width: isSelected ? "9px" : "7px",
+                        height: isSelected ? "9px" : "7px",
+                        scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
+                        boxShadow: isSelected
+                          ? `0 0 8px 3px ${familyColor}55`
+                          : isNextTarget
+                            ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
+                            : hasFragrance
+                              ? `0 0 3px 1px ${familyColor}22`
+                              : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
+                        opacity: hasFragrance ? 1 : 0.5,
+                      }}
+                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ background: familyColor, marginBottom: "4px" }}
+                    />
+
+                    {/* Date number */}
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
                       style={{
                         fontSize: "13px",
                         fontWeight: isSelected ? 600 : 500,
                         color: `rgba(255,255,255,${Math.min(dateOpacity + 0.15, 1)})`,
-                        marginBottom: "7px",
+                        marginBottom: "5px",
                       }}
                     >
                       {d.day}
                     </span>
 
-                    <div className="flex flex-col items-center justify-center" style={{ height: "26px", gap: "6px" }}>
-                      <motion.div
-                        className="rounded-full"
-                        animate={{
-                          width: isSelected ? "9px" : "7px",
-                          height: isSelected ? "9px" : "7px",
-                          scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
-                          boxShadow: isSelected
-                            ? `0 0 8px 3px ${familyColor}55`
-                            : isNextTarget
-                              ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
-                              : hasFragrance
-                                ? `0 0 3px 1px ${familyColor}22`
-                                : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
-                          opacity: hasFragrance ? 1 : 0.5,
-                        }}
-                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                        style={{ background: familyColor }}
-                      />
-
+                    {/* Scent dot(s) — below date */}
+                    <div className="flex flex-col items-center justify-center" style={{ minHeight: "18px", gap: "4px" }}>
                       {isLayered && (
                         <motion.div
                           className="rounded-full"
@@ -1448,7 +1445,7 @@ const OdaraScreen = () => {
                       <motion.div
                         layoutId="forecastUnderline"
                         className="rounded-full"
-                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
+                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "2px" }}
                       />
                     )}
                   </button>
