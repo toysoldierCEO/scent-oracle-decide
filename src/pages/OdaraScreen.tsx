@@ -544,7 +544,7 @@ const OdaraScreen = () => {
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: oracle.today_pick.fragrance_id,
-        p_context: "hangout",
+        p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
       toast("Skipped — next option");
