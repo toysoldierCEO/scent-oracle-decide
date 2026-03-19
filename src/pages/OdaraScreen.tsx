@@ -524,7 +524,7 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      toast.success(`${entry.name} — wearing today`);
+      // Silent success — UI state communicates the action
     } catch (e) {
       console.error("Accept failed:", e);
       toast.error("Couldn't confirm — try again");
