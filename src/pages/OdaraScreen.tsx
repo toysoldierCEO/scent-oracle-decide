@@ -1004,8 +1004,8 @@ const OdaraScreen = () => {
                         }}
                       >
 
-                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
-                          {cardActiveLayer.top ?? `Enhance with ${cardActiveLayer.top_name}`}
+                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
+                          {cardActiveLayer.top_name ?? cardActiveLayer.top}
                         </p>
                         <span
                           className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
