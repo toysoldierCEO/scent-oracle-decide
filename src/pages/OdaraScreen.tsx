@@ -1068,7 +1068,7 @@ const OdaraScreen = () => {
 
                       {/* Family label with color accent */}
                       <p
-                        className="text-xs text-center tracking-[0.2em] mb-5 uppercase select-none"
+                        className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
                         style={{ color: familyColor }}
                       >
                         {cardPick.family}
