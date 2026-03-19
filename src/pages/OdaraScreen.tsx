@@ -400,6 +400,7 @@ const OdaraScreen = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
+  const [lockPulse, setLockPulse] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
