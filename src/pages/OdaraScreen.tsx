@@ -1075,7 +1075,7 @@ const OdaraScreen = () => {
                       </p>
                     </div>
 
-                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
+                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-[6px] mb-[16px] text-pretty select-none">
                       {cardPick.reason}
                     </p>
 
