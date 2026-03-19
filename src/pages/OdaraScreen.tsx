@@ -1195,7 +1195,8 @@ const OdaraScreen = () => {
                           )}
                         </AnimatePresence>
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
