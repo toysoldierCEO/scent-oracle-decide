@@ -1364,7 +1364,7 @@ const OdaraScreen = () => {
               })}
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Fragrance Profile Sheet */}
         <AnimatePresence>
