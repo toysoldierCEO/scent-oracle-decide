@@ -661,7 +661,7 @@ const OdaraScreen = () => {
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
           <Skeleton className="w-20 h-3 mb-6 bg-muted/20 rounded" />
-          <div className="w-full max-w-md rounded-[32px] p-8 flex flex-col items-center gap-4" style={{ background: "var(--glass-bg)" }}>
+          <div className="w-full max-w-md rounded-[24px] px-[22px] py-[18px] flex flex-col items-center gap-[10px]" style={{ background: "var(--glass-bg)" }}>
             <Skeleton className="w-3/4 h-10 bg-muted/20 rounded" />
             <Skeleton className="w-24 h-4 bg-muted/20 rounded" />
             <Skeleton className="w-full h-14 bg-muted/20 rounded" />
@@ -990,7 +990,7 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className={`w-full rounded-[32px] p-8 flex flex-col items-center relative ${
+                    className={`w-full rounded-[24px] px-[22px] py-[18px] flex flex-col items-center relative ${
                       isCenter ? "cursor-pointer" : ""
                     }`}
                     onClick={() => {
@@ -1025,7 +1025,7 @@ const OdaraScreen = () => {
                     }}
                   >
                     {/* Day/date label */}
-                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 select-none">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-[6px] select-none">
                       {dayData.label} · {dayData.day}
                     </span>
 
@@ -1068,28 +1068,31 @@ const OdaraScreen = () => {
 
                       {/* Family label with color accent */}
                       <p
-                        className="text-xs text-center tracking-[0.2em] mb-5 uppercase select-none"
+                        className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
                         style={{ color: familyColor }}
                       >
                         {cardPick.family}
                       </p>
                     </div>
 
-                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-4 mb-8 text-pretty select-none">
+                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-[6px] mb-[16px] text-pretty select-none">
                       {cardPick.reason}
                     </p>
 
                     {/* Layer Card — only on center */}
-                    {isCenter && cardHasLayer && cardActiveLayer && (
+                    {isCenter && cardHasLayer && cardActiveLayer && (() => {
+                      const layerFamilyTint = FAMILY_TINTS[cardPick.family] ?? DEFAULT_TINT;
+                      const layerFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
+                      return (
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
                           setLayerSheetOpen((o) => !o);
                         }}
-                        className="w-full rounded-[16px] px-4 py-3 mb-4 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
+                        className="w-full rounded-[20px] px-[22px] py-[16px] mb-[10px] flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
                         style={{
-                          background: "var(--sub-glass-bg)",
-                          boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+                          background: `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, ${layerFamilyTint.material} 50%, rgba(0,0,0,0.08) 100%), rgba(255,255,255,0.05)`,
+                          boxShadow: `0 10px 30px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 0 20px -8px ${layerFamilyColor}08`,
                         }}
                       >
 
@@ -1192,12 +1195,13 @@ const OdaraScreen = () => {
                           )}
                         </AnimatePresence>
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-2.5 justify-center mb-2 flex-wrap">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-1.5 font-medium">Alternatives</span>
+                      <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => (
                           <motion.button
                             key={alt.name}
