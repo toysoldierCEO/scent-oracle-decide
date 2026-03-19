@@ -1185,22 +1185,35 @@ const OdaraScreen = () => {
                     {isCenter && cardHasAlternates && (
                       <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
                         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
-                        {cardAlternates!.map((alt) => (
-                          <motion.button
-                            key={alt.name}
-                            whileHover={{ backgroundColor: "rgba(255,255,255,0.10)" }}
-                            whileTap={{ scale: 0.93 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAlternateTap(alt);
-                            }}
-                            disabled={isBusy}
-                            className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-colors disabled:opacity-40 font-medium"
-                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.12)", minHeight: "40px" }}
-                          >
-                            {alt.name}
-                          </motion.button>
-                        ))}
+                        {cardAlternates!.map((alt) => {
+                          const altFamily = alt.family ?? "";
+                          const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
+                          const altTint = FAMILY_TINTS[altFamily] ?? DEFAULT_TINT;
+                          const isSelected = oracle?.today_pick?.name === alt.name;
+                          return (
+                            <motion.button
+                              key={alt.name}
+                              whileTap={{ scale: 0.93 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlternateTap(alt);
+                              }}
+                              disabled={isBusy}
+                              className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
+                              style={{
+                                background: isSelected
+                                  ? `linear-gradient(135deg, ${altColor}18 0%, ${altColor}08 100%)`
+                                  : `linear-gradient(135deg, ${altColor}0A 0%, transparent 100%)`,
+                                boxShadow: isSelected
+                                  ? `inset 0 0 0 1px ${altColor}35, 0 0 12px -4px ${altColor}20`
+                                  : `inset 0 0 0 1px ${altColor}18`,
+                                minHeight: "40px",
+                              }}
+                            >
+                              {alt.name}
+                            </motion.button>
+                          );
+                        })}
                       </div>
                     )}
 
