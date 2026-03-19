@@ -527,7 +527,7 @@ const OdaraScreen = () => {
       // Silent success — UI state communicates the action
     } catch (e) {
       console.error("Accept failed:", e);
-      toast.error("Couldn't confirm — try again");
+      console.warn("Couldn't confirm — try again");
     } finally {
       setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
