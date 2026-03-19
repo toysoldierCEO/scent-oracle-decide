@@ -1292,10 +1292,10 @@ const OdaraScreen = () => {
         <motion.div
           className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
           animate={{
-            maxHeight: layerSheetOpen ? 60 : 200,
+            maxHeight: layerSheetOpen ? 54 : 180,
             y: layerSheetOpen ? 24 : 0,
-            paddingTop: layerSheetOpen ? 4 : 12,
-            paddingBottom: layerSheetOpen ? 6 : 24,
+            paddingTop: layerSheetOpen ? 3 : 10,
+            paddingBottom: layerSheetOpen ? 4 : 18,
             opacity: layerSheetOpen ? 0.55 : 1,
             scale: layerSheetOpen ? 0.97 : 1,
           }}
