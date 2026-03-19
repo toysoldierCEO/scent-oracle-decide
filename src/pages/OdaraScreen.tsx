@@ -962,30 +962,6 @@ const OdaraScreen = () => {
                           boxShadow: "var(--shadow-sub-glass), inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
                         }}
                       >
-                        {/* Save star */}
-                        <motion.button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLayerSaved((s) => !s);
-                            toast(layerSaved ? "Combo unsaved" : "Combo saved");
-                          }}
-                          whileTap={{ scale: 1.3 }}
-                          className="absolute top-3 right-3 p-1"
-                        >
-                          <motion.div
-                            animate={layerSaved ? { scale: [1, 1.25, 1] } : { scale: 1 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <Star
-                              size={14}
-                              className={`transition-all duration-200 ${
-                                layerSaved
-                                  ? "text-foreground fill-foreground/80 drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]"
-                                  : "text-muted-foreground/30 hover:text-muted-foreground/60"
-                              }`}
-                            />
-                          </motion.div>
-                        </motion.button>
 
                         <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide pr-6">
                           {cardActiveLayer.top ?? `Enhance with ${cardActiveLayer.top_name}`}
