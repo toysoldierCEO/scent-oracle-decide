@@ -1317,40 +1317,6 @@ const OdaraScreen = () => {
             Forecast
           </span>
           <div className="relative">
-            <div className="absolute top-[7px] left-[12px] right-[12px] h-px bg-muted-foreground/10" />
-
-            {/* Continuous orb */}
-            {(() => {
-              const totalSegments = 6;
-              const FADE_START = 0.80;
-              const progressInDay = orbPosition;
-              const orbFade = progressInDay >= FADE_START
-                ? 1 - ((progressInDay - FADE_START) / (1 - FADE_START))
-                : 1;
-              const maxProgress = FADE_START + (1 - FADE_START) * 0.4;
-              const clampedProgress = Math.min(progressInDay, maxProgress);
-              const pct = (clampedProgress / totalSegments) * 100;
-              return (
-                <div
-                  className="absolute top-[2px] z-10 pointer-events-none"
-                  style={{
-                    left: `calc(12px + ${pct / 100} * (100% - 24px))`,
-                    transform: "translateX(-50%)",
-                    opacity: Math.max(0, orbFade),
-                  }}
-                >
-                  <div
-                    className="rounded-full"
-                    style={{
-                      width: "7px", height: "7px",
-                      background: "white",
-                      boxShadow: `0 0 4px 2px rgba(255,255,255,${(0.15 * orbFade).toFixed(3)}), 0 0 10px 4px rgba(255,255,255,${(0.06 * orbFade).toFixed(3)})`,
-                      animation: "orbBreathe 4s ease-in-out infinite 2s",
-                    }}
-                  />
-                </div>
-              );
-            })()}
 
             {/* Day markers */}
             <div className="flex justify-between relative">
