@@ -725,7 +725,7 @@ const OdaraScreen = () => {
 
   return (
     <div className="dark">
-      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden relative">
+      <div className="min-h-screen bg-background flex flex-col items-center px-6 py-0 overflow-hidden relative">
         {/* Subtle background tint overlay */}
         <motion.div
           className="absolute inset-0 pointer-events-none z-0"
