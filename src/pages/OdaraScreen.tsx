@@ -830,34 +830,8 @@ const OdaraScreen = () => {
           animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
-          {/* Gesture hint indicators */}
+          {/* Gesture hint indicators removed — state communicates via card transitions */}
           <AnimatePresence>
-            {swipeFeedback === "up" && (
-              <motion.div
-                key="feedback-up"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: -8 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-                className="absolute -top-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
-              >
-                <ChevronUp size={14} className="text-foreground/60" />
-                <span className="text-[11px] uppercase tracking-[0.15em] text-foreground/80 font-medium">Wearing this</span>
-              </motion.div>
-            )}
-            {swipeFeedback === "down" && (
-              <motion.div
-                key="feedback-down"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 8 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-                className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2"
-              >
-                <ChevronDown size={14} className="text-muted-foreground/60" />
-                <span className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/60 font-medium">Not today</span>
-              </motion.div>
-            )}
           </AnimatePresence>
 
           {/* Card stack container — custom gesture handling */}
