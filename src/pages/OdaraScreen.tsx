@@ -1526,12 +1526,12 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Role + Weather (two-tier) */}
+                  {/* Wear Context + Weather (two-tier) */}
                   {(profile?.wardrobe_role || profile?.weather) && (
                     <div className="mb-8 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
                         <div>
-                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Role</span>
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Wear it for</span>
                           <p className="text-[12px] text-foreground/80 mt-1">{profile.wardrobe_role}</p>
                         </div>
                       )}
@@ -1540,7 +1540,7 @@ const OdaraScreen = () => {
                           <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Weather</span>
                           <p className="text-[12px] text-foreground/80 mt-1">{profile.weather}</p>
                           {profile.secondary_weather && (
-                            <p className="text-[11px] text-muted-foreground/50 mt-0.5 italic">{profile.secondary_weather}</p>
+                            <p className="text-[11px] text-foreground/60 mt-1">{profile.secondary_weather}</p>
                           )}
                         </div>
                       )}
