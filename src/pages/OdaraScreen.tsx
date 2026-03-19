@@ -425,7 +425,7 @@ const OdaraScreen = () => {
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
-  const [selectedContext, setSelectedContext] = useState<string>("hangout");
+  const [selectedContext, setSelectedContext] = useState<string>("daily");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
