@@ -77,19 +77,19 @@ const FAMILY_COLORS: Record<string, string> = {
 };
 
 /* Family → tint colors for card backgrounds (subtle, desaturated) */
-const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string }> = {
-  "fresh-blue":      { bg: "rgba(91,155,213,0.06)",  glow: "rgba(91,155,213,0.15)",  border: "rgba(91,155,213,0.12)" },
-  "sweet-gourmand":  { bg: "rgba(212,160,86,0.06)",  glow: "rgba(212,160,86,0.15)",  border: "rgba(212,160,86,0.12)" },
-  "oud-amber":       { bg: "rgba(192,138,62,0.07)",  glow: "rgba(192,138,62,0.18)",  border: "rgba(192,138,62,0.14)" },
-  "dark-leather":    { bg: "rgba(139,58,58,0.06)",   glow: "rgba(139,58,58,0.15)",   border: "rgba(139,58,58,0.12)" },
-  "woody-clean":     { bg: "rgba(107,155,122,0.06)", glow: "rgba(107,155,122,0.15)", border: "rgba(107,155,122,0.12)" },
-  "tobacco-boozy":   { bg: "rgba(107,66,38,0.07)",   glow: "rgba(107,66,38,0.18)",   border: "rgba(107,66,38,0.14)" },
-  "citrus-cologne":  { bg: "rgba(232,212,77,0.05)",  glow: "rgba(232,212,77,0.12)",  border: "rgba(232,212,77,0.10)" },
-  "citrus-aromatic": { bg: "rgba(184,201,78,0.05)",  glow: "rgba(184,201,78,0.12)",  border: "rgba(184,201,78,0.10)" },
-  "floral-musk":     { bg: "rgba(196,160,185,0.05)", glow: "rgba(196,160,185,0.12)", border: "rgba(196,160,185,0.10)" },
+const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string; material: string }> = {
+  "fresh-blue":      { bg: "rgba(91,155,213,0.08)",  glow: "rgba(91,155,213,0.18)",  border: "rgba(91,155,213,0.14)", material: "rgba(70,130,190,0.06)" },
+  "sweet-gourmand":  { bg: "rgba(212,160,86,0.08)",  glow: "rgba(212,160,86,0.18)",  border: "rgba(212,160,86,0.14)", material: "rgba(180,130,60,0.07)" },
+  "oud-amber":       { bg: "rgba(192,138,62,0.10)",  glow: "rgba(192,138,62,0.22)",  border: "rgba(192,138,62,0.16)", material: "rgba(160,110,40,0.08)" },
+  "dark-leather":    { bg: "rgba(139,58,58,0.08)",   glow: "rgba(139,58,58,0.18)",   border: "rgba(139,58,58,0.14)", material: "rgba(120,40,50,0.07)" },
+  "woody-clean":     { bg: "rgba(107,155,122,0.08)", glow: "rgba(107,155,122,0.18)", border: "rgba(107,155,122,0.14)", material: "rgba(85,130,100,0.06)" },
+  "tobacco-boozy":   { bg: "rgba(107,66,38,0.10)",   glow: "rgba(107,66,38,0.22)",   border: "rgba(107,66,38,0.16)", material: "rgba(90,50,30,0.08)" },
+  "citrus-cologne":  { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
+  "citrus-aromatic": { bg: "rgba(184,201,78,0.07)",  glow: "rgba(184,201,78,0.15)",  border: "rgba(184,201,78,0.12)", material: "rgba(150,170,60,0.05)" },
+  "floral-musk":     { bg: "rgba(196,160,185,0.07)", glow: "rgba(196,160,185,0.15)", border: "rgba(196,160,185,0.12)", material: "rgba(170,130,160,0.05)" },
 };
 
-const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)" };
+const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
 
 const FAMILY_LABELS: Record<string, string> = {
   "oud-amber": "Oud & Amber",
@@ -1000,12 +1000,28 @@ const OdaraScreen = () => {
                     }}
                     style={{
                       background: isCenter
-                        ? `linear-gradient(180deg, ${familyTint.bg} 0%, rgba(255,255,255,0.02) 50%, ${familyTint.bg} 100%), rgba(10,10,12,0.88)`
-                        : `linear-gradient(180deg, ${familyTint.bg} 0%, rgba(255,255,255,0.01) 100%), rgba(18,18,22,0.82)`,
-                      backdropFilter: isCenter ? "blur(40px) saturate(1.2)" : "blur(16px) saturate(1.1)",
+                        ? `linear-gradient(180deg, rgba(255,255,255,0.05) 0%, ${familyTint.material} 35%, rgba(0,0,0,0.15) 100%), linear-gradient(180deg, ${familyTint.bg} 0%, transparent 40%), rgba(8,8,10,0.94)`
+                        : `linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.08) 100%), rgba(14,14,18,0.88)`,
+                      backdropFilter: isCenter ? "blur(44px) saturate(1.3)" : "blur(16px) saturate(1.1)",
                       boxShadow: isCenter
-                        ? `0 25px 60px -15px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.1), inset 0 0 0 1px ${familyTint.border}, 0 0 40px -10px ${familyTint.glow}${feedbackGlow ? `, ${feedbackGlow}` : ""}`
-                        : `0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px ${familyTint.border}`,
+                        ? [
+                            // Outer shadow — grounded weight
+                            `0 30px 70px -15px rgba(0,0,0,0.75)`,
+                            `0 12px 30px -8px rgba(0,0,0,0.55)`,
+                            // Top edge highlight — brighter
+                            `inset 0 1px 0 0 rgba(255,255,255,0.14)`,
+                            // Side edges — softer
+                            `inset 1px 0 0 0 rgba(255,255,255,0.05)`,
+                            `inset -1px 0 0 0 rgba(255,255,255,0.05)`,
+                            // Bottom edge — subtle
+                            `inset 0 -1px 0 0 rgba(255,255,255,0.03)`,
+                            // Inner shadow — contained depth
+                            `inset 0 -8px 20px -10px rgba(0,0,0,0.35)`,
+                            // Family glow — atmospheric
+                            `0 0 50px -12px ${familyTint.glow}`,
+                            feedbackGlow,
+                          ].filter(Boolean).join(", ")
+                        : `0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.04)`,
                     }}
                   >
                     {/* Day/date label */}
