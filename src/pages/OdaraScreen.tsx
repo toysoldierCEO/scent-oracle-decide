@@ -863,7 +863,7 @@ const OdaraScreen = () => {
           {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
-            style={{ minHeight: "400px", touchAction: "none" }}
+            style={{ minHeight: "400px", touchAction: "none", zIndex: 20, position: "relative" }}
             onPointerDown={(e) => {
               dragDirection.current = "none";
               dragStart.current = { x: e.clientX, y: e.clientY };
@@ -1304,6 +1304,8 @@ const OdaraScreen = () => {
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
             transformOrigin: "bottom center",
+            position: "relative",
+            zIndex: 5,
           }}
         >
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
