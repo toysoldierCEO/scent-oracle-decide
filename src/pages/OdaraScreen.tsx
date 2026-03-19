@@ -400,6 +400,7 @@ const OdaraScreen = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
+  const [lockPulse, setLockPulse] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -1087,16 +1088,41 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
+                    {/* Lock pulse radiation */}
+                    {isCenter && (
+                      <AnimatePresence>
+                        {lockPulse && (
+                          <motion.div
+                            key="lock-pulse"
+                            className="absolute bottom-5 right-5 rounded-full pointer-events-none"
+                            style={{ width: 20, height: 20 }}
+                            initial={{ scale: 1, opacity: 0.5 }}
+                            animate={{ scale: 18, opacity: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.7, ease: [0.2, 0, 0, 1] }}
+                            onAnimationComplete={() => setLockPulse(false)}
+                          >
+                            <div
+                              className="w-full h-full rounded-full"
+                              style={{ background: `radial-gradient(circle, ${familyColor}30 0%, transparent 70%)` }}
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    )}
+
                     {/* Lock toggle — bottom-right */}
                     {isCenter && (
                       <motion.button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setLayerSaved((s) => !s);
-                          toast(layerSaved ? "Unlocked" : "Locked in");
+                          const willLock = !layerSaved;
+                          setLayerSaved(willLock);
+                          if (willLock) setLockPulse(true);
+                          toast(willLock ? "Locked in" : "Unlocked");
                         }}
                         whileTap={{ scale: 1.15 }}
-                        className="absolute bottom-5 right-5 p-2 rounded-full"
+                        className="absolute bottom-5 right-5 p-2 rounded-full z-10"
                         style={{
                           background: layerSaved ? `${familyColor}18` : "transparent",
                         }}
