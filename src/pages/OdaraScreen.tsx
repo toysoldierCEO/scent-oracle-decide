@@ -1110,22 +1110,22 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
-                    {/* Alternates */}
+                    {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-2 justify-center mb-2 flex-wrap">
-                        <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40 w-full text-center mb-1">Also works with</span>
+                      <div className="flex gap-2.5 justify-center mb-2 flex-wrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-1.5 font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => (
                           <motion.button
                             key={alt.name}
-                            whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ backgroundColor: "rgba(255,255,255,0.10)" }}
+                            whileTap={{ scale: 0.93 }}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleAlternateTap(alt);
                             }}
                             disabled={isBusy}
-                            className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
-                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
+                            className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-colors disabled:opacity-40 font-medium"
+                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.12)", minHeight: "40px" }}
                           >
                             {alt.name}
                           </motion.button>
