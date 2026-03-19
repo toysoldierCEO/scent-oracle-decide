@@ -547,7 +547,7 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      toast("Skipped — next option");
+      // Silent — card transition communicates the skip
       await fetchOracle();
     } catch (e) {
       console.error("Skip failed:", e);
