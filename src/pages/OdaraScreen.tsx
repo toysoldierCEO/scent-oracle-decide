@@ -1330,6 +1330,58 @@ const OdaraScreen = () => {
             Forecast
           </span>
           <div className="relative">
+            {/* White orb — continuous time indicator, moves across the orb lane */}
+            {(() => {
+              // progress: 0.0 = midnight (start of today), 1.0 = midnight (start of tomorrow)
+              const progress = orbPosition;
+              // Fade-out zone: 80% → 100% the orb tightens and fades before midnight handoff
+              const FADE_START = 0.80;
+              const fade = progress >= FADE_START
+                ? 1 - ((progress - FADE_START) / (1 - FADE_START))
+                : 1;
+              // Glow tightens as orb approaches next day
+              const glowScale = progress >= FADE_START ? fade : 1;
+              // Position: orb travels from column 0 center to column 1 center
+              // In a 7-col flex justify-between, each column center is at (i / 6) * 100%
+              // So col 0 = 0%, col 1 = 16.667%
+              const colCenterPct = (progress / 6) * 100;
+              return (
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    // The orb lane sits at the same vertical position as the per-column orb lanes
+                    // weekday label height (~15px) + marginBottom 4px = 19px offset, centered in 11px lane
+                    top: "19px",
+                    left: 0,
+                    right: 0,
+                    height: "11px",
+                    zIndex: 10,
+                  }}
+                >
+                  <div
+                    className="absolute"
+                    style={{
+                      left: `${colCenterPct}%`,
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  >
+                    <div
+                      className="rounded-full"
+                      style={{
+                        width: "6px",
+                        height: "6px",
+                        background: "white",
+                        opacity: Math.max(0, fade),
+                        boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * fade).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * fade).toFixed(3)})`,
+                        animation: fade > 0.1 ? "orbBreathe 4s ease-in-out infinite 2s" : "none",
+                        transition: "opacity 0.5s ease, box-shadow 0.5s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Day markers */}
             <div className="flex justify-between relative">
