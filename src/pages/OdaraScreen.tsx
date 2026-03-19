@@ -571,16 +571,84 @@ const OdaraScreen = () => {
 
     setExitDirection("left");
     setTimeout(() => {
+      // Build layer map for the new pick using the compatibility engine
+      const altFamily = alt.family ?? "";
+      const altEntry: FragranceEntry = {
+        fragrance_id: alt.fragrance_id ?? "",
+        name: alt.name,
+        family: altFamily,
+        reason: alt.reason ?? "",
+        longevity_score: FRAGRANCE_PROFILES[alt.name]?.longevity_score ?? 0.7,
+        projection_score: FRAGRANCE_PROFILES[alt.name]?.projection_score ?? 0.5,
+      };
+      const allEntries: FragranceEntry[] = Object.entries(FRAGRANCE_PROFILES).map(([name, p]) => ({
+        fragrance_id: "",
+        name,
+        family: Object.entries(FRAGRANCE_BRANDS).find(([n]) => n === name)?.[0] ? "" : "",
+        reason: "",
+        longevity_score: p.longevity_score ?? 0.7,
+        projection_score: p.projection_score ?? 0.5,
+      }));
+      // Try to find family from known profiles or alternates
+      const knownFamilies: Record<string, string> = {};
+      for (const fd of forecastDays) {
+        if (fd.fragrance) knownFamilies[fd.fragrance.name] = fd.fragrance.family;
+      }
+      if (oracle) {
+        knownFamilies[oracle.today_pick.name] = oracle.today_pick.family;
+        (oracle.alternates ?? []).forEach(a => { if (a.family) knownFamilies[a.name] = a.family; });
+      }
+      const resolvedEntries: FragranceEntry[] = Object.entries(FRAGRANCE_PROFILES).map(([name, p]) => ({
+        fragrance_id: "",
+        name,
+        family: knownFamilies[name] ?? "",
+        reason: "",
+        longevity_score: p.longevity_score ?? 0.7,
+        projection_score: p.projection_score ?? 0.5,
+      }));
+      const dailySet = recommendDailySet({ ...altEntry, family: knownFamilies[alt.name] ?? altFamily }, resolvedEntries, 0);
+      let newLayerMap: Record<LayerMood, LayerOption> | null = null;
+      if (dailySet.is_layered && dailySet.layer) {
+        const layerOption: LayerOption = {
+          base_id: alt.fragrance_id,
+          anchor_name: alt.name,
+          top_id: dailySet.layer.fragrance_id,
+          top_name: dailySet.layer.name,
+          top: dailySet.layer.name,
+          mode: "balance",
+          reason: dailySet.reasoning,
+          why_it_works: dailySet.reasoning,
+          anchor_sprays: 3,
+          top_sprays: 1,
+          anchor_placement: "Neck, chest",
+          top_placement: "Wrists",
+          strength_note: `A balanced blend of ${alt.name} and ${dailySet.layer.name}`,
+        };
+        newLayerMap = {
+          balanced: layerOption,
+          bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
+          smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
+          wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
+        };
+      }
+
       setOracle({
         today_pick: { fragrance_id: alt.fragrance_id, name: alt.name, family: alt.family ?? "", reason: alt.reason ?? "" },
-        layer: null,
+        layer: newLayerMap,
         alternates: newAlts.slice(0, 3),
       });
       setExitDirection(null);
       setCardKey((k) => k + 1);
+      setLayerSaved(false);
+      // Auto-open layer if available
+      if (newLayerMap) {
+        setLayerSheetOpen(true);
+      } else {
+        setLayerSheetOpen(false);
+      }
       setActionState("idle");
     }, 300);
-  }, [actionState, oracle]);
+  }, [actionState, oracle, forecastDays]);
 
   const isBusy = actionState !== "idle";
 
@@ -755,8 +823,13 @@ const OdaraScreen = () => {
         })()}
 
 
-        {/* Cover Flow Card Stack */}
-        <div className="relative w-full max-w-lg mt-3 overflow-visible" style={{ perspective: "1200px" }}>
+        {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
+        <motion.div
+          className="relative w-full max-w-lg mt-3 overflow-visible"
+          style={{ perspective: "1200px" }}
+          animate={{ y: layerSheetOpen ? -18 : 0 }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+        >
           {/* Gesture hint indicators */}
           <AnimatePresence>
             {swipeFeedback === "up" && (
@@ -1105,22 +1178,22 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
-                    {/* Alternates */}
+                    {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-2 justify-center mb-2 flex-wrap">
-                        <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40 w-full text-center mb-1">Also works with</span>
+                      <div className="flex gap-2.5 justify-center mb-2 flex-wrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-1.5 font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => (
                           <motion.button
                             key={alt.name}
-                            whileHover={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ backgroundColor: "rgba(255,255,255,0.10)" }}
+                            whileTap={{ scale: 0.93 }}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleAlternateTap(alt);
                             }}
                             disabled={isBusy}
-                            className="text-[11px] text-muted-foreground rounded-full px-4 py-2 transition-colors disabled:opacity-40"
-                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)" }}
+                            className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-colors disabled:opacity-40 font-medium"
+                            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.12)", minHeight: "40px" }}
                           >
                             {alt.name}
                           </motion.button>
@@ -1197,14 +1270,20 @@ const OdaraScreen = () => {
               );
             })}
           </motion.div>
-        </div>
+        </motion.div>
 
         {/* Spacer before forecast */}
         <div className="mt-auto pt-8" />
 
-        {/* 7-Day Forecast Timepiece */}
-        <div
-          className="w-full max-w-md rounded-t-[16px] px-5 py-3 pb-6 backdrop-blur-xl"
+        {/* 7-Day Forecast Timepiece — magnet: compresses when layer expands */}
+        <motion.div
+          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden"
+          animate={{
+            paddingTop: layerSheetOpen ? 8 : 12,
+            paddingBottom: layerSheetOpen ? 16 : 24,
+            opacity: layerSheetOpen ? 0.7 : 1,
+          }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
           style={{
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
@@ -1353,7 +1432,7 @@ const OdaraScreen = () => {
               })}
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Fragrance Profile Sheet */}
         <AnimatePresence>
