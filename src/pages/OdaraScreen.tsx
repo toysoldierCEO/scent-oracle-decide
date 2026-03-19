@@ -825,9 +825,9 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
         <motion.div
-          className="relative w-full max-w-lg mt-3 overflow-visible"
+          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-0"
           style={{ perspective: "1200px" }}
-          animate={{ y: layerSheetOpen ? -18 : 0 }}
+          animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
           {/* Gesture hint indicators */}
@@ -1272,21 +1272,29 @@ const OdaraScreen = () => {
           </motion.div>
         </motion.div>
 
-        {/* Spacer before forecast */}
-        <div className="mt-auto pt-8" />
-
-        {/* 7-Day Forecast Timepiece — magnet: compresses when layer expands */}
+        {/* Spacer before forecast — grows when layer is closed */}
         <motion.div
-          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden"
+          className="shrink"
+          animate={{ flexGrow: layerSheetOpen ? 0 : 1, minHeight: layerSheetOpen ? 4 : 16 }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+        />
+
+        {/* 7-Day Forecast Timepiece — magnet: physically pushed down & compressed when layer expands */}
+        <motion.div
+          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
           animate={{
-            paddingTop: layerSheetOpen ? 8 : 12,
-            paddingBottom: layerSheetOpen ? 16 : 24,
-            opacity: layerSheetOpen ? 0.7 : 1,
+            maxHeight: layerSheetOpen ? 60 : 200,
+            y: layerSheetOpen ? 24 : 0,
+            paddingTop: layerSheetOpen ? 4 : 12,
+            paddingBottom: layerSheetOpen ? 6 : 24,
+            opacity: layerSheetOpen ? 0.55 : 1,
+            scale: layerSheetOpen ? 0.97 : 1,
           }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
           style={{
             background: "var(--sub-glass-bg)",
             boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
+            transformOrigin: "bottom center",
           }}
         >
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
