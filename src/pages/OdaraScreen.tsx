@@ -1272,8 +1272,12 @@ const OdaraScreen = () => {
           </motion.div>
         </motion.div>
 
-        {/* Spacer before forecast */}
-        <div className="mt-auto pt-8" />
+        {/* Spacer before forecast — grows when layer is closed */}
+        <motion.div
+          className="shrink"
+          animate={{ flexGrow: layerSheetOpen ? 0 : 1, minHeight: layerSheetOpen ? 4 : 16 }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+        />
 
         {/* 7-Day Forecast Timepiece — magnet: compresses when layer expands */}
         <motion.div
