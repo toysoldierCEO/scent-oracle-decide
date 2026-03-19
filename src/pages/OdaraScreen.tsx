@@ -661,7 +661,7 @@ const OdaraScreen = () => {
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
           <Skeleton className="w-20 h-3 mb-6 bg-muted/20 rounded" />
-          <div className="w-full max-w-md rounded-[32px] p-8 flex flex-col items-center gap-4" style={{ background: "var(--glass-bg)" }}>
+          <div className="w-full max-w-md rounded-[24px] px-[22px] py-[18px] flex flex-col items-center gap-[10px]" style={{ background: "var(--glass-bg)" }}>
             <Skeleton className="w-3/4 h-10 bg-muted/20 rounded" />
             <Skeleton className="w-24 h-4 bg-muted/20 rounded" />
             <Skeleton className="w-full h-14 bg-muted/20 rounded" />
