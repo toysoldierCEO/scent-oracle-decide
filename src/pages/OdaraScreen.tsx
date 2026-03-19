@@ -1200,8 +1200,8 @@ const OdaraScreen = () => {
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-2.5 justify-center mb-2 flex-wrap">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-1.5 font-medium">Alternatives</span>
+                      <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => (
                           <motion.button
                             key={alt.name}
