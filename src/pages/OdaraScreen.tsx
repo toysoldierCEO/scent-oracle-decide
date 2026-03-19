@@ -1086,6 +1086,46 @@ const OdaraScreen = () => {
                         ))}
                       </div>
                     )}
+
+                    {/* Lock toggle — bottom-right */}
+                    {isCenter && (
+                      <motion.button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLayerSaved((s) => !s);
+                          toast(layerSaved ? "Unlocked" : "Locked in");
+                        }}
+                        whileTap={{ scale: 1.15 }}
+                        className="absolute bottom-5 right-5 p-2 rounded-full"
+                        style={{
+                          background: layerSaved ? `${familyColor}18` : "transparent",
+                        }}
+                      >
+                        <motion.div
+                          animate={layerSaved
+                            ? { scale: [1, 1.05, 1] }
+                            : { scale: 1 }
+                          }
+                          transition={{ duration: 0.2 }}
+                        >
+                          {layerSaved ? (
+                            <Lock
+                              size={16}
+                              className="transition-all duration-200"
+                              style={{
+                                color: familyColor,
+                                filter: `drop-shadow(0 0 6px ${familyColor}60)`,
+                              }}
+                            />
+                          ) : (
+                            <LockOpen
+                              size={16}
+                              className="text-muted-foreground/50 transition-all duration-200 hover:text-muted-foreground/70"
+                            />
+                          )}
+                        </motion.div>
+                      </motion.button>
+                    )}
                   </div>
                 </motion.div>
               );
