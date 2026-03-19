@@ -1235,7 +1235,7 @@ const OdaraScreen = () => {
                           const willLock = !layerSaved;
                           setLayerSaved(willLock);
                           if (willLock) setLockPulse(true);
-                          toast(willLock ? "Locked in" : "Unlocked");
+                          // Silent — lock icon state communicates
                         }}
                         whileTap={{ scale: 1.15 }}
                         className="absolute bottom-5 right-5 p-2 rounded-full z-10"
