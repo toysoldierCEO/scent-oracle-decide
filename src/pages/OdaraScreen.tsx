@@ -1288,10 +1288,10 @@ const OdaraScreen = () => {
           </motion.div>
         </motion.div>
 
-        {/* Spacer before forecast — grows when layer is closed */}
+        {/* Spacer before forecast — breathing room between card and forecast */}
         <motion.div
-          className="shrink"
-          animate={{ flexGrow: layerSheetOpen ? 0 : 1, minHeight: layerSheetOpen ? 4 : 16 }}
+          className="shrink-0"
+          animate={{ height: layerSheetOpen ? 6 : 20 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         />
 
