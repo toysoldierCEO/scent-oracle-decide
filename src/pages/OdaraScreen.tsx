@@ -1025,7 +1025,7 @@ const OdaraScreen = () => {
                     }}
                   >
                     {/* Day/date label */}
-                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 select-none">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-[6px] select-none">
                       {dayData.label} · {dayData.day}
                     </span>
 
