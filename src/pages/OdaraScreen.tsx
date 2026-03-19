@@ -825,9 +825,9 @@ const OdaraScreen = () => {
 
         {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
         <motion.div
-          className="relative w-full max-w-lg mt-3 overflow-visible"
+          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-0"
           style={{ perspective: "1200px" }}
-          animate={{ y: layerSheetOpen ? -18 : 0 }}
+          animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
           {/* Gesture hint indicators */}
