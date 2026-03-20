@@ -534,7 +534,7 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
-    setSwipeFeedback("down");
+    
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
