@@ -513,8 +513,6 @@ const OdaraScreen = () => {
     if (!entry?.fragrance_id) return;
 
     setActionState("accepting");
-    // Show swipe-up feedback
-    setSwipeFeedback("up");
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
