@@ -926,14 +926,9 @@ const OdaraScreen = () => {
               const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
               const zIndex = 10 - absOffset;
 
-              // Swipe feedback animation for center card
-              const feedbackY = isCenter && swipeFeedback === "up" ? -8 : isCenter && swipeFeedback === "down" ? 8 : 0;
-              const feedbackScale = isCenter && swipeFeedback ? 0.97 : scale;
-              const feedbackGlow = isCenter && swipeFeedback === "up"
-                ? `0 -8px 30px -5px ${familyColor}30`
-                : isCenter && swipeFeedback === "down"
-                  ? `0 8px 20px -5px rgba(0,0,0,0.4)`
-                  : "";
+              const feedbackY = 0;
+              const feedbackScale = scale;
+              const feedbackGlow = "";
 
               return (
                 <motion.div
