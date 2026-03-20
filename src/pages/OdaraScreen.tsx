@@ -549,7 +549,6 @@ const OdaraScreen = () => {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
     } finally {
-      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
