@@ -439,8 +439,7 @@ const OdaraScreen = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Swipe feedback state
-  const [swipeFeedback, setSwipeFeedback] = useState<"up" | "down" | null>(null);
+  // Swipe feedback removed — silent UI
 
   // Direction locking for gestures
   const dragDirection = useRef<"none" | "horizontal" | "vertical">("none");
