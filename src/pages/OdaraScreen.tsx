@@ -439,8 +439,7 @@ const OdaraScreen = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Swipe feedback state
-  const [swipeFeedback, setSwipeFeedback] = useState<"up" | "down" | null>(null);
+  // Swipe feedback removed — silent UI
 
   // Direction locking for gestures
   const dragDirection = useRef<"none" | "horizontal" | "vertical">("none");
@@ -514,8 +513,6 @@ const OdaraScreen = () => {
     if (!entry?.fragrance_id) return;
 
     setActionState("accepting");
-    // Show swipe-up feedback
-    setSwipeFeedback("up");
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
@@ -529,7 +526,6 @@ const OdaraScreen = () => {
       console.error("Accept failed:", e);
       console.warn("Couldn't confirm — try again");
     } finally {
-      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
@@ -538,7 +534,7 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
-    setSwipeFeedback("down");
+    
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
@@ -553,7 +549,6 @@ const OdaraScreen = () => {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
     } finally {
-      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
@@ -931,14 +926,9 @@ const OdaraScreen = () => {
               const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
               const zIndex = 10 - absOffset;
 
-              // Swipe feedback animation for center card
-              const feedbackY = isCenter && swipeFeedback === "up" ? -8 : isCenter && swipeFeedback === "down" ? 8 : 0;
-              const feedbackScale = isCenter && swipeFeedback ? 0.97 : scale;
-              const feedbackGlow = isCenter && swipeFeedback === "up"
-                ? `0 -8px 30px -5px ${familyColor}30`
-                : isCenter && swipeFeedback === "down"
-                  ? `0 8px 20px -5px rgba(0,0,0,0.4)`
-                  : "";
+              const feedbackY = 0;
+              const feedbackScale = scale;
+              const feedbackGlow = "";
 
               return (
                 <motion.div
@@ -949,7 +939,7 @@ const OdaraScreen = () => {
                     y: feedbackY,
                     rotateY,
                     scale: feedbackScale,
-                    opacity: isCenter && swipeFeedback === "down" ? 0.6 : opacity,
+                    opacity,
                     z: translateZ,
                   }}
                   transition={{
@@ -964,14 +954,7 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className={`w-full rounded-[24px] px-[22px] py-[18px] flex flex-col items-center relative ${
-                      isCenter ? "cursor-pointer" : ""
-                    }`}
-                    onClick={() => {
-                      if (!isCenter) return;
-                      if (longPressTimer.current) return;
-                      handleAccept();
-                    }}
+                    className="w-full rounded-[24px] px-[22px] py-[16px] flex flex-col items-center relative"
                     style={{
                       background: isCenter
                         ? [
