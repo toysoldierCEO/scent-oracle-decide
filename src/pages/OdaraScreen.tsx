@@ -65,15 +65,15 @@ const TEMPERATURES = [35, 50, 65, 80] as const;
 
 /* ── Fragrance family → color mapping (expanded with tint HSL values) ── */
 const FAMILY_COLORS: Record<string, string> = {
-  "oud-amber": "#C08A3E",
-  "fresh-blue": "#5B9BD5",
-  "woody-clean": "#6B9B7A",
-  "sweet-gourmand": "#D4A056",
-  "dark-leather": "#8B3A3A",
-  "tobacco-boozy": "#6B4226",
+  "oud-amber": "#D4A373",
+  "fresh-blue": "#4DA3FF",
+  "tobacco-boozy": "#8B5E3C",
+  "sweet-gourmand": "#C77DFF",
+  "dark-leather": "#5A3A2E",
+  "woody-clean": "#7FAF8E",
+  "citrus-cologne": "#F4D35E",
   "floral-musk": "#C4A0B9",
   "citrus-aromatic": "#B8C94E",
-  "citrus-cologne": "#E8D44D",
 };
 
 /* Family → tint colors for card backgrounds (subtle, desaturated) */
