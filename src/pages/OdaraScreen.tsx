@@ -1033,8 +1033,8 @@ const OdaraScreen = () => {
                         }}
                         className="w-full rounded-[20px] px-[22px] py-[16px] mb-[10px] flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
                         style={{
-                          background: `${layerFamilyColor}22`,
-                          border: `1px solid ${layerFamilyColor}66`,
+                          background: `${layerFamilyColor}44`,
+                          border: `1px solid ${layerFamilyColor}AA`,
                         }}
                       >
 
