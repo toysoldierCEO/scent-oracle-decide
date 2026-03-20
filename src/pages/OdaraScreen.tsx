@@ -939,7 +939,7 @@ const OdaraScreen = () => {
                     y: feedbackY,
                     rotateY,
                     scale: feedbackScale,
-                    opacity: isCenter && swipeFeedback === "down" ? 0.6 : opacity,
+                    opacity,
                     z: translateZ,
                   }}
                   transition={{
