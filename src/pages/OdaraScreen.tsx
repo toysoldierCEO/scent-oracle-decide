@@ -957,36 +957,12 @@ const OdaraScreen = () => {
                     className="w-full rounded-[24px] px-[22px] py-[16px] flex flex-col items-center relative"
                     style={{
                       background: isCenter
-                        ? [
-                            // Top-light veil — subtle brightness at top
-                            `linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 30%, transparent 55%, rgba(0,0,0,0.2) 100%)`,
-                            // Family atmosphere — trapped light
-                            `linear-gradient(180deg, ${familyTint.bg} 0%, ${familyTint.material} 40%, transparent 70%)`,
-                            // Solid obsidian base — deep, rich, opaque
-                            `rgba(6,6,8,0.97)`,
-                          ].join(", ")
+                        ? `linear-gradient(135deg, ${familyColor}55, rgba(20,20,20,0.95))`
                         : `linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(0,0,0,0.1) 100%), rgba(10,10,12,0.92)`,
                       backdropFilter: isCenter ? "blur(50px) saturate(1.4)" : "blur(14px) saturate(1.05)",
+                      border: isCenter ? `1px solid ${familyColor}88` : undefined,
                       boxShadow: isCenter
-                        ? [
-                            // Broad grounding shadow — valuable weight
-                            `0 40px 80px -18px rgba(0,0,0,0.8)`,
-                            `0 16px 36px -10px rgba(0,0,0,0.6)`,
-                            `0 6px 14px -4px rgba(0,0,0,0.45)`,
-                            // Top edge — bright premium highlight
-                            `inset 0 1px 0 0 rgba(255,255,255,0.16)`,
-                            // Side edges — softer, graduated
-                            `inset 1px 0 0 0 rgba(255,255,255,0.06)`,
-                            `inset -1px 0 0 0 rgba(255,255,255,0.06)`,
-                            // Bottom edge — barely there
-                            `inset 0 -1px 0 0 rgba(255,255,255,0.025)`,
-                            // Inner containment shadow — volume & depth
-                            `inset 0 -12px 28px -12px rgba(0,0,0,0.4)`,
-                            `inset 0 6px 16px -8px rgba(255,255,255,0.03)`,
-                            // Family atmospheric glow
-                            `0 0 60px -14px ${familyTint.glow}`,
-                            feedbackGlow,
-                          ].filter(Boolean).join(", ")
+                        ? `0 10px 40px rgba(0,0,0,0.6)`
                         : `0 12px 35px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.05), inset 0 0 0 1px rgba(255,255,255,0.03)`,
                     }}
                   >
