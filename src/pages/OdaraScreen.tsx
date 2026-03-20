@@ -526,7 +526,6 @@ const OdaraScreen = () => {
       console.error("Accept failed:", e);
       console.warn("Couldn't confirm — try again");
     } finally {
-      setTimeout(() => setSwipeFeedback(null), 600);
       setActionState("idle");
       swipeLocked.current = false;
     }
