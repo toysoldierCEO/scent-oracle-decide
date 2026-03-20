@@ -1182,14 +1182,14 @@ const OdaraScreen = () => {
                                 handleAlternateTap(alt);
                               }}
                               disabled={isBusy}
-                              className="text-[13px] text-foreground/80 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
+                              className="text-[13px] text-white/90 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
                               style={{
                                 background: isSelected
-                                  ? `linear-gradient(135deg, ${altColor}18 0%, ${altColor}08 100%)`
-                                  : `linear-gradient(135deg, ${altColor}0A 0%, transparent 100%)`,
+                                  ? `linear-gradient(135deg, ${altColor}45 0%, ${altColor}28 100%)`
+                                  : `linear-gradient(135deg, ${altColor}30 0%, ${altColor}18 100%)`,
                                 boxShadow: isSelected
-                                  ? `inset 0 0 0 1px ${altColor}35, 0 0 12px -4px ${altColor}20`
-                                  : `inset 0 0 0 1px ${altColor}18`,
+                                  ? `inset 0 0 0 1.5px ${altColor}60, 0 0 16px -4px ${altColor}35`
+                                  : `inset 0 0 0 1px ${altColor}40`,
                                 minHeight: "40px",
                               }}
                             >
