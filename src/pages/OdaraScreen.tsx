@@ -980,11 +980,10 @@ const OdaraScreen = () => {
               // Phase 1: only render day 0 (live main card), skip forecast cards
               if (i !== 0) return null;
               const cardPick = oraclePick;
-              const cardLayerMap = null;
-              const cardAlternates: any[] = [];
+              const cardAlternates = oracleAlternates ?? [];
               const cardHasLayer = false;
               const cardActiveLayer = null;
-              const cardHasAlternates = false;
+              const cardHasAlternates = cardAlternates.length > 0;
 
               if (!cardPick) return null;
 
