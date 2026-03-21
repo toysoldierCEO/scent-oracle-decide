@@ -708,16 +708,14 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  const isViewingForecast = selectedForecastDay > 0;
-  const forecastEntry = forecastDays[selectedForecastDay];
-  const today_pick = isViewingForecast && forecastEntry?.fragrance
-    ? forecastEntry.fragrance
-    : oraclePick;
-  const currentLayerMap = isViewingForecast ? forecastEntry?.layer ?? null : layerMap;
-  const alternates = isViewingForecast ? forecastEntry?.alternates : oracleAlternates;
-  const hasLayer = currentLayerMap != null;
-  const activeLayer = hasLayer ? currentLayerMap[selectedMood] : null;
-  const hasAlternates = alternates != null && alternates.length > 0;
+  // Phase 1: force layer and alternates to null — only main card is live-wired
+  const isViewingForecast = false; // forecast disabled in Phase 1
+  const today_pick = oraclePick;
+  const currentLayerMap = null; // layer not wired yet
+  const alternates: any[] = []; // alternates not wired yet
+  const hasLayer = false;
+  const activeLayer = null;
+  const hasAlternates = false;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
 
@@ -918,12 +916,14 @@ const OdaraScreen = () => {
 
               if (absOffset > 3) return null;
 
-              const cardPick = i === 0 && oracle ? oraclePick : dayData.fragrance;
-              const cardLayerMap = i === 0 ? layerMap : dayData.layer;
-              const cardAlternates = i === 0 ? oracleAlternates : dayData.alternates;
-              const cardHasLayer = cardLayerMap != null;
-              const cardActiveLayer = cardHasLayer ? cardLayerMap[selectedMood] : null;
-              const cardHasAlternates = cardAlternates != null && cardAlternates.length > 0;
+              // Phase 1: only render day 0 (live main card), skip forecast cards
+              if (i !== 0) return null;
+              const cardPick = oraclePick;
+              const cardLayerMap = null;
+              const cardAlternates: any[] = [];
+              const cardHasLayer = false;
+              const cardActiveLayer = null;
+              const cardHasAlternates = false;
 
               if (!cardPick) return null;
 
@@ -1015,10 +1015,10 @@ const OdaraScreen = () => {
                         {cardPick.name}
                       </h1>
 
-                      {/* Brand name */}
-                      {FRAGRANCE_BRANDS[cardPick.name] && (
+                      {/* Brand name — from live Supabase data */}
+                      {cardPick.reason && (
                         <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
-                          {FRAGRANCE_BRANDS[cardPick.name]}
+                          {cardPick.reason}
                         </p>
                       )}
 
@@ -1031,9 +1031,7 @@ const OdaraScreen = () => {
                       </p>
                     </div>
 
-                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-[6px] mb-[16px] text-pretty select-none">
-                      {cardPick.reason}
-                    </p>
+                    {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
 
                     {/* Layer Card — only on center */}
                     {isCenter && cardHasLayer && cardActiveLayer && (() => {
