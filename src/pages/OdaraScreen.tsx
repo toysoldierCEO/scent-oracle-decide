@@ -1,7 +1,17 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
+
+/* ── Supabase connection test ── */
+supabaseClient
+  .from('fragrances')
+  .select('id, name, brand, family_key')
+  .limit(1)
+  .then(({ data, error }) => {
+    console.log('[ODARA] Supabase connection test:', { data, error });
+  });
 
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
 
