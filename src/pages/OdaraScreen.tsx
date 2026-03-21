@@ -485,19 +485,36 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async (ctx?: string, temp?: number) => {
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
     setLoading(true);
     setError(false);
     setExitDirection(null);
     try {
-      // Phase 1: fetch main card data directly from external fragrances table
-      const { data: rows, error: qErr } = await supabaseClient
+      // Fetch main card — if excludeId provided, skip that row (used after alt tap)
+      let mainQuery = supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key')
-        .limit(1)
-        .single();
+        .limit(1);
+      if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
+      const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
+
+      // Fetch 3 alternatives excluding the main card
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .neq('id', rows.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+      }));
+
       const liveOracle: OracleData = {
         today_pick: {
           fragrance_id: rows.id,
@@ -506,7 +523,7 @@ const OdaraScreen = () => {
           reason: `${rows.brand} — ${rows.family_key ?? 'signature'}`,
         },
         layer: null,
-        alternates: [],
+        alternates: liveAlternates,
       };
       setOracle(liveOracle);
       setCardKey((k) => k + 1);
@@ -517,6 +534,50 @@ const OdaraScreen = () => {
       setLoading(false);
     }
   }, [selectedContext, effectiveTemperature]);
+
+  // Load a specific fragrance as main card by id (for alt tap)
+  const loadFragranceById = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(false);
+    try {
+      const { data: row, error: qErr } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .eq('id', id)
+        .single();
+      if (qErr) throw qErr;
+
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .neq('id', row.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+      }));
+
+      setOracle({
+        today_pick: {
+          fragrance_id: row.id,
+          name: row.name,
+          family: row.family_key ?? '',
+          reason: `${row.brand} — ${row.family_key ?? 'signature'}`,
+        },
+        layer: null,
+        alternates: liveAlternates,
+      });
+      setCardKey((k) => k + 1);
+    } catch (e) {
+      console.error("Load fragrance failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => { fetchOracle(); }, [fetchOracle]);
 
@@ -569,95 +630,10 @@ const OdaraScreen = () => {
   }, [actionState, oracle, getUserId, fetchOracle]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
-    if (actionState !== "idle" || !oracle) return;
-    setActionState("rebuilding");
-    const oldPick = oracle.today_pick;
-    const remainingAlts = (oracle.alternates ?? []).filter((a) => a.name !== alt.name);
-    const newAlts = [
-      { fragrance_id: oldPick.fragrance_id, name: oldPick.name, family: oldPick.family, reason: oldPick.reason },
-      ...remainingAlts,
-    ].filter((a) => a.name !== alt.name);
-
-    setExitDirection("left");
-    setTimeout(() => {
-      // Build layer map for the new pick using the compatibility engine
-      const altFamily = alt.family ?? "";
-      const altEntry: FragranceEntry = {
-        fragrance_id: alt.fragrance_id ?? "",
-        name: alt.name,
-        family: altFamily,
-        reason: alt.reason ?? "",
-        longevity_score: FRAGRANCE_PROFILES[alt.name]?.longevity_score ?? 0.7,
-        projection_score: FRAGRANCE_PROFILES[alt.name]?.projection_score ?? 0.5,
-      };
-      const allEntries: FragranceEntry[] = Object.entries(FRAGRANCE_PROFILES).map(([name, p]) => ({
-        fragrance_id: "",
-        name,
-        family: Object.entries(FRAGRANCE_BRANDS).find(([n]) => n === name)?.[0] ? "" : "",
-        reason: "",
-        longevity_score: p.longevity_score ?? 0.7,
-        projection_score: p.projection_score ?? 0.5,
-      }));
-      // Try to find family from known profiles or alternates
-      const knownFamilies: Record<string, string> = {};
-      for (const fd of forecastDays) {
-        if (fd.fragrance) knownFamilies[fd.fragrance.name] = fd.fragrance.family;
-      }
-      if (oracle) {
-        knownFamilies[oracle.today_pick.name] = oracle.today_pick.family;
-        (oracle.alternates ?? []).forEach(a => { if (a.family) knownFamilies[a.name] = a.family; });
-      }
-      const resolvedEntries: FragranceEntry[] = Object.entries(FRAGRANCE_PROFILES).map(([name, p]) => ({
-        fragrance_id: "",
-        name,
-        family: knownFamilies[name] ?? "",
-        reason: "",
-        longevity_score: p.longevity_score ?? 0.7,
-        projection_score: p.projection_score ?? 0.5,
-      }));
-      const dailySet = recommendDailySet({ ...altEntry, family: knownFamilies[alt.name] ?? altFamily }, resolvedEntries, 0);
-      let newLayerMap: Record<LayerMood, LayerOption> | null = null;
-      if (dailySet.is_layered && dailySet.layer) {
-        const layerOption: LayerOption = {
-          base_id: alt.fragrance_id,
-          anchor_name: alt.name,
-          top_id: dailySet.layer.fragrance_id,
-          top_name: dailySet.layer.name,
-          top: dailySet.layer.name,
-          mode: "balance",
-          reason: dailySet.reasoning,
-          why_it_works: dailySet.reasoning,
-          anchor_sprays: 3,
-          top_sprays: 1,
-          anchor_placement: "Neck, chest",
-          top_placement: "Wrists",
-          strength_note: `A balanced blend of ${alt.name} and ${dailySet.layer.name}`,
-        };
-        newLayerMap = {
-          balanced: layerOption,
-          bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
-          smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
-          wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
-        };
-      }
-
-      setOracle({
-        today_pick: { fragrance_id: alt.fragrance_id, name: alt.name, family: alt.family ?? "", reason: alt.reason ?? "" },
-        layer: newLayerMap,
-        alternates: newAlts.slice(0, 3),
-      });
-      setExitDirection(null);
-      setCardKey((k) => k + 1);
-      setLayerSaved(false);
-      // Auto-open layer if available
-      if (newLayerMap) {
-        setLayerSheetOpen(true);
-      } else {
-        setLayerSheetOpen(false);
-      }
-      setActionState("idle");
-    }, 300);
-  }, [actionState, oracle, forecastDays]);
+    if (actionState !== "idle" || !alt.fragrance_id) return;
+    // Phase 1: simply load the tapped fragrance as main card from live Supabase
+    loadFragranceById(alt.fragrance_id);
+  }, [actionState, loadFragranceById]);
 
   const isBusy = actionState !== "idle";
 
@@ -708,14 +684,14 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  // Phase 1: force layer and alternates to null — only main card is live-wired
-  const isViewingForecast = false; // forecast disabled in Phase 1
+  // Phase 1: layer still off, but alternates are now live
+  const isViewingForecast = false;
   const today_pick = oraclePick;
-  const currentLayerMap = null; // layer not wired yet
-  const alternates: any[] = []; // alternates not wired yet
+  const currentLayerMap = null;
+  const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  const hasAlternates = false;
+  const hasAlternates = alternates.length > 0;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
 
@@ -919,11 +895,10 @@ const OdaraScreen = () => {
               // Phase 1: only render day 0 (live main card), skip forecast cards
               if (i !== 0) return null;
               const cardPick = oraclePick;
-              const cardLayerMap = null;
-              const cardAlternates: any[] = [];
+              const cardAlternates = oracleAlternates ?? [];
               const cardHasLayer = false;
               const cardActiveLayer = null;
-              const cardHasAlternates = false;
+              const cardHasAlternates = cardAlternates.length > 0;
 
               if (!cardPick) return null;
 
