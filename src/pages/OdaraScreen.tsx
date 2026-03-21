@@ -4,14 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/* ── Supabase connection test ── */
-supabaseClient
-  .from('fragrances')
-  .select('name, brand, family_key')
-  .limit(3)
-  .then(({ data, error }) => {
-    console.log('[ODARA] fragrances query (3 rows):', { data, error });
-  });
+/* ── Live fetch replaces old test query ── */
 
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -497,14 +490,25 @@ const OdaraScreen = () => {
     setError(false);
     setExitDirection(null);
     try {
-      const userId = await getUserId();
-      const t = temp ?? effectiveTemperature;
-      const { data, error: rpcError } = await supabase.rpc(
-        "get_todays_oracle_v3",
-        { p_user_id: userId, p_temperature: t, p_context: ctx ?? selectedContext }
-      );
-      if (rpcError) throw rpcError;
-      setOracle(data as unknown as OracleData);
+      // Phase 1: fetch main card data directly from external fragrances table
+      const { data: rows, error: qErr } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .limit(1)
+        .single();
+      if (qErr) throw qErr;
+      console.log('[ODARA] Live fragrance row:', rows);
+      const liveOracle: OracleData = {
+        today_pick: {
+          fragrance_id: rows.id,
+          name: rows.name,
+          family: rows.family_key ?? '',
+          reason: `${rows.brand} — ${rows.family_key ?? 'signature'}`,
+        },
+        layer: null,
+        alternates: [],
+      };
+      setOracle(liveOracle);
       setCardKey((k) => k + 1);
     } catch (e) {
       console.error("Oracle fetch failed:", e);
@@ -512,7 +516,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [getUserId, selectedContext, effectiveTemperature]);
+  }, [selectedContext, effectiveTemperature]);
 
   useEffect(() => { fetchOracle(); }, [fetchOracle]);
 
