@@ -916,12 +916,14 @@ const OdaraScreen = () => {
 
               if (absOffset > 3) return null;
 
-              const cardPick = i === 0 && oracle ? oraclePick : dayData.fragrance;
-              const cardLayerMap = i === 0 ? layerMap : dayData.layer;
-              const cardAlternates = i === 0 ? oracleAlternates : dayData.alternates;
-              const cardHasLayer = cardLayerMap != null;
-              const cardActiveLayer = cardHasLayer ? cardLayerMap[selectedMood] : null;
-              const cardHasAlternates = cardAlternates != null && cardAlternates.length > 0;
+              // Phase 1: only render day 0 (live main card), skip forecast cards
+              if (i !== 0) return null;
+              const cardPick = oraclePick;
+              const cardLayerMap = null;
+              const cardAlternates: any[] = [];
+              const cardHasLayer = false;
+              const cardActiveLayer = null;
+              const cardHasAlternates = false;
 
               if (!cardPick) return null;
 
