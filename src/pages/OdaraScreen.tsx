@@ -7,10 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 /* ── Supabase connection test ── */
 supabaseClient
   .from('fragrances')
-  .select('id, name, brand, family_key')
-  .limit(1)
+  .select('name, brand, family_key')
+  .limit(3)
   .then(({ data, error }) => {
-    console.log('[ODARA] Supabase connection test:', { data, error });
+    console.log('[ODARA] fragrances query (3 rows):', { data, error });
   });
 
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
