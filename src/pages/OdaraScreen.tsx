@@ -485,19 +485,36 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async (ctx?: string, temp?: number) => {
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
     setLoading(true);
     setError(false);
     setExitDirection(null);
     try {
-      // Phase 1: fetch main card data directly from external fragrances table
-      const { data: rows, error: qErr } = await supabaseClient
+      // Fetch main card — if excludeId provided, skip that row (used after alt tap)
+      let mainQuery = supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key')
-        .limit(1)
-        .single();
+        .limit(1);
+      if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
+      const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
+
+      // Fetch 3 alternatives excluding the main card
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .neq('id', rows.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+      }));
+
       const liveOracle: OracleData = {
         today_pick: {
           fragrance_id: rows.id,
@@ -506,7 +523,7 @@ const OdaraScreen = () => {
           reason: `${rows.brand} — ${rows.family_key ?? 'signature'}`,
         },
         layer: null,
-        alternates: [],
+        alternates: liveAlternates,
       };
       setOracle(liveOracle);
       setCardKey((k) => k + 1);
@@ -517,6 +534,50 @@ const OdaraScreen = () => {
       setLoading(false);
     }
   }, [selectedContext, effectiveTemperature]);
+
+  // Load a specific fragrance as main card by id (for alt tap)
+  const loadFragranceById = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(false);
+    try {
+      const { data: row, error: qErr } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .eq('id', id)
+        .single();
+      if (qErr) throw qErr;
+
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key')
+        .neq('id', row.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+      }));
+
+      setOracle({
+        today_pick: {
+          fragrance_id: row.id,
+          name: row.name,
+          family: row.family_key ?? '',
+          reason: `${row.brand} — ${row.family_key ?? 'signature'}`,
+        },
+        layer: null,
+        alternates: liveAlternates,
+      });
+      setCardKey((k) => k + 1);
+    } catch (e) {
+      console.error("Load fragrance failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => { fetchOracle(); }, [fetchOracle]);
 
