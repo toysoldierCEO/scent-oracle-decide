@@ -769,14 +769,14 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  // Phase 1: force layer and alternates to null — only main card is live-wired
-  const isViewingForecast = false; // forecast disabled in Phase 1
+  // Phase 1: layer still off, but alternates are now live
+  const isViewingForecast = false;
   const today_pick = oraclePick;
-  const currentLayerMap = null; // layer not wired yet
-  const alternates: any[] = []; // alternates not wired yet
+  const currentLayerMap = null;
+  const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  const hasAlternates = false;
+  const hasAlternates = alternates.length > 0;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
 
