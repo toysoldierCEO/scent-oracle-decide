@@ -1031,9 +1031,7 @@ const OdaraScreen = () => {
                       </p>
                     </div>
 
-                    <p className="text-sm text-center text-muted-foreground/80 leading-relaxed px-[6px] mb-[16px] text-pretty select-none">
-                      {cardPick.reason}
-                    </p>
+                    {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
 
                     {/* Layer Card — only on center */}
                     {isCenter && cardHasLayer && cardActiveLayer && (() => {
