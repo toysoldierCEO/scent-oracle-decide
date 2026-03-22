@@ -200,19 +200,8 @@ const LayerCard = ({
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);
 
-  // Why it works text
-  let whyText = '';
-  if (baseNotesRaw.length > 0 || layerNotesRaw.length > 0) {
-    const mn = getDisplayName(mainName, mainBrand);
-    const ln = getDisplayName(activeModeEntry.name, activeModeEntry.brand);
-    const bPart = baseNotesRaw.length > 0
-      ? `The ${baseNotesRaw.slice(0, 2).join(" and ")} in ${mn} ${cfg.whyVerb}`
-      : mn;
-    const lPart = layerNotesRaw.length > 0
-      ? ` while ${layerNotesRaw.slice(0, 2).join(" and ")} from ${ln} add${layerNotesRaw.length === 1 ? 's' : ''} depth`
-      : '';
-    whyText = `${bPart}${lPart}.`;
-  }
+  // Why it works — note-driven, mood-aware
+  const whyText = buildWhyItWorks(selectedMood, baseNotesRaw, layerNotesRaw);
 
   const mn = getDisplayName(mainName, mainBrand);
 
