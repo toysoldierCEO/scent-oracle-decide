@@ -538,7 +538,7 @@ const OdaraScreen = () => {
           fragrance_id: rows.id,
           name: rows.name,
           family: rows.family_key ?? '',
-          reason: `${rows.brand} — ${rows.family_key ?? 'signature'}`,
+          reason: rows.brand ?? '',
         },
         layer: null,
         alternates: liveAlternates,
@@ -594,7 +594,7 @@ const OdaraScreen = () => {
           fragrance_id: row.id,
           name: row.name,
           family: row.family_key ?? '',
-          reason: `${row.brand} — ${row.family_key ?? 'signature'}`,
+          reason: row.brand ?? '',
         },
         layer: null,
         alternates: liveAlternates,
@@ -1042,19 +1042,24 @@ const OdaraScreen = () => {
                       const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
                       return (
                         <div
-                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none"
+                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none relative z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLayerSheetOpen((o) => !o);
+                          }}
                           style={{
                             background: layerTint.bg,
                             border: `1px solid ${layerTint.border}`,
                             boxShadow: `0 2px 12px ${layerTint.glow}`,
+                            pointerEvents: 'auto',
                           }}
                         >
-                          <p className="text-[13px] tracking-wide" style={{ color: layerColor }}>
+                          <p className="text-[13px] tracking-wide text-white">
                             Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
                           </p>
                           <span
-                            className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full"
-                            style={{ color: layerColor, opacity: 0.7, boxShadow: `inset 0 0 0 1px ${layerColor}33` }}
+                            className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
+                            style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
                           >
                             balance
                           </span>
