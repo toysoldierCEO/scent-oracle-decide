@@ -251,9 +251,6 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-              {/* Effect */}
-              <p className="text-[11px] text-white/80 leading-relaxed">{cfg.effect}</p>
-
               {/* Key notes */}
               {hasNotes && (
                 <div>
