@@ -1182,7 +1182,7 @@ const OdaraScreen = () => {
                                 minHeight: "40px",
                               }}
                             >
-                              {alt.name}
+                              {getDisplayName(alt.name)}
                             </motion.button>
                           );
                         })}
