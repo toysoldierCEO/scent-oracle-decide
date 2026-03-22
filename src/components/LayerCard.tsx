@@ -129,6 +129,8 @@ interface LayerCardProps {
   /** The main fragrance — used for "why it works" text, NOT for color */
   mainName: string;
   mainBrand: string | null;
+  /** Main fragrance notes from DB */
+  mainNotes: string[] | null;
   /** All layer mode entries */
   layerModes: LayerModes;
   /** Currently selected mood */
