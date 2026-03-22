@@ -650,7 +650,7 @@ const OdaraScreen = () => {
     try {
       const { data: row, error: qErr } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
