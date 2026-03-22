@@ -232,6 +232,22 @@ const LayerCard = ({
         {activeModeEntry.family_key?.toUpperCase() ?? ''}
       </span>
 
+      {/* Always-visible Key notes summary */}
+      {hasNotes && (
+        <div className="w-full mt-[6px] px-1">
+          {baseNotesRaw.length > 0 && (
+            <p className="text-[10px] text-white/70 text-center">
+              <span className="text-white/40">Main:</span> {baseNotesRaw.join(', ').toLowerCase()}
+            </p>
+          )}
+          {layerNotesRaw.length > 0 && (
+            <p className="text-[10px] text-white/70 text-center">
+              <span className="text-white/40">Layer:</span> {layerNotesRaw.join(', ').toLowerCase()}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Mode selector */}
       <div className="mt-[8px]">
         <ModeSelector
