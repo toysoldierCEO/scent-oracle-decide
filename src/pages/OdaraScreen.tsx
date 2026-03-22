@@ -1036,20 +1036,31 @@ const OdaraScreen = () => {
                       </p>
                     </div>
 
-                    {/* Layer label — compact format */}
-                    {isCenter && layerSuggestion && (
-                      <div className="flex flex-col items-center mb-[14px]">
-                        <p className="text-[13px] text-foreground/80 tracking-wide select-none">
-                          Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
-                        </p>
-                        <span
-                          className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/60 mt-[4px] px-3 py-[2px] rounded-full select-none"
-                          style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.1)" }}
+                    {/* Layer label — live Supabase data, own family color */}
+                    {isCenter && layerSuggestion && (() => {
+                      const layerColor = FAMILY_COLORS[layerSuggestion.family] ?? '#888';
+                      const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
+                      return (
+                        <div
+                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none"
+                          style={{
+                            background: layerTint.bg,
+                            border: `1px solid ${layerTint.border}`,
+                            boxShadow: `0 2px 12px ${layerTint.glow}`,
+                          }}
                         >
-                          balance
-                        </span>
-                      </div>
-                    )}
+                          <p className="text-[13px] tracking-wide" style={{ color: layerColor }}>
+                            Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
+                          </p>
+                          <span
+                            className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full"
+                            style={{ color: layerColor, opacity: 0.7, boxShadow: `inset 0 0 0 1px ${layerColor}33` }}
+                          >
+                            balance
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
 
