@@ -719,8 +719,8 @@ const OdaraScreen = () => {
   const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  // Derive layer suggestion from first alternative (Phase 1 placeholder)
-  const layerSuggestion = alternates.length > 0 ? alternates[0] : null;
+  // Layer suggestion from live Supabase fetch
+  const layerSuggestion = layerFragrance ? { name: layerFragrance.name, family: layerFragrance.family_key } : null;
   const hasAlternates = alternates.length > 0;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
