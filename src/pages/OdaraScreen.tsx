@@ -47,7 +47,15 @@ interface LayerOption {
   reason: string;
 }
 
-type LayerMood = 'balanced' | 'bold' | 'smooth' | 'wild';
+type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
+
+interface LayerModeEntry {
+  id: string;
+  name: string;
+  family_key: string;
+}
+
+type LayerModes = Record<LayerMood, LayerModeEntry | null>;
 
 interface OracleData {
   today_pick: {
@@ -65,7 +73,7 @@ interface OracleData {
   }[] | null;
 }
 
-const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
+const LAYER_MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
@@ -464,7 +472,7 @@ function buildForecastDays(): ForecastDay[] {
         strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
       };
       layerMap = {
-        balanced: layerOption,
+        balance: layerOption,
         bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
         smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
         wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
@@ -481,6 +489,7 @@ function buildForecastDays(): ForecastDay[] {
 
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
+  const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -491,7 +500,7 @@ const OdaraScreen = () => {
   const [selectedContext, setSelectedContext] = useState<string>("daily");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
-  const [selectedMood, setSelectedMood] = useState<LayerMood>('balanced');
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
@@ -560,7 +569,7 @@ const OdaraScreen = () => {
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
 
-      // Fetch 3 alternatives excluding the main card
+      // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key')
@@ -572,18 +581,29 @@ const OdaraScreen = () => {
         fragrance_id: r.id,
         name: r.name,
         family: r.family_key ?? '',
-        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+        reason: rows.brand ?? '',
       }));
 
-      // Fetch layer fragrance (different from main)
-      const { data: layerRow } = await supabaseClient
+      // Fetch 4 layer fragrances for mode system (separate from alternatives)
+      const altIds = (altRows ?? []).map((r: any) => r.id);
+      let layerQuery = supabaseClient
         .from('fragrances')
         .select('id, name, family_key')
         .neq('id', rows.id)
         .not('family_key', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      setLayerFragrance(layerRow ?? null);
+        .limit(4);
+      const { data: layerRows } = await layerQuery;
+
+      const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+      const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+      (layerRows ?? []).forEach((r: any, i: number) => {
+        if (i < 4) {
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, family_key: r.family_key };
+        }
+      });
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
 
       const liveOracle: OracleData = {
         today_pick: {
@@ -628,18 +648,27 @@ const OdaraScreen = () => {
         fragrance_id: r.id,
         name: r.name,
         family: r.family_key ?? '',
-        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+        reason: row.brand ?? '',
       }));
 
-      // Fetch layer fragrance for new main
-      const { data: layerRow } = await supabaseClient
+      // Fetch 4 layer fragrances for mode system
+      const { data: layerRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, family_key')
         .neq('id', row.id)
         .not('family_key', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      setLayerFragrance(layerRow ?? null);
+        .limit(4);
+
+      const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+      const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+      (layerRows ?? []).forEach((r: any, i: number) => {
+        if (i < 4) {
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, family_key: r.family_key };
+        }
+      });
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
 
       setOracle({
         today_pick: {
@@ -764,18 +793,22 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  // Phase 1: layer still off, but alternates are now live
+  // Phase 2: mode-driven layering
   const isViewingForecast = false;
   const today_pick = oraclePick;
   const currentLayerMap = null;
   const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  // Layer suggestion from live Supabase fetch
-  const layerSuggestion = layerFragrance ? { name: layerFragrance.name, family: layerFragrance.family_key } : null;
+  // Active layer mode entry
+  const activeLayerMode = layerModes[selectedMood];
+  const layerSuggestion = activeLayerMode ? { name: activeLayerMode.name, family: activeLayerMode.family_key } : null;
   const hasAlternates = alternates.length > 0;
+  const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
-  const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
+  // Card color follows selected layer mode family when a mode is active
+  const effectiveFamily = activeLayerMode ? activeLayerMode.family_key : today_pick?.family;
+  const bgTintColor = effectiveFamily ? (FAMILY_COLORS[effectiveFamily] ?? null) : null;
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
@@ -984,9 +1017,11 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Family color tinting
-              const familyTint = FAMILY_TINTS[cardPick.family] ?? DEFAULT_TINT;
-              const familyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
+              // Family color tinting — follows active layer mode when selected
+              const cardEffectiveFamily = activeLayerMode ? activeLayerMode.family_key : cardPick.family;
+              const familyTint = FAMILY_TINTS[cardEffectiveFamily] ?? DEFAULT_TINT;
+              const familyColor = FAMILY_COLORS[cardEffectiveFamily] ?? "#888";
+              const baseFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
 
               // Cover flow transforms
               const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
@@ -1079,26 +1114,95 @@ const OdaraScreen = () => {
                         </p>
                       )}
 
-                      {/* Family label with color accent */}
+                      {/* Family label with color accent — always uses base family */}
                       <p
                         className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
-                        style={{ color: familyColor }}
+                        style={{ color: baseFamilyColor }}
                       >
                         {cardPick.family}
                       </p>
                     </div>
 
-                    {/* Layer label — live Supabase data, own family color */}
-                    {isCenter && layerSuggestion && (() => {
-                      const layerColor = FAMILY_COLORS[layerSuggestion.family] ?? '#888';
-                      const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
+                    {/* Mode-driven layer system */}
+                    {isCenter && hasAnyLayerMode && (() => {
+                      const activeModeEntry = layerModes[selectedMood];
+                      if (!activeModeEntry) return null;
 
-                      // Curated notes for layer detail
+                      const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
+                      const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
+
+                      // Curated notes
                       const baseNotesRaw = getCuratedNotes(cardPick.name, null, null);
                       const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-                      const layerNotesRaw = getCuratedNotes(layerSuggestion.name, null, null, baseNoteSet);
-                      const whyText = buildWhyItWorks(cardPick.name, baseNotesRaw, layerSuggestion.name, layerNotesRaw);
+                      const layerNotesRaw = getCuratedNotes(activeModeEntry.name, null, null, baseNoteSet);
                       const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
+
+                      // Mode-specific config
+                      const MOOD_CONFIG: Record<LayerMood, {
+                        token: string;
+                        effect: string;
+                        baseSprays: number;
+                        layerSprays: number;
+                        basePlacement: string;
+                        layerPlacement: string;
+                        placement: string;
+                        result: string;
+                        whyVerb: string;
+                      }> = {
+                        balance: {
+                          token: 'BALANCE',
+                          effect: `Harmonizes with ${getDisplayName(cardPick.name)} for a rounded blend.`,
+                          baseSprays: 3, layerSprays: 1,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists',
+                          placement: 'Base on pulse points, layer on outer edges for natural diffusion.',
+                          result: `A balanced blend where ${getDisplayName(cardPick.name)} leads and ${getDisplayName(activeModeEntry.name)} accents.`,
+                          whyVerb: 'stay grounded',
+                        },
+                        bold: {
+                          token: 'AMPLIFY',
+                          effect: `Boosts projection and presence alongside ${getDisplayName(cardPick.name)}.`,
+                          baseSprays: 2, layerSprays: 2,
+                          basePlacement: 'chest, wrists',
+                          layerPlacement: 'neck, behind ears',
+                          placement: 'Even distribution across hot zones for maximum sillage.',
+                          result: `A powerful statement — ${getDisplayName(cardPick.name)} and ${getDisplayName(activeModeEntry.name)} command the room.`,
+                          whyVerb: 'anchor the intensity',
+                        },
+                        smooth: {
+                          token: 'SOFTEN',
+                          effect: `Softens the edges of ${getDisplayName(cardPick.name)} into a creamy finish.`,
+                          baseSprays: 2, layerSprays: 1,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists, inner elbows',
+                          placement: 'Close-contact zones for intimate projection.',
+                          result: `A smooth, approachable blend — ${getDisplayName(activeModeEntry.name)} creams out the edges.`,
+                          whyVerb: 'provide structure',
+                        },
+                        wild: {
+                          token: 'CONTRAST',
+                          effect: `Adds unexpected tension against ${getDisplayName(cardPick.name)}.`,
+                          baseSprays: 2, layerSprays: 2,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists, collar',
+                          placement: 'Separate zones to let each scent breathe independently.',
+                          result: `An unpredictable blend — ${getDisplayName(cardPick.name)} clashes with ${getDisplayName(activeModeEntry.name)} for magnetism.`,
+                          whyVerb: 'create the foundation',
+                        },
+                      };
+                      const cfg = MOOD_CONFIG[selectedMood];
+
+                      // Build why it works referencing notes
+                      let whyText = '';
+                      if (baseNotesRaw.length > 0 || layerNotesRaw.length > 0) {
+                        const bPart = baseNotesRaw.length > 0
+                          ? `The ${baseNotesRaw.slice(0, 2).join(" and ")} in ${getDisplayName(cardPick.name)} ${cfg.whyVerb}`
+                          : getDisplayName(cardPick.name);
+                        const lPart = layerNotesRaw.length > 0
+                          ? ` while ${layerNotesRaw.slice(0, 2).join(" and ")} from ${getDisplayName(activeModeEntry.name)} add${layerNotesRaw.length === 1 ? 's' : ''} depth`
+                          : '';
+                        whyText = `${bPart}${lPart}.`;
+                      }
 
                       return (
                         <div
@@ -1115,14 +1219,43 @@ const OdaraScreen = () => {
                           }}
                         >
                           <p className="text-[13px] tracking-wide text-white">
-                            Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
+                            Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name)}</span>
                           </p>
                           <span
                             className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
                             style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
                           >
-                            balance
+                            {cfg.token}
                           </span>
+
+                          {/* Mode selector chips */}
+                          <div className="flex gap-1.5 mt-[8px]" onClick={(e) => e.stopPropagation()}>
+                            {LAYER_MOODS.map((mood) => {
+                              const mEntry = layerModes[mood];
+                              if (!mEntry) return null;
+                              const mColor = FAMILY_COLORS[mEntry.family_key] ?? '#888';
+                              return (
+                                <button
+                                  key={mood}
+                                  onClick={() => {
+                                    setSelectedMood(mood);
+                                    setLayerFragrance(mEntry);
+                                  }}
+                                  className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+                                    selectedMood === mood
+                                      ? "text-white"
+                                      : "text-white/40 hover:text-white/70"
+                                  }`}
+                                  style={selectedMood === mood ? {
+                                    background: `${mColor}33`,
+                                    boxShadow: `inset 0 0 0 1px ${mColor}66`,
+                                  } : undefined}
+                                >
+                                  {mood}
+                                </button>
+                              );
+                            })}
+                          </div>
 
                           {/* Expanded layer detail */}
                           <AnimatePresence initial={false}>
@@ -1135,11 +1268,8 @@ const OdaraScreen = () => {
                                 className="w-full overflow-hidden"
                               >
                                 <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-
                                   {/* What it does */}
-                                  <p className="text-[11px] text-white/80 leading-relaxed">
-                                    Balances {getDisplayName(cardPick.name)} with a complementary layer.
-                                  </p>
+                                  <p className="text-[11px] text-white/80 leading-relaxed">{cfg.effect}</p>
 
                                   {/* Key notes */}
                                   {hasNotes && (
@@ -1154,7 +1284,7 @@ const OdaraScreen = () => {
                                         )}
                                         {layerNotesRaw.length > 0 && (
                                           <p className="text-[11px] text-white/80">
-                                            <span className="text-white/50">{getDisplayName(layerSuggestion.name)}:</span>{" "}
+                                            <span className="text-white/50">{getDisplayName(activeModeEntry.name)}:</span>{" "}
                                             {layerNotesRaw.join(", ").toLowerCase()}
                                           </p>
                                         )}
@@ -1169,13 +1299,13 @@ const OdaraScreen = () => {
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">01</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">3×</span> {getDisplayName(cardPick.name)} — chest, neck
+                                          <span className="font-mono">{cfg.baseSprays}×</span> {getDisplayName(cardPick.name)} — {cfg.basePlacement}
                                         </p>
                                       </div>
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">02</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">1×</span> {getDisplayName(layerSuggestion.name)} — wrists
+                                          <span className="font-mono">{cfg.layerSprays}×</span> {getDisplayName(activeModeEntry.name)} — {cfg.layerPlacement}
                                         </p>
                                       </div>
                                     </div>
@@ -1184,12 +1314,10 @@ const OdaraScreen = () => {
                                   {/* Placement */}
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Placement</span>
-                                    <p className="text-[11px] text-white/80 mt-0.5">
-                                      Base on pulse points, layer on outer edges for natural diffusion.
-                                    </p>
+                                    <p className="text-[11px] text-white/80 mt-0.5">{cfg.placement}</p>
                                   </div>
 
-                                  {/* Why it works — must reference notes */}
+                                  {/* Why it works */}
                                   {whyText && (
                                     <div>
                                       <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Why it works</span>
@@ -1200,136 +1328,13 @@ const OdaraScreen = () => {
                                   {/* Result */}
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Result</span>
-                                    <p className="text-[11px] text-white/80 mt-0.5">
-                                      A balanced blend where {getDisplayName(cardPick.name)} leads and {getDisplayName(layerSuggestion.name)} accents.
-                                    </p>
+                                    <p className="text-[11px] text-white/80 mt-0.5">{cfg.result}</p>
                                   </div>
                                 </div>
                               </motion.div>
                             )}
                           </AnimatePresence>
                         </div>
-                      );
-                    })()}
-
-                    {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
-
-                    {/* Layer Card — only on center */}
-                    {isCenter && cardHasLayer && cardActiveLayer && (() => {
-                      const layerFamilyTint = FAMILY_TINTS[cardPick.family] ?? DEFAULT_TINT;
-                      const layerFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
-                      return (
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLayerSheetOpen((o) => !o);
-                        }}
-                        className="w-full rounded-[20px] px-[22px] py-[16px] mb-[10px] flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.98] relative"
-                        style={{
-                          background: `${layerFamilyColor}44`,
-                          border: `1px solid ${layerFamilyColor}AA`,
-                        }}
-                      >
-
-                        <p className="text-[14px] font-medium text-foreground/90 mb-1 tracking-wide">
-                          {cardActiveLayer.top_name ?? cardActiveLayer.top}
-                        </p>
-                        <span
-                          className="text-[9px] text-muted-foreground/80 px-2.5 py-0.5 rounded-full mb-1"
-                          style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
-                        >
-                          {cardActiveLayer.mode}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground/35 tracking-[0.1em]">
-                          {layerSheetOpen ? "tap to close" : "tap for details"}
-                        </span>
-
-                        {/* Expanded details */}
-                        <AnimatePresence initial={false}>
-                          {layerSheetOpen && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-                              className="w-full overflow-hidden"
-                            >
-                              <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                                {/* Mood selector */}
-                                <div className="flex gap-1 justify-center pb-1" onClick={(e) => e.stopPropagation()}>
-                                  {LAYER_MOODS.map((mood) => (
-                                    <button
-                                      key={mood}
-                                      onClick={() => setSelectedMood(mood)}
-                                      className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
-                                        selectedMood === mood
-                                          ? "bg-foreground/10 text-foreground"
-                                          : "text-muted-foreground/40 hover:text-muted-foreground/70"
-                                      }`}
-                                      style={selectedMood === mood ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)" } : undefined}
-                                    >
-                                      {mood}
-                                    </button>
-                                  ))}
-                                </div>
-
-                                <div>
-                                  <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Role</span>
-                                  <p className="text-[11px] text-foreground/75 mt-0.5 leading-relaxed">
-                                    {cardActiveLayer.top_name} acts as {cardActiveLayer.mode === 'balance' ? 'a balancing accent' : cardActiveLayer.mode === 'amplify' ? 'a bold amplifier' : cardActiveLayer.mode === 'soften' ? 'a softening layer' : 'a contrasting element'} to {cardActiveLayer.anchor_name ?? cardPick.name}
-                                  </p>
-                                </div>
-
-                                {(cardActiveLayer.why_it_works || cardActiveLayer.reason) && (
-                                  <div>
-                                    <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Why this works</span>
-                                    <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
-                                      {cardActiveLayer.why_it_works ?? cardActiveLayer.reason}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {(cardActiveLayer.anchor_sprays != null && cardActiveLayer.top_sprays != null) && (
-                                  <div>
-                                    <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Spray order</span>
-                                    <div className="mt-1 space-y-1">
-                                      <div className="flex items-start gap-2">
-                                        <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">01</span>
-                                        <div>
-                                          <p className="text-[11px] text-foreground/80">
-                                            <span className="font-mono">{cardActiveLayer.anchor_sprays}×</span> {cardActiveLayer.anchor_name ?? cardPick.name}
-                                          </p>
-                                          {cardActiveLayer.anchor_placement && (
-                                            <p className="text-[10px] text-muted-foreground/45">{cardActiveLayer.anchor_placement}</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-start gap-2">
-                                        <span className="text-[9px] font-mono text-muted-foreground/40 mt-px">02</span>
-                                        <div>
-                                          <p className="text-[11px] text-foreground/80">
-                                            <span className="font-mono">{cardActiveLayer.top_sprays}×</span> {cardActiveLayer.top_name}
-                                          </p>
-                                          {cardActiveLayer.top_placement && (
-                                            <p className="text-[10px] text-muted-foreground/45">{cardActiveLayer.top_placement}</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div>
-                                  <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/50">Result</span>
-                                  <p className="text-[11px] text-foreground/70 mt-0.5 leading-relaxed">
-                                    {cardActiveLayer.strength_note ?? `A ${cardActiveLayer.mode} blend of ${cardActiveLayer.anchor_name ?? cardPick.name} and ${cardActiveLayer.top_name}`}
-                                  </p>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
                       );
                     })()}
 
