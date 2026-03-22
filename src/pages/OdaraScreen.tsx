@@ -57,34 +57,7 @@ interface LayerOption {
   reason: string;
 }
 
-type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
 
-interface LayerModeEntry {
-  id: string;
-  name: string;
-  brand: string | null;
-  family_key: string;
-}
-
-type LayerModes = Record<LayerMood, LayerModeEntry | null>;
-
-interface OracleData {
-  today_pick: {
-    fragrance_id?: string;
-    name: string;
-    family: string;
-    reason: string;
-  };
-  layer?: Record<LayerMood, LayerOption> | null;
-  alternates?: {
-    fragrance_id?: string;
-    name: string;
-    family?: string;
-    reason?: string;
-  }[] | null;
-}
-
-const LAYER_MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
