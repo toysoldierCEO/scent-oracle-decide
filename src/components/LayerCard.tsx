@@ -172,10 +172,11 @@ const LayerCard = ({
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
   const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
 
-  // Notes
-  const baseNotesRaw = getCuratedNotes(mainName);
+  // Notes — from real DB data
+  const baseNotesRaw = getCuratedNotes(mainNotes);
   const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-  const layerNotesRaw = getCuratedNotes(activeModeEntry.name, baseNoteSet);
+  const layerNoteSource = activeModeEntry.notes ?? activeModeEntry.accords ?? null;
+  const layerNotesRaw = getCuratedNotes(layerNoteSource, baseNoteSet);
   const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);
