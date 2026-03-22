@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
+import LayerCard from "@/components/LayerCard";
+import type { LayerMood, LayerModes, LayerModeEntry } from "@/components/ModeSelector";
+import { LAYER_MOODS } from "@/components/ModeSelector";
 
 /* ── Live fetch replaces old test query ── */
 
