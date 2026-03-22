@@ -793,18 +793,22 @@ const OdaraScreen = () => {
 
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
-  // Phase 1: layer still off, but alternates are now live
+  // Phase 2: mode-driven layering
   const isViewingForecast = false;
   const today_pick = oraclePick;
   const currentLayerMap = null;
   const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  // Layer suggestion from live Supabase fetch
-  const layerSuggestion = layerFragrance ? { name: layerFragrance.name, family: layerFragrance.family_key } : null;
+  // Active layer mode entry
+  const activeLayerMode = layerModes[selectedMood];
+  const layerSuggestion = activeLayerMode ? { name: activeLayerMode.name, family: activeLayerMode.family_key } : null;
   const hasAlternates = alternates.length > 0;
+  const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
-  const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
+  // Card color follows selected layer mode family when a mode is active
+  const effectiveFamily = activeLayerMode ? activeLayerMode.family_key : today_pick?.family;
+  const bgTintColor = effectiveFamily ? (FAMILY_COLORS[effectiveFamily] ?? null) : null;
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
