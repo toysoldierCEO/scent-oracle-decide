@@ -581,7 +581,7 @@ const OdaraScreen = () => {
       // Fetch main card — if excludeId provided, skip that row (used after alt tap)
       let mainQuery = supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .limit(1);
       if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
       const { data: rows, error: qErr } = await mainQuery.single();
