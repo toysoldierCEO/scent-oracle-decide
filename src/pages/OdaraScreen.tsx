@@ -472,7 +472,7 @@ function buildForecastDays(): ForecastDay[] {
         strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
       };
       layerMap = {
-        balanced: layerOption,
+        balance: layerOption,
         bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
         smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
         wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
