@@ -90,6 +90,13 @@ const FAMILY_COLORS: Record<string, string> = {
   "citrus-cologne": "#F4D35E",
   "floral-musk": "#C4A0B9",
   "citrus-aromatic": "#B8C94E",
+  "fresh-citrus": "#F4D35E",
+  "spicy-warm": "#D4713B",
+  "fresh-aquatic": "#5BC0DE",
+  "earthy-patchouli": "#8B7355",
+  "aromatic-fougere": "#6B8E6B",
+  "floral-rich": "#D4839E",
+  "green-earthy": "#6B8E5A",
 };
 
 /* Family → tint colors for card backgrounds (subtle, desaturated) */
@@ -103,6 +110,13 @@ const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string; m
   "citrus-cologne":  { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
   "citrus-aromatic": { bg: "rgba(184,201,78,0.07)",  glow: "rgba(184,201,78,0.15)",  border: "rgba(184,201,78,0.12)", material: "rgba(150,170,60,0.05)" },
   "floral-musk":     { bg: "rgba(196,160,185,0.07)", glow: "rgba(196,160,185,0.15)", border: "rgba(196,160,185,0.12)", material: "rgba(170,130,160,0.05)" },
+  "fresh-citrus":    { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
+  "spicy-warm":      { bg: "rgba(212,113,59,0.08)",  glow: "rgba(212,113,59,0.18)",  border: "rgba(212,113,59,0.14)", material: "rgba(180,90,40,0.07)" },
+  "fresh-aquatic":   { bg: "rgba(91,192,222,0.08)",  glow: "rgba(91,192,222,0.18)",  border: "rgba(91,192,222,0.14)", material: "rgba(70,160,190,0.06)" },
+  "earthy-patchouli":{ bg: "rgba(139,115,85,0.08)",  glow: "rgba(139,115,85,0.18)",  border: "rgba(139,115,85,0.14)", material: "rgba(115,90,65,0.07)" },
+  "aromatic-fougere":{ bg: "rgba(107,142,107,0.08)", glow: "rgba(107,142,107,0.18)", border: "rgba(107,142,107,0.14)", material: "rgba(85,120,85,0.06)" },
+  "floral-rich":     { bg: "rgba(212,131,158,0.07)", glow: "rgba(212,131,158,0.15)", border: "rgba(212,131,158,0.12)", material: "rgba(180,110,135,0.05)" },
+  "green-earthy":    { bg: "rgba(107,142,90,0.07)",  glow: "rgba(107,142,90,0.15)",  border: "rgba(107,142,90,0.12)", material: "rgba(85,120,70,0.05)" },
 };
 
 const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
@@ -117,6 +131,13 @@ const FAMILY_LABELS: Record<string, string> = {
   "floral-musk": "Floral & Musk",
   "citrus-aromatic": "Citrus & Aromatic",
   "citrus-cologne": "Citrus Cologne",
+  "fresh-citrus": "Fresh Citrus",
+  "spicy-warm": "Spicy & Warm",
+  "fresh-aquatic": "Fresh & Aquatic",
+  "earthy-patchouli": "Earthy Patchouli",
+  "aromatic-fougere": "Aromatic Fougère",
+  "floral-rich": "Rich Floral",
+  "green-earthy": "Green & Earthy",
 };
 
 interface FragranceProfile {
