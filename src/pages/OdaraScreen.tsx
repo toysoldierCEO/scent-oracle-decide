@@ -1141,6 +1141,7 @@ const OdaraScreen = () => {
                       <LayerCard
                         mainName={cardPick.name}
                         mainBrand={cardPick.reason}
+                        mainNotes={mainNotes}
                         layerModes={layerModes}
                         selectedMood={selectedMood}
                         onSelectMood={(mood) => {
