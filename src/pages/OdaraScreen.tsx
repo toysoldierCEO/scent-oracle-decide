@@ -429,6 +429,7 @@ function buildForecastDays(): ForecastDay[] {
 
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
+  const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionState, setActionState] = useState<ActionState>("idle");
