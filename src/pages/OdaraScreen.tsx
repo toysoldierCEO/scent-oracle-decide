@@ -6,6 +6,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /* ── Live fetch replaces old test query ── */
 
+/** Display-only: strip trailing filler like "for Men", "for Women", "Eau de Parfum" etc. */
+function getDisplayName(name: string): string {
+  return name
+    .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, '')
+    .trim();
+}
+
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
@@ -989,7 +996,7 @@ const OdaraScreen = () => {
                       onContextMenu={(e) => e.preventDefault()}
                     >
                       <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                        {cardPick.name}
+                        {getDisplayName(cardPick.name)}
                       </h1>
 
                       {/* Brand name — from live Supabase data */}
@@ -1012,7 +1019,7 @@ const OdaraScreen = () => {
                     {isCenter && layerSuggestion && (
                       <div className="flex flex-col items-center mb-[14px]">
                         <p className="text-[13px] text-foreground/80 tracking-wide select-none">
-                          Layer: <span className="font-medium">{layerSuggestion.name}</span>
+                          Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
                         </p>
                         <span
                           className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/60 mt-[4px] px-3 py-[2px] rounded-full select-none"
@@ -1175,7 +1182,7 @@ const OdaraScreen = () => {
                                 minHeight: "40px",
                               }}
                             >
-                              {alt.name}
+                              {getDisplayName(alt.name)}
                             </motion.button>
                           );
                         })}
