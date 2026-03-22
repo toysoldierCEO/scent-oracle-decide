@@ -569,7 +569,7 @@ const OdaraScreen = () => {
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
 
-      // Fetch 3 alternatives excluding the main card
+      // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key')
@@ -581,18 +581,29 @@ const OdaraScreen = () => {
         fragrance_id: r.id,
         name: r.name,
         family: r.family_key ?? '',
-        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+        reason: rows.brand ?? '',
       }));
 
-      // Fetch layer fragrance (different from main)
-      const { data: layerRow } = await supabaseClient
+      // Fetch 4 layer fragrances for mode system (separate from alternatives)
+      const altIds = (altRows ?? []).map((r: any) => r.id);
+      let layerQuery = supabaseClient
         .from('fragrances')
         .select('id, name, family_key')
         .neq('id', rows.id)
         .not('family_key', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      setLayerFragrance(layerRow ?? null);
+        .limit(4);
+      const { data: layerRows } = await layerQuery;
+
+      const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+      const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+      (layerRows ?? []).forEach((r: any, i: number) => {
+        if (i < 4) {
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, family_key: r.family_key };
+        }
+      });
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
 
       const liveOracle: OracleData = {
         today_pick: {
