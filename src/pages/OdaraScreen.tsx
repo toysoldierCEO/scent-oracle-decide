@@ -650,11 +650,12 @@ const OdaraScreen = () => {
         reason: row.brand ?? '',
       }));
 
-      // Fetch 4 layer fragrances for mode system
+      // Fetch 4 layer fragrances for mode system — exclude main AND alternatives
+      const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, family_key')
-        .neq('id', row.id)
+        .select('id, name, brand, family_key')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
 
