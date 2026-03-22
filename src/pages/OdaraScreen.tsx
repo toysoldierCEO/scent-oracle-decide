@@ -47,7 +47,15 @@ interface LayerOption {
   reason: string;
 }
 
-type LayerMood = 'balanced' | 'bold' | 'smooth' | 'wild';
+type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
+
+interface LayerModeEntry {
+  id: string;
+  name: string;
+  family_key: string;
+}
+
+type LayerModes = Record<LayerMood, LayerModeEntry | null>;
 
 interface OracleData {
   today_pick: {
