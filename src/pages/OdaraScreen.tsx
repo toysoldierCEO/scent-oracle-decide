@@ -1114,26 +1114,95 @@ const OdaraScreen = () => {
                         </p>
                       )}
 
-                      {/* Family label with color accent */}
+                      {/* Family label with color accent — always uses base family */}
                       <p
                         className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
-                        style={{ color: familyColor }}
+                        style={{ color: baseFamilyColor }}
                       >
                         {cardPick.family}
                       </p>
                     </div>
 
-                    {/* Layer label — live Supabase data, own family color */}
-                    {isCenter && layerSuggestion && (() => {
-                      const layerColor = FAMILY_COLORS[layerSuggestion.family] ?? '#888';
-                      const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
+                    {/* Mode-driven layer system */}
+                    {isCenter && hasAnyLayerMode && (() => {
+                      const activeModeEntry = layerModes[selectedMood];
+                      if (!activeModeEntry) return null;
 
-                      // Curated notes for layer detail
+                      const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
+                      const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
+
+                      // Curated notes
                       const baseNotesRaw = getCuratedNotes(cardPick.name, null, null);
                       const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-                      const layerNotesRaw = getCuratedNotes(layerSuggestion.name, null, null, baseNoteSet);
-                      const whyText = buildWhyItWorks(cardPick.name, baseNotesRaw, layerSuggestion.name, layerNotesRaw);
+                      const layerNotesRaw = getCuratedNotes(activeModeEntry.name, null, null, baseNoteSet);
                       const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
+
+                      // Mode-specific config
+                      const MOOD_CONFIG: Record<LayerMood, {
+                        token: string;
+                        effect: string;
+                        baseSprays: number;
+                        layerSprays: number;
+                        basePlacement: string;
+                        layerPlacement: string;
+                        placement: string;
+                        result: string;
+                        whyVerb: string;
+                      }> = {
+                        balance: {
+                          token: 'BALANCE',
+                          effect: `Harmonizes with ${getDisplayName(cardPick.name)} for a rounded blend.`,
+                          baseSprays: 3, layerSprays: 1,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists',
+                          placement: 'Base on pulse points, layer on outer edges for natural diffusion.',
+                          result: `A balanced blend where ${getDisplayName(cardPick.name)} leads and ${getDisplayName(activeModeEntry.name)} accents.`,
+                          whyVerb: 'stay grounded',
+                        },
+                        bold: {
+                          token: 'AMPLIFY',
+                          effect: `Boosts projection and presence alongside ${getDisplayName(cardPick.name)}.`,
+                          baseSprays: 2, layerSprays: 2,
+                          basePlacement: 'chest, wrists',
+                          layerPlacement: 'neck, behind ears',
+                          placement: 'Even distribution across hot zones for maximum sillage.',
+                          result: `A powerful statement — ${getDisplayName(cardPick.name)} and ${getDisplayName(activeModeEntry.name)} command the room.`,
+                          whyVerb: 'anchor the intensity',
+                        },
+                        smooth: {
+                          token: 'SOFTEN',
+                          effect: `Softens the edges of ${getDisplayName(cardPick.name)} into a creamy finish.`,
+                          baseSprays: 2, layerSprays: 1,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists, inner elbows',
+                          placement: 'Close-contact zones for intimate projection.',
+                          result: `A smooth, approachable blend — ${getDisplayName(activeModeEntry.name)} creams out the edges.`,
+                          whyVerb: 'provide structure',
+                        },
+                        wild: {
+                          token: 'CONTRAST',
+                          effect: `Adds unexpected tension against ${getDisplayName(cardPick.name)}.`,
+                          baseSprays: 2, layerSprays: 2,
+                          basePlacement: 'chest, neck',
+                          layerPlacement: 'wrists, collar',
+                          placement: 'Separate zones to let each scent breathe independently.',
+                          result: `An unpredictable blend — ${getDisplayName(cardPick.name)} clashes with ${getDisplayName(activeModeEntry.name)} for magnetism.`,
+                          whyVerb: 'create the foundation',
+                        },
+                      };
+                      const cfg = MOOD_CONFIG[selectedMood];
+
+                      // Build why it works referencing notes
+                      let whyText = '';
+                      if (baseNotesRaw.length > 0 || layerNotesRaw.length > 0) {
+                        const bPart = baseNotesRaw.length > 0
+                          ? `The ${baseNotesRaw.slice(0, 2).join(" and ")} in ${getDisplayName(cardPick.name)} ${cfg.whyVerb}`
+                          : getDisplayName(cardPick.name);
+                        const lPart = layerNotesRaw.length > 0
+                          ? ` while ${layerNotesRaw.slice(0, 2).join(" and ")} from ${getDisplayName(activeModeEntry.name)} add${layerNotesRaw.length === 1 ? 's' : ''} depth`
+                          : '';
+                        whyText = `${bPart}${lPart}.`;
+                      }
 
                       return (
                         <div
@@ -1150,14 +1219,43 @@ const OdaraScreen = () => {
                           }}
                         >
                           <p className="text-[13px] tracking-wide text-white">
-                            Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
+                            Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name)}</span>
                           </p>
                           <span
                             className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
                             style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
                           >
-                            balance
+                            {cfg.token}
                           </span>
+
+                          {/* Mode selector chips */}
+                          <div className="flex gap-1.5 mt-[8px]" onClick={(e) => e.stopPropagation()}>
+                            {LAYER_MOODS.map((mood) => {
+                              const mEntry = layerModes[mood];
+                              if (!mEntry) return null;
+                              const mColor = FAMILY_COLORS[mEntry.family_key] ?? '#888';
+                              return (
+                                <button
+                                  key={mood}
+                                  onClick={() => {
+                                    setSelectedMood(mood);
+                                    setLayerFragrance(mEntry);
+                                  }}
+                                  className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+                                    selectedMood === mood
+                                      ? "text-white"
+                                      : "text-white/40 hover:text-white/70"
+                                  }`}
+                                  style={selectedMood === mood ? {
+                                    background: `${mColor}33`,
+                                    boxShadow: `inset 0 0 0 1px ${mColor}66`,
+                                  } : undefined}
+                                >
+                                  {mood}
+                                </button>
+                              );
+                            })}
+                          </div>
 
                           {/* Expanded layer detail */}
                           <AnimatePresence initial={false}>
@@ -1170,11 +1268,8 @@ const OdaraScreen = () => {
                                 className="w-full overflow-hidden"
                               >
                                 <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-
                                   {/* What it does */}
-                                  <p className="text-[11px] text-white/80 leading-relaxed">
-                                    Balances {getDisplayName(cardPick.name)} with a complementary layer.
-                                  </p>
+                                  <p className="text-[11px] text-white/80 leading-relaxed">{cfg.effect}</p>
 
                                   {/* Key notes */}
                                   {hasNotes && (
@@ -1189,7 +1284,7 @@ const OdaraScreen = () => {
                                         )}
                                         {layerNotesRaw.length > 0 && (
                                           <p className="text-[11px] text-white/80">
-                                            <span className="text-white/50">{getDisplayName(layerSuggestion.name)}:</span>{" "}
+                                            <span className="text-white/50">{getDisplayName(activeModeEntry.name)}:</span>{" "}
                                             {layerNotesRaw.join(", ").toLowerCase()}
                                           </p>
                                         )}
@@ -1204,13 +1299,13 @@ const OdaraScreen = () => {
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">01</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">3×</span> {getDisplayName(cardPick.name)} — chest, neck
+                                          <span className="font-mono">{cfg.baseSprays}×</span> {getDisplayName(cardPick.name)} — {cfg.basePlacement}
                                         </p>
                                       </div>
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">02</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">1×</span> {getDisplayName(layerSuggestion.name)} — wrists
+                                          <span className="font-mono">{cfg.layerSprays}×</span> {getDisplayName(activeModeEntry.name)} — {cfg.layerPlacement}
                                         </p>
                                       </div>
                                     </div>
@@ -1219,12 +1314,10 @@ const OdaraScreen = () => {
                                   {/* Placement */}
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Placement</span>
-                                    <p className="text-[11px] text-white/80 mt-0.5">
-                                      Base on pulse points, layer on outer edges for natural diffusion.
-                                    </p>
+                                    <p className="text-[11px] text-white/80 mt-0.5">{cfg.placement}</p>
                                   </div>
 
-                                  {/* Why it works — must reference notes */}
+                                  {/* Why it works */}
                                   {whyText && (
                                     <div>
                                       <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Why it works</span>
@@ -1235,9 +1328,7 @@ const OdaraScreen = () => {
                                   {/* Result */}
                                   <div>
                                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Result</span>
-                                    <p className="text-[11px] text-white/80 mt-0.5">
-                                      A balanced blend where {getDisplayName(cardPick.name)} leads and {getDisplayName(layerSuggestion.name)} accents.
-                                    </p>
+                                    <p className="text-[11px] text-white/80 mt-0.5">{cfg.result}</p>
                                   </div>
                                 </div>
                               </motion.div>
