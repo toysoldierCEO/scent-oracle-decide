@@ -584,15 +584,14 @@ const OdaraScreen = () => {
         reason: rows.brand ?? '',
       }));
 
-      // Fetch 4 layer fragrances for mode system (separate from alternatives)
-      const altIds = (altRows ?? []).map((r: any) => r.id);
-      let layerQuery = supabaseClient
+      // Fetch 4 layer fragrances for mode system — exclude main AND alternatives
+      const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
+      const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, family_key')
-        .neq('id', rows.id)
+        .select('id, name, brand, family_key')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
-      const { data: layerRows } = await layerQuery;
 
       const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
       const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
