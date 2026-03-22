@@ -673,7 +673,7 @@ const OdaraScreen = () => {
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
