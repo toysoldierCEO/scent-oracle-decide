@@ -1019,7 +1019,7 @@ const OdaraScreen = () => {
                     {isCenter && layerSuggestion && (
                       <div className="flex flex-col items-center mb-[14px]">
                         <p className="text-[13px] text-foreground/80 tracking-wide select-none">
-                          Layer: <span className="font-medium">{layerSuggestion.name}</span>
+                          Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
                         </p>
                         <span
                           className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/60 mt-[4px] px-3 py-[2px] rounded-full select-none"
