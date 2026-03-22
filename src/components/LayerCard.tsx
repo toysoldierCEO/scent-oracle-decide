@@ -158,6 +158,7 @@ interface LayerCardProps {
 const LayerCard = ({
   mainName,
   mainBrand,
+  mainNotes,
   layerModes,
   selectedMood,
   onSelectMood,
