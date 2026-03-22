@@ -605,7 +605,7 @@ const OdaraScreen = () => {
       const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
       (layerRows ?? []).forEach((r: any, i: number) => {
         if (i < 4) {
-          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, family_key: r.family_key };
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key };
         }
       });
       setLayerModes(newLayerModes);
