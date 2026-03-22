@@ -12,6 +12,13 @@ export const FAMILY_COLORS: Record<string, string> = {
   "citrus-cologne": "#F4D35E",
   "floral-musk": "#C4A0B9",
   "citrus-aromatic": "#B8C94E",
+  "fresh-citrus": "#F4D35E",
+  "spicy-warm": "#D4713B",
+  "fresh-aquatic": "#5BC0DE",
+  "earthy-patchouli": "#8B7355",
+  "aromatic-fougere": "#6B8E6B",
+  "floral-rich": "#D4839E",
+  "green-earthy": "#6B8E5A",
 };
 
 export const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string; material: string }> = {
