@@ -648,18 +648,27 @@ const OdaraScreen = () => {
         fragrance_id: r.id,
         name: r.name,
         family: r.family_key ?? '',
-        reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
+        reason: row.brand ?? '',
       }));
 
-      // Fetch layer fragrance for new main
-      const { data: layerRow } = await supabaseClient
+      // Fetch 4 layer fragrances for mode system
+      const { data: layerRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, family_key')
         .neq('id', row.id)
         .not('family_key', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      setLayerFragrance(layerRow ?? null);
+        .limit(4);
+
+      const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+      const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+      (layerRows ?? []).forEach((r: any, i: number) => {
+        if (i < 4) {
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, family_key: r.family_key };
+        }
+      });
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
 
       setOracle({
         today_pick: {
