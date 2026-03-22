@@ -1159,42 +1159,42 @@ const OdaraScreen = () => {
                       }> = {
                         balance: {
                           token: 'BALANCE',
-                          effect: `Harmonizes with ${getDisplayName(cardPick.name)} for a rounded blend.`,
+                          effect: `Harmonizes with ${getDisplayName(cardPick.name, cardPick.reason)} for a rounded blend.`,
                           baseSprays: 3, layerSprays: 1,
                           basePlacement: 'chest, neck',
                           layerPlacement: 'wrists',
                           placement: 'Base on pulse points, layer on outer edges for natural diffusion.',
-                          result: `A balanced blend where ${getDisplayName(cardPick.name)} leads and ${getDisplayName(activeModeEntry.name)} accents.`,
+                          result: `A balanced blend where ${getDisplayName(cardPick.name, cardPick.reason)} leads and ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} accents.`,
                           whyVerb: 'stay grounded',
                         },
                         bold: {
                           token: 'AMPLIFY',
-                          effect: `Boosts projection and presence alongside ${getDisplayName(cardPick.name)}.`,
+                          effect: `Boosts projection and presence alongside ${getDisplayName(cardPick.name, cardPick.reason)}.`,
                           baseSprays: 2, layerSprays: 2,
                           basePlacement: 'chest, wrists',
                           layerPlacement: 'neck, behind ears',
                           placement: 'Even distribution across hot zones for maximum sillage.',
-                          result: `A powerful statement — ${getDisplayName(cardPick.name)} and ${getDisplayName(activeModeEntry.name)} command the room.`,
+                          result: `A powerful statement — ${getDisplayName(cardPick.name, cardPick.reason)} and ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} command the room.`,
                           whyVerb: 'anchor the intensity',
                         },
                         smooth: {
                           token: 'SOFTEN',
-                          effect: `Softens the edges of ${getDisplayName(cardPick.name)} into a creamy finish.`,
+                          effect: `Softens the edges of ${getDisplayName(cardPick.name, cardPick.reason)} into a creamy finish.`,
                           baseSprays: 2, layerSprays: 1,
                           basePlacement: 'chest, neck',
                           layerPlacement: 'wrists, inner elbows',
                           placement: 'Close-contact zones for intimate projection.',
-                          result: `A smooth, approachable blend — ${getDisplayName(activeModeEntry.name)} creams out the edges.`,
+                          result: `A smooth, approachable blend — ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} creams out the edges.`,
                           whyVerb: 'provide structure',
                         },
                         wild: {
                           token: 'CONTRAST',
-                          effect: `Adds unexpected tension against ${getDisplayName(cardPick.name)}.`,
+                          effect: `Adds unexpected tension against ${getDisplayName(cardPick.name, cardPick.reason)}.`,
                           baseSprays: 2, layerSprays: 2,
                           basePlacement: 'chest, neck',
                           layerPlacement: 'wrists, collar',
                           placement: 'Separate zones to let each scent breathe independently.',
-                          result: `An unpredictable blend — ${getDisplayName(cardPick.name)} clashes with ${getDisplayName(activeModeEntry.name)} for magnetism.`,
+                          result: `An unpredictable blend — ${getDisplayName(cardPick.name, cardPick.reason)} clashes with ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} for magnetism.`,
                           whyVerb: 'create the foundation',
                         },
                       };
@@ -1204,10 +1204,10 @@ const OdaraScreen = () => {
                       let whyText = '';
                       if (baseNotesRaw.length > 0 || layerNotesRaw.length > 0) {
                         const bPart = baseNotesRaw.length > 0
-                          ? `The ${baseNotesRaw.slice(0, 2).join(" and ")} in ${getDisplayName(cardPick.name)} ${cfg.whyVerb}`
-                          : getDisplayName(cardPick.name);
+                          ? `The ${baseNotesRaw.slice(0, 2).join(" and ")} in ${getDisplayName(cardPick.name, cardPick.reason)} ${cfg.whyVerb}`
+                          : getDisplayName(cardPick.name, cardPick.reason);
                         const lPart = layerNotesRaw.length > 0
-                          ? ` while ${layerNotesRaw.slice(0, 2).join(" and ")} from ${getDisplayName(activeModeEntry.name)} add${layerNotesRaw.length === 1 ? 's' : ''} depth`
+                          ? ` while ${layerNotesRaw.slice(0, 2).join(" and ")} from ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} add${layerNotesRaw.length === 1 ? 's' : ''} depth`
                           : '';
                         whyText = `${bPart}${lPart}.`;
                       }
@@ -1227,7 +1227,7 @@ const OdaraScreen = () => {
                           }}
                         >
                           <p className="text-[13px] tracking-wide text-white">
-                            Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name)}</span>
+                            Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</span>
                           </p>
                           <span
                             className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
@@ -1286,13 +1286,13 @@ const OdaraScreen = () => {
                                       <div className="mt-1 space-y-0.5">
                                         {baseNotesRaw.length > 0 && (
                                           <p className="text-[11px] text-white/80">
-                                            <span className="text-white/50">{getDisplayName(cardPick.name)}:</span>{" "}
+                                            <span className="text-white/50">{getDisplayName(cardPick.name, cardPick.reason)}:</span>{" "}
                                             {baseNotesRaw.join(", ").toLowerCase()}
                                           </p>
                                         )}
                                         {layerNotesRaw.length > 0 && (
                                           <p className="text-[11px] text-white/80">
-                                            <span className="text-white/50">{getDisplayName(activeModeEntry.name)}:</span>{" "}
+                                            <span className="text-white/50">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}:</span>{" "}
                                             {layerNotesRaw.join(", ").toLowerCase()}
                                           </p>
                                         )}
@@ -1307,13 +1307,13 @@ const OdaraScreen = () => {
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">01</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">{cfg.baseSprays}×</span> {getDisplayName(cardPick.name)} — {cfg.basePlacement}
+                                          <span className="font-mono">{cfg.baseSprays}×</span> {getDisplayName(cardPick.name, cardPick.reason)} — {cfg.basePlacement}
                                         </p>
                                       </div>
                                       <div className="flex items-start gap-2">
                                         <span className="text-[9px] font-mono text-white/40 mt-px">02</span>
                                         <p className="text-[11px] text-white/80">
-                                          <span className="font-mono">{cfg.layerSprays}×</span> {getDisplayName(activeModeEntry.name)} — {cfg.layerPlacement}
+                                          <span className="font-mono">{cfg.layerSprays}×</span> {getDisplayName(activeModeEntry.name, activeModeEntry.brand)} — {cfg.layerPlacement}
                                         </p>
                                       </div>
                                     </div>
