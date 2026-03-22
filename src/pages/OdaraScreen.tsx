@@ -584,15 +584,14 @@ const OdaraScreen = () => {
         reason: rows.brand ?? '',
       }));
 
-      // Fetch 4 layer fragrances for mode system (separate from alternatives)
-      const altIds = (altRows ?? []).map((r: any) => r.id);
-      let layerQuery = supabaseClient
+      // Fetch 4 layer fragrances for mode system — exclude main AND alternatives
+      const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
+      const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, family_key')
-        .neq('id', rows.id)
+        .select('id, name, brand, family_key')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
-      const { data: layerRows } = await layerQuery;
 
       const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
       const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
@@ -651,11 +650,12 @@ const OdaraScreen = () => {
         reason: row.brand ?? '',
       }));
 
-      // Fetch 4 layer fragrances for mode system
+      // Fetch 4 layer fragrances for mode system — exclude main AND alternatives
+      const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, family_key')
-        .neq('id', row.id)
+        .select('id, name, brand, family_key')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
 
@@ -806,8 +806,8 @@ const OdaraScreen = () => {
   const hasAlternates = alternates.length > 0;
   const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
-  // Card color follows selected layer mode family when a mode is active
-  const effectiveFamily = activeLayerMode ? activeLayerMode.family_key : today_pick?.family;
+  // Card color stays fixed to main fragrance family
+  const effectiveFamily = today_pick?.family;
   const bgTintColor = effectiveFamily ? (FAMILY_COLORS[effectiveFamily] ?? null) : null;
 
   const handleForecastDayTap = (index: number) => {
@@ -1017,8 +1017,8 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Family color tinting — follows active layer mode when selected
-              const cardEffectiveFamily = activeLayerMode ? activeLayerMode.family_key : cardPick.family;
+              // Card color stays fixed to main fragrance family
+              const cardEffectiveFamily = cardPick.family;
               const familyTint = FAMILY_TINTS[cardEffectiveFamily] ?? DEFAULT_TINT;
               const familyColor = FAMILY_COLORS[cardEffectiveFamily] ?? "#888";
               const baseFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
