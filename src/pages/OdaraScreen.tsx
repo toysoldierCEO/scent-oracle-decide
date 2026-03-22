@@ -579,6 +579,16 @@ const OdaraScreen = () => {
         reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
       }));
 
+      // Fetch layer fragrance for new main
+      const { data: layerRow } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, family_key')
+        .neq('id', row.id)
+        .not('family_key', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      setLayerFragrance(layerRow ?? null);
+
       setOracle({
         today_pick: {
           fragrance_id: row.id,
