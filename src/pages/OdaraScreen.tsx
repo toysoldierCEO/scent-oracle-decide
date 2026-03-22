@@ -59,6 +59,7 @@ type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
 interface LayerModeEntry {
   id: string;
   name: string;
+  brand: string | null;
   family_key: string;
 }
 
