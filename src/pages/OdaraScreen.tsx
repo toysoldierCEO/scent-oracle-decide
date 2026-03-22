@@ -56,7 +56,21 @@ interface LayerOption {
   dominance_level?: 'low' | 'medium' | 'high';
   reason: string;
 }
-
+interface OracleData {
+  today_pick: {
+    fragrance_id?: string;
+    name: string;
+    family: string;
+    reason: string;
+  };
+  layer?: Record<LayerMood, LayerOption> | null;
+  alternates?: {
+    fragrance_id?: string;
+    name: string;
+    family?: string;
+    reason?: string;
+  }[] | null;
+}
 
 
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
