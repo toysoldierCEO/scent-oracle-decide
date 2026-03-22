@@ -132,6 +132,58 @@ function performanceLabel(score: number): string {
   return "Strong";
 }
 
+/** Generic notes to filter out when selecting distinctive notes */
+const GENERIC_NOTES = new Set(["fresh", "clean", "warm", "soft", "light", "smooth", "musk", "white musk"]);
+
+/**
+ * Get max 3 distinctive notes for a fragrance, preferring non-generic ones.
+ * Falls back to accords string split if notes unavailable.
+ */
+function getCuratedNotes(
+  name: string,
+  dbNotes: string | null | undefined,
+  dbAccords: string | null | undefined,
+  exclude: Set<string> = new Set(),
+): string[] {
+  // 1. Try DB notes (comma-separated string)
+  let pool: string[] = [];
+  if (dbNotes) {
+    pool = dbNotes.split(",").map(n => n.trim()).filter(Boolean);
+  }
+  // 2. Fallback: DB accords
+  if (pool.length === 0 && dbAccords) {
+    pool = dbAccords.split(",").map(n => n.trim()).filter(Boolean);
+  }
+  // 3. Fallback: local FRAGRANCE_PROFILES
+  if (pool.length === 0) {
+    const profile = FRAGRANCE_PROFILES[name];
+    if (profile) {
+      const all = [
+        ...(profile.top_notes ?? []),
+        ...(profile.heart_notes ?? []),
+        ...(profile.base_notes ?? []),
+      ];
+      pool = all;
+    }
+  }
+  if (pool.length === 0) return [];
+
+  // Filter: remove generic, remove duplicates with other fragrance
+  const distinctive = pool.filter(n => !GENERIC_NOTES.has(n.toLowerCase()) && !exclude.has(n.toLowerCase()));
+  const fallback = pool.filter(n => !exclude.has(n.toLowerCase()));
+  const source = distinctive.length >= 2 ? distinctive : fallback;
+  return source.slice(0, 3);
+}
+
+/** Build a "why it works" explanation referencing actual notes */
+function buildWhyItWorks(baseName: string, baseNotes: string[], layerName: string, layerNotes: string[]): string {
+  if (baseNotes.length === 0 && layerNotes.length === 0) return "";
+  const bPart = baseNotes.length > 0 ? `The ${baseNotes.slice(0, 2).join(" and ")} in ${getDisplayName(baseName)}` : getDisplayName(baseName);
+  const lPart = layerNotes.length > 0 ? `while ${layerNotes.slice(0, 2).join(" and ")} from ${getDisplayName(layerName)} add${layerNotes.length === 1 ? "s" : ""} depth` : "";
+  if (lPart) return `${bPart} stay grounded ${lPart}.`;
+  return `${bPart} anchors the blend with character.`;
+}
+
 /* Brand mapping */
 const FRAGRANCE_BRANDS: Record<string, string> = {
   "Valley of the Kings": "Alexandria Fragrances",
