@@ -1017,8 +1017,8 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Family color tinting — follows active layer mode when selected
-              const cardEffectiveFamily = activeLayerMode ? activeLayerMode.family_key : cardPick.family;
+              // Card color stays fixed to main fragrance family
+              const cardEffectiveFamily = cardPick.family;
               const familyTint = FAMILY_TINTS[cardEffectiveFamily] ?? DEFAULT_TINT;
               const familyColor = FAMILY_COLORS[cardEffectiveFamily] ?? "#888";
               const baseFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
