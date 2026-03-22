@@ -506,7 +506,66 @@ function buildForecastDays(): ForecastDay[] {
   });
 }
 
-const OdaraScreen = () => {
+/**
+ * Pick 4 layer fragrances maximizing family_key diversity.
+ * Groups candidates by family, picks one per family first,
+ * then fills remaining slots from leftover candidates.
+ */
+function pickDiverseLayerModes(candidates: any[]): LayerModes {
+  const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+  const result: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+
+  if (!candidates || candidates.length === 0) return result;
+
+  // Group by family_key — pick first candidate per family
+  const familyMap = new Map<string, any[]>();
+  for (const c of candidates) {
+    const fk = c.family_key as string;
+    if (!familyMap.has(fk)) familyMap.set(fk, []);
+    familyMap.get(fk)!.push(c);
+  }
+
+  // Pick one representative per distinct family
+  const picked: any[] = [];
+  const usedIds = new Set<string>();
+  for (const [, members] of familyMap) {
+    if (picked.length >= 4) break;
+    const rep = members[0];
+    picked.push(rep);
+    usedIds.add(rep.id);
+  }
+
+  // If fewer than 4 distinct families, fill from remaining candidates
+  if (picked.length < 4) {
+    for (const c of candidates) {
+      if (picked.length >= 4) break;
+      if (!usedIds.has(c.id)) {
+        picked.push(c);
+        usedIds.add(c.id);
+      }
+    }
+  }
+
+  // Assign to modes
+  picked.forEach((r, i) => {
+    if (i < 4) {
+      result[moodKeys[i]] = {
+        id: r.id,
+        name: r.name,
+        brand: r.brand ?? null,
+        family_key: r.family_key,
+        notes: r.notes ?? null,
+        accords: r.accords ?? null,
+      };
+    }
+  });
+
+  console.log('[ODARA] Layer mode families:', moodKeys.map((m, i) => `${m.toUpperCase()}=${picked[i]?.family_key ?? 'none'}`).join(', '));
+
+  return result;
+}
+
+
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
