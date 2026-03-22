@@ -588,6 +588,7 @@ const OdaraScreen = () => {
       const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
+      setMainNotes(rows.notes ?? rows.accords ?? null);
 
       // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
