@@ -131,6 +131,13 @@ const FAMILY_LABELS: Record<string, string> = {
   "floral-musk": "Floral & Musk",
   "citrus-aromatic": "Citrus & Aromatic",
   "citrus-cologne": "Citrus Cologne",
+  "fresh-citrus": "Fresh Citrus",
+  "spicy-warm": "Spicy & Warm",
+  "fresh-aquatic": "Fresh & Aquatic",
+  "earthy-patchouli": "Earthy Patchouli",
+  "aromatic-fougere": "Aromatic Fougère",
+  "floral-rich": "Rich Floral",
+  "green-earthy": "Green & Earthy",
 };
 
 interface FragranceProfile {
