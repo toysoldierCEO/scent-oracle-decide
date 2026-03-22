@@ -538,7 +538,7 @@ const OdaraScreen = () => {
           fragrance_id: rows.id,
           name: rows.name,
           family: rows.family_key ?? '',
-          reason: `${rows.brand} — ${rows.family_key ?? 'signature'}`,
+          reason: rows.brand ?? '',
         },
         layer: null,
         alternates: liveAlternates,
