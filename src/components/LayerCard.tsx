@@ -123,24 +123,26 @@ function buildWhyItWorks(
   const b = baseNotes.slice(0, 2).map(n => n.toLowerCase());
   const l = layerNotes.slice(0, 2).map(n => n.toLowerCase());
 
-  // If no notes at all, return empty — section will be hidden
   if (b.length === 0 && l.length === 0) return '';
 
   const bStr = b.join(' and ');
   const lStr = l.join(' and ');
+  // Plural verb when 2 notes, singular when 1
+  const bPlural = b.length > 1;
+  const lPlural = l.length > 1;
 
   if (b.length > 0 && l.length > 0) {
     const templates: Record<LayerMood, string> = {
-      balance: `The ${bStr} stays grounded while ${lStr} lifts the top without competing.`,
+      balance: `The ${bStr} ${bPlural ? 'stay' : 'stays'} grounded while ${lStr} ${lPlural ? 'lift' : 'lifts'} the top without competing.`,
       bold: `${bStr} and ${lStr} push in the same direction — maximum depth.`,
-      smooth: `${lStr} softens the ${bStr} into something creamy and approachable.`,
-      wild: `${bStr} collides with ${lStr} — tension that keeps people guessing.`,
+      smooth: `${lStr} ${lPlural ? 'soften' : 'softens'} the ${bStr} into something creamy and approachable.`,
+      wild: `${bStr} ${bPlural ? 'collide' : 'collides'} with ${lStr} — tension that keeps people guessing.`,
     };
     return templates[mood];
   }
 
-  if (b.length > 0) return `The ${bStr} anchors the blend with character.`;
-  return `The ${lStr} introduces a new dimension to the base.`;
+  if (b.length > 0) return `The ${bStr} ${bPlural ? 'anchor' : 'anchors'} the blend with character.`;
+  return `The ${lStr} ${lPlural ? 'introduce' : 'introduces'} a new dimension to the base.`;
 }
 
 /* ── Props ── */
