@@ -429,6 +429,7 @@ function buildForecastDays(): ForecastDay[] {
 
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
+  const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionState, setActionState] = useState<ActionState>("idle");
@@ -522,6 +523,16 @@ const OdaraScreen = () => {
         reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
       }));
 
+      // Fetch layer fragrance (different from main)
+      const { data: layerRow } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, family_key')
+        .neq('id', rows.id)
+        .not('family_key', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      setLayerFragrance(layerRow ?? null);
+
       const liveOracle: OracleData = {
         today_pick: {
           fragrance_id: rows.id,
@@ -567,6 +578,16 @@ const OdaraScreen = () => {
         family: r.family_key ?? '',
         reason: `${r.brand} — ${r.family_key ?? 'signature'}`,
       }));
+
+      // Fetch layer fragrance for new main
+      const { data: layerRow } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, family_key')
+        .neq('id', row.id)
+        .not('family_key', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      setLayerFragrance(layerRow ?? null);
 
       setOracle({
         today_pick: {
@@ -698,8 +719,8 @@ const OdaraScreen = () => {
   const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
-  // Derive layer suggestion from first alternative (Phase 1 placeholder)
-  const layerSuggestion = alternates.length > 0 ? alternates[0] : null;
+  // Layer suggestion from live Supabase fetch
+  const layerSuggestion = layerFragrance ? { name: layerFragrance.name, family: layerFragrance.family_key } : null;
   const hasAlternates = alternates.length > 0;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
@@ -1015,20 +1036,31 @@ const OdaraScreen = () => {
                       </p>
                     </div>
 
-                    {/* Layer label — compact format */}
-                    {isCenter && layerSuggestion && (
-                      <div className="flex flex-col items-center mb-[14px]">
-                        <p className="text-[13px] text-foreground/80 tracking-wide select-none">
-                          Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
-                        </p>
-                        <span
-                          className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/60 mt-[4px] px-3 py-[2px] rounded-full select-none"
-                          style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.1)" }}
+                    {/* Layer label — live Supabase data, own family color */}
+                    {isCenter && layerSuggestion && (() => {
+                      const layerColor = FAMILY_COLORS[layerSuggestion.family] ?? '#888';
+                      const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
+                      return (
+                        <div
+                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none"
+                          style={{
+                            background: layerTint.bg,
+                            border: `1px solid ${layerTint.border}`,
+                            boxShadow: `0 2px 12px ${layerTint.glow}`,
+                          }}
                         >
-                          balance
-                        </span>
-                      </div>
-                    )}
+                          <p className="text-[13px] tracking-wide" style={{ color: layerColor }}>
+                            Layer: <span className="font-medium">{getDisplayName(layerSuggestion.name)}</span>
+                          </p>
+                          <span
+                            className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full"
+                            style={{ color: layerColor, opacity: 0.7, boxShadow: `inset 0 0 0 1px ${layerColor}33` }}
+                          >
+                            balance
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
 
