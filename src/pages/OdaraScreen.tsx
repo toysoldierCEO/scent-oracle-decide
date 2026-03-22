@@ -605,22 +605,16 @@ const OdaraScreen = () => {
         reason: rows.brand ?? '',
       }));
 
-      // Fetch 4 layer fragrances for mode system — exclude main AND alternatives
+      // Fetch layer candidates — get more rows to maximize family diversity
       const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
-        .limit(4);
+        .limit(20);
 
-      const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
-      const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
-      (layerRows ?? []).forEach((r: any, i: number) => {
-        if (i < 4) {
-          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key, notes: r.notes ?? null, accords: r.accords ?? null };
-        }
-      });
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? []);
       setLayerModes(newLayerModes);
       setLayerFragrance(newLayerModes.balance ?? null);
       setSelectedMood('balance');
