@@ -792,15 +792,8 @@ const OdaraScreen = () => {
   const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
 
   // Phase 2: mode-driven layering
-  const isViewingForecast = false;
   const today_pick = oraclePick;
-  const currentLayerMap = null;
   const alternates = oracleAlternates ?? [];
-  const hasLayer = false;
-  const activeLayer = null;
-  // Active layer mode entry
-  const activeLayerMode = layerModes[selectedMood];
-  const layerSuggestion = activeLayerMode ? { name: activeLayerMode.name, family: activeLayerMode.family_key } : null;
   const hasAlternates = alternates.length > 0;
   const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
