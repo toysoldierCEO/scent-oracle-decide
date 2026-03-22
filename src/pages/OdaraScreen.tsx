@@ -6,6 +6,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /* ── Live fetch replaces old test query ── */
 
+/** Display-only: strip trailing filler like "for Men", "for Women", "Eau de Parfum" etc. */
+function getDisplayName(name: string): string {
+  return name
+    .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, '')
+    .trim();
+}
+
 import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
