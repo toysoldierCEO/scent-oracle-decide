@@ -14,39 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      fragrances: {
-        Row: {
-          accords: string[] | null
-          brand: string | null
-          created_at: string
-          family_key: string | null
-          id: string
-          name: string
-          notes: string[] | null
-          projection: number | null
-        }
-        Insert: {
-          accords?: string[] | null
-          brand?: string | null
-          created_at?: string
-          family_key?: string | null
-          id?: string
-          name: string
-          notes?: string[] | null
-          projection?: number | null
-        }
-        Update: {
-          accords?: string[] | null
-          brand?: string | null
-          created_at?: string
-          family_key?: string | null
-          id?: string
-          name?: string
-          notes?: string[] | null
-          projection?: number | null
-        }
-        Relationships: []
-      }
       oracle_accepts: {
         Row: {
           context: string
