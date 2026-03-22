@@ -1002,8 +1002,6 @@ const OdaraScreen = () => {
               if (i !== 0) return null;
               const cardPick = oraclePick;
               const cardAlternates = oracleAlternates ?? [];
-              const cardHasLayer = false;
-              const cardActiveLayer = null;
               const cardHasAlternates = cardAlternates.length > 0;
 
               if (!cardPick) return null;
