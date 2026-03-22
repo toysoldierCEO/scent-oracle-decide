@@ -657,7 +657,7 @@ const OdaraScreen = () => {
 
       const { data: altRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .neq('id', row.id)
         .not('family_key', 'is', null)
         .limit(3);
