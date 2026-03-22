@@ -591,7 +591,7 @@ const OdaraScreen = () => {
       // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .neq('id', rows.id)
         .not('family_key', 'is', null)
         .limit(3);
