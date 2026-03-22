@@ -656,6 +656,7 @@ const OdaraScreen = () => {
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
+      setMainNotes(row.notes ?? row.accords ?? null);
 
       const { data: altRows } = await supabaseClient
         .from('fragrances')
