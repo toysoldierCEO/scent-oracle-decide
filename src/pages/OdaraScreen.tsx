@@ -691,6 +691,8 @@ const OdaraScreen = () => {
   const alternates = oracleAlternates ?? [];
   const hasLayer = false;
   const activeLayer = null;
+  // Derive layer suggestion from first alternative (Phase 1 placeholder)
+  const layerSuggestion = alternates.length > 0 ? alternates[0] : null;
   const hasAlternates = alternates.length > 0;
 
   const bgTintColor = today_pick?.family ? (FAMILY_COLORS[today_pick.family] ?? null) : null;
@@ -1005,6 +1007,21 @@ const OdaraScreen = () => {
                         {cardPick.family}
                       </p>
                     </div>
+
+                    {/* Layer label — compact format */}
+                    {isCenter && layerSuggestion && (
+                      <div className="flex flex-col items-center mb-[14px]">
+                        <p className="text-[13px] text-foreground/80 tracking-wide select-none">
+                          Layer: <span className="font-medium">{layerSuggestion.name}</span>
+                        </p>
+                        <span
+                          className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/60 mt-[4px] px-3 py-[2px] rounded-full select-none"
+                          style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.1)" }}
+                        >
+                          balance
+                        </span>
+                      </div>
+                    )}
 
                     {/* Reason text hidden in Phase 1 — no oracle reason available yet */}
 
