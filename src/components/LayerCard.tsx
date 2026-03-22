@@ -57,22 +57,11 @@ function getDisplayName(name: string, brand?: string | null): string {
 /** Generic notes to filter out */
 const GENERIC_NOTES = new Set(["fresh", "clean", "warm", "soft", "light", "smooth", "musk", "white musk"]);
 
-const FRAGRANCE_PROFILES: Record<string, { top_notes?: string[]; heart_notes?: string[]; base_notes?: string[] }> = {
-  "Valley of the Kings": { top_notes: ["Saffron", "Pink Pepper", "Bergamot"], heart_notes: ["Rose Absolute", "Oud"], base_notes: ["Amber", "Sandalwood", "Musk"] },
-  "Agar": { top_notes: ["Elemi", "Green Cardamom"], heart_notes: ["Agarwood", "Cedar Atlas"], base_notes: ["Vetiver", "White Musk"] },
-  "Noire Absolu": { top_notes: ["Black Pepper", "Juniper"], heart_notes: ["Leather", "Iris"], base_notes: ["Castoreum", "Patchouli", "Benzoin"] },
-  "Santal Sérénade": { top_notes: ["Coconut Milk", "Cardamom"], heart_notes: ["Sandalwood", "Tonka Bean"], base_notes: ["Vanilla", "Cashmeran"] },
-  "Hafez 1984": { top_notes: ["Cinnamon", "Dried Plum"], heart_notes: ["Tobacco Leaf", "Dark Rum"], base_notes: ["Labdanum", "Oud", "Smoky Birch"] },
-  "Mystere 28": { top_notes: ["Sea Salt", "Grapefruit", "Mint"], heart_notes: ["Lavender", "Geranium"], base_notes: ["Ambroxan", "White Cedar"] },
-  "Amber Dusk": { top_notes: ["Mandarin", "Ginger"], heart_notes: ["Amber", "Frankincense"], base_notes: ["Labdanum", "Vanilla", "Musk"] },
-};
-
-function getCuratedNotes(name: string, exclude: Set<string> = new Set()): string[] {
-  const profile = FRAGRANCE_PROFILES[name];
-  if (!profile) return [];
-  const pool = [...(profile.top_notes ?? []), ...(profile.heart_notes ?? []), ...(profile.base_notes ?? [])];
-  const distinctive = pool.filter(n => !GENERIC_NOTES.has(n.toLowerCase()) && !exclude.has(n.toLowerCase()));
-  const fallback = pool.filter(n => !exclude.has(n.toLowerCase()));
+/** Extract up to 3 distinctive notes from a notes array, excluding generic and already-used notes */
+function getCuratedNotes(notes: string[] | null | undefined, exclude: Set<string> = new Set()): string[] {
+  if (!notes || notes.length === 0) return [];
+  const distinctive = notes.filter(n => !GENERIC_NOTES.has(n.toLowerCase()) && !exclude.has(n.toLowerCase()));
+  const fallback = notes.filter(n => !exclude.has(n.toLowerCase()));
   const source = distinctive.length >= 2 ? distinctive : fallback;
   return source.slice(0, 3);
 }
@@ -140,6 +129,8 @@ interface LayerCardProps {
   /** The main fragrance — used for "why it works" text, NOT for color */
   mainName: string;
   mainBrand: string | null;
+  /** Main fragrance notes from DB */
+  mainNotes: string[] | null;
   /** All layer mode entries */
   layerModes: LayerModes;
   /** Currently selected mood */
@@ -167,6 +158,7 @@ interface LayerCardProps {
 const LayerCard = ({
   mainName,
   mainBrand,
+  mainNotes,
   layerModes,
   selectedMood,
   onSelectMood,
@@ -180,10 +172,11 @@ const LayerCard = ({
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
   const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
 
-  // Notes
-  const baseNotesRaw = getCuratedNotes(mainName);
+  // Notes — from real DB data
+  const baseNotesRaw = getCuratedNotes(mainNotes);
   const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-  const layerNotesRaw = getCuratedNotes(activeModeEntry.name, baseNoteSet);
+  const layerNoteSource = activeModeEntry.notes ?? activeModeEntry.accords ?? null;
+  const layerNotesRaw = getCuratedNotes(layerNoteSource, baseNoteSet);
   const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);

@@ -508,6 +508,7 @@ function buildForecastDays(): ForecastDay[] {
 
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
+  const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -581,17 +582,18 @@ const OdaraScreen = () => {
       // Fetch main card — if excludeId provided, skip that row (used after alt tap)
       let mainQuery = supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .limit(1);
       if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
       const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
+      setMainNotes(rows.notes ?? rows.accords ?? null);
 
       // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .neq('id', rows.id)
         .not('family_key', 'is', null)
         .limit(3);
@@ -607,7 +609,7 @@ const OdaraScreen = () => {
       const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
@@ -616,7 +618,7 @@ const OdaraScreen = () => {
       const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
       (layerRows ?? []).forEach((r: any, i: number) => {
         if (i < 4) {
-          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key };
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key, notes: r.notes ?? null, accords: r.accords ?? null };
         }
       });
       setLayerModes(newLayerModes);
@@ -650,14 +652,15 @@ const OdaraScreen = () => {
     try {
       const { data: row, error: qErr } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
+      setMainNotes(row.notes ?? row.accords ?? null);
 
       const { data: altRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .neq('id', row.id)
         .not('family_key', 'is', null)
         .limit(3);
@@ -673,7 +676,7 @@ const OdaraScreen = () => {
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
-        .select('id, name, brand, family_key')
+        .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(4);
@@ -682,7 +685,7 @@ const OdaraScreen = () => {
       const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
       (layerRows ?? []).forEach((r: any, i: number) => {
         if (i < 4) {
-          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key };
+          newLayerModes[moodKeys[i]] = { id: r.id, name: r.name, brand: r.brand ?? null, family_key: r.family_key, notes: r.notes ?? null, accords: r.accords ?? null };
         }
       });
       setLayerModes(newLayerModes);
@@ -1138,6 +1141,7 @@ const OdaraScreen = () => {
                       <LayerCard
                         mainName={cardPick.name}
                         mainBrand={cardPick.reason}
+                        mainNotes={mainNotes}
                         layerModes={layerModes}
                         selectedMood={selectedMood}
                         onSelectMood={(mood) => {
