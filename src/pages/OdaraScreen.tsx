@@ -1233,7 +1233,7 @@ const OdaraScreen = () => {
                             className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
                             style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
                           >
-                            {cfg.token}
+                            {activeModeEntry.family_key?.toUpperCase() ?? ''}
                           </span>
 
                           {/* Mode selector chips */}
