@@ -73,7 +73,7 @@ interface OracleData {
   }[] | null;
 }
 
-const LAYER_MOODS: LayerMood[] = ['balanced', 'bold', 'smooth', 'wild'];
+const LAYER_MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
 
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
