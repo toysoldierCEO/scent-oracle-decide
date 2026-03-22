@@ -806,8 +806,8 @@ const OdaraScreen = () => {
   const hasAlternates = alternates.length > 0;
   const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
-  // Card color follows selected layer mode family when a mode is active
-  const effectiveFamily = activeLayerMode ? activeLayerMode.family_key : today_pick?.family;
+  // Card color stays fixed to main fragrance family
+  const effectiveFamily = today_pick?.family;
   const bgTintColor = effectiveFamily ? (FAMILY_COLORS[effectiveFamily] ?? null) : null;
 
   const handleForecastDayTap = (index: number) => {
