@@ -1017,9 +1017,11 @@ const OdaraScreen = () => {
 
               if (!cardPick) return null;
 
-              // Family color tinting
-              const familyTint = FAMILY_TINTS[cardPick.family] ?? DEFAULT_TINT;
-              const familyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
+              // Family color tinting — follows active layer mode when selected
+              const cardEffectiveFamily = activeLayerMode ? activeLayerMode.family_key : cardPick.family;
+              const familyTint = FAMILY_TINTS[cardEffectiveFamily] ?? DEFAULT_TINT;
+              const familyColor = FAMILY_COLORS[cardEffectiveFamily] ?? "#888";
+              const baseFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
 
               // Cover flow transforms
               const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
