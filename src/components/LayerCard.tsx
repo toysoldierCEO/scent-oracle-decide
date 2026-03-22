@@ -68,14 +68,12 @@ function getCuratedNotes(notes: string[] | null | undefined, exclude: Set<string
 
 /* ── Mode-specific config ── */
 interface MoodConfig {
-  effect: string;
   baseSprays: number;
   layerSprays: number;
   basePlacement: string;
   layerPlacement: string;
   placement: string;
   result: string;
-  whyVerb: string;
 }
 
 function buildMoodConfig(
@@ -89,39 +87,60 @@ function buildMoodConfig(
   const ln = getDisplayName(layerName, layerBrand);
   const configs: Record<LayerMood, MoodConfig> = {
     balance: {
-      effect: `Harmonizes with ${mn} for a rounded blend.`,
       baseSprays: 3, layerSprays: 1,
       basePlacement: 'chest, neck', layerPlacement: 'wrists',
       placement: 'Base on pulse points, layer on outer edges for natural diffusion.',
       result: `A balanced blend where ${mn} leads and ${ln} accents.`,
-      whyVerb: 'stay grounded',
     },
     bold: {
-      effect: `Boosts projection and presence alongside ${mn}.`,
       baseSprays: 2, layerSprays: 2,
       basePlacement: 'chest, wrists', layerPlacement: 'neck, behind ears',
       placement: 'Even distribution across hot zones for maximum sillage.',
       result: `A powerful statement — ${mn} and ${ln} command the room.`,
-      whyVerb: 'anchor the intensity',
     },
     smooth: {
-      effect: `Softens the edges of ${mn} into a creamy finish.`,
       baseSprays: 2, layerSprays: 1,
       basePlacement: 'chest, neck', layerPlacement: 'wrists, inner elbows',
       placement: 'Close-contact zones for intimate projection.',
       result: `A smooth, approachable blend — ${ln} creams out the edges.`,
-      whyVerb: 'provide structure',
     },
     wild: {
-      effect: `Adds unexpected tension against ${mn}.`,
       baseSprays: 2, layerSprays: 2,
       basePlacement: 'chest, neck', layerPlacement: 'wrists, collar',
       placement: 'Separate zones to let each scent breathe independently.',
       result: `An unpredictable blend — ${mn} clashes with ${ln} for magnetism.`,
-      whyVerb: 'create the foundation',
     },
   };
   return configs[mood];
+}
+
+/** Build a note-driven "why it works" sentence based on mood and actual notes */
+function buildWhyItWorks(
+  mood: LayerMood,
+  baseNotes: string[],
+  layerNotes: string[],
+): string {
+  const b = baseNotes.slice(0, 2).map(n => n.toLowerCase());
+  const l = layerNotes.slice(0, 2).map(n => n.toLowerCase());
+
+  // If no notes at all, return empty — section will be hidden
+  if (b.length === 0 && l.length === 0) return '';
+
+  const bStr = b.join(' and ');
+  const lStr = l.join(' and ');
+
+  if (b.length > 0 && l.length > 0) {
+    const templates: Record<LayerMood, string> = {
+      balance: `The ${bStr} stays grounded while ${lStr} lifts the top without competing.`,
+      bold: `${bStr} and ${lStr} push in the same direction — maximum depth.`,
+      smooth: `${lStr} softens the ${bStr} into something creamy and approachable.`,
+      wild: `${bStr} collides with ${lStr} — tension that keeps people guessing.`,
+    };
+    return templates[mood];
+  }
+
+  if (b.length > 0) return `The ${bStr} anchors the blend with character.`;
+  return `The ${lStr} introduces a new dimension to the base.`;
 }
 
 /* ── Props ── */
