@@ -566,6 +566,7 @@ function pickDiverseLayerModes(candidates: any[]): LayerModes {
 }
 
 const OdaraScreen = () => {
+  const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
