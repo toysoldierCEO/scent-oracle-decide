@@ -1092,9 +1092,17 @@ const OdaraScreen = () => {
                     {isCenter && layerSuggestion && (() => {
                       const layerColor = FAMILY_COLORS[layerSuggestion.family] ?? '#888';
                       const layerTint = FAMILY_TINTS[layerSuggestion.family] ?? DEFAULT_TINT;
+
+                      // Curated notes for layer detail
+                      const baseNotesRaw = getCuratedNotes(cardPick.name, null, null);
+                      const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
+                      const layerNotesRaw = getCuratedNotes(layerSuggestion.name, null, null, baseNoteSet);
+                      const whyText = buildWhyItWorks(cardPick.name, baseNotesRaw, layerSuggestion.name, layerNotesRaw);
+                      const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
+
                       return (
                         <div
-                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none relative z-10"
+                          className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none relative z-10 w-full"
                           onClick={(e) => {
                             e.stopPropagation();
                             setLayerSheetOpen((o) => !o);
@@ -1115,6 +1123,91 @@ const OdaraScreen = () => {
                           >
                             balance
                           </span>
+
+                          {/* Expanded layer detail */}
+                          <AnimatePresence initial={false}>
+                            {layerSheetOpen && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+                                className="w-full overflow-hidden"
+                              >
+                                <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+
+                                  {/* What it does */}
+                                  <p className="text-[11px] text-white/80 leading-relaxed">
+                                    Balances {getDisplayName(cardPick.name)} with a complementary layer.
+                                  </p>
+
+                                  {/* Key notes */}
+                                  {hasNotes && (
+                                    <div>
+                                      <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Key notes</span>
+                                      <div className="mt-1 space-y-0.5">
+                                        {baseNotesRaw.length > 0 && (
+                                          <p className="text-[11px] text-white/80">
+                                            <span className="text-white/50">{getDisplayName(cardPick.name)}:</span>{" "}
+                                            {baseNotesRaw.join(", ").toLowerCase()}
+                                          </p>
+                                        )}
+                                        {layerNotesRaw.length > 0 && (
+                                          <p className="text-[11px] text-white/80">
+                                            <span className="text-white/50">{getDisplayName(layerSuggestion.name)}:</span>{" "}
+                                            {layerNotesRaw.join(", ").toLowerCase()}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Spray order */}
+                                  <div>
+                                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Spray order</span>
+                                    <div className="mt-1 space-y-1">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[9px] font-mono text-white/40 mt-px">01</span>
+                                        <p className="text-[11px] text-white/80">
+                                          <span className="font-mono">3×</span> {getDisplayName(cardPick.name)} — chest, neck
+                                        </p>
+                                      </div>
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[9px] font-mono text-white/40 mt-px">02</span>
+                                        <p className="text-[11px] text-white/80">
+                                          <span className="font-mono">1×</span> {getDisplayName(layerSuggestion.name)} — wrists
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Placement */}
+                                  <div>
+                                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Placement</span>
+                                    <p className="text-[11px] text-white/80 mt-0.5">
+                                      Base on pulse points, layer on outer edges for natural diffusion.
+                                    </p>
+                                  </div>
+
+                                  {/* Why it works — must reference notes */}
+                                  {whyText && (
+                                    <div>
+                                      <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Why it works</span>
+                                      <p className="text-[11px] text-white/80 mt-0.5 leading-relaxed">{whyText}</p>
+                                    </div>
+                                  )}
+
+                                  {/* Result */}
+                                  <div>
+                                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Result</span>
+                                    <p className="text-[11px] text-white/80 mt-0.5">
+                                      A balanced blend where {getDisplayName(cardPick.name)} leads and {getDisplayName(layerSuggestion.name)} accents.
+                                    </p>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       );
                     })()}
