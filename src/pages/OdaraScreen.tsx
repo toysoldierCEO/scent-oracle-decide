@@ -996,7 +996,7 @@ const OdaraScreen = () => {
                       onContextMenu={(e) => e.preventDefault()}
                     >
                       <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                        {cardPick.name}
+                        {getDisplayName(cardPick.name)}
                       </h1>
 
                       {/* Brand name — from live Supabase data */}
