@@ -212,9 +212,10 @@ const LayerCard = ({
         onToggleExpand();
       }}
       style={{
-        background: layerTint.bg,
-        border: `1px solid ${layerTint.border}`,
-        boxShadow: `0 2px 12px ${layerTint.glow}`,
+        background: `linear-gradient(135deg, ${layerTint.material}, ${layerTint.bg}), rgba(6,6,8,0.92)`,
+        border: `1.5px solid ${layerTint.border}`,
+        boxShadow: `0 2px 16px ${layerTint.glow}, inset 0 1px 0 ${layerTint.border}`,
+        backdropFilter: 'blur(24px)',
         pointerEvents: 'auto',
       }}
     >
