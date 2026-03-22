@@ -8,6 +8,8 @@ export interface LayerModeEntry {
   name: string;
   brand: string | null;
   family_key: string;
+  notes: string[] | null;
+  accords: string[] | null;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;
