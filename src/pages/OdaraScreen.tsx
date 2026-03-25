@@ -568,6 +568,7 @@ function pickDiverseLayerModes(candidates: any[]): LayerModes {
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
+  const [mainAccords, setMainAccords] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -647,7 +648,8 @@ const OdaraScreen = () => {
       const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
-      setMainNotes(rows.notes ?? rows.accords ?? null);
+      setMainNotes(rows.notes ?? null);
+      setMainAccords(rows.accords ?? null);
 
       // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
@@ -709,7 +711,8 @@ const OdaraScreen = () => {
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
-      setMainNotes(row.notes ?? row.accords ?? null);
+      setMainNotes(row.notes ?? null);
+      setMainAccords(row.accords ?? null);
 
       const { data: altRows } = await supabaseClient
         .from('fragrances')
