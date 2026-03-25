@@ -568,6 +568,7 @@ function pickDiverseLayerModes(candidates: any[]): LayerModes {
 const OdaraScreen = () => {
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
+  const [mainAccords, setMainAccords] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -647,7 +648,8 @@ const OdaraScreen = () => {
       const { data: rows, error: qErr } = await mainQuery.single();
       if (qErr) throw qErr;
       console.log('[ODARA] Live fragrance row:', rows);
-      setMainNotes(rows.notes ?? rows.accords ?? null);
+      setMainNotes(rows.notes ?? null);
+      setMainAccords(rows.accords ?? null);
 
       // Fetch 3 alternatives excluding the main card (separate from layering)
       const { data: altRows } = await supabaseClient
@@ -709,7 +711,8 @@ const OdaraScreen = () => {
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
-      setMainNotes(row.notes ?? row.accords ?? null);
+      setMainNotes(row.notes ?? null);
+      setMainAccords(row.accords ?? null);
 
       const { data: altRows } = await supabaseClient
         .from('fragrances')
@@ -1181,6 +1184,28 @@ const OdaraScreen = () => {
                       >
                         {cardPick.family}
                       </p>
+
+                      {/* Main fragrance notes & accords — swappable for phased notes later */}
+                      {(() => {
+                        const displayNotes = (mainNotes ?? []).slice(0, 3);
+                        const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
+                        const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+                        if (!isCenter || !hasAny) return null;
+                        return (
+                          <div className="w-full px-2 mb-[10px] space-y-[2px]">
+                            {displayNotes.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                            {displayAccords.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Layer Card — separate component with independent color ownership */}
