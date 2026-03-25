@@ -1184,6 +1184,28 @@ const OdaraScreen = () => {
                       >
                         {cardPick.family}
                       </p>
+
+                      {/* Main fragrance notes & accords — swappable for phased notes later */}
+                      {(() => {
+                        const displayNotes = (mainNotes ?? []).slice(0, 3);
+                        const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
+                        const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+                        if (!isCenter || !hasAny) return null;
+                        return (
+                          <div className="w-full px-2 mb-[10px] space-y-[2px]">
+                            {displayNotes.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                            {displayAccords.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Layer Card — separate component with independent color ownership */}
