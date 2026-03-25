@@ -232,21 +232,29 @@ const LayerCard = ({
         {activeModeEntry.family_key?.toUpperCase() ?? ''}
       </span>
 
-      {/* Always-visible Key notes summary */}
-      {hasNotes && (
-        <div className="w-full mt-[6px] px-1">
-          {baseNotesRaw.length > 0 && (
-            <p className="text-[10px] text-white/70 text-center">
-              <span className="text-white/40">Main:</span> {baseNotesRaw.join(', ').toLowerCase()}
-            </p>
-          )}
-          {layerNotesRaw.length > 0 && (
-            <p className="text-[10px] text-white/70 text-center">
-              <span className="text-white/40">Layer:</span> {layerNotesRaw.join(', ').toLowerCase()}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Always-visible notes & accords summary */}
+      {(() => {
+        const layerNotes = activeModeEntry.notes ?? [];
+        const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
+        const displayNotes = layerNotes.slice(0, 3);
+        const displayAccords = layerAccords.slice(0, 4);
+        const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+        if (!hasAny) return null;
+        return (
+          <div className="w-full mt-[6px] px-1 space-y-[2px]">
+            {displayNotes.length > 0 && (
+              <p className="text-[10px] text-white/70 text-center">
+                <span className="text-white/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
+              </p>
+            )}
+            {displayAccords.length > 0 && (
+              <p className="text-[10px] text-white/70 text-center">
+                <span className="text-white/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Mode selector */}
       <div className="mt-[8px]">
@@ -269,26 +277,34 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-              {/* Key notes */}
-              {hasNotes && (
-                <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Key notes</span>
-                  <div className="mt-1 space-y-0.5">
-                    {baseNotesRaw.length > 0 && (
-                      <p className="text-[11px] text-white/80">
-                        <span className="text-white/50">{mn}:</span>{" "}
-                        {baseNotesRaw.join(", ").toLowerCase()}
-                      </p>
-                    )}
-                    {layerNotesRaw.length > 0 && (
-                      <p className="text-[11px] text-white/80">
-                        <span className="text-white/50">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}:</span>{" "}
-                        {layerNotesRaw.join(", ").toLowerCase()}
-                      </p>
-                    )}
+              {/* Layer fragrance notes & accords */}
+              {(() => {
+                const ln = activeModeEntry.notes ?? [];
+                const la = (activeModeEntry.accords ?? []).map(a => a.trim());
+                const displayNotes = ln.slice(0, 3);
+                const displayAccords = la.slice(0, 4);
+                const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+                if (!hasAny) return null;
+                return (
+                  <div>
+                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Notes &amp; Accords</span>
+                    <div className="mt-1 space-y-0.5">
+                      {displayNotes.length > 0 && (
+                        <p className="text-[11px] text-white/80">
+                          <span className="text-white/50">Notes:</span>{" "}
+                          {displayNotes.join(", ").toLowerCase()}
+                        </p>
+                      )}
+                      {displayAccords.length > 0 && (
+                        <p className="text-[11px] text-white/80">
+                          <span className="text-white/50">Accords:</span>{" "}
+                          {displayAccords.join(", ").toLowerCase()}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Spray order */}
               <div>
