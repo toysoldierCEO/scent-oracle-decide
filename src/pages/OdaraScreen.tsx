@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, LayerModeEntry } from "@/components/ModeSelector";
 import { LAYER_MOODS } from "@/components/ModeSelector";
+import { normalizeNotes } from "@/lib/normalizeNotes";
 
 /* ── Live fetch replaces old test query ── */
 
