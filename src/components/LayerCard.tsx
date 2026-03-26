@@ -237,7 +237,7 @@ const LayerCard = ({
       {(() => {
         const layerNotes = activeModeEntry.notes ?? [];
         const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
-        const displayNotes = layerNotes.slice(0, 3);
+        const displayNotes = normalizeNotes(layerNotes, 3);
         const displayAccords = layerAccords.slice(0, 4);
         const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
         if (!hasAny) return null;
@@ -282,7 +282,7 @@ const LayerCard = ({
               {(() => {
                 const ln = activeModeEntry.notes ?? [];
                 const la = (activeModeEntry.accords ?? []).map(a => a.trim());
-                const displayNotes = ln.slice(0, 3);
+                const displayNotes = normalizeNotes(ln, 3);
                 const displayAccords = la.slice(0, 4);
                 const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
                 if (!hasAny) return null;
