@@ -226,6 +226,9 @@ const LayerCard = ({
       <p className="text-[13px] tracking-wide text-white">
         Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</span>
       </p>
+      {activeModeEntry.brand && (
+        <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
+      )}
       <span
         className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
         style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
