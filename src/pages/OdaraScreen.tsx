@@ -1617,30 +1617,57 @@ const OdaraScreen = () => {
                     </div>
                   </div>
 
-                  {/* Note Pyramid */}
-                  {(profile?.top_notes || profile?.heart_notes || profile?.base_notes) && (
-                    <div className="mb-8 space-y-3">
-                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Note Pyramid</span>
-                      {profile?.top_notes && (
-                        <div>
-                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Top</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
-                        </div>
-                      )}
-                      {profile?.heart_notes && (
-                        <div>
-                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Heart</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
-                        </div>
-                      )}
-                      {profile?.base_notes && (
-                        <div>
-                          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Base</span>
-                          <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Note Pyramid — raw, unfiltered notes for detail view */}
+                  {(() => {
+                    const hasProfileNotes = profile?.top_notes || profile?.heart_notes || profile?.base_notes;
+                    const hasDbNotes = (mainNotes && mainNotes.length > 0);
+                    const hasDbAccords = (mainAccords && mainAccords.length > 0);
+                    if (!hasProfileNotes && !hasDbNotes && !hasDbAccords) return null;
+                    return (
+                      <div className="mb-8 space-y-3">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">
+                          {hasProfileNotes ? 'Note Pyramid' : 'Notes & Accords'}
+                        </span>
+                        {hasProfileNotes ? (
+                          <>
+                            {profile?.top_notes && (
+                              <div>
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Top</span>
+                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
+                              </div>
+                            )}
+                            {profile?.heart_notes && (
+                              <div>
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Heart</span>
+                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
+                              </div>
+                            )}
+                            {profile?.base_notes && (
+                              <div>
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Base</span>
+                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {hasDbNotes && (
+                              <div>
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Notes</span>
+                                <p className="text-[12px] text-foreground/80 mt-0.5">{mainNotes!.join(" · ")}</p>
+                              </div>
+                            )}
+                            {hasDbAccords && (
+                              <div>
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Accords</span>
+                                <p className="text-[12px] text-foreground/80 mt-0.5">{mainAccords!.join(" · ")}</p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Performance Bars */}
                   {(profile?.longevity_score != null || profile?.projection_score != null) && (
