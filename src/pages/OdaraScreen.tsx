@@ -1187,7 +1187,7 @@ const OdaraScreen = () => {
 
                       {/* Main fragrance notes & accords — swappable for phased notes later */}
                       {(() => {
-                        const displayNotes = (mainNotes ?? []).slice(0, 3);
+                        const displayNotes = normalizeNotes(mainNotes ?? [], 3);
                         const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
                         const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
                         if (!isCenter || !hasAny) return null;
