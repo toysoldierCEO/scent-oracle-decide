@@ -321,6 +321,7 @@ const LayerCard = ({
 
   // Why it works — structured interaction logic
   const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
+  const resultText = buildResultText(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
 
   return (
     <div
