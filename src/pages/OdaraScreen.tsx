@@ -822,7 +822,7 @@ const OdaraScreen = () => {
         .not('family_key', 'is', null)
         .limit(20);
 
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], newMainRow.family_key ?? '');
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], row.family_key ?? '');
       setLayerModes(newLayerModes);
       setLayerFragrance(newLayerModes.balance ?? null);
       setSelectedMood('balance');
