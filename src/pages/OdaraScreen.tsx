@@ -1170,7 +1170,7 @@ const OdaraScreen = () => {
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
                       <div className="flex flex-col items-center mb-[6px] max-w-full">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mb-[4px] font-medium">Alternatives</span>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mt-[18px] mb-[10px] font-medium">Alternatives</span>
                         <div className="relative w-full">
                           <div
                             className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-4 pb-1"
