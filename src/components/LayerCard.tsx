@@ -346,20 +346,13 @@ const LayerCard = ({
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
   const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
 
-  // Notes — from real DB data
-  const baseNotesRaw = getCuratedNotes(mainNotes);
-  const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-  const layerNoteSource = activeModeEntry.notes ?? activeModeEntry.accords ?? null;
-  const layerNotesRaw = getCuratedNotes(layerNoteSource, baseNoteSet);
-  const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
-
   const mn = getDisplayName(mainName, mainBrand);
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
 
-  const interaction = activeModeEntry.interactionType ?? 'balance';
-  const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw, interaction);
-  const effectText = buildEffectText(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw, interaction);
+  // Backend-driven text — no frontend generation
+  const reasonText = activeModeEntry.reason || '';
+  const whyText = activeModeEntry.why_it_works || '';
 
   return (
     <div

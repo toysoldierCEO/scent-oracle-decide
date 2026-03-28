@@ -572,6 +572,28 @@ function scoreLayerCandidate(
   return { score: Math.max(0, Math.min(1, score)), interaction };
 }
 
+/* ── Interaction-aware text generators ── */
+const INTERACTION_REASON: Record<InteractionType, (layerFamily: string) => string> = {
+  amplify: (lf) => `Reinforces ${lf.replace(/-/g, ' ')} character`,
+  balance: (lf) => `Adds ${lf.replace(/-/g, ' ')} dimension`,
+  contrast: (lf) => `Contrasts with ${lf.replace(/-/g, ' ')} energy`,
+};
+
+const INTERACTION_WHY: Record<InteractionType, (mainFam: string, layerFam: string) => string> = {
+  amplify: (mf, lf) => {
+    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    return `Both lean ${m} — the layer doubles down so the whole thing reads stronger without getting muddy.`;
+  },
+  balance: (mf, lf) => {
+    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    return `The ${m} base holds shape while ${l} fills what's missing — neither drops out.`;
+  },
+  contrast: (mf, lf) => {
+    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    return `${m.charAt(0).toUpperCase() + m.slice(1)} and ${l} pull in opposite directions — the tension keeps it interesting.`;
+  },
+};
+
 /**
  * Pick 4 layer fragrances using interaction-type-aware scoring.
  * Prioritizes family diversity + meaningful transformation.
@@ -618,7 +640,6 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
   }
 
   // Assign to moods — try to match interaction type to mood intent
-  // balance mood → prefer 'balance' interaction, bold → 'amplify', smooth → 'balance', wild → 'contrast'
   const moodPreference: Record<LayerMood, InteractionType> = {
     balance: 'balance',
     bold: 'amplify',
@@ -629,12 +650,12 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
   const assigned = new Set<string>();
   for (const mood of moodKeys) {
     const preferred = moodPreference[mood];
-    // Try to find a picked candidate matching preferred interaction
     const match = picked.find(p => p.interaction === preferred && !assigned.has(p.id));
     const fallback = picked.find(p => !assigned.has(p.id));
     const chosen = match ?? fallback;
     if (chosen) {
       assigned.add(chosen.id);
+      const iType = chosen.interaction as InteractionType;
       result[mood] = {
         id: chosen.id,
         name: chosen.name,
@@ -642,7 +663,9 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
         family_key: chosen.family_key,
         notes: chosen.notes ?? null,
         accords: chosen.accords ?? null,
-        interactionType: chosen.interaction,
+        interactionType: iType,
+        reason: INTERACTION_REASON[iType](chosen.family_key),
+        why_it_works: INTERACTION_WHY[iType](mainFamily, chosen.family_key),
       };
     }
   }
