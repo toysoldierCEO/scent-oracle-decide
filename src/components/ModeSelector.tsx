@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 export type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
 export const LAYER_MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
 
+export type InteractionType = 'amplify' | 'balance' | 'contrast';
+
 export interface LayerModeEntry {
   id: string;
   name: string;
@@ -10,6 +12,7 @@ export interface LayerModeEntry {
   family_key: string;
   notes: string[] | null;
   accords: string[] | null;
+  interactionType: InteractionType;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;
