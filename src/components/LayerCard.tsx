@@ -102,23 +102,19 @@ const ROLE_ADDITIONS: Record<string, string> = {
   fruity: 'a lighter, fruitier surface', musk: 'a softer landing',
 };
 
-/* ── Effect text: outcome-focused, 1 sentence ── */
-const MOOD_EFFECT_TEMPLATES: Record<LayerMood, (mainStr: string, layerAdd: string) => string[]> = {
+/* ── Effect text: outcome-focused, interaction-type-aware ── */
+const INTERACTION_EFFECT_TEMPLATES: Record<InteractionType, (mainStr: string, layerAdd: string) => string[]> = {
+  amplify: (ms, la) => [
+    `${ms} gets louder — ${la} reinforces it without changing direction.`,
+    `Doubles down on ${ms}, with ${la} adding density to the trail.`,
+  ],
   balance: (ms, la) => [
     `${ms} stays forward, ${la} fills in behind for a rounder finish.`,
     `Opens with ${ms}, settles into ${la} without either dropping out.`,
   ],
-  bold: (ms, la) => [
-    `${ms} pushes further with ${la} reinforcing the trail.`,
-    `Stronger projection overall — ${ms} leads, ${la} extends the dry-down.`,
-  ],
-  smooth: (ms, la) => [
-    `${ms} softens into ${la}, creating a seamless skin-close wear.`,
-    `Blends down to one texture — ${ms} on top, ${la} underneath.`,
-  ],
-  wild: (ms, la) => [
-    `${ms} opens sharp, then ${la} pulls it somewhere unexpected.`,
-    `Starts familiar with ${ms}, shifts into ${la} as it develops.`,
+  contrast: (ms, la) => [
+    `${ms} opens sharp, then ${la} pulls it somewhere different.`,
+    `Starts with ${ms}, shifts into ${la} as it develops on skin.`,
   ],
 };
 
@@ -128,6 +124,7 @@ function buildEffectText(
   layerName: string,
   baseNotes: string[],
   layerNotes: string[],
+  interactionType: InteractionType,
 ): string {
   const baseRole = detectRole(baseNotes);
   const layerRole = detectRole(layerNotes);
@@ -140,7 +137,7 @@ function buildEffectText(
     layerAddition = altRole ? (ROLE_ADDITIONS[altRole.role] ?? 'a contrasting edge') : 'a contrasting edge';
   }
 
-  const templates = MOOD_EFFECT_TEMPLATES[mood](mainStrength, layerAddition);
+  const templates = INTERACTION_EFFECT_TEMPLATES[interactionType](mainStrength, layerAddition);
   const idx = (baseName.length + layerName.length) % templates.length;
   return templates[idx];
 }
