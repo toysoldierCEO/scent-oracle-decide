@@ -1374,10 +1374,6 @@ const OdaraScreen = () => {
                             </div>
                             <div className="shrink-0 w-3" aria-hidden />
                           </div>
-                          {/* Right fade hint */}
-                          <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.4))' }} />
-                          {/* Left fade hint */}
-                          <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to left, transparent, rgba(0,0,0,0.4))' }} />
                         </div>
                       </div>
                     )}
