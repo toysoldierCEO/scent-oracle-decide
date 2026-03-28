@@ -326,7 +326,7 @@ const LayerCard = ({
 
   // Why it works — structured interaction logic
   const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
-  const resultText = buildResultText(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
+  const effectText = buildEffectText(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
 
   return (
     <div
@@ -416,12 +416,6 @@ const LayerCard = ({
                 </div>
               </div>
 
-              {/* Placement */}
-              <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Placement</span>
-                <p className="text-[11px] text-white/80 mt-0.5">{cfg.placement}</p>
-              </div>
-
               {/* Why it works */}
               {whyText && (
                 <div>
@@ -430,10 +424,10 @@ const LayerCard = ({
                 </div>
               )}
 
-              {/* Result */}
+              {/* Effect */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Result</span>
-                <p className="text-[11px] text-white/80 mt-0.5">{resultText}</p>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
+                <p className="text-[11px] text-white/80 mt-0.5">{effectText}</p>
               </div>
             </div>
           </motion.div>
