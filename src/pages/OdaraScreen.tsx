@@ -1384,7 +1384,7 @@ const OdaraScreen = () => {
                         {lockFlashColor && (
                           <motion.div
                             key={`lock-flash-${lockFlashColor}`}
-                            className="absolute top-3 left-5 pointer-events-none z-20"
+                            className="absolute top-3 left-5 pointer-events-none z-20 ml-2 mt-2"
                             style={{ width: 20, height: 20 }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: [0, 1, 1, 0] }}
