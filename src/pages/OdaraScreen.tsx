@@ -1141,8 +1141,8 @@ const OdaraScreen = () => {
                         return (
                           <div className="w-full px-2 mb-[10px] mt-[12px]">
                             {displayAccords.length > 0 && (
-                              <p className="text-[11px] text-center select-none" style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 400, letterSpacing: '0.02em' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.45)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              <p className="text-[13px] text-center select-none" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.04em', lineHeight: 1.5 }}>
+                                <span style={{ color: 'rgba(255,255,255,0.50)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
                               </p>
                             )}
                           </div>
