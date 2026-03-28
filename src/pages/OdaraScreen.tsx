@@ -1,7 +1,6 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { supabaseClient } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, LayerModeEntry } from "@/components/ModeSelector";
@@ -766,9 +765,9 @@ const OdaraScreen = () => {
       const tempVal = temp ?? effectiveTemperature ?? 25;
 
       // Call backend RPC with context
-      const { data: rpcResult, error: rpcErr } = await supabaseClient
+      const { data: rpcResult, error: rpcErr } = await supabase
         .rpc('get_todays_oracle_v3', {
-          p_user: userId,
+          p_user_id: userId,
           p_temperature: tempVal,
           p_context: contextVal,
           p_brand: null,
@@ -779,6 +778,8 @@ const OdaraScreen = () => {
       const pick = result.today_pick;
 
       console.log('[ODARA] Oracle RPC result:', result);
+
+      if (!pick) throw new Error('No fragrance found for this context');
 
       setMainNotes(pick.notes ?? null);
       setMainAccords(pick.accords ?? null);
@@ -792,7 +793,7 @@ const OdaraScreen = () => {
 
       // Fetch layer candidates from the table (context-independent diversity scoring)
       const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
-      const { data: layerRows } = await supabaseClient
+      const { data: layerRows } = await supabase
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
@@ -829,7 +830,7 @@ const OdaraScreen = () => {
     setLoading(true);
     setError(false);
     try {
-      const { data: row, error: qErr } = await supabaseClient
+      const { data: row, error: qErr } = await supabase
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
         .eq('id', id)
@@ -838,7 +839,7 @@ const OdaraScreen = () => {
       setMainNotes(row.notes ?? null);
       setMainAccords(row.accords ?? null);
 
-      const { data: altRows } = await supabaseClient
+      const { data: altRows } = await supabase
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
         .neq('id', row.id)
@@ -854,7 +855,7 @@ const OdaraScreen = () => {
 
       // Fetch layer candidates — get more rows to maximize family diversity
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
-      const { data: layerRows } = await supabaseClient
+      const { data: layerRows } = await supabase
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
         .not('id', 'in', `(${excludeIds.join(',')})`)
