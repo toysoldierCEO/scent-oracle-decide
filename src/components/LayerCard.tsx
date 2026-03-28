@@ -246,11 +246,6 @@ const LayerCard = ({
         if (!hasAny) return null;
         return (
           <div className="w-full mt-[6px] px-1 space-y-[2px]">
-            {displayNotes.length > 0 && (
-              <p className="text-[10px] text-white/70 text-center">
-                <span className="text-white/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
-              </p>
-            )}
             {displayAccords.length > 0 && (
               <p className="text-[10px] text-white/70 text-center">
                 <span className="text-white/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
@@ -291,14 +286,8 @@ const LayerCard = ({
                 if (!hasAny) return null;
                 return (
                   <div>
-                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Notes &amp; Accords</span>
+                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Accords</span>
                     <div className="mt-1 space-y-0.5">
-                      {displayNotes.length > 0 && (
-                        <p className="text-[11px] text-white/80">
-                          <span className="text-white/50">Notes:</span>{" "}
-                          {displayNotes.join(", ").toLowerCase()}
-                        </p>
-                      )}
                       {displayAccords.length > 0 && (
                         <p className="text-[11px] text-white/80">
                           <span className="text-white/50">Accords:</span>{" "}

@@ -1140,11 +1140,6 @@ const OdaraScreen = () => {
                         if (!isCenter || !hasAny) return null;
                         return (
                           <div className="w-full px-2 mb-[10px] space-y-[2px]">
-                            {displayNotes.length > 0 && (
-                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
-                                <span className="text-muted-foreground/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
-                              </p>
-                            )}
                             {displayAccords.length > 0 && (
                               <p className="text-[10px] text-muted-foreground/70 text-center select-none">
                                 <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
