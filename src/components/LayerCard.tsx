@@ -115,7 +115,53 @@ function buildMoodConfig(
   return configs[mood];
 }
 
-/** Build a structured "why it works" sentence describing scent interaction */
+/** Role descriptor with a distinct "role" word for deduplication */
+interface RoleDesc { role: string; label: string }
+
+/** Map note families to scent roles */
+const ROLE_MATCHERS: { pattern: RegExp; role: string; label: string }[] = [
+  { pattern: /lemon|bergamot|orange|grapefruit|lime|citrus|mandarin/, role: 'citrus', label: 'brightness' },
+  { pattern: /cedar|sandalwood|oud|wood|vetiver/, role: 'woody', label: 'structure' },
+  { pattern: /cardamom|pepper|cinnamon|saffron|clove|nutmeg|ginger/, role: 'spicy', label: 'warmth' },
+  { pattern: /vanilla|caramel|honey|tonka|praline|cocoa|chocolate/, role: 'sweet', label: 'roundness' },
+  { pattern: /rose|jasmine|iris|violet|lily|tuberose|neroli|lavender/, role: 'floral', label: 'elegance' },
+  { pattern: /aqua|marine|mint|cucumber|water|ozone|rain/, role: 'fresh', label: 'clarity' },
+  { pattern: /leather|suede|tobacco|smoke/, role: 'leather', label: 'rugged depth' },
+  { pattern: /amber|resin|incense|benzoin|labdanum/, role: 'resin', label: 'weight' },
+  { pattern: /patchouli|earth|moss|soil/, role: 'earthy', label: 'grounding' },
+  { pattern: /pear|apple|peach|plum|berry|fig|raspberry/, role: 'fruity', label: 'lift' },
+  { pattern: /musk|skin|powder/, role: 'musk', label: 'softness' },
+];
+
+/** Detect the primary role from a notes array */
+function detectRole(notes: string[]): RoleDesc | null {
+  if (!notes || notes.length === 0) return null;
+  const joined = notes.slice(0, 4).map(s => s.toLowerCase()).join(' ');
+  for (const m of ROLE_MATCHERS) {
+    if (m.pattern.test(joined)) return { role: m.role, label: m.label };
+  }
+  return null;
+}
+
+/** Detect secondary role that differs from the primary */
+function detectSecondaryRole(notes: string[], excludeRole: string): RoleDesc | null {
+  if (!notes || notes.length === 0) return null;
+  const joined = notes.slice(0, 4).map(s => s.toLowerCase()).join(' ');
+  for (const m of ROLE_MATCHERS) {
+    if (m.role !== excludeRole && m.pattern.test(joined)) return { role: m.role, label: m.label };
+  }
+  return null;
+}
+
+/** Effect vocabulary per mood */
+const MOOD_EFFECTS: Record<LayerMood, string[]> = {
+  balance: ['creating a balanced blend with natural depth', 'creating an even interplay that stays composed'],
+  bold: ['creating projection that fills the room', 'creating a commanding presence with layered intensity'],
+  smooth: ['creating a seamless, skin-close finish', 'creating an effortless blend that feels second-skin'],
+  wild: ['creating unpredictable contrast that intrigues', 'creating tension that shifts throughout the day'],
+};
+
+/** Build a structured "why it works" sentence */
 function buildWhyItWorks(
   mood: LayerMood,
   baseName: string,
@@ -123,51 +169,24 @@ function buildWhyItWorks(
   baseNotes: string[],
   layerNotes: string[],
 ): string {
-  // Derive character descriptors from top notes
-  const baseChar = describeCharacter(baseNotes);
-  const layerChar = describeCharacter(layerNotes);
+  const baseRole = detectRole(baseNotes);
+  const layerRole = detectRole(layerNotes);
 
-  if (!baseChar && !layerChar) return '';
+  // Ensure distinct descriptors — if same role, grab secondary
+  let bLabel = baseRole?.label ?? 'character';
+  let lLabel = layerRole?.label ?? 'a complementary dimension';
 
-  const templates: Record<LayerMood, string> = {
-    balance: `${baseName} provides ${baseChar || 'a solid foundation'}, while ${layerName} adds ${layerChar || 'a complementary accent'} — together they stay balanced without either overpowering.`,
-    bold: `${baseName} drives with ${baseChar || 'intensity'}, and ${layerName} doubles down with ${layerChar || 'its own weight'} — creating a statement that commands attention.`,
-    smooth: `${baseName} sets the tone with ${baseChar || 'structure'}, while ${layerName} softens the edges with ${layerChar || 'a gentler touch'} — making the blend approachable and seamless.`,
-    wild: `${baseName} brings ${baseChar || 'its own identity'}, and ${layerName} introduces ${layerChar || 'an unexpected twist'} — the contrast creates tension that keeps people guessing.`,
-  };
-  return templates[mood];
-}
+  if (baseRole && layerRole && baseRole.role === layerRole.role) {
+    const altLayer = detectSecondaryRole(layerNotes, baseRole.role);
+    lLabel = altLayer?.label ?? 'a contrasting edge';
+  }
 
-/** Translate a notes array into a concise character descriptor */
-function describeCharacter(notes: string[]): string {
-  if (!notes || notes.length === 0) return '';
-  const n = notes.slice(0, 3).map(s => s.toLowerCase());
+  // Pick effect phrase (alternate based on name length for variety)
+  const effects = MOOD_EFFECTS[mood];
+  const effectIdx = (baseName.length + layerName.length) % effects.length;
+  const effect = effects[effectIdx];
 
-  // Map common note families to descriptors
-  const descriptors: string[] = [];
-  const citrus = n.some(x => /lemon|bergamot|orange|grapefruit|lime|citrus|mandarin/.test(x));
-  const woody = n.some(x => /cedar|sandalwood|oud|wood|vetiver|patchouli/.test(x));
-  const spicy = n.some(x => /cardamom|pepper|cinnamon|saffron|clove|nutmeg|ginger/.test(x));
-  const sweet = n.some(x => /vanilla|caramel|honey|tonka|praline|cocoa|chocolate/.test(x));
-  const floral = n.some(x => /rose|jasmine|iris|violet|lily|tuberose|neroli|lavender/.test(x));
-  const fresh = n.some(x => /aqua|marine|mint|cucumber|water|ozone|rain/.test(x));
-  const leather = n.some(x => /leather|suede|tobacco|smoke/.test(x));
-  const amber = n.some(x => /amber|resin|incense|benzoin|labdanum/.test(x));
-  const fruity = n.some(x => /pear|apple|peach|plum|berry|fig|raspberry/.test(x));
-
-  if (citrus) descriptors.push('bright citrus energy');
-  if (woody) descriptors.push('a woody backbone');
-  if (spicy) descriptors.push('warm spice');
-  if (sweet) descriptors.push('rich sweetness');
-  if (floral) descriptors.push('floral elegance');
-  if (fresh) descriptors.push('clean freshness');
-  if (leather) descriptors.push('dark, rugged texture');
-  if (amber) descriptors.push('resinous warmth');
-  if (fruity) descriptors.push('juicy fruitiness');
-
-  if (descriptors.length === 0) return n.join(' and ');
-  if (descriptors.length === 1) return descriptors[0];
-  return descriptors.slice(0, 2).join(' and ');
+  return `${baseName} provides ${bLabel}, while ${layerName} adds ${lLabel} — ${effect}.`;
 }
 
 /* ── Props ── */
