@@ -1182,16 +1182,16 @@ const OdaraScreen = () => {
                   className="absolute w-full max-w-md"
                   animate={{
                     x: translateX,
-                    y: feedbackY,
+                    y: cardExiting && isCenter ? 600 : feedbackY,
                     rotateY,
                     scale: feedbackScale,
-                    opacity,
+                    opacity: cardExiting && isCenter ? 0 : opacity,
                     z: translateZ,
                   }}
-                  transition={{
-                    duration: 0.45,
-                    ease: [0.32, 0.72, 0, 1],
-                  }}
+                  transition={cardExiting && isCenter
+                    ? { duration: 0.4, ease: [0.4, 0, 1, 1] }
+                    : { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
+                  }
                   style={{
                     zIndex,
                     filter: blur > 0 ? `blur(${blur}px)` : undefined,
