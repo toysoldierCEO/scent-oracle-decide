@@ -369,8 +369,8 @@ const LayerCard = ({
         pointerEvents: 'auto',
       }}
     >
-      <p className="text-[13px] tracking-wide text-white">
-        Layer: <span className="font-medium">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</span>
+      <p className="text-[13px] tracking-wide text-white font-medium">
+        {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
       </p>
       {activeModeEntry.brand && (
         <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
@@ -393,7 +393,7 @@ const LayerCard = ({
         return (
           <div className="w-full mt-[6px] px-1 space-y-[2px]">
             {displayAccords.length > 0 && (
-              <p className="text-[11px] text-white/80 text-center lowercase">
+              <p className="text-[11px] text-white/80 text-center lowercase" style={{ letterSpacing: '0.06em' }}>
                 <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
               </p>
             )}

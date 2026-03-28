@@ -24,7 +24,7 @@ function getDisplayName(name: string, brand?: string | null): string {
   return display;
 }
 
-import { Lock, LockOpen, X, ChevronUp, ChevronDown } from "lucide-react";
+import { Lock, LockOpen, X } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -1252,7 +1252,7 @@ const OdaraScreen = () => {
                         return (
                           <div className="w-full px-2 mb-[10px] mt-[6px]">
                             {displayAccords.length > 0 && (
-                              <p className="text-[13px] text-center select-none lowercase" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.04em', lineHeight: 1.5 }}>
+                              <p className="text-[13px] text-center select-none lowercase" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 }}>
                                 <span style={{ color: 'rgba(255,255,255,0.50)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
                               </p>
                             )}
@@ -1313,9 +1313,9 @@ const OdaraScreen = () => {
                                     disabled={isBusy}
                                     className="text-[13px] text-white/90 rounded-full px-4 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap shrink-0"
                                     style={{
-                                      background: isSelected ? `${altColor}55` : `${altColor}33`,
-                                      border: `1px solid ${altColor}AA`,
-                                      boxShadow: isSelected ? `0 0 12px ${altColor}55` : "none",
+                                      background: isSelected ? `${altColor}55` : `${altColor}22`,
+                                      border: `1px solid ${altColor}66`,
+                                      boxShadow: "none",
                                       color: "#fff",
                                       fontWeight: 500,
                                       scrollSnapAlign: 'start',
@@ -1336,13 +1336,13 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
-                    {/* Lock pulse radiation */}
+                    {/* Lock pulse radiation — top-left */}
                     {isCenter && (
                       <AnimatePresence>
                         {lockPulse && (
                           <motion.div
                             key="lock-pulse"
-                            className="absolute bottom-5 right-5 rounded-full pointer-events-none"
+                            className="absolute top-3 left-5 rounded-full pointer-events-none"
                             style={{ width: 20, height: 20 }}
                             initial={{ scale: 1, opacity: 0.5 }}
                             animate={{ scale: 18, opacity: 0 }}
@@ -1359,7 +1359,7 @@ const OdaraScreen = () => {
                       </AnimatePresence>
                     )}
 
-                    {/* Lock toggle — bottom-right */}
+                    {/* Lock toggle — top-left */}
                     {isCenter && (
                       <motion.button
                         onClick={(e) => {
@@ -1367,10 +1367,9 @@ const OdaraScreen = () => {
                           const willLock = !layerSaved;
                           setLayerSaved(willLock);
                           if (willLock) setLockPulse(true);
-                          // Silent — lock icon state communicates
                         }}
                         whileTap={{ scale: 1.15 }}
-                        className="absolute bottom-5 right-5 p-2 rounded-full z-10"
+                        className="absolute top-3 left-5 p-2 rounded-full z-10"
                         style={{
                           background: layerSaved ? `${familyColor}18` : "transparent",
                         }}
