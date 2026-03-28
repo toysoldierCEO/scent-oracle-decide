@@ -246,6 +246,7 @@ const LayerCard = ({
   mainName,
   mainBrand,
   mainNotes,
+  mainFamily,
   layerModes,
   selectedMood,
   onSelectMood,
