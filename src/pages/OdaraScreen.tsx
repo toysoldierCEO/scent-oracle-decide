@@ -1169,8 +1169,8 @@ const OdaraScreen = () => {
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
+                      <div className="flex gap-2 justify-center mb-[6px] flex-nowrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[4px] font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => {
                           const altFamily = alt.family ?? "";
                           const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
@@ -1185,17 +1185,17 @@ const OdaraScreen = () => {
                                 handleAlternateTap(alt);
                               }}
                               disabled={isBusy}
-                              className="text-[13px] text-white/90 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
+                              className="text-[12px] text-white/90 rounded-full px-3 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap"
                               style={{
                                 background: isSelected
                                   ? `${altColor}55`
                                   : `${altColor}33`,
-                                border: `1.5px solid ${altColor}AA`,
+                                border: `1px solid ${altColor}AA`,
                                 boxShadow: isSelected
                                   ? `0 0 12px ${altColor}55`
                                   : "none",
                                 color: "#fff",
-                                minHeight: "40px",
+                                fontWeight: 500,
                               }}
                             >
                               {getDisplayName(alt.name)}
