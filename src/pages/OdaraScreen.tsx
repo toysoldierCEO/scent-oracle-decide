@@ -1433,6 +1433,15 @@ const OdaraScreen = () => {
                                 filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
                               }}
                             />
+                          ) : selectionState === "undo-ready" ? (
+                            <LockOpen
+                              size={16}
+                              className="transition-all duration-200"
+                              style={{
+                                color: "#eab308",
+                                filter: `drop-shadow(0 0 4px rgba(234,179,8,0.5))`,
+                              }}
+                            />
                           ) : (
                             <LockOpen
                               size={16}
