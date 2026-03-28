@@ -228,7 +228,7 @@ const LayerCard = ({
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);
 
   // Why it works — note-driven, mood-aware
-  const whyText = buildWhyItWorks(selectedMood, baseNotesRaw, layerNotesRaw);
+  const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
 
   const mn = getDisplayName(mainName, mainBrand);
 
