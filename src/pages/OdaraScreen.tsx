@@ -1126,7 +1126,7 @@ const OdaraScreen = () => {
 
                       {/* Family label with color accent — always uses base family */}
                       <p
-                        className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
+                        className="text-xs text-center tracking-[0.25em] mb-[16px] uppercase select-none w-full"
                         style={{ color: baseFamilyColor }}
                       >
                         {cardPick.family}
@@ -1141,8 +1141,8 @@ const OdaraScreen = () => {
                         return (
                           <div className="w-full px-2 mb-[10px] space-y-[2px]">
                             {displayAccords.length > 0 && (
-                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
-                                <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              <p className="text-[11px] text-muted-foreground/80 text-center select-none">
+                                <span className="text-muted-foreground/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
                               </p>
                             )}
                           </div>
