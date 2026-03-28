@@ -590,6 +590,8 @@ const OdaraScreen = () => {
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const LOCK_THRESHOLD = 12;
 
+  const DEV_FALLBACK_USER_ID = 'ddb32bec-480a-483a-b0ca-b7fc5e10fda3';
+
   const loadOracle = async (nextContext = 'daily') => {
     setLoading(true);
     setErrorMsg(null);
@@ -598,8 +600,16 @@ const OdaraScreen = () => {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const userId = user?.id;
-    console.log('ODARA auth user', userId);
+    const previewHost =
+      window.location.hostname.includes('lovable') ||
+      window.location.hostname.includes('preview') ||
+      window.location.hostname.includes('localhost');
+
+    const userId = user?.id ?? (previewHost ? DEV_FALLBACK_USER_ID : null);
+
+    console.log('ODARA auth user', user?.id);
+    console.log('ODARA effective user', userId);
+    console.log('ODARA preview host', previewHost);
 
     if (!userId) {
       setOracle(null);
