@@ -697,8 +697,8 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  // 2-state selection: neutral / selected
-  const [selectionState, setSelectionState] = useState<"neutral" | "selected">("neutral");
+  // 3-state selection: neutral / selected / undo-ready
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
   // Undo: store previous scent data after skip
@@ -1148,16 +1148,23 @@ const OdaraScreen = () => {
                     handleAccept();
                   }
                 }
-                // Swipe DOWN = skip (always, from any state)
+                // Swipe DOWN from selected = yellow undo-ready (no skip yet)
+                // Swipe DOWN from undo-ready = red skip
                 else if (offset.y > vThreshold || velocity.y > vVel) {
-                  setLockFlashColor("#ef4444");
-                  setCardExiting(true);
-                  setTimeout(() => {
-                    setLockFlashColor(null);
-                    setCardExiting(false);
-                    setSelectionState("neutral");
-                    handleSkip();
-                  }, 450);
+                  if (selectionState === "selected") {
+                    setSelectionState("undo-ready");
+                    setLockFlashColor("#eab308");
+                    setTimeout(() => setLockFlashColor(null), 400);
+                  } else if (selectionState === "undo-ready" || selectionState === "neutral") {
+                    setLockFlashColor("#ef4444");
+                    setCardExiting(true);
+                    setTimeout(() => {
+                      setLockFlashColor(null);
+                      setCardExiting(false);
+                      setSelectionState("neutral");
+                      handleSkip();
+                    }, 450);
+                  }
                 }
               }
             }}
