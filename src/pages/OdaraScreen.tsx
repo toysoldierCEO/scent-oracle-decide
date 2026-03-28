@@ -1138,7 +1138,7 @@ const OdaraScreen = () => {
                         const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
                         if (!isCenter || !hasAny) return null;
                         return (
-                          <div className="w-full px-2 mb-[10px] mt-[12px]">
+                          <div className="w-full px-2 mb-[10px] mt-[6px]">
                             {displayAccords.length > 0 && (
                               <p className="text-[13px] text-center select-none" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.04em', lineHeight: 1.5 }}>
                                 <span style={{ color: 'rgba(255,255,255,0.50)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
