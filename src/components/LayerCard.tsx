@@ -369,7 +369,7 @@ const LayerCard = ({
         pointerEvents: 'auto',
       }}
     >
-      <p className="text-[13px] tracking-wide text-white font-medium">
+      <p className="text-lg font-serif tracking-wide text-white leading-tight">
         {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
       </p>
       {activeModeEntry.brand && (
