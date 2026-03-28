@@ -442,19 +442,20 @@ const LayerCard = ({
                 </div>
               </div>
 
-              {/* Why it works */}
-              {whyText && (
+              {/* Reason — compact utility tone */}
+              {reasonText && (
                 <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
-                  <p className="text-[11px] text-white/80 mt-0.5 leading-relaxed">{whyText}</p>
+                  <p className="text-xs text-white/65">{reasonText}</p>
                 </div>
               )}
 
-              {/* Effect */}
-              <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
-                <p className="text-[11px] text-white/80 mt-0.5">{effectText}</p>
-              </div>
+              {/* Why it works — more prominent explanation */}
+              {whyText && (
+                <div>
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
+                  <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
