@@ -219,20 +219,14 @@ function buildWhyItWorks(
 
 /* ── Props ── */
 interface LayerCardProps {
-  /** The main fragrance — used for "why it works" text, NOT for color */
   mainName: string;
   mainBrand: string | null;
-  /** Main fragrance notes from DB */
   mainNotes: string[] | null;
-  /** All layer mode entries */
+  mainFamily: string | null;
   layerModes: LayerModes;
-  /** Currently selected mood */
   selectedMood: LayerMood;
-  /** Callback when user selects a mood */
   onSelectMood: (mood: LayerMood) => void;
-  /** Whether detail sheet is expanded */
   isExpanded: boolean;
-  /** Toggle expanded state */
   onToggleExpand: () => void;
 }
 
@@ -274,7 +268,7 @@ const LayerCard = ({
 
   const mn = getDisplayName(mainName, mainBrand);
 
-  const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);
+  const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
 
   // Why it works — structured interaction logic
   const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
@@ -351,17 +345,17 @@ const LayerCard = ({
               {/* Spray order */}
               <div>
                 <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Spray order</span>
-                <div className="mt-1 space-y-1">
-                  <div className="flex items-start gap-2">
-                    <span className="text-[9px] font-mono text-white/40 mt-px">01</span>
-                    <p className="text-[11px] text-white/80">
-                      <span className="font-mono">{cfg.baseSprays}×</span> {mn} — {cfg.basePlacement}
+                <div className="mt-1 space-y-2">
+                  <div>
+                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
+                    <p className="text-[11px] text-white/80 mt-0.5">
+                      {cfg.baseLabel} · {cfg.baseZones}
                     </p>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[9px] font-mono text-white/40 mt-px">02</span>
-                    <p className="text-[11px] text-white/80">
-                      <span className="font-mono">{cfg.layerSprays}×</span> {getDisplayName(activeModeEntry.name, activeModeEntry.brand)} — {cfg.layerPlacement}
+                  <div>
+                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Top — {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</p>
+                    <p className="text-[11px] text-white/80 mt-0.5">
+                      {cfg.topLabel} · {cfg.topZones}
                     </p>
                   </div>
                 </div>
