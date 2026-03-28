@@ -1412,8 +1412,9 @@ const OdaraScreen = () => {
 
                     {/* Lock icon — state-driven, top-left */}
                     {isCenter && (
-                      <div className="absolute top-3 left-5 p-2 z-10">
+                      <div className="absolute top-3 left-5 flex flex-col items-center z-10">
                         <motion.div
+                          className="p-2"
                           animate={lockFlashColor
                             ? { scale: [1, 1.12, 1] }
                             : { scale: 1 }
@@ -1429,15 +1430,6 @@ const OdaraScreen = () => {
                                 filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
                               }}
                             />
-                          ) : selectionState === "undo-ready" ? (
-                            <LockOpen
-                              size={16}
-                              className="transition-all duration-200"
-                              style={{
-                                color: "#eab308",
-                                filter: `drop-shadow(0 0 4px rgba(234,179,8,0.4))`,
-                              }}
-                            />
                           ) : (
                             <LockOpen
                               size={16}
@@ -1445,6 +1437,25 @@ const OdaraScreen = () => {
                             />
                           )}
                         </motion.div>
+                        {/* Undo back arrow — appears after skip */}
+                        <AnimatePresence>
+                          {showUndoArrow && (
+                            <motion.button
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.2 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUndo();
+                              }}
+                              className="mt-1 p-1.5 rounded-full"
+                              style={{ color: "rgba(255,255,255,0.45)" }}
+                            >
+                              <Undo2 size={13} />
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
                       </div>
                     )}
                   </div>
