@@ -115,35 +115,59 @@ function buildMoodConfig(
   return configs[mood];
 }
 
-/** Build a note-driven "why it works" sentence based on mood and actual notes */
+/** Build a structured "why it works" sentence describing scent interaction */
 function buildWhyItWorks(
   mood: LayerMood,
+  baseName: string,
+  layerName: string,
   baseNotes: string[],
   layerNotes: string[],
 ): string {
-  const b = baseNotes.slice(0, 2).map(n => n.toLowerCase());
-  const l = layerNotes.slice(0, 2).map(n => n.toLowerCase());
+  // Derive character descriptors from top notes
+  const baseChar = describeCharacter(baseNotes);
+  const layerChar = describeCharacter(layerNotes);
 
-  if (b.length === 0 && l.length === 0) return '';
+  if (!baseChar && !layerChar) return '';
 
-  const bStr = b.join(' and ');
-  const lStr = l.join(' and ');
-  // Plural verb when 2 notes, singular when 1
-  const bPlural = b.length > 1;
-  const lPlural = l.length > 1;
+  const templates: Record<LayerMood, string> = {
+    balance: `${baseName} provides ${baseChar || 'a solid foundation'}, while ${layerName} adds ${layerChar || 'a complementary accent'} — together they stay balanced without either overpowering.`,
+    bold: `${baseName} drives with ${baseChar || 'intensity'}, and ${layerName} doubles down with ${layerChar || 'its own weight'} — creating a statement that commands attention.`,
+    smooth: `${baseName} sets the tone with ${baseChar || 'structure'}, while ${layerName} softens the edges with ${layerChar || 'a gentler touch'} — making the blend approachable and seamless.`,
+    wild: `${baseName} brings ${baseChar || 'its own identity'}, and ${layerName} introduces ${layerChar || 'an unexpected twist'} — the contrast creates tension that keeps people guessing.`,
+  };
+  return templates[mood];
+}
 
-  if (b.length > 0 && l.length > 0) {
-    const templates: Record<LayerMood, string> = {
-      balance: `The ${bStr} ${bPlural ? 'stay' : 'stays'} grounded while ${lStr} ${lPlural ? 'lift' : 'lifts'} the top without competing.`,
-      bold: `${bStr} and ${lStr} push in the same direction — maximum depth.`,
-      smooth: `${lStr} ${lPlural ? 'soften' : 'softens'} the ${bStr} into something creamy and approachable.`,
-      wild: `${bStr} ${bPlural ? 'collide' : 'collides'} with ${lStr} — tension that keeps people guessing.`,
-    };
-    return templates[mood];
-  }
+/** Translate a notes array into a concise character descriptor */
+function describeCharacter(notes: string[]): string {
+  if (!notes || notes.length === 0) return '';
+  const n = notes.slice(0, 3).map(s => s.toLowerCase());
 
-  if (b.length > 0) return `The ${bStr} ${bPlural ? 'anchor' : 'anchors'} the blend with character.`;
-  return `The ${lStr} ${lPlural ? 'introduce' : 'introduces'} a new dimension to the base.`;
+  // Map common note families to descriptors
+  const descriptors: string[] = [];
+  const citrus = n.some(x => /lemon|bergamot|orange|grapefruit|lime|citrus|mandarin/.test(x));
+  const woody = n.some(x => /cedar|sandalwood|oud|wood|vetiver|patchouli/.test(x));
+  const spicy = n.some(x => /cardamom|pepper|cinnamon|saffron|clove|nutmeg|ginger/.test(x));
+  const sweet = n.some(x => /vanilla|caramel|honey|tonka|praline|cocoa|chocolate/.test(x));
+  const floral = n.some(x => /rose|jasmine|iris|violet|lily|tuberose|neroli|lavender/.test(x));
+  const fresh = n.some(x => /aqua|marine|mint|cucumber|water|ozone|rain/.test(x));
+  const leather = n.some(x => /leather|suede|tobacco|smoke/.test(x));
+  const amber = n.some(x => /amber|resin|incense|benzoin|labdanum/.test(x));
+  const fruity = n.some(x => /pear|apple|peach|plum|berry|fig|raspberry/.test(x));
+
+  if (citrus) descriptors.push('bright citrus energy');
+  if (woody) descriptors.push('a woody backbone');
+  if (spicy) descriptors.push('warm spice');
+  if (sweet) descriptors.push('rich sweetness');
+  if (floral) descriptors.push('floral elegance');
+  if (fresh) descriptors.push('clean freshness');
+  if (leather) descriptors.push('dark, rugged texture');
+  if (amber) descriptors.push('resinous warmth');
+  if (fruity) descriptors.push('juicy fruitiness');
+
+  if (descriptors.length === 0) return n.join(' and ');
+  if (descriptors.length === 1) return descriptors[0];
+  return descriptors.slice(0, 2).join(' and ');
 }
 
 /* ── Props ── */
