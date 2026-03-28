@@ -84,8 +84,6 @@ interface MoodConfig {
   baseZones: string;
   topLabel: string;
   topZones: string;
-  placement: string;
-  result: string;
 }
 
 /* ── Result text helpers ── */
@@ -104,14 +102,27 @@ const ROLE_ADDITIONS: Record<string, string> = {
   fruity: 'a lighter, fruitier surface', musk: 'a softer landing',
 };
 
-const MOOD_NET_EFFECTS: Record<LayerMood, string[]> = {
-  balance: ['keeping both readable without competing', 'letting each layer stay distinct'],
-  bold: ['pushing projection and presence further', 'amplifying the sillage trail'],
-  smooth: ['smoothing every transition from top to base', 'making the blend feel seamless on skin'],
-  wild: ['creating an evolving contrast that shifts over time', 'adding tension that keeps it interesting'],
+/* ── Effect text: outcome-focused, 1 sentence ── */
+const MOOD_EFFECT_TEMPLATES: Record<LayerMood, (mainStr: string, layerAdd: string) => string[]> = {
+  balance: (ms, la) => [
+    `${ms} stays forward, ${la} fills in behind for a rounder finish.`,
+    `Opens with ${ms}, settles into ${la} without either dropping out.`,
+  ],
+  bold: (ms, la) => [
+    `${ms} pushes further with ${la} reinforcing the trail.`,
+    `Stronger projection overall — ${ms} leads, ${la} extends the dry-down.`,
+  ],
+  smooth: (ms, la) => [
+    `${ms} softens into ${la}, creating a seamless skin-close wear.`,
+    `Blends down to one texture — ${ms} on top, ${la} underneath.`,
+  ],
+  wild: (ms, la) => [
+    `${ms} opens sharp, then ${la} pulls it somewhere unexpected.`,
+    `Starts familiar with ${ms}, shifts into ${la} as it develops.`,
+  ],
 };
 
-function buildResultText(
+function buildEffectText(
   mood: LayerMood,
   baseName: string,
   layerName: string,
@@ -121,19 +132,17 @@ function buildResultText(
   const baseRole = detectRole(baseNotes);
   const layerRole = detectRole(layerNotes);
 
-  const mainStrength = baseRole ? (ROLE_STRENGTHS[baseRole.role] ?? 'character') : 'character';
+  const mainStrength = baseRole ? (ROLE_STRENGTHS[baseRole.role] ?? 'its character') : 'its character';
   let layerAddition = layerRole ? (ROLE_ADDITIONS[layerRole.role] ?? 'a complementary layer') : 'a complementary layer';
 
-  // Avoid repeating if same role
   if (baseRole && layerRole && baseRole.role === layerRole.role) {
     const altRole = detectSecondaryRole(layerNotes, baseRole.role);
     layerAddition = altRole ? (ROLE_ADDITIONS[altRole.role] ?? 'a contrasting edge') : 'a contrasting edge';
   }
 
-  const effects = MOOD_NET_EFFECTS[mood];
-  const effectIdx = (baseName.length + layerName.length) % effects.length;
-
-  return `Keeps the ${mainStrength} of ${baseName}, adds ${layerAddition} from ${layerName} — ${effects[effectIdx]}.`;
+  const templates = MOOD_EFFECT_TEMPLATES[mood](mainStrength, layerAddition);
+  const idx = (baseName.length + layerName.length) % templates.length;
+  return templates[idx];
 }
 
 function buildMoodConfig(
@@ -157,32 +166,28 @@ function buildMoodConfig(
       baseZones: baseHeavy ? 'chest (1), back of neck (1)' : 'chest (2), back of neck (1)',
       topLabel: topHeavy ? '1 spray' : '2 sprays',
       topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
-      placement: 'Base on torso for projection, top on extremities for trail.',
-      result: '', // filled below
+    
     },
     bold: {
       baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
       baseZones: baseHeavy ? 'chest (1), front neck (1)' : 'chest (2), front neck (1)',
       topLabel: topHeavy ? '2 sprays' : '3 sprays',
       topZones: topHeavy ? 'both wrists (1 each)' : 'front neck (1), both wrists (1 each)',
-      placement: 'Full coverage across pulse points for maximum sillage.',
-      result: '',
+    
     },
     smooth: {
       baseLabel: baseHeavy ? '1 spray' : '2 sprays',
       baseZones: baseHeavy ? 'chest (1)' : 'chest (1), back of neck (1)',
       topLabel: topHeavy ? '1 spray' : '2 sprays',
       topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
-      placement: 'Close-contact zones for intimate, skin-level projection.',
-      result: '',
+    
     },
     wild: {
       baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
       baseZones: baseHeavy ? 'chest (1), front neck (1)' : 'chest (2), front neck (1)',
       topLabel: topHeavy ? '2 sprays' : '2 sprays',
       topZones: topHeavy ? 'both wrists (1 each)' : 'both wrists (1 each)',
-      placement: 'Separate zones to let each scent evolve independently.',
-      result: '',
+    
     },
   };
   const cfg = configs[mood];
