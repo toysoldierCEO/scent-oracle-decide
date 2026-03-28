@@ -519,12 +519,17 @@ function classifyInteraction(mainFamily: string, layerFamily: string): Interacti
   const mainAiry = AIRY_FAMILIES.has(mainFamily);
   const layerDense = DENSE_FAMILIES.has(layerFamily);
   const layerAiry = AIRY_FAMILIES.has(layerFamily);
+  const mainNeutral = !mainDense && !mainAiry;
+  const layerNeutral = !layerDense && !layerAiry;
 
   // Opposite density → contrast
   if ((mainDense && layerAiry) || (mainAiry && layerDense)) return 'contrast';
   // Same density group but different family → amplify
   if ((mainDense && layerDense) || (mainAiry && layerAiry)) return 'amplify';
-  // One neutral → balance
+  // Neutral + extreme → contrast (pulling in a new direction)
+  if (mainNeutral && (layerDense || layerAiry)) return 'contrast';
+  if (layerNeutral && (mainDense || mainAiry)) return 'balance';
+  // Both neutral but different families → balance
   return 'balance';
 }
 
