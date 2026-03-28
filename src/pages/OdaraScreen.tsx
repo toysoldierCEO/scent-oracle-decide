@@ -1252,7 +1252,7 @@ const OdaraScreen = () => {
                         return (
                           <div className="w-full px-2 mb-[10px] mt-[6px]">
                             {displayAccords.length > 0 && (
-                              <p className="text-[13px] text-center select-none" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.04em', lineHeight: 1.5 }}>
+                              <p className="text-[13px] text-center select-none lowercase" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.04em', lineHeight: 1.5 }}>
                                 <span style={{ color: 'rgba(255,255,255,0.50)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
                               </p>
                             )}
@@ -1732,7 +1732,7 @@ const OdaraScreen = () => {
                             {hasDbAccords && (
                               <div>
                                 <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Accords</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5">{mainAccords!.join(" · ")}</p>
+                                <p className="text-[12px] text-foreground/80 mt-0.5 lowercase">{mainAccords!.join(" · ")}</p>
                               </div>
                             )}
                           </>

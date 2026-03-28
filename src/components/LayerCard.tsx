@@ -393,7 +393,7 @@ const LayerCard = ({
         return (
           <div className="w-full mt-[6px] px-1 space-y-[2px]">
             {displayAccords.length > 0 && (
-              <p className="text-[11px] text-white/80 text-center">
+              <p className="text-[11px] text-white/80 text-center lowercase">
                 <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
               </p>
             )}
