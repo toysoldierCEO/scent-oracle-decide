@@ -1169,39 +1169,51 @@ const OdaraScreen = () => {
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-1.5 justify-center mb-[6px] flex-nowrap max-w-full overflow-hidden">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[4px] font-medium">Alternatives</span>
-                        {cardAlternates!.map((alt) => {
-                          const altFamily = alt.family ?? "";
-                          const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
-                          const altTint = FAMILY_TINTS[altFamily] ?? DEFAULT_TINT;
-                          const isSelected = oracle?.today_pick?.name === alt.name;
-                          return (
-                            <motion.button
-                              key={alt.name}
-                              whileTap={{ scale: 0.93 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAlternateTap(alt);
-                              }}
-                              disabled={isBusy}
-                              className="text-[11px] text-white/90 rounded-full px-2.5 py-1 transition-all disabled:opacity-40 whitespace-nowrap overflow-hidden text-ellipsis max-w-[30%]"
-                              style={{
-                                background: isSelected
-                                  ? `${altColor}55`
-                                  : `${altColor}33`,
-                                border: `1px solid ${altColor}AA`,
-                                boxShadow: isSelected
-                                  ? `0 0 12px ${altColor}55`
-                                  : "none",
-                                color: "#fff",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {getDisplayName(alt.name)}
-                            </motion.button>
-                          );
-                        })}
+                      <div className="flex flex-col items-center mb-[6px] max-w-full">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mb-[4px] font-medium">Alternatives</span>
+                        <div className="relative w-full">
+                          <div
+                            className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-1 pb-1"
+                            style={{
+                              scrollbarWidth: 'none',
+                              msOverflowStyle: 'none',
+                              WebkitOverflowScrolling: 'touch',
+                            }}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onTouchMove={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex flex-row gap-2.5 mx-auto">
+                              {cardAlternates!.map((alt) => {
+                                const altFamily = alt.family ?? "";
+                                const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
+                                const isSelected = oracle?.today_pick?.name === alt.name;
+                                return (
+                                  <motion.button
+                                    key={alt.name}
+                                    whileTap={{ scale: 0.93 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAlternateTap(alt);
+                                    }}
+                                    disabled={isBusy}
+                                    className="text-[13px] text-white/90 rounded-full px-4 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap shrink-0"
+                                    style={{
+                                      background: isSelected ? `${altColor}55` : `${altColor}33`,
+                                      border: `1px solid ${altColor}AA`,
+                                      boxShadow: isSelected ? `0 0 12px ${altColor}55` : "none",
+                                      color: "#fff",
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {getDisplayName(alt.name)}
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Right fade hint */}
+                          <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.4))' }} />
+                        </div>
                       </div>
                     )}
 
