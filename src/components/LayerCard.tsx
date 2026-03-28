@@ -234,15 +234,38 @@ function detectSecondaryRole(notes: string[], excludeRole: string): RoleDesc | n
   return null;
 }
 
-/** Effect vocabulary per mood */
-const MOOD_EFFECTS: Record<LayerMood, string[]> = {
-  balance: ['creating a balanced blend with natural depth', 'creating an even interplay that stays composed'],
-  bold: ['creating projection that fills the room', 'creating a commanding presence with layered intensity'],
-  smooth: ['creating a seamless, skin-close finish', 'creating an effortless blend that feels second-skin'],
-  wild: ['creating unpredictable contrast that intrigues', 'creating tension that shifts throughout the day'],
+/* ── "Why it works" — natural, sensory language ── */
+
+/** What each role DOES (verb-based, not noun labels) */
+const ROLE_DOES: Record<string, string> = {
+  citrus: 'keeps it bright',
+  woody: 'gives it shape',
+  spicy: 'adds bite',
+  sweet: 'rounds it out',
+  floral: 'opens it up',
+  fresh: 'keeps it clean',
+  leather: 'adds edge',
+  resin: 'anchors the base',
+  earthy: 'grounds it',
+  fruity: 'lifts the opening',
+  musk: 'softens the landing',
 };
 
-/** Build a structured "why it works" sentence */
+/** What each role PREVENTS (when the other scent could be too much) */
+const ROLE_PREVENTS: Record<string, string> = {
+  citrus: 'feeling flat',
+  woody: 'feeling thin',
+  spicy: 'feeling one-note',
+  sweet: 'feeling sharp',
+  floral: 'feeling heavy',
+  fresh: 'getting stale',
+  leather: 'feeling light',
+  resin: 'drifting away too fast',
+  earthy: 'floating off',
+  fruity: 'feeling dense',
+  musk: 'feeling harsh',
+};
+
 function buildWhyItWorks(
   mood: LayerMood,
   baseName: string,
@@ -253,21 +276,29 @@ function buildWhyItWorks(
   const baseRole = detectRole(baseNotes);
   const layerRole = detectRole(layerNotes);
 
-  // Ensure distinct descriptors — if same role, grab secondary
-  let bLabel = baseRole?.label ?? 'character';
-  let lLabel = layerRole?.label ?? 'a complementary dimension';
+  let bDoes = baseRole ? (ROLE_DOES[baseRole.role] ?? 'holds the center') : 'holds the center';
+  let lDoes = layerRole ? (ROLE_DOES[layerRole.role] ?? 'fills in the gaps') : 'fills in the gaps';
+  let lPrevents = layerRole ? (ROLE_PREVENTS[layerRole.role] ?? 'feeling incomplete') : 'feeling incomplete';
+  let bPrevents = baseRole ? (ROLE_PREVENTS[baseRole.role] ?? 'feeling incomplete') : 'feeling incomplete';
 
+  // If same role, grab secondary for contrast
   if (baseRole && layerRole && baseRole.role === layerRole.role) {
     const altLayer = detectSecondaryRole(layerNotes, baseRole.role);
-    lLabel = altLayer?.label ?? 'a contrasting edge';
+    if (altLayer) {
+      lDoes = ROLE_DOES[altLayer.role] ?? 'fills in the gaps';
+      lPrevents = ROLE_PREVENTS[altLayer.role] ?? 'feeling one-dimensional';
+    }
   }
 
-  // Pick effect phrase (alternate based on name length for variety)
-  const effects = MOOD_EFFECTS[mood];
-  const effectIdx = (baseName.length + layerName.length) % effects.length;
-  const effect = effects[effectIdx];
-
-  return `${baseName} provides ${bLabel}, while ${layerName} adds ${lLabel} — ${effect}.`;
+  // Alternate between two natural patterns for variety
+  const pick = (baseName.length + layerName.length) % 3;
+  if (pick === 0) {
+    return `The base ${bDoes}, while the layer ${lDoes} — stops it from ${lPrevents}.`;
+  } else if (pick === 1) {
+    return `One ${bDoes}, the other ${lDoes}, so it doesn't end up ${bPrevents}.`;
+  } else {
+    return `${bDoes[0].toUpperCase() + bDoes.slice(1)} on one side, ${lDoes} on the other — neither takes over.`;
+  }
 }
 
 /* ── Props ── */
