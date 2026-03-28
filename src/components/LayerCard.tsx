@@ -225,12 +225,12 @@ const LayerCard = ({
   const layerNotesRaw = getCuratedNotes(layerNoteSource, baseNoteSet);
   const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
 
+  const mn = getDisplayName(mainName, mainBrand);
+
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand);
 
-  // Why it works — note-driven, mood-aware
+  // Why it works — structured interaction logic
   const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw);
-
-  const mn = getDisplayName(mainName, mainBrand);
 
   return (
     <div
