@@ -1076,7 +1076,7 @@ const OdaraScreen = () => {
                   >
                     {/* Temperature — quiet metadata top-right */}
                     {isCenter && (displayedTemperature ?? effectiveTemperature) > 0 && (
-                      <span className="absolute top-3 right-4 text-[10px] font-mono text-white/30 select-none">
+                      <span className="absolute top-3 right-5 text-[11px] font-mono font-medium text-white/90 select-none">
                         {displayedTemperature ?? effectiveTemperature}°
                       </span>
                     )}
