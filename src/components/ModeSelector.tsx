@@ -13,6 +13,8 @@ export interface LayerModeEntry {
   notes: string[] | null;
   accords: string[] | null;
   interactionType: InteractionType;
+  reason: string;
+  why_it_works: string;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;

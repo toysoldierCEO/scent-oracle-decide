@@ -346,20 +346,13 @@ const LayerCard = ({
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
   const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
 
-  // Notes — from real DB data
-  const baseNotesRaw = getCuratedNotes(mainNotes);
-  const baseNoteSet = new Set(baseNotesRaw.map(n => n.toLowerCase()));
-  const layerNoteSource = activeModeEntry.notes ?? activeModeEntry.accords ?? null;
-  const layerNotesRaw = getCuratedNotes(layerNoteSource, baseNoteSet);
-  const hasNotes = baseNotesRaw.length > 0 || layerNotesRaw.length > 0;
-
   const mn = getDisplayName(mainName, mainBrand);
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
 
-  const interaction = activeModeEntry.interactionType ?? 'balance';
-  const whyText = buildWhyItWorks(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw, interaction);
-  const effectText = buildEffectText(selectedMood, mn, getDisplayName(activeModeEntry.name, activeModeEntry.brand), baseNotesRaw, layerNotesRaw, interaction);
+  // Backend-driven text — no frontend generation
+  const reasonText = activeModeEntry.reason || '';
+  const whyText = activeModeEntry.why_it_works || '';
 
   return (
     <div
@@ -449,19 +442,20 @@ const LayerCard = ({
                 </div>
               </div>
 
-              {/* Why it works */}
-              {whyText && (
+              {/* Reason — compact utility tone */}
+              {reasonText && (
                 <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
-                  <p className="text-[11px] text-white/80 mt-0.5 leading-relaxed">{whyText}</p>
+                  <p className="text-xs text-white/65">{reasonText}</p>
                 </div>
               )}
 
-              {/* Effect */}
-              <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
-                <p className="text-[11px] text-white/80 mt-0.5">{effectText}</p>
-              </div>
+              {/* Why it works — more prominent explanation */}
+              {whyText && (
+                <div>
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
+                  <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
