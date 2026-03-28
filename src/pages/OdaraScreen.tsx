@@ -24,7 +24,7 @@ function getDisplayName(name: string, brand?: string | null): string {
   return display;
 }
 
-import { Lock, LockOpen, X } from "lucide-react";
+import { Lock, LockOpen, X, Undo2 } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -697,10 +697,16 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  // 3-state selection system: neutral → selected → undo-ready
-  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
+  // 2-state selection: neutral / selected
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected">("neutral");
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
+  // Undo: store previous scent data after skip
+  const [previousOracle, setPreviousOracle] = useState<OracleData | null>(null);
+  const [previousMainNotes, setPreviousMainNotes] = useState<string[] | null>(null);
+  const [previousMainAccords, setPreviousMainAccords] = useState<string[] | null>(null);
+  const [previousLayerModes, setPreviousLayerModes] = useState<LayerModes | null>(null);
+  const [showUndoArrow, setShowUndoArrow] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -906,6 +912,11 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
+    // Save current state for undo
+    setPreviousOracle(oracle);
+    setPreviousMainNotes(mainNotes);
+    setPreviousMainAccords(mainAccords);
+    setPreviousLayerModes(layerModes);
     
     try {
       const userId = await getUserId();
@@ -915,8 +926,8 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      // Silent — card transition communicates the skip
       await fetchOracle();
+      setShowUndoArrow(true);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -924,7 +935,26 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, getUserId, fetchOracle]);
+  }, [actionState, oracle, mainNotes, mainAccords, layerModes, getUserId, fetchOracle]);
+
+  const handleUndo = useCallback(() => {
+    if (!previousOracle) return;
+    setOracle(previousOracle);
+    setMainNotes(previousMainNotes);
+    setMainAccords(previousMainAccords);
+    if (previousLayerModes) {
+      setLayerModes(previousLayerModes);
+      setLayerFragrance(previousLayerModes.balance ?? null);
+      setSelectedMood('balance');
+    }
+    setPreviousOracle(null);
+    setPreviousMainNotes(null);
+    setPreviousMainAccords(null);
+    setPreviousLayerModes(null);
+    setShowUndoArrow(false);
+    setSelectionState("neutral");
+    setCardKey((k) => k + 1);
+  }, [previousOracle, previousMainNotes, previousMainAccords, previousLayerModes]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
@@ -1108,37 +1138,26 @@ const OdaraScreen = () => {
               } else if (dir === "vertical") {
                 const vThreshold = 60;
                 const vVel = 200;
-                // Swipe UP behavior depends on selectionState
+                // Swipe UP = choose (lock in)
                 if (offset.y < -vThreshold || velocity.y < -vVel) {
                   if (selectionState === "neutral") {
-                    // Select → lock closed, green flash
                     setSelectionState("selected");
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
+                    setShowUndoArrow(false);
                     handleAccept();
                   }
                 }
-                // Swipe DOWN behavior depends on selectionState
+                // Swipe DOWN = skip (always, from any state)
                 else if (offset.y > vThreshold || velocity.y > vVel) {
-                  if (selectionState === "selected") {
-                    // Undo → lock open, yellow flash
-                    setSelectionState("undo-ready");
-                    setLockFlashColor("#eab308");
-                    setTimeout(() => setLockFlashColor(null), 400);
-                  } else if (selectionState === "undo-ready") {
-                    // Skip → red flash, card exits down
-                    setLockFlashColor("#ef4444");
-                    setCardExiting(true);
-                    setTimeout(() => {
-                      setLockFlashColor(null);
-                      setCardExiting(false);
-                      setSelectionState("neutral");
-                      handleSkip();
-                    }, 450);
-                  } else {
-                    // neutral → skip directly
+                  setLockFlashColor("#ef4444");
+                  setCardExiting(true);
+                  setTimeout(() => {
+                    setLockFlashColor(null);
+                    setCardExiting(false);
+                    setSelectionState("neutral");
                     handleSkip();
-                  }
+                  }, 450);
                 }
               }
             }}
@@ -1355,10 +1374,6 @@ const OdaraScreen = () => {
                             </div>
                             <div className="shrink-0 w-3" aria-hidden />
                           </div>
-                          {/* Right fade hint */}
-                          <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.4))' }} />
-                          {/* Left fade hint */}
-                          <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to left, transparent, rgba(0,0,0,0.4))' }} />
                         </div>
                       </div>
                     )}
@@ -1369,7 +1384,7 @@ const OdaraScreen = () => {
                         {lockFlashColor && (
                           <motion.div
                             key={`lock-flash-${lockFlashColor}`}
-                            className="absolute top-3 left-5 pointer-events-none z-20"
+                            className="absolute top-3 left-5 pointer-events-none z-20 ml-2 mt-2"
                             style={{ width: 20, height: 20 }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: [0, 1, 1, 0] }}
@@ -1393,8 +1408,9 @@ const OdaraScreen = () => {
 
                     {/* Lock icon — state-driven, top-left */}
                     {isCenter && (
-                      <div className="absolute top-3 left-5 p-2 z-10">
+                      <div className="absolute top-3 left-5 flex flex-col items-center z-10">
                         <motion.div
+                          className="p-2"
                           animate={lockFlashColor
                             ? { scale: [1, 1.12, 1] }
                             : { scale: 1 }
@@ -1410,15 +1426,6 @@ const OdaraScreen = () => {
                                 filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
                               }}
                             />
-                          ) : selectionState === "undo-ready" ? (
-                            <LockOpen
-                              size={16}
-                              className="transition-all duration-200"
-                              style={{
-                                color: "#eab308",
-                                filter: `drop-shadow(0 0 4px rgba(234,179,8,0.4))`,
-                              }}
-                            />
                           ) : (
                             <LockOpen
                               size={16}
@@ -1426,6 +1433,25 @@ const OdaraScreen = () => {
                             />
                           )}
                         </motion.div>
+                        {/* Undo back arrow — appears after skip */}
+                        <AnimatePresence>
+                          {showUndoArrow && (
+                            <motion.button
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.2 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUndo();
+                              }}
+                              className="mt-1 p-1.5 rounded-full"
+                              style={{ color: "rgba(255,255,255,0.45)" }}
+                            >
+                              <Undo2 size={13} />
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
                       </div>
                     )}
                   </div>
