@@ -753,6 +753,7 @@ const OdaraScreen = () => {
     setLoading(true);
     setError(false);
     setExitDirection(null);
+    setSelectionState("neutral");
     try {
       // Fetch main card — if excludeId provided, skip that row (used after alt tap)
       let mainQuery = supabaseClient
