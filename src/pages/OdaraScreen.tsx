@@ -768,9 +768,10 @@ const OdaraScreen = () => {
       // Call backend RPC with context
       const { data: rpcResult, error: rpcErr } = await supabaseClient
         .rpc('get_todays_oracle_v3', {
-          p_user_id: userId,
+          p_user: userId,
           p_temperature: tempVal,
           p_context: contextVal,
+          p_brand: null,
         });
 
       if (rpcErr) throw rpcErr;
