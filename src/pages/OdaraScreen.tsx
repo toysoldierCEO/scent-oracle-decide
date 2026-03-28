@@ -1185,7 +1185,7 @@ const OdaraScreen = () => {
                                 handleAlternateTap(alt);
                               }}
                               disabled={isBusy}
-                              className="text-[12px] text-white/90 rounded-full px-3 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap"
+                              className="text-[12px] text-white/90 rounded-full px-3 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px]"
                               style={{
                                 background: isSelected
                                   ? `${altColor}55`
