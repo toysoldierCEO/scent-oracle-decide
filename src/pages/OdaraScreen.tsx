@@ -697,8 +697,10 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  const [layerSaved, setLayerSaved] = useState(false);
-  const [lockPulse, setLockPulse] = useState(false);
+  // 3-state selection system: neutral → selected → undo-ready
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
+  const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
+  const [cardExiting, setCardExiting] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
