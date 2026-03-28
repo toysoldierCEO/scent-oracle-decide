@@ -567,199 +567,255 @@ function pickDiverseLayerModes(candidates: any[]): LayerModes {
 }
 
 const OdaraScreen = () => {
-  const [context, setContext] = useState('daily');
   const [oracle, setOracle] = useState<OracleData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [mainAccords, setMainAccords] = useState<string[] | null>(null);
   const [layerModes, setLayerModes] = useState<LayerModes>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [actionState, setActionState] = useState<ActionState>("idle");
+  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
   const swipeLocked = useRef(false);
+  const [selectedContext, setSelectedContext] = useState<string>("daily");
+  const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
   const [layerSaved, setLayerSaved] = useState(false);
   const [lockPulse, setLockPulse] = useState(false);
+  const [selectedForecastDay, setSelectedForecastDay] = useState(0);
+  const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Swipe feedback removed — silent UI
 
   // Direction locking for gestures
   const dragDirection = useRef<"none" | "horizontal" | "vertical">("none");
   const dragStart = useRef<{ x: number; y: number } | null>(null);
-  const LOCK_THRESHOLD = 12;
+  const LOCK_THRESHOLD = 12; // px before direction locks
 
-  const DEV_FALLBACK_USER_ID = 'ddb32bec-480a-483a-b0ca-b7fc5e10fda3';
+  const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
+  const forecastDays = useMemo(() => buildForecastDays(), []);
 
-  const loadOracle = async (nextContext = 'daily') => {
-    setLoading(true);
-    setErrorMsg(null);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const previewHost =
-      window.location.hostname.includes('lovable') ||
-      window.location.hostname.includes('preview') ||
-      window.location.hostname.includes('localhost');
-
-    const userId = user?.id ?? (previewHost ? DEV_FALLBACK_USER_ID : null);
-
-    console.log('ODARA auth user', user?.id);
-    console.log('ODARA effective user', userId);
-    console.log('ODARA preview host', previewHost);
-
-    if (!userId) {
-      setOracle(null);
-      setErrorMsg("Couldn't load today's scent");
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase.rpc('get_todays_oracle_v3' as any, {
-      p_user: userId,
-      p_temperature: 65,
-      p_context: nextContext,
-      p_brand: null,
-    } as any);
-
-    console.log('ODARA oracle data', data);
-    console.log('ODARA oracle error', error);
-
-    if (error || !data) {
-      setOracle(null);
-      setErrorMsg("Couldn't load today's scent");
-    } else {
-      const oracleData = data as any;
-
-      // Map oracle response to OracleData
-      const liveOracle: OracleData = {
-        today_pick: oracleData.today_pick,
-        layer: oracleData.layer
-          ? {
-              balance: oracleData.layer.balanced ?? oracleData.layer.balance ?? null,
-              bold: oracleData.layer.bold ?? null,
-              smooth: oracleData.layer.smooth ?? null,
-              wild: oracleData.layer.wild ?? null,
-            }
-          : null,
-        alternates: oracleData.alternates ?? null,
-      };
-      setOracle(liveOracle);
-
-      // Fetch notes/accords for the main fragrance
-      if (oracleData.today_pick?.fragrance_id) {
-        const { data: fragRow } = await supabaseClient
-          .from('fragrances')
-          .select('notes, accords')
-          .eq('id', oracleData.today_pick.fragrance_id)
-          .single();
-        if (fragRow) {
-          setMainNotes(fragRow.notes ?? null);
-          setMainAccords(fragRow.accords ?? null);
-        } else {
-          setMainNotes(null);
-          setMainAccords(null);
-        }
-      }
-
-      // Build layer modes from oracle layer data for LayerCard compatibility
-      if (liveOracle.layer) {
-        const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
-        const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
-        for (const mood of moodKeys) {
-          const entry = liveOracle.layer[mood];
-          if (entry && entry.top_id) {
-            const { data: layerRow } = await supabaseClient
-              .from('fragrances')
-              .select('id, name, brand, family_key, notes, accords')
-              .eq('id', entry.top_id)
-              .single();
-            if (layerRow) {
-              newLayerModes[mood] = {
-                id: layerRow.id,
-                name: layerRow.name,
-                brand: layerRow.brand ?? null,
-                family_key: layerRow.family_key ?? '',
-                notes: layerRow.notes ?? null,
-                accords: layerRow.accords ?? null,
-              };
-            }
-          }
-        }
-        setLayerModes(newLayerModes);
-        setLayerFragrance(newLayerModes.balance ?? null);
-        setSelectedMood('balance');
-      } else {
-        setLayerModes({ balance: null, bold: null, smooth: null, wild: null });
-      }
-
-      setCardKey((k) => k + 1);
-    }
-
-    setLoading(false);
-  };
-
+  // Continuous timepiece orb position
+  const [orbPosition, setOrbPosition] = useState(0);
   useEffect(() => {
-    loadOracle('daily');
+    let raf: number;
+    const tick = () => {
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const msInDay = 24 * 60 * 60 * 1000;
+      const dayProgress = (now.getTime() - startOfDay.getTime()) / msInDay;
+      setOrbPosition(dayProgress);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
-  const handleContextChange = async (nextContext: string) => {
-    setContext(nextContext);
-    await loadOracle(nextContext);
-  };
+  // Fetch live weather on mount
+  useEffect(() => {
+    let cancelled = false;
+    setWeatherLoading(true);
+    fetchLiveTemperature()
+      .then((temp) => { if (!cancelled) { setLiveTemperature(temp); setSelectedTemperature(temp); } })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
-  const handleAccept = async () => {
+  const getUserId = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ?? "00000000-0000-0000-0000-000000000000";
+  }, []);
+
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
+    setLoading(true);
+    setError(false);
+    setExitDirection(null);
+    try {
+      // Fetch main card — if excludeId provided, skip that row (used after alt tap)
+      let mainQuery = supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .limit(1);
+      if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
+      const { data: rows, error: qErr } = await mainQuery.single();
+      if (qErr) throw qErr;
+      console.log('[ODARA] Live fragrance row:', rows);
+      setMainNotes(rows.notes ?? null);
+      setMainAccords(rows.accords ?? null);
+
+      // Fetch 3 alternatives excluding the main card (separate from layering)
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .neq('id', rows.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: rows.brand ?? '',
+      }));
+
+      // Fetch layer candidates — get more rows to maximize family diversity
+      const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
+      const { data: layerRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
+        .not('family_key', 'is', null)
+        .limit(20);
+
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? []);
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
+
+      const liveOracle: OracleData = {
+        today_pick: {
+          fragrance_id: rows.id,
+          name: rows.name,
+          family: rows.family_key ?? '',
+          reason: rows.brand ?? '',
+        },
+        layer: null,
+        alternates: liveAlternates,
+      };
+      setOracle(liveOracle);
+      setCardKey((k) => k + 1);
+    } catch (e) {
+      console.error("Oracle fetch failed:", e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedContext, effectiveTemperature]);
+
+  // Load a specific fragrance as main card by id (for alt tap)
+  const loadFragranceById = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(false);
+    try {
+      const { data: row, error: qErr } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .eq('id', id)
+        .single();
+      if (qErr) throw qErr;
+      setMainNotes(row.notes ?? null);
+      setMainAccords(row.accords ?? null);
+
+      const { data: altRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .neq('id', row.id)
+        .not('family_key', 'is', null)
+        .limit(3);
+
+      const liveAlternates = (altRows ?? []).map((r: any) => ({
+        fragrance_id: r.id,
+        name: r.name,
+        family: r.family_key ?? '',
+        reason: row.brand ?? '',
+      }));
+
+      // Fetch layer candidates — get more rows to maximize family diversity
+      const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
+      const { data: layerRows } = await supabaseClient
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
+        .not('family_key', 'is', null)
+        .limit(20);
+
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? []);
+      setLayerModes(newLayerModes);
+      setLayerFragrance(newLayerModes.balance ?? null);
+      setSelectedMood('balance');
+
+      setOracle({
+        today_pick: {
+          fragrance_id: row.id,
+          name: row.name,
+          family: row.family_key ?? '',
+          reason: row.brand ?? '',
+        },
+        layer: null,
+        alternates: liveAlternates,
+      });
+      setCardKey((k) => k + 1);
+    } catch (e) {
+      console.error("Load fragrance failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchOracle(); }, [fetchOracle]);
+
+  const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
-    const entry = oracle?.today_pick;
+    const isViewingForecastNow = selectedForecastDay > 0;
+    const entry = isViewingForecastNow ? forecastDays[selectedForecastDay]?.fragrance : oracle?.today_pick;
     if (!entry?.fragrance_id) return;
 
     setActionState("accepting");
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return;
+      const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
-        p_user: user.id,
+        p_user: userId,
         p_fragrance_id: entry.fragrance_id,
-        p_context: context,
-      } as any);
+        p_context: selectedContext,
+      });
       if (rpcError) throw rpcError;
+      // Silent success — UI state communicates the action
     } catch (e) {
       console.error("Accept failed:", e);
+      console.warn("Couldn't confirm — try again");
     } finally {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  };
+  }, [actionState, oracle, getUserId, selectedForecastDay, forecastDays, selectedContext]);
 
-  const handleSkip = async () => {
+  const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return;
+      const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
-        p_user: user.id,
+        p_user: userId,
         p_fragrance_id: oracle.today_pick.fragrance_id,
-        p_context: context,
-      } as any);
+        p_context: selectedContext,
+      });
       if (rpcError) throw rpcError;
-      await loadOracle(context);
+      // Silent — card transition communicates the skip
+      await fetchOracle();
     } catch (e) {
       console.error("Skip failed:", e);
+      console.warn("Couldn't skip — try again");
     } finally {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  };
+  }, [actionState, oracle, getUserId, fetchOracle]);
 
-  const handleAlternateTap = (alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
+  const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
-    // For now, just log — full alt-tap reload can be added later
-    console.log('ODARA alt tap', alt);
-  };
+    // Phase 1: simply load the tapped fragrance as main card from live Supabase
+    loadFragranceById(alt.fragrance_id);
+  }, [actionState, loadFragranceById]);
 
   const isBusy = actionState !== "idle";
 
@@ -790,14 +846,14 @@ const OdaraScreen = () => {
   }
 
   // Error state
-  if (errorMsg || !oracle) {
+  if (error || !oracle) {
     return (
       <div className="dark">
         <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-          <p className="text-sm text-muted-foreground">{errorMsg ?? "Couldn't load today's scent"}</p>
+          <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
-            onClick={() => loadOracle(context)}
+            onClick={() => fetchOracle()}
             className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
             style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
           >
@@ -808,56 +864,141 @@ const OdaraScreen = () => {
     );
   }
 
-  const today_pick = oracle.today_pick;
-  const alternates = oracle.alternates ?? [];
+  const { today_pick: oraclePick, layer: layerMap, alternates: oracleAlternates } = oracle;
+
+  // Phase 2: mode-driven layering
+  const today_pick = oraclePick;
+  const alternates = oracleAlternates ?? [];
   const hasAlternates = alternates.length > 0;
   const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
 
+  // Card color stays fixed to main fragrance family
   const effectiveFamily = today_pick?.family;
-  const familyColor = FAMILY_COLORS[effectiveFamily] ?? "#888";
   const bgTintColor = effectiveFamily ? (FAMILY_COLORS[effectiveFamily] ?? null) : null;
+
+  const handleForecastDayTap = (index: number) => {
+    if (index === selectedForecastDay) return;
+    setSelectedForecastDay(index);
+    setLayerSheetOpen(false);
+    setCardKey((k) => k + 1);
+    setExitDirection(null);
+    const dayTemp = forecastDays[index]?.temperature;
+    if (dayTemp != null) setDisplayedTemperature(dayTemp);
+    else setDisplayedTemperature(null);
+  };
 
   return (
     <div className="dark">
-      <div className="min-h-screen bg-background flex flex-col items-center px-6 py-0 overflow-hidden relative">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden relative">
         {/* Subtle background tint overlay */}
         <motion.div
           className="absolute inset-0 pointer-events-none z-0"
           animate={{ backgroundColor: bgTintColor ? `${bgTintColor}08` : "transparent" }}
           transition={{ duration: 0.4, ease: "easeInOut" }}
         />
-
         {/* Header */}
         <header className="flex flex-col items-center pt-12 pb-6">
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
         </header>
 
         {/* Context chips */}
-        <div className="flex gap-1.5 mb-6">
+        <div className="flex gap-1.5 mb-3">
           {CONTEXTS.map((ctx) => (
             <button
               key={ctx}
-              onClick={() => handleContextChange(ctx)}
+              onClick={() => {
+                setSelectedContext(ctx);
+                fetchOracle(ctx, selectedTemperature);
+              }}
               disabled={isBusy || loading}
               className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                context === ctx
+                selectedContext === ctx
                   ? "bg-foreground/10 text-foreground"
                   : "text-muted-foreground/50 hover:text-muted-foreground"
               }`}
-              style={context === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
+              style={selectedContext === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
             >
               {ctx}
             </button>
           ))}
         </div>
 
-        {/* Hero Card */}
+        {/* Temperature Scale */}
+        {(() => {
+          const TRACK_MIN = 28;
+          const TRACK_MAX = 87;
+          const BENCHMARKS = [35, 50, 65, 80];
+          const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+          const tempToShow = displayedTemperature ?? effectiveTemperature;
+          const pct = ((clamp(tempToShow, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
+
+          return (
+            <div className="w-full max-w-md mb-6 px-2">
+              <div className="relative w-full" style={{ height: "40px" }}>
+                <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "25px" }} />
+                <motion.div
+                  className="absolute -translate-x-1/2 flex flex-col items-center"
+                  style={{ top: "0px" }}
+                  animate={{ left: `${pct}%` }}
+                  transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                >
+                  <span className="text-[10px] font-mono text-muted-foreground/70 select-none mb-1">
+                    {tempToShow}°
+                  </span>
+                  <motion.div
+                    className="rounded-full"
+                    whileHover={{ scale: 1.4, boxShadow: "0 0 6px 3px rgba(255,255,255,0.25), 0 0 14px 6px rgba(255,255,255,0.1)" }}
+                    whileTap={{ scale: 1.2 }}
+                    style={{
+                      width: "7px", height: "7px",
+                      background: "white",
+                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
+                      animation: "orbBreathe 4s ease-in-out infinite",
+                    }}
+                  />
+                </motion.div>
+              </div>
+
+              <div className="relative w-full mt-1" style={{ height: "20px" }}>
+                {BENCHMARKS.map((temp) => {
+                  const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
+                  return (
+                    <button
+                      key={temp}
+                      onClick={() => {
+                        setManualTemperatureOverride(temp);
+                        setSelectedTemperature(temp);
+                        fetchOracle(selectedContext, temp);
+                      }}
+                      disabled={isBusy || loading}
+                      className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
+                      style={{ left: `${tickPct}%` }}
+                    >
+                      <div className="w-[3px] h-[10px] rounded-full bg-foreground/20 group-hover:bg-foreground/40 transition-colors" />
+                      <span className="text-[9px] font-mono text-muted-foreground/40 mt-1 group-hover:text-muted-foreground/70 transition-colors select-none">
+                        {temp}°
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+
+        {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
         <motion.div
-          className="relative w-full max-w-lg overflow-visible flex-shrink-0"
+          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-0"
           style={{ perspective: "1200px" }}
           animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
+          {/* Gesture hint indicators removed — state communicates via card transitions */}
+          <AnimatePresence>
+          </AnimatePresence>
+
+          {/* Card stack container — custom gesture handling */}
           <motion.div
             className="flex items-center justify-center relative"
             style={{ minHeight: "420px", touchAction: "none" }}
@@ -878,214 +1019,518 @@ const OdaraScreen = () => {
             dragElastic={0.15}
             onDragEnd={(_, info: PanInfo) => {
               const { offset, velocity } = info;
+              const absX = Math.abs(offset.x);
+              const absY = Math.abs(offset.y);
+
+              // Use the locked direction, or fall back to dominant axis
+              const dir = dragDirection.current !== "none"
+                ? dragDirection.current
+                : (absX > absY ? "horizontal" : "vertical");
+
               dragDirection.current = "none";
               dragStart.current = null;
 
-              const vThreshold = 60;
-              const vVel = 200;
-              if (offset.y < -vThreshold || velocity.y < -vVel) {
-                handleAccept();
-              } else if (offset.y > vThreshold || velocity.y > vVel) {
-                handleSkip();
+              if (dir === "horizontal") {
+                const hThreshold = 50;
+                const hVel = 200;
+                if (
+                  (offset.x < -hThreshold || velocity.x < -hVel) &&
+                  selectedForecastDay < forecastDays.length - 1
+                ) {
+                  const next = selectedForecastDay + 1;
+                  setSelectedForecastDay(next);
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[next]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                } else if (
+                  (offset.x > hThreshold || velocity.x > hVel) &&
+                  selectedForecastDay > 0
+                ) {
+                  const prev = selectedForecastDay - 1;
+                  setSelectedForecastDay(prev);
+                  setLayerSheetOpen(false);
+                  const dayTemp = forecastDays[prev]?.temperature;
+                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                }
+              } else if (dir === "vertical") {
+                const vThreshold = 60;
+                const vVel = 200;
+                // Swipe UP = accept / wear
+                if (offset.y < -vThreshold || velocity.y < -vVel) {
+                  handleAccept();
+                }
+                // Swipe DOWN = skip
+                else if (offset.y > vThreshold || velocity.y > vVel) {
+                  handleSkip();
+                }
               }
             }}
           >
-            <motion.div
-              key={`card-${cardKey}`}
-              className="w-full max-w-md"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
-            >
-              <div
-                className="w-full rounded-[24px] px-[22px] py-[16px] flex flex-col items-center relative"
-                style={{
-                  background: `linear-gradient(135deg, ${familyColor}55, rgba(20,20,20,0.95))`,
-                  backdropFilter: "blur(50px) saturate(1.4)",
-                  border: `1px solid ${familyColor}88`,
-                  boxShadow: `0 10px 40px rgba(0,0,0,0.6)`,
-                }}
-              >
-                {/* Today label */}
-                <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-[6px] select-none">
-                  Today's Pick
-                </span>
+            {forecastDays.map((dayData, i) => {
+              const offset = i - selectedForecastDay;
+              const absOffset = Math.abs(offset);
+              const isCenter = offset === 0;
 
-                {/* Long-press target for fragrance profile */}
-                <div
-                  className="flex flex-col items-center select-none"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    longPressTimer.current = setTimeout(() => {
-                      setProfileOpen(true);
-                      longPressTimer.current = null;
-                    }, LONG_PRESS_DURATION);
+              if (absOffset > 3) return null;
+
+              // Phase 1: only render day 0 (live main card), skip forecast cards
+              if (i !== 0) return null;
+              const cardPick = oraclePick;
+              const cardAlternates = oracleAlternates ?? [];
+              const cardHasAlternates = cardAlternates.length > 0;
+
+              if (!cardPick) return null;
+
+              // Card color stays fixed to main fragrance family
+              const cardEffectiveFamily = cardPick.family;
+              const familyTint = FAMILY_TINTS[cardEffectiveFamily] ?? DEFAULT_TINT;
+              const familyColor = FAMILY_COLORS[cardEffectiveFamily] ?? "#888";
+              const baseFamilyColor = FAMILY_COLORS[cardPick.family] ?? "#888";
+
+              // Cover flow transforms
+              const scale = isCenter ? 1 : Math.max(0.88, 1 - absOffset * 0.05);
+              const rotateY = offset * -22;
+              const translateX = offset * 90;
+              const translateZ = isCenter ? 40 : -absOffset * 50;
+              const opacity = isCenter ? 1 : Math.max(0.55, 0.75 - absOffset * 0.12);
+              const blur = isCenter ? 0 : Math.min(absOffset * 1.5, 4);
+              const zIndex = 10 - absOffset;
+
+              const feedbackY = 0;
+              const feedbackScale = scale;
+              const feedbackGlow = "";
+
+              return (
+                <motion.div
+                  key={`coverflow-${i}`}
+                  className="absolute w-full max-w-md"
+                  animate={{
+                    x: translateX,
+                    y: feedbackY,
+                    rotateY,
+                    scale: feedbackScale,
+                    opacity,
+                    z: translateZ,
                   }}
-                  onPointerUp={() => {
-                    if (longPressTimer.current) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
+                  transition={{
+                    duration: 0.45,
+                    ease: [0.32, 0.72, 0, 1],
                   }}
-                  onPointerLeave={() => {
-                    if (longPressTimer.current) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
+                  style={{
+                    zIndex,
+                    filter: blur > 0 ? `blur(${blur}px)` : undefined,
+                    transformStyle: "preserve-3d",
+                    pointerEvents: isCenter ? "auto" : "none",
                   }}
-                  onContextMenu={(e) => e.preventDefault()}
                 >
-                  <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                    {getDisplayName(today_pick.name, today_pick.reason)}
-                  </h1>
-
-                  {/* Brand / reason */}
-                  {today_pick.reason && (
-                    <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
-                      {today_pick.reason}
-                    </p>
-                  )}
-
-                  {/* Family label */}
-                  <p
-                    className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
-                    style={{ color: familyColor }}
-                  >
-                    {today_pick.family}
-                  </p>
-
-                  {/* Notes & accords */}
-                  {(() => {
-                    const displayNotes = normalizeNotes(mainNotes ?? [], 3);
-                    const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
-                    const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
-                    if (!hasAny) return null;
-                    return (
-                      <div className="w-full px-2 mb-[10px] space-y-[2px]">
-                        {displayNotes.length > 0 && (
-                          <p className="text-[10px] text-muted-foreground/70 text-center select-none">
-                            <span className="text-muted-foreground/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
-                          </p>
-                        )}
-                        {displayAccords.length > 0 && (
-                          <p className="text-[10px] text-muted-foreground/70 text-center select-none">
-                            <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Layer Card */}
-                {hasAnyLayerMode && (
-                  <LayerCard
-                    mainName={today_pick.name}
-                    mainBrand={today_pick.reason}
-                    mainNotes={mainNotes}
-                    layerModes={layerModes}
-                    selectedMood={selectedMood}
-                    onSelectMood={(mood) => {
-                      setSelectedMood(mood);
-                      setLayerFragrance(layerModes[mood]);
+                  <div
+                    className="w-full rounded-[24px] px-[22px] py-[16px] flex flex-col items-center relative"
+                    style={{
+                      background: isCenter
+                        ? `linear-gradient(135deg, ${familyColor}55, rgba(20,20,20,0.95))`
+                        : `linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(0,0,0,0.1) 100%), rgba(10,10,12,0.92)`,
+                      backdropFilter: isCenter ? "blur(50px) saturate(1.4)" : "blur(14px) saturate(1.05)",
+                      border: isCenter ? `1px solid ${familyColor}88` : undefined,
+                      boxShadow: isCenter
+                        ? `0 10px 40px rgba(0,0,0,0.6)`
+                        : `0 12px 35px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.05), inset 0 0 0 1px rgba(255,255,255,0.03)`,
                     }}
-                    isExpanded={layerSheetOpen}
-                    onToggleExpand={() => setLayerSheetOpen((o) => !o)}
-                  />
-                )}
-
-                {/* Alternatives */}
-                {hasAlternates && (
-                  <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
-                    {alternates.map((alt) => {
-                      const altFamily = alt.family ?? "";
-                      const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
-                      return (
-                        <motion.button
-                          key={alt.name}
-                          whileTap={{ scale: 0.93 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAlternateTap(alt);
-                          }}
-                          disabled={isBusy}
-                          className="text-[13px] text-white/90 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
-                          style={{
-                            background: `${altColor}33`,
-                            border: `1.5px solid ${altColor}AA`,
-                            color: "#fff",
-                            minHeight: "40px",
-                          }}
-                        >
-                          {getDisplayName(alt.name)}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Lock pulse radiation */}
-                <AnimatePresence>
-                  {lockPulse && (
-                    <motion.div
-                      key="lock-pulse"
-                      className="absolute bottom-5 right-5 rounded-full pointer-events-none"
-                      style={{ width: 20, height: 20 }}
-                      initial={{ scale: 1, opacity: 0.5 }}
-                      animate={{ scale: 18, opacity: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.7, ease: [0.2, 0, 0, 1] }}
-                      onAnimationComplete={() => setLockPulse(false)}
-                    >
-                      <div
-                        className="w-full h-full rounded-full"
-                        style={{ background: `radial-gradient(circle, ${familyColor}30 0%, transparent 70%)` }}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Lock toggle */}
-                <motion.button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const willLock = !layerSaved;
-                    setLayerSaved(willLock);
-                    if (willLock) setLockPulse(true);
-                  }}
-                  whileTap={{ scale: 1.15 }}
-                  className="absolute bottom-5 right-5 p-2 rounded-full z-10"
-                  style={{ background: layerSaved ? `${familyColor}18` : "transparent" }}
-                >
-                  <motion.div
-                    animate={layerSaved ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-                    transition={{ duration: 0.2 }}
                   >
-                    {layerSaved ? (
-                      <Lock
-                        size={16}
-                        className="transition-all duration-200"
-                        style={{ color: familyColor, filter: `drop-shadow(0 0 6px ${familyColor}60)` }}
-                      />
-                    ) : (
-                      <LockOpen
-                        size={16}
-                        className="text-muted-foreground/50 transition-all duration-200 hover:text-muted-foreground/70"
+                    {/* Day/date label */}
+                    <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-[6px] select-none">
+                      {dayData.label} · {dayData.day}
+                    </span>
+
+                    {/* Long-press target for fragrance profile */}
+                    <div
+                      className="flex flex-col items-center select-none"
+                      onPointerDown={(e) => {
+                        if (!isCenter) return;
+                        e.stopPropagation();
+                        longPressTimer.current = setTimeout(() => {
+                          setSelectedForecastDay(i);
+                          setProfileOpen(true);
+                          longPressTimer.current = null;
+                        }, LONG_PRESS_DURATION);
+                      }}
+                      onPointerUp={() => {
+                        if (longPressTimer.current) {
+                          clearTimeout(longPressTimer.current);
+                          longPressTimer.current = null;
+                        }
+                      }}
+                      onPointerLeave={() => {
+                        if (longPressTimer.current) {
+                          clearTimeout(longPressTimer.current);
+                          longPressTimer.current = null;
+                        }
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
+                        {getDisplayName(cardPick.name, cardPick.reason)}
+                      </h1>
+
+                      {/* Brand name — from live Supabase data */}
+                      {cardPick.reason && (
+                        <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
+                          {cardPick.reason}
+                        </p>
+                      )}
+
+                      {/* Family label with color accent — always uses base family */}
+                      <p
+                        className="text-xs text-center tracking-[0.2em] mb-[16px] uppercase select-none"
+                        style={{ color: baseFamilyColor }}
+                      >
+                        {cardPick.family}
+                      </p>
+
+                      {/* Main fragrance notes & accords — swappable for phased notes later */}
+                      {(() => {
+                        const displayNotes = normalizeNotes(mainNotes ?? [], 3);
+                        const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
+                        const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+                        if (!isCenter || !hasAny) return null;
+                        return (
+                          <div className="w-full px-2 mb-[10px] space-y-[2px]">
+                            {displayNotes.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Notes:</span> {displayNotes.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                            {displayAccords.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 text-center select-none">
+                                <span className="text-muted-foreground/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Layer Card — separate component with independent color ownership */}
+                    {isCenter && hasAnyLayerMode && (
+                      <LayerCard
+                        mainName={cardPick.name}
+                        mainBrand={cardPick.reason}
+                        mainNotes={mainNotes}
+                        layerModes={layerModes}
+                        selectedMood={selectedMood}
+                        onSelectMood={(mood) => {
+                          setSelectedMood(mood);
+                          setLayerFragrance(layerModes[mood]);
+                        }}
+                        isExpanded={layerSheetOpen}
+                        onToggleExpand={() => setLayerSheetOpen((o) => !o)}
                       />
                     )}
-                  </motion.div>
-                </motion.button>
-              </div>
-            </motion.div>
+
+                    {/* Alternatives */}
+                    {isCenter && cardHasAlternates && (
+                      <div className="flex gap-[10px] justify-center mb-[6px] flex-wrap">
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[6px] font-medium">Alternatives</span>
+                        {cardAlternates!.map((alt) => {
+                          const altFamily = alt.family ?? "";
+                          const altColor = FAMILY_COLORS[altFamily] ?? "#ffffff";
+                          const altTint = FAMILY_TINTS[altFamily] ?? DEFAULT_TINT;
+                          const isSelected = oracle?.today_pick?.name === alt.name;
+                          return (
+                            <motion.button
+                              key={alt.name}
+                              whileTap={{ scale: 0.93 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlternateTap(alt);
+                              }}
+                              disabled={isBusy}
+                              className="text-[13px] text-white/90 rounded-full px-5 py-2.5 transition-all disabled:opacity-40 font-medium"
+                              style={{
+                                background: isSelected
+                                  ? `${altColor}55`
+                                  : `${altColor}33`,
+                                border: `1.5px solid ${altColor}AA`,
+                                boxShadow: isSelected
+                                  ? `0 0 12px ${altColor}55`
+                                  : "none",
+                                color: "#fff",
+                                minHeight: "40px",
+                              }}
+                            >
+                              {getDisplayName(alt.name)}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Lock pulse radiation */}
+                    {isCenter && (
+                      <AnimatePresence>
+                        {lockPulse && (
+                          <motion.div
+                            key="lock-pulse"
+                            className="absolute bottom-5 right-5 rounded-full pointer-events-none"
+                            style={{ width: 20, height: 20 }}
+                            initial={{ scale: 1, opacity: 0.5 }}
+                            animate={{ scale: 18, opacity: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.7, ease: [0.2, 0, 0, 1] }}
+                            onAnimationComplete={() => setLockPulse(false)}
+                          >
+                            <div
+                              className="w-full h-full rounded-full"
+                              style={{ background: `radial-gradient(circle, ${familyColor}30 0%, transparent 70%)` }}
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    )}
+
+                    {/* Lock toggle — bottom-right */}
+                    {isCenter && (
+                      <motion.button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const willLock = !layerSaved;
+                          setLayerSaved(willLock);
+                          if (willLock) setLockPulse(true);
+                          // Silent — lock icon state communicates
+                        }}
+                        whileTap={{ scale: 1.15 }}
+                        className="absolute bottom-5 right-5 p-2 rounded-full z-10"
+                        style={{
+                          background: layerSaved ? `${familyColor}18` : "transparent",
+                        }}
+                      >
+                        <motion.div
+                          animate={layerSaved
+                            ? { scale: [1, 1.05, 1] }
+                            : { scale: 1 }
+                          }
+                          transition={{ duration: 0.2 }}
+                        >
+                          {layerSaved ? (
+                            <Lock
+                              size={16}
+                              className="transition-all duration-200"
+                              style={{
+                                color: familyColor,
+                                filter: `drop-shadow(0 0 6px ${familyColor}60)`,
+                              }}
+                            />
+                          ) : (
+                            <LockOpen
+                              size={16}
+                              className="text-muted-foreground/50 transition-all duration-200 hover:text-muted-foreground/70"
+                            />
+                          )}
+                        </motion.div>
+                      </motion.button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </motion.div>
+        </motion.div>
+
+        {/* Spacer before forecast — breathing room between card and forecast */}
+        <motion.div
+          className="shrink-0"
+          animate={{ height: layerSheetOpen ? 6 : 20 }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+        />
+
+        {/* 7-Day Forecast Timepiece — magnet: physically pushed down & compressed when layer expands */}
+        <motion.div
+          className="w-full max-w-md rounded-t-[16px] px-5 backdrop-blur-xl overflow-hidden shrink-0"
+          animate={{
+            maxHeight: layerSheetOpen ? 60 : 200,
+            y: layerSheetOpen ? 24 : 0,
+            paddingTop: layerSheetOpen ? 4 : 12,
+            paddingBottom: layerSheetOpen ? 6 : 24,
+            opacity: layerSheetOpen ? 0.55 : 1,
+            scale: layerSheetOpen ? 0.97 : 1,
+          }}
+          transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+          style={{
+            background: "var(--sub-glass-bg)",
+            boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)",
+            transformOrigin: "bottom center",
+          }}
+        >
+          <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
+            Forecast
+          </span>
+          <div className="relative">
+            {/* White orb — continuous time indicator, moves across the orb lane */}
+            {(() => {
+              // progress: 0.0 = midnight (start of today), 1.0 = midnight (start of tomorrow)
+              const progress = orbPosition;
+              // Fade-out zone: 80% → 100% the orb tightens and fades before midnight handoff
+              const FADE_START = 0.80;
+              const fade = progress >= FADE_START
+                ? 1 - ((progress - FADE_START) / (1 - FADE_START))
+                : 1;
+              // Glow tightens as orb approaches next day
+              const glowScale = progress >= FADE_START ? fade : 1;
+              // Position: orb travels from column 0 center to column 1 center
+              // In a 7-col flex justify-between, each column center is at (i / 6) * 100%
+              // So col 0 = 0%, col 1 = 16.667%
+              const colCenterPct = (progress / 6) * 100;
+              return (
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    // The orb lane sits at the same vertical position as the per-column orb lanes
+                    // weekday label height (~15px) + marginBottom 4px = 19px offset, centered in 11px lane
+                    top: "19px",
+                    left: 0,
+                    right: 0,
+                    height: "11px",
+                    zIndex: 10,
+                  }}
+                >
+                  <div
+                    className="absolute"
+                    style={{
+                      left: `${colCenterPct}%`,
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  >
+                    <div
+                      className="rounded-full"
+                      style={{
+                        width: "6px",
+                        height: "6px",
+                        background: "white",
+                        opacity: Math.max(0, fade),
+                        boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * fade).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * fade).toFixed(3)})`,
+                        animation: fade > 0.1 ? "orbBreathe 4s ease-in-out infinite 2s" : "none",
+                        transition: "opacity 0.5s ease, box-shadow 0.5s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Day markers */}
+            <div className="flex justify-between relative">
+              {forecastDays.map((d, i) => {
+                const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
+                const familyColor = d.fragrance
+                  ? (FAMILY_COLORS[d.fragrance.family] ?? FALLBACK_ORB_COLOR)
+                  : FALLBACK_ORB_COLOR;
+                const isSelected = selectedForecastDay === i;
+                const hasFragrance = !!d.fragrance;
+
+                const FADE_ZONE = 0.20;
+                const distToDay = i - orbPosition;
+                const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
+                const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
+                const isCurrentOrbDay = i === 0;
+
+                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 : isNextTarget ? 0.45 + handoffGlow * 0.3 : 0.45;
+                const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
+
+                const isLayered = d.dailySet?.is_layered ?? false;
+                const layerFamily = d.dailySet?.layer?.family;
+                const layerColor = layerFamily ? (FAMILY_COLORS[layerFamily] ?? FALLBACK_ORB_COLOR) : FALLBACK_ORB_COLOR;
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleForecastDayTap(i)}
+                    className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
+                    style={{ minWidth: "28px", width: "28px" }}
+                  >
+                    <span
+                      className="font-mono transition-all duration-200 text-center leading-none"
+                      style={{
+                        fontSize: "11px", letterSpacing: "0.1em",
+                        color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
+                        fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {d.label}
+                    </span>
+
+                    {/* Orb lane spacer — orb is now absolutely positioned above */}
+                    <div style={{ height: "11px", marginBottom: "3px" }} />
+
+                    <span
+                      className="font-mono text-center leading-none transition-all duration-200"
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: isSelected ? 600 : 500,
+                        color: `rgba(255,255,255,${Math.min(dateOpacity + 0.15, 1)})`,
+                        marginBottom: "7px",
+                      }}
+                    >
+                      {d.day}
+                    </span>
+
+                    <div className="flex flex-col items-center justify-center" style={{ height: "26px", gap: "6px" }}>
+                      <motion.div
+                        className="rounded-full"
+                        animate={{
+                          width: isSelected ? "9px" : "7px",
+                          height: isSelected ? "9px" : "7px",
+                          scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
+                          boxShadow: isSelected
+                            ? `0 0 8px 3px ${familyColor}55`
+                            : isNextTarget
+                              ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
+                              : hasFragrance
+                                ? `0 0 3px 1px ${familyColor}22`
+                                : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
+                          opacity: hasFragrance ? 1 : 0.5,
+                        }}
+                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                        style={{ background: familyColor }}
+                      />
+
+                      {isLayered && (
+                        <motion.div
+                          className="rounded-full"
+                          initial={{ opacity: 0, scale: 0 }}
+                          animate={{
+                            opacity: 0.85, scale: 1,
+                            width: isSelected ? "7px" : "6px",
+                            height: isSelected ? "7px" : "6px",
+                            boxShadow: isSelected
+                              ? `0 0 6px 2px ${layerColor}44`
+                              : `0 0 2px 1px ${layerColor}22`,
+                          }}
+                          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                          style={{ background: layerColor }}
+                        />
+                      )}
+                    </div>
+
+                    {isSelected && (
+                      <motion.div
+                        layoutId="forecastUnderline"
+                        className="rounded-full"
+                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </motion.div>
 
         {/* Fragrance Profile Sheet */}
         <AnimatePresence>
           {profileOpen && (() => {
             const profile = FRAGRANCE_PROFILES[today_pick.name];
-            const profileFamilyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
+            const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
             const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
             const familyTint = FAMILY_TINTS[today_pick.family] ?? DEFAULT_TINT;
             return (
@@ -1123,7 +1568,9 @@ const OdaraScreen = () => {
                     <X size={18} />
                   </button>
 
+                  {/* Top section: Name + Family + Bottle */}
                   <div className="relative mb-6">
+                    {/* Bottle image — top right */}
                     {profile?.bottle_url && (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
@@ -1134,7 +1581,9 @@ const OdaraScreen = () => {
                       >
                         <div
                           className="relative rounded-xl overflow-hidden"
-                          style={{ boxShadow: `0 8px 24px -6px rgba(0,0,0,0.4), 0 0 20px -4px ${familyTint.glow}` }}
+                          style={{
+                            boxShadow: `0 8px 24px -6px rgba(0,0,0,0.4), 0 0 20px -4px ${familyTint.glow}`,
+                          }}
                         >
                           <img
                             src={profile.bottle_url}
@@ -1142,14 +1591,18 @@ const OdaraScreen = () => {
                             className="w-full h-auto object-cover"
                             style={{ aspectRatio: "2/3" }}
                           />
+                          {/* Family glow overlay */}
                           <div
                             className="absolute inset-0 pointer-events-none"
-                            style={{ background: `linear-gradient(180deg, transparent 40%, ${profileFamilyColor}15 100%)` }}
+                            style={{
+                              background: `linear-gradient(180deg, transparent 40%, ${familyColor}15 100%)`,
+                            }}
                           />
                         </div>
                       </motion.div>
                     )}
 
+                    {/* Name + family — left aligned to leave room for bottle */}
                     <div style={{ paddingRight: profile?.bottle_url ? "30%" : "0" }}>
                       <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
                       {profile?.brand && (
@@ -1157,18 +1610,18 @@ const OdaraScreen = () => {
                       )}
                       <span
                         className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
-                        style={{ color: profileFamilyColor, boxShadow: `inset 0 0 0 1px ${profileFamilyColor}33` }}
+                        style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
                       >
                         {familyLabel}
                       </span>
                     </div>
                   </div>
 
-                  {/* Note Pyramid */}
+                  {/* Note Pyramid — raw, unfiltered notes for detail view */}
                   {(() => {
                     const hasProfileNotes = profile?.top_notes || profile?.heart_notes || profile?.base_notes;
-                    const hasDbNotes = mainNotes && mainNotes.length > 0;
-                    const hasDbAccords = mainAccords && mainAccords.length > 0;
+                    const hasDbNotes = (mainNotes && mainNotes.length > 0);
+                    const hasDbAccords = (mainAccords && mainAccords.length > 0);
                     if (!hasProfileNotes && !hasDbNotes && !hasDbAccords) return null;
                     return (
                       <div className="mb-8 space-y-3">
@@ -1227,15 +1680,18 @@ const OdaraScreen = () => {
                               <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
                               <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.longevity_score * 10)}/10</span>
                             </div>
-                            <div className="w-full h-[6px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                            <div
+                              className="w-full h-[6px] rounded-full overflow-hidden"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                            >
                               <motion.div
                                 className="h-full rounded-full"
                                 initial={{ width: 0 }}
                                 animate={{ width: `${profile.longevity_score * 100}%` }}
                                 transition={{ duration: 0.5, delay: 0.2, ease: [0.2, 0, 0, 1] }}
                                 style={{
-                                  background: `linear-gradient(90deg, ${profileFamilyColor}CC, ${profileFamilyColor}88)`,
-                                  boxShadow: `0 0 10px -2px ${profileFamilyColor}44`,
+                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
                                 }}
                               />
                             </div>
@@ -1247,15 +1703,18 @@ const OdaraScreen = () => {
                               <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
                               <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.projection_score * 10)}/10</span>
                             </div>
-                            <div className="w-full h-[6px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                            <div
+                              className="w-full h-[6px] rounded-full overflow-hidden"
+                              style={{ background: "rgba(255,255,255,0.06)" }}
+                            >
                               <motion.div
                                 className="h-full rounded-full"
                                 initial={{ width: 0 }}
                                 animate={{ width: `${profile.projection_score * 100}%` }}
                                 transition={{ duration: 0.5, delay: 0.35, ease: [0.2, 0, 0, 1] }}
                                 style={{
-                                  background: `linear-gradient(90deg, ${profileFamilyColor}CC, ${profileFamilyColor}88)`,
-                                  boxShadow: `0 0 10px -2px ${profileFamilyColor}44`,
+                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
                                 }}
                               />
                             </div>
@@ -1265,7 +1724,7 @@ const OdaraScreen = () => {
                     </div>
                   )}
 
-                  {/* Wear Context + Weather */}
+                  {/* Wear Context + Weather (two-tier) */}
                   {(profile?.wardrobe_role || profile?.weather) && (
                     <div className="mb-8 grid grid-cols-2 gap-4">
                       {profile.wardrobe_role && (
