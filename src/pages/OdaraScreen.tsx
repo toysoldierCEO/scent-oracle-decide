@@ -779,6 +779,8 @@ const OdaraScreen = () => {
 
       console.log('[ODARA] Oracle RPC result:', result);
 
+      if (!pick) throw new Error('No fragrance found for this context');
+
       setMainNotes(pick.notes ?? null);
       setMainAccords(pick.accords ?? null);
 
