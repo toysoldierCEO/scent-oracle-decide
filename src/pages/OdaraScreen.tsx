@@ -847,7 +847,7 @@ const OdaraScreen = () => {
       });
       if (rpcError) throw rpcError;
       // Silent — card transition communicates the skip
-      await fetchOracle();
+      await loadOracle(context);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -855,7 +855,7 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, getUserId, fetchOracle]);
+  }, [actionState, oracle, getUserId, loadOracle, context]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
@@ -899,7 +899,7 @@ const OdaraScreen = () => {
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
-            onClick={() => fetchOracle()}
+            onClick={() => loadOracle(context)}
             className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
             style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
           >
@@ -953,8 +953,7 @@ const OdaraScreen = () => {
             <button
               key={ctx}
               onClick={() => {
-                setSelectedContext(ctx);
-                fetchOracle(ctx, selectedTemperature);
+                handleContextChange(ctx);
               }}
               disabled={isBusy || loading}
               className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
@@ -1014,7 +1013,7 @@ const OdaraScreen = () => {
                       onClick={() => {
                         setManualTemperatureOverride(temp);
                         setSelectedTemperature(temp);
-                        fetchOracle(selectedContext, temp);
+                        loadOracle(context);
                       }}
                       disabled={isBusy || loading}
                       className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
