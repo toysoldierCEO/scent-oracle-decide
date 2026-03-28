@@ -276,28 +276,6 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-              {/* Layer fragrance notes & accords */}
-              {(() => {
-                const ln = activeModeEntry.notes ?? [];
-                const la = (activeModeEntry.accords ?? []).map(a => a.trim());
-                const displayNotes = normalizeNotes(ln, 3);
-                const displayAccords = la.slice(0, 4);
-                const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
-                if (!hasAny) return null;
-                return (
-                  <div>
-                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Accords</span>
-                    <div className="mt-1 space-y-0.5">
-                      {displayAccords.length > 0 && (
-                        <p className="text-[11px] text-white/80">
-                          <span className="text-white/50">Accords:</span>{" "}
-                          {displayAccords.join(", ").toLowerCase()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Spray order */}
               <div>
