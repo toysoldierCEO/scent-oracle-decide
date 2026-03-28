@@ -1173,15 +1173,18 @@ const OdaraScreen = () => {
                         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mb-[4px] font-medium">Alternatives</span>
                         <div className="relative w-full">
                           <div
-                            className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-1 pb-1"
+                            className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-4 pb-1"
                             style={{
                               scrollbarWidth: 'none',
                               msOverflowStyle: 'none',
                               WebkitOverflowScrolling: 'touch',
+                              scrollBehavior: 'smooth',
+                              scrollSnapType: 'x mandatory',
                             }}
                             onTouchStart={(e) => e.stopPropagation()}
                             onTouchMove={(e) => e.stopPropagation()}
                           >
+                            <div className="shrink-0 w-3" aria-hidden />
                             <div className="flex flex-row gap-2.5 mx-auto">
                               {cardAlternates!.map((alt) => {
                                 const altFamily = alt.family ?? "";
@@ -1203,6 +1206,7 @@ const OdaraScreen = () => {
                                       boxShadow: isSelected ? `0 0 12px ${altColor}55` : "none",
                                       color: "#fff",
                                       fontWeight: 500,
+                                      scrollSnapAlign: 'start',
                                     }}
                                   >
                                     {getDisplayName(alt.name)}
@@ -1210,9 +1214,12 @@ const OdaraScreen = () => {
                                 );
                               })}
                             </div>
+                            <div className="shrink-0 w-3" aria-hidden />
                           </div>
                           {/* Right fade hint */}
                           <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.4))' }} />
+                          {/* Left fade hint */}
+                          <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none" style={{ background: 'linear-gradient(to left, transparent, rgba(0,0,0,0.4))' }} />
                         </div>
                       </div>
                     )}
