@@ -24,7 +24,7 @@ function getDisplayName(name: string, brand?: string | null): string {
   return display;
 }
 
-import { Lock, LockOpen, X } from "lucide-react";
+import { Lock, LockOpen, X, Undo2 } from "lucide-react";
 
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
@@ -697,10 +697,16 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  // 3-state selection system: neutral → selected → undo-ready
-  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
+  // 2-state selection: neutral / selected
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected">("neutral");
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
+  // Undo: store previous scent data after skip
+  const [previousOracle, setPreviousOracle] = useState<OracleData | null>(null);
+  const [previousMainNotes, setPreviousMainNotes] = useState<string[] | null>(null);
+  const [previousMainAccords, setPreviousMainAccords] = useState<string[] | null>(null);
+  const [previousLayerModes, setPreviousLayerModes] = useState<LayerModes | null>(null);
+  const [showUndoArrow, setShowUndoArrow] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
