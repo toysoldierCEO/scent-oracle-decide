@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import ModeSelector, { type LayerMood, type LayerModes, LAYER_MOODS } from "./ModeSelector";
+import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, LAYER_MOODS } from "./ModeSelector";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 
 /* ── Color maps (shared reference, same as OdaraScreen) ── */
