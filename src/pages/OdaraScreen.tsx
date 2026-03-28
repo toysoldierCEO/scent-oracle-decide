@@ -923,68 +923,7 @@ const OdaraScreen = () => {
           ))}
         </div>
 
-        {/* Temperature Scale */}
-        {(() => {
-          const TRACK_MIN = 28;
-          const TRACK_MAX = 87;
-          const BENCHMARKS = [35, 50, 65, 80];
-          const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-          const tempToShow = displayedTemperature ?? effectiveTemperature;
-          const pct = ((clamp(tempToShow, TRACK_MIN, TRACK_MAX) - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
-
-          return (
-            <div className="w-full max-w-md mb-6 px-2">
-              <div className="relative w-full" style={{ height: "40px" }}>
-                <div className="absolute w-full h-[2px] rounded-full bg-foreground/10" style={{ top: "25px" }} />
-                <motion.div
-                  className="absolute -translate-x-1/2 flex flex-col items-center"
-                  style={{ top: "0px" }}
-                  animate={{ left: `${pct}%` }}
-                  transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                >
-                  <span className="text-[10px] font-mono text-muted-foreground/70 select-none mb-1">
-                    {tempToShow}°
-                  </span>
-                  <motion.div
-                    className="rounded-full"
-                    whileHover={{ scale: 1.4, boxShadow: "0 0 6px 3px rgba(255,255,255,0.25), 0 0 14px 6px rgba(255,255,255,0.1)" }}
-                    whileTap={{ scale: 1.2 }}
-                    style={{
-                      width: "7px", height: "7px",
-                      background: "white",
-                      boxShadow: "0 0 4px 2px rgba(255,255,255,0.15), 0 0 10px 4px rgba(255,255,255,0.06)",
-                      animation: "orbBreathe 4s ease-in-out infinite",
-                    }}
-                  />
-                </motion.div>
-              </div>
-
-              <div className="relative w-full mt-1" style={{ height: "20px" }}>
-                {BENCHMARKS.map((temp) => {
-                  const tickPct = ((temp - TRACK_MIN) / (TRACK_MAX - TRACK_MIN)) * 100;
-                  return (
-                    <button
-                      key={temp}
-                      onClick={() => {
-                        setManualTemperatureOverride(temp);
-                        setSelectedTemperature(temp);
-                        fetchOracle(selectedContext, temp);
-                      }}
-                      disabled={isBusy || loading}
-                      className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
-                      style={{ left: `${tickPct}%` }}
-                    >
-                      <div className="w-[3px] h-[10px] rounded-full bg-foreground/20 group-hover:bg-foreground/40 transition-colors" />
-                      <span className="text-[9px] font-mono text-muted-foreground/40 mt-1 group-hover:text-muted-foreground/70 transition-colors select-none">
-                        {temp}°
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
+        {/* Temperature removed — now shown on card */}
 
 
         {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
