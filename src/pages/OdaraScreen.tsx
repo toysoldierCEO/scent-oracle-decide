@@ -1125,7 +1125,7 @@ const OdaraScreen = () => {
 
                       {/* Family label with color accent — always uses base family */}
                       <p
-                        className="text-xs text-center uppercase select-none w-full mt-[10px] mb-[16px]"
+                        className="text-xs text-center uppercase select-none w-full mt-[10px] mb-[6px]"
                         style={{ color: baseFamilyColor, fontWeight: 500, letterSpacing: '0.12em', lineHeight: 1.4 }}
                       >
                         {cardPick.family}
