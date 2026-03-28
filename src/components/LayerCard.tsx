@@ -67,12 +67,23 @@ function getCuratedNotes(notes: string[] | null | undefined, exclude: Set<string
   return source.slice(0, 3);
 }
 
+/* ── Intensity detection ── */
+const HEAVY_FAMILIES = new Set(['oud-amber', 'dark-leather', 'tobacco-boozy', 'sweet-gourmand']);
+const LIGHT_FAMILIES = new Set(['fresh-blue', 'citrus-cologne', 'citrus-aromatic', 'fresh-citrus', 'fresh-aquatic']);
+
+function isHeavy(familyKey: string | null): boolean {
+  return !!familyKey && HEAVY_FAMILIES.has(familyKey);
+}
+function isLight(familyKey: string | null): boolean {
+  return !!familyKey && LIGHT_FAMILIES.has(familyKey);
+}
+
 /* ── Mode-specific config ── */
 interface MoodConfig {
-  baseSprays: number;
-  layerSprays: number;
-  basePlacement: string;
-  layerPlacement: string;
+  baseLabel: string;
+  baseZones: string;
+  topLabel: string;
+  topZones: string;
   placement: string;
   result: string;
 }
@@ -83,32 +94,49 @@ function buildMoodConfig(
   mainBrand: string | null,
   layerName: string,
   layerBrand: string | null,
+  mainFamily: string | null,
+  layerFamily: string | null,
 ): MoodConfig {
   const mn = getDisplayName(mainName, mainBrand);
   const ln = getDisplayName(layerName, layerBrand);
+
+  // Determine spray counts based on intensity + mood
+  const baseHeavy = isHeavy(mainFamily);
+  const topHeavy = isHeavy(layerFamily);
+
+  // Base spray logic: chest (1–2) + optional back of neck (1)
+  // Top spray logic: front neck (1) + wrists (1 each = 2 symmetric)
   const configs: Record<LayerMood, MoodConfig> = {
     balance: {
-      baseSprays: 3, layerSprays: 1,
-      basePlacement: 'chest, neck', layerPlacement: 'wrists',
-      placement: 'Base on pulse points, layer on outer edges for natural diffusion.',
+      baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
+      baseZones: baseHeavy ? 'chest (1), back of neck (1)' : 'chest (2), back of neck (1)',
+      topLabel: topHeavy ? '1 spray' : '2 sprays',
+      topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
+      placement: 'Base on torso for projection, top on extremities for trail.',
       result: `A balanced blend where ${mn} leads and ${ln} accents.`,
     },
     bold: {
-      baseSprays: 2, layerSprays: 2,
-      basePlacement: 'chest, wrists', layerPlacement: 'neck, behind ears',
-      placement: 'Even distribution across hot zones for maximum sillage.',
+      baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
+      baseZones: baseHeavy ? 'chest (1), front neck (1)' : 'chest (2), front neck (1)',
+      topLabel: topHeavy ? '2 sprays' : '3 sprays',
+      topZones: topHeavy ? 'both wrists (1 each)' : 'front neck (1), both wrists (1 each)',
+      placement: 'Full coverage across pulse points for maximum sillage.',
       result: `A powerful statement — ${mn} and ${ln} command the room.`,
     },
     smooth: {
-      baseSprays: 2, layerSprays: 1,
-      basePlacement: 'chest, neck', layerPlacement: 'wrists, inner elbows',
-      placement: 'Close-contact zones for intimate projection.',
-      result: `A smooth, approachable blend — ${ln} creams out the edges.`,
+      baseLabel: baseHeavy ? '1 spray' : '2 sprays',
+      baseZones: baseHeavy ? 'chest (1)' : 'chest (1), back of neck (1)',
+      topLabel: topHeavy ? '1 spray' : '2 sprays',
+      topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
+      placement: 'Close-contact zones for intimate, skin-level projection.',
+      result: `A smooth, approachable blend — ${ln} softens the edges.`,
     },
     wild: {
-      baseSprays: 2, layerSprays: 2,
-      basePlacement: 'chest, neck', layerPlacement: 'wrists, collar',
-      placement: 'Separate zones to let each scent breathe independently.',
+      baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
+      baseZones: baseHeavy ? 'chest (1), front neck (1)' : 'chest (2), front neck (1)',
+      topLabel: topHeavy ? '2 sprays' : '2 sprays',
+      topZones: topHeavy ? 'both wrists (1 each)' : 'both wrists (1 each)',
+      placement: 'Separate zones to let each scent evolve independently.',
       result: `An unpredictable blend — ${mn} clashes with ${ln} for magnetism.`,
     },
   };
