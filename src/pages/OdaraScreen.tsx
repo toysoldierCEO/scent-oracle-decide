@@ -896,39 +896,38 @@ const OdaraScreen = () => {
           animate={{ backgroundColor: bgTintColor ? `${bgTintColor}08` : "transparent" }}
           transition={{ duration: 0.4, ease: "easeInOut" }}
         />
-        {/* Header */}
-        <header className="flex flex-col items-center pt-12 pb-6">
-          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
-        </header>
+        {/* Header + Context chips grouped */}
+        <div className="flex flex-col items-center pt-[16px] mb-[14px]">
+          <header className="flex flex-col items-center pb-6">
+            <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
+          </header>
 
-        {/* Context chips */}
-        <div className="flex gap-1.5 mb-3">
-          {CONTEXTS.map((ctx) => (
-            <button
-              key={ctx}
-              onClick={() => {
-                setSelectedContext(ctx);
-                fetchOracle(ctx, selectedTemperature);
-              }}
-              disabled={isBusy || loading}
-              className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
-                selectedContext === ctx
-                  ? "bg-foreground/10 text-foreground"
-                  : "text-muted-foreground/50 hover:text-muted-foreground"
-              }`}
-              style={selectedContext === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
-            >
-              {ctx}
-            </button>
-          ))}
+          {/* Context chips */}
+          <div className="flex gap-1.5">
+            {CONTEXTS.map((ctx) => (
+              <button
+                key={ctx}
+                onClick={() => {
+                  setSelectedContext(ctx);
+                  fetchOracle(ctx, selectedTemperature);
+                }}
+                disabled={isBusy || loading}
+                className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
+                  selectedContext === ctx
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                }`}
+                style={selectedContext === ctx ? { boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)" } : undefined}
+              >
+                {ctx}
+              </button>
+            ))}
+          </div>
         </div>
-
-        {/* Temperature removed — now shown on card */}
-
 
         {/* Cover Flow Card Stack — magnet: shifts up when layer expands */}
         <motion.div
-          className="relative w-full max-w-lg mt-3 overflow-visible flex-shrink-0"
+          className="relative w-full max-w-lg mt-[4px] overflow-visible flex-shrink-0"
           style={{ perspective: "1200px" }}
           animate={{ y: layerSheetOpen ? -32 : 0 }}
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
@@ -1170,7 +1169,7 @@ const OdaraScreen = () => {
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
                       <div className="flex flex-col items-center mb-[6px] max-w-full">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mt-[18px] mb-[10px] font-medium">Alternatives</span>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mt-[18px] mb-[16px] font-medium">Alternatives</span>
                         <div className="relative w-full">
                           <div
                             className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-4 pb-1"
