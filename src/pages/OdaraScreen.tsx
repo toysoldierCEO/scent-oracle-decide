@@ -507,38 +507,103 @@ function buildForecastDays(): ForecastDay[] {
   });
 }
 
+/* ── Density classification for interaction types ── */
+const DENSE_FAMILIES = new Set(['oud-amber', 'dark-leather', 'tobacco-boozy', 'sweet-gourmand']);
+const AIRY_FAMILIES = new Set(['fresh-blue', 'citrus-cologne', 'fresh-citrus', 'fresh-aquatic', 'citrus-aromatic']);
+
+type InteractionType = 'amplify' | 'balance' | 'contrast';
+
+function classifyInteraction(mainFamily: string, layerFamily: string): InteractionType {
+  if (mainFamily === layerFamily) return 'amplify';
+  const mainDense = DENSE_FAMILIES.has(mainFamily);
+  const mainAiry = AIRY_FAMILIES.has(mainFamily);
+  const layerDense = DENSE_FAMILIES.has(layerFamily);
+  const layerAiry = AIRY_FAMILIES.has(layerFamily);
+
+  // Opposite density → contrast
+  if ((mainDense && layerAiry) || (mainAiry && layerDense)) return 'contrast';
+  // Same density group but different family → amplify
+  if ((mainDense && layerDense) || (mainAiry && layerAiry)) return 'amplify';
+  // One neutral → balance
+  return 'balance';
+}
+
+function scoreLayerCandidate(
+  mainFamily: string,
+  candidate: any,
+): { score: number; interaction: InteractionType } {
+  const layerFamily = candidate.family_key as string;
+  const interaction = classifyInteraction(mainFamily, layerFamily);
+
+  let score = 0.5; // baseline
+
+  // Interaction type boosts
+  if (interaction === 'balance') score += 0.25; // fills a gap — best
+  if (interaction === 'contrast') score += 0.15; // adds tension — good
+  if (interaction === 'amplify') score += 0.05; // same direction — only if meaningful
+
+  // Penalty: same family as main (redundant, no transformation)
+  if (layerFamily === mainFamily) score -= 0.30;
+
+  // Penalty: both dense (muddy/cloying risk)
+  if (DENSE_FAMILIES.has(mainFamily) && DENSE_FAMILIES.has(layerFamily) && mainFamily !== layerFamily) {
+    score -= 0.10;
+  }
+
+  // Boost: layer adds missing dimension (different density)
+  const mainDense = DENSE_FAMILIES.has(mainFamily);
+  const mainAiry = AIRY_FAMILIES.has(mainFamily);
+  const layerDense = DENSE_FAMILIES.has(layerFamily);
+  const layerAiry = AIRY_FAMILIES.has(layerFamily);
+  if ((mainDense && layerAiry) || (mainAiry && layerDense)) {
+    score += 0.10; // structural improvement
+  }
+
+  // Boost: neutral layer on extreme base (grounding/lifting)
+  if ((mainDense || mainAiry) && !layerDense && !layerAiry) {
+    score += 0.08;
+  }
+
+  return { score: Math.max(0, Math.min(1, score)), interaction };
+}
+
 /**
- * Pick 4 layer fragrances maximizing family_key diversity.
- * Groups candidates by family, picks one per family first,
- * then fills remaining slots from leftover candidates.
+ * Pick 4 layer fragrances using interaction-type-aware scoring.
+ * Prioritizes family diversity + meaningful transformation.
  */
-function pickDiverseLayerModes(candidates: any[]): LayerModes {
+function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerModes {
   const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
   const result: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
 
   if (!candidates || candidates.length === 0) return result;
 
-  // Group by family_key — pick first candidate per family
-  const familyMap = new Map<string, any[]>();
-  for (const c of candidates) {
-    const fk = c.family_key as string;
-    if (!familyMap.has(fk)) familyMap.set(fk, []);
-    familyMap.get(fk)!.push(c);
-  }
+  // Score and classify all candidates
+  const scored = candidates
+    .filter(c => c.family_key)
+    .map(c => ({
+      ...c,
+      ...scoreLayerCandidate(mainFamily, c),
+    }))
+    .sort((a, b) => b.score - a.score);
 
-  // Pick one representative per distinct family
-  const picked: any[] = [];
+  // Pick top candidates ensuring family diversity
+  const picked: (typeof scored[0])[] = [];
+  const usedFamilies = new Set<string>();
   const usedIds = new Set<string>();
-  for (const [, members] of familyMap) {
+
+  // First pass: one per distinct family, sorted by score
+  for (const c of scored) {
     if (picked.length >= 4) break;
-    const rep = members[0];
-    picked.push(rep);
-    usedIds.add(rep.id);
+    if (!usedFamilies.has(c.family_key) && !usedIds.has(c.id)) {
+      picked.push(c);
+      usedFamilies.add(c.family_key);
+      usedIds.add(c.id);
+    }
   }
 
-  // If fewer than 4 distinct families, fill from remaining candidates
+  // Fill remaining slots from best remaining candidates
   if (picked.length < 4) {
-    for (const c of candidates) {
+    for (const c of scored) {
       if (picked.length >= 4) break;
       if (!usedIds.has(c.id)) {
         picked.push(c);
@@ -547,21 +612,40 @@ function pickDiverseLayerModes(candidates: any[]): LayerModes {
     }
   }
 
-  // Assign to modes
-  picked.forEach((r, i) => {
-    if (i < 4) {
-      result[moodKeys[i]] = {
-        id: r.id,
-        name: r.name,
-        brand: r.brand ?? null,
-        family_key: r.family_key,
-        notes: r.notes ?? null,
-        accords: r.accords ?? null,
+  // Assign to moods — try to match interaction type to mood intent
+  // balance mood → prefer 'balance' interaction, bold → 'amplify', smooth → 'balance', wild → 'contrast'
+  const moodPreference: Record<LayerMood, InteractionType> = {
+    balance: 'balance',
+    bold: 'amplify',
+    smooth: 'balance',
+    wild: 'contrast',
+  };
+
+  const assigned = new Set<string>();
+  for (const mood of moodKeys) {
+    const preferred = moodPreference[mood];
+    // Try to find a picked candidate matching preferred interaction
+    const match = picked.find(p => p.interaction === preferred && !assigned.has(p.id));
+    const fallback = picked.find(p => !assigned.has(p.id));
+    const chosen = match ?? fallback;
+    if (chosen) {
+      assigned.add(chosen.id);
+      result[mood] = {
+        id: chosen.id,
+        name: chosen.name,
+        brand: chosen.brand ?? null,
+        family_key: chosen.family_key,
+        notes: chosen.notes ?? null,
+        accords: chosen.accords ?? null,
+        interactionType: chosen.interaction,
       };
     }
-  });
+  }
 
-  console.log('[ODARA] Layer mode families:', moodKeys.map((m, i) => `${m.toUpperCase()}=${picked[i]?.family_key ?? 'none'}`).join(', '));
+  console.log('[ODARA] Layer selections:', moodKeys.map(m => {
+    const e = result[m];
+    return `${m.toUpperCase()}=${e?.family_key ?? 'none'}(${e?.interactionType ?? '-'})`;
+  }).join(', '));
 
   return result;
 }
