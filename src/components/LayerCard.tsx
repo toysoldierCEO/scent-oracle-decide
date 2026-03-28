@@ -88,6 +88,54 @@ interface MoodConfig {
   result: string;
 }
 
+/* ── Result text helpers ── */
+const ROLE_STRENGTHS: Record<string, string> = {
+  citrus: 'citrus lift', woody: 'woody backbone', spicy: 'spiced edge',
+  sweet: 'sweetness', floral: 'floral character', fresh: 'freshness',
+  leather: 'leather depth', resin: 'resinous weight', earthy: 'earthy base',
+  fruity: 'fruity brightness', musk: 'soft finish',
+};
+
+const ROLE_ADDITIONS: Record<string, string> = {
+  citrus: 'brightness on top', woody: 'woody structure underneath',
+  spicy: 'a warmer, spiced dimension', sweet: 'roundness in the drydown',
+  floral: 'floral complexity', fresh: 'a cleaner, fresher opening',
+  leather: 'textured depth', resin: 'anchoring weight', earthy: 'grounding warmth',
+  fruity: 'a lighter, fruitier surface', musk: 'a softer landing',
+};
+
+const MOOD_NET_EFFECTS: Record<LayerMood, string[]> = {
+  balance: ['keeping both readable without competing', 'letting each layer stay distinct'],
+  bold: ['pushing projection and presence further', 'amplifying the sillage trail'],
+  smooth: ['smoothing every transition from top to base', 'making the blend feel seamless on skin'],
+  wild: ['creating an evolving contrast that shifts over time', 'adding tension that keeps it interesting'],
+};
+
+function buildResultText(
+  mood: LayerMood,
+  baseName: string,
+  layerName: string,
+  baseNotes: string[],
+  layerNotes: string[],
+): string {
+  const baseRole = detectRole(baseNotes);
+  const layerRole = detectRole(layerNotes);
+
+  const mainStrength = baseRole ? (ROLE_STRENGTHS[baseRole.role] ?? 'character') : 'character';
+  let layerAddition = layerRole ? (ROLE_ADDITIONS[layerRole.role] ?? 'a complementary layer') : 'a complementary layer';
+
+  // Avoid repeating if same role
+  if (baseRole && layerRole && baseRole.role === layerRole.role) {
+    const altRole = detectSecondaryRole(layerNotes, baseRole.role);
+    layerAddition = altRole ? (ROLE_ADDITIONS[altRole.role] ?? 'a contrasting edge') : 'a contrasting edge';
+  }
+
+  const effects = MOOD_NET_EFFECTS[mood];
+  const effectIdx = (baseName.length + layerName.length) % effects.length;
+
+  return `Keeps the ${mainStrength} of ${baseName}, adds ${layerAddition} from ${layerName} — ${effects[effectIdx]}.`;
+}
+
 function buildMoodConfig(
   mood: LayerMood,
   mainName: string,
@@ -100,12 +148,9 @@ function buildMoodConfig(
   const mn = getDisplayName(mainName, mainBrand);
   const ln = getDisplayName(layerName, layerBrand);
 
-  // Determine spray counts based on intensity + mood
   const baseHeavy = isHeavy(mainFamily);
   const topHeavy = isHeavy(layerFamily);
 
-  // Base spray logic: chest (1–2) + optional back of neck (1)
-  // Top spray logic: front neck (1) + wrists (1 each = 2 symmetric)
   const configs: Record<LayerMood, MoodConfig> = {
     balance: {
       baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
@@ -113,7 +158,7 @@ function buildMoodConfig(
       topLabel: topHeavy ? '1 spray' : '2 sprays',
       topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
       placement: 'Base on torso for projection, top on extremities for trail.',
-      result: `A balanced blend where ${mn} leads and ${ln} accents.`,
+      result: '', // filled below
     },
     bold: {
       baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
@@ -121,7 +166,7 @@ function buildMoodConfig(
       topLabel: topHeavy ? '2 sprays' : '3 sprays',
       topZones: topHeavy ? 'both wrists (1 each)' : 'front neck (1), both wrists (1 each)',
       placement: 'Full coverage across pulse points for maximum sillage.',
-      result: `A powerful statement — ${mn} and ${ln} command the room.`,
+      result: '',
     },
     smooth: {
       baseLabel: baseHeavy ? '1 spray' : '2 sprays',
@@ -129,7 +174,7 @@ function buildMoodConfig(
       topLabel: topHeavy ? '1 spray' : '2 sprays',
       topZones: topHeavy ? 'front neck (1)' : 'both wrists (1 each)',
       placement: 'Close-contact zones for intimate, skin-level projection.',
-      result: `A smooth, approachable blend — ${ln} softens the edges.`,
+      result: '',
     },
     wild: {
       baseLabel: baseHeavy ? '2 sprays' : '3 sprays',
@@ -137,10 +182,13 @@ function buildMoodConfig(
       topLabel: topHeavy ? '2 sprays' : '2 sprays',
       topZones: topHeavy ? 'both wrists (1 each)' : 'both wrists (1 each)',
       placement: 'Separate zones to let each scent evolve independently.',
-      result: `An unpredictable blend — ${mn} clashes with ${ln} for magnetism.`,
+      result: '',
     },
   };
-  return configs[mood];
+  const cfg = configs[mood];
+  // Result text uses note-aware logic
+  // (notes not available here, so result is set at render time)
+  return cfg;
 }
 
 /** Role descriptor with a distinct "role" word for deduplication */
@@ -345,7 +393,7 @@ const LayerCard = ({
 
               {/* Spray order */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Spray order</span>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Spray order</span>
                 <div className="mt-1 space-y-2">
                   <div>
                     <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
@@ -364,22 +412,22 @@ const LayerCard = ({
 
               {/* Placement */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Placement</span>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Placement</span>
                 <p className="text-[11px] text-white/80 mt-0.5">{cfg.placement}</p>
               </div>
 
               {/* Why it works */}
               {whyText && (
                 <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Why it works</span>
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
                   <p className="text-[11px] text-white/80 mt-0.5 leading-relaxed">{whyText}</p>
                 </div>
               )}
 
               {/* Result */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50">Result</span>
-                <p className="text-[11px] text-white/80 mt-0.5">{cfg.result}</p>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Result</span>
+                <p className="text-[11px] text-white/80 mt-0.5">{resultText}</p>
               </div>
             </div>
           </motion.div>
