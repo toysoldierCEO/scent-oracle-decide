@@ -230,7 +230,7 @@ const LayerCard = ({
         <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
       )}
       <span
-        className="text-[9px] uppercase tracking-[0.18em] mt-[4px] px-3 py-[2px] rounded-full text-white/70"
+        className="text-[9px] uppercase tracking-[0.25em] mt-[4px] px-3 py-[2px] rounded-full text-white/70 text-center w-auto"
         style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
       >
         {activeModeEntry.family_key?.toUpperCase() ?? ''}
@@ -247,8 +247,8 @@ const LayerCard = ({
         return (
           <div className="w-full mt-[6px] px-1 space-y-[2px]">
             {displayAccords.length > 0 && (
-              <p className="text-[10px] text-white/70 text-center">
-                <span className="text-white/40">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+              <p className="text-[11px] text-white/80 text-center">
+                <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
               </p>
             )}
           </div>
