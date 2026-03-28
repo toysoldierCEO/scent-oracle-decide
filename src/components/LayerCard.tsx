@@ -456,6 +456,19 @@ const LayerCard = ({
                   <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
                 </div>
               )}
+
+              {/* Effect — outcome of the layering */}
+              {(() => {
+                const baseNotes = normalizeNotes(mainNotes ?? [], 4);
+                const layerNotes = normalizeNotes(activeModeEntry.notes ?? [], 4);
+                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType);
+                return (
+                  <div>
+                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
+                    <p className="text-sm text-white/80 leading-relaxed mt-1">{effectSentence}</p>
+                  </div>
+                );
+              })()}
             </div>
           </motion.div>
         )}
