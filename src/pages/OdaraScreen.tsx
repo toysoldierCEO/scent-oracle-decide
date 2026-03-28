@@ -697,8 +697,10 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  const [layerSaved, setLayerSaved] = useState(false);
-  const [lockPulse, setLockPulse] = useState(false);
+  // 3-state selection system: neutral → selected → undo-ready
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
+  const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
+  const [cardExiting, setCardExiting] = useState(false);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -751,6 +753,7 @@ const OdaraScreen = () => {
     setLoading(true);
     setError(false);
     setExitDirection(null);
+    setSelectionState("neutral");
     try {
       // Fetch main card — if excludeId provided, skip that row (used after alt tap)
       let mainQuery = supabaseClient
@@ -1105,13 +1108,37 @@ const OdaraScreen = () => {
               } else if (dir === "vertical") {
                 const vThreshold = 60;
                 const vVel = 200;
-                // Swipe UP = accept / wear
+                // Swipe UP behavior depends on selectionState
                 if (offset.y < -vThreshold || velocity.y < -vVel) {
-                  handleAccept();
+                  if (selectionState === "neutral") {
+                    // Select → lock closed, green flash
+                    setSelectionState("selected");
+                    setLockFlashColor("#22c55e");
+                    setTimeout(() => setLockFlashColor(null), 400);
+                    handleAccept();
+                  }
                 }
-                // Swipe DOWN = skip
+                // Swipe DOWN behavior depends on selectionState
                 else if (offset.y > vThreshold || velocity.y > vVel) {
-                  handleSkip();
+                  if (selectionState === "selected") {
+                    // Undo → lock open, yellow flash
+                    setSelectionState("undo-ready");
+                    setLockFlashColor("#eab308");
+                    setTimeout(() => setLockFlashColor(null), 400);
+                  } else if (selectionState === "undo-ready") {
+                    // Skip → red flash, card exits down
+                    setLockFlashColor("#ef4444");
+                    setCardExiting(true);
+                    setTimeout(() => {
+                      setLockFlashColor(null);
+                      setCardExiting(false);
+                      setSelectionState("neutral");
+                      handleSkip();
+                    }, 450);
+                  } else {
+                    // neutral → skip directly
+                    handleSkip();
+                  }
                 }
               }
             }}
@@ -1156,16 +1183,16 @@ const OdaraScreen = () => {
                   className="absolute w-full max-w-md"
                   animate={{
                     x: translateX,
-                    y: feedbackY,
+                    y: cardExiting && isCenter ? 600 : feedbackY,
                     rotateY,
                     scale: feedbackScale,
-                    opacity,
+                    opacity: cardExiting && isCenter ? 0 : opacity,
                     z: translateZ,
                   }}
-                  transition={{
-                    duration: 0.45,
-                    ease: [0.32, 0.72, 0, 1],
-                  }}
+                  transition={cardExiting && isCenter
+                    ? { duration: 0.4, ease: [0.4, 0, 1, 1] }
+                    : { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
+                  }
                   style={{
                     zIndex,
                     filter: blur > 0 ? `blur(${blur}px)` : undefined,
@@ -1336,68 +1363,70 @@ const OdaraScreen = () => {
                       </div>
                     )}
 
-                    {/* Lock pulse radiation — top-left */}
+                    {/* Lock line flash — Tron-style neon line on lock icon */}
                     {isCenter && (
                       <AnimatePresence>
-                        {lockPulse && (
+                        {lockFlashColor && (
                           <motion.div
-                            key="lock-pulse"
-                            className="absolute top-3 left-5 rounded-full pointer-events-none"
+                            key={`lock-flash-${lockFlashColor}`}
+                            className="absolute top-3 left-5 pointer-events-none z-20"
                             style={{ width: 20, height: 20 }}
-                            initial={{ scale: 1, opacity: 0.5 }}
-                            animate={{ scale: 18, opacity: 0 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 1, 1, 0] }}
                             exit={{ opacity: 0 }}
-                            transition={{ duration: 0.7, ease: [0.2, 0, 0, 1] }}
-                            onAnimationComplete={() => setLockPulse(false)}
+                            transition={{ duration: 0.4, times: [0, 0.1, 0.6, 1], ease: "easeOut" }}
                           >
-                            <div
-                              className="w-full h-full rounded-full"
-                              style={{ background: `radial-gradient(circle, ${familyColor}30 0%, transparent 70%)` }}
-                            />
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                              {/* Neon line traces around the lock shape */}
+                              <rect x="3" y="9" width="14" height="9" rx="2" stroke={lockFlashColor} strokeWidth="1.5" fill="none"
+                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`} />
+                              <path d={selectionState === "selected"
+                                ? "M7 9V6a3 3 0 0 1 6 0v3"
+                                : "M7 9V6a3 3 0 0 1 6 0"
+                              } stroke={lockFlashColor} strokeWidth="1.5" fill="none" strokeLinecap="round"
+                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`} />
+                            </svg>
                           </motion.div>
                         )}
                       </AnimatePresence>
                     )}
 
-                    {/* Lock toggle — top-left */}
+                    {/* Lock icon — state-driven, top-left */}
                     {isCenter && (
-                      <motion.button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const willLock = !layerSaved;
-                          setLayerSaved(willLock);
-                          if (willLock) setLockPulse(true);
-                        }}
-                        whileTap={{ scale: 1.15 }}
-                        className="absolute top-3 left-5 p-2 rounded-full z-10"
-                        style={{
-                          background: layerSaved ? `${familyColor}18` : "transparent",
-                        }}
-                      >
+                      <div className="absolute top-3 left-5 p-2 z-10">
                         <motion.div
-                          animate={layerSaved
-                            ? { scale: [1, 1.05, 1] }
+                          animate={lockFlashColor
+                            ? { scale: [1, 1.12, 1] }
                             : { scale: 1 }
                           }
-                          transition={{ duration: 0.2 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          {layerSaved ? (
+                          {selectionState === "selected" ? (
                             <Lock
                               size={16}
                               className="transition-all duration-200"
                               style={{
-                                color: familyColor,
-                                filter: `drop-shadow(0 0 6px ${familyColor}60)`,
+                                color: "#22c55e",
+                                filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
+                              }}
+                            />
+                          ) : selectionState === "undo-ready" ? (
+                            <LockOpen
+                              size={16}
+                              className="transition-all duration-200"
+                              style={{
+                                color: "#eab308",
+                                filter: `drop-shadow(0 0 4px rgba(234,179,8,0.4))`,
                               }}
                             />
                           ) : (
                             <LockOpen
                               size={16}
-                              className="text-muted-foreground/50 transition-all duration-200 hover:text-muted-foreground/70"
+                              className="text-muted-foreground/40 transition-all duration-200"
                             />
                           )}
                         </motion.div>
-                      </motion.button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
