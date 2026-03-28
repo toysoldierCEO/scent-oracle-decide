@@ -912,6 +912,11 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
+    // Save current state for undo
+    setPreviousOracle(oracle);
+    setPreviousMainNotes(mainNotes);
+    setPreviousMainAccords(mainAccords);
+    setPreviousLayerModes(layerModes);
     
     try {
       const userId = await getUserId();
@@ -921,8 +926,8 @@ const OdaraScreen = () => {
         p_context: selectedContext,
       });
       if (rpcError) throw rpcError;
-      // Silent — card transition communicates the skip
       await fetchOracle();
+      setShowUndoArrow(true);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -930,7 +935,26 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, getUserId, fetchOracle]);
+  }, [actionState, oracle, mainNotes, mainAccords, layerModes, getUserId, fetchOracle]);
+
+  const handleUndo = useCallback(() => {
+    if (!previousOracle) return;
+    setOracle(previousOracle);
+    setMainNotes(previousMainNotes);
+    setMainAccords(previousMainAccords);
+    if (previousLayerModes) {
+      setLayerModes(previousLayerModes);
+      setLayerFragrance(previousLayerModes.balance ?? null);
+      setSelectedMood('balance');
+    }
+    setPreviousOracle(null);
+    setPreviousMainNotes(null);
+    setPreviousMainAccords(null);
+    setPreviousLayerModes(null);
+    setShowUndoArrow(false);
+    setSelectionState("neutral");
+    setCardKey((k) => k + 1);
+  }, [previousOracle, previousMainNotes, previousMainAccords, previousLayerModes]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
@@ -1114,37 +1138,26 @@ const OdaraScreen = () => {
               } else if (dir === "vertical") {
                 const vThreshold = 60;
                 const vVel = 200;
-                // Swipe UP behavior depends on selectionState
+                // Swipe UP = choose (lock in)
                 if (offset.y < -vThreshold || velocity.y < -vVel) {
                   if (selectionState === "neutral") {
-                    // Select → lock closed, green flash
                     setSelectionState("selected");
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
+                    setShowUndoArrow(false);
                     handleAccept();
                   }
                 }
-                // Swipe DOWN behavior depends on selectionState
+                // Swipe DOWN = skip (always, from any state)
                 else if (offset.y > vThreshold || velocity.y > vVel) {
-                  if (selectionState === "selected") {
-                    // Undo → lock open, yellow flash
-                    setSelectionState("undo-ready");
-                    setLockFlashColor("#eab308");
-                    setTimeout(() => setLockFlashColor(null), 400);
-                  } else if (selectionState === "undo-ready") {
-                    // Skip → red flash, card exits down
-                    setLockFlashColor("#ef4444");
-                    setCardExiting(true);
-                    setTimeout(() => {
-                      setLockFlashColor(null);
-                      setCardExiting(false);
-                      setSelectionState("neutral");
-                      handleSkip();
-                    }, 450);
-                  } else {
-                    // neutral → skip directly
+                  setLockFlashColor("#ef4444");
+                  setCardExiting(true);
+                  setTimeout(() => {
+                    setLockFlashColor(null);
+                    setCardExiting(false);
+                    setSelectionState("neutral");
                     handleSkip();
-                  }
+                  }, 450);
                 }
               }
             }}
