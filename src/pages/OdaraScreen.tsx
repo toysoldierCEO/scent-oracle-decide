@@ -1107,13 +1107,37 @@ const OdaraScreen = () => {
               } else if (dir === "vertical") {
                 const vThreshold = 60;
                 const vVel = 200;
-                // Swipe UP = accept / wear
+                // Swipe UP behavior depends on selectionState
                 if (offset.y < -vThreshold || velocity.y < -vVel) {
-                  handleAccept();
+                  if (selectionState === "neutral") {
+                    // Select → lock closed, green flash
+                    setSelectionState("selected");
+                    setLockFlashColor("#22c55e");
+                    setTimeout(() => setLockFlashColor(null), 400);
+                    handleAccept();
+                  }
                 }
-                // Swipe DOWN = skip
+                // Swipe DOWN behavior depends on selectionState
                 else if (offset.y > vThreshold || velocity.y > vVel) {
-                  handleSkip();
+                  if (selectionState === "selected") {
+                    // Undo → lock open, yellow flash
+                    setSelectionState("undo-ready");
+                    setLockFlashColor("#eab308");
+                    setTimeout(() => setLockFlashColor(null), 400);
+                  } else if (selectionState === "undo-ready") {
+                    // Skip → red flash, card exits down
+                    setLockFlashColor("#ef4444");
+                    setCardExiting(true);
+                    setTimeout(() => {
+                      setLockFlashColor(null);
+                      setCardExiting(false);
+                      setSelectionState("neutral");
+                      handleSkip();
+                    }, 450);
+                  } else {
+                    // neutral → skip directly
+                    handleSkip();
+                  }
                 }
               }
             }}
