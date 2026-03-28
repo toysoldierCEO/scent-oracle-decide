@@ -574,6 +574,8 @@ const OdaraScreen = () => {
   const [layerFragrance, setLayerFragrance] = useState<{ id: string; name: string; family_key: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [context, setContext] = useState('daily');
   const [actionState, setActionState] = useState<ActionState>("idle");
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [cardKey, setCardKey] = useState(0);
@@ -635,71 +637,114 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
+  const loadOracle = useCallback(async (nextContext = context) => {
     setLoading(true);
     setError(false);
-    setExitDirection(null);
+    setErrorMsg(null);
     try {
-      // Fetch main card — if excludeId provided, skip that row (used after alt tap)
-      let mainQuery = supabaseClient
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .limit(1);
-      if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
-      const { data: rows, error: qErr } = await mainQuery.single();
-      if (qErr) throw qErr;
-      console.log('[ODARA] Live fragrance row:', rows);
-      setMainNotes(rows.notes ?? null);
-      setMainAccords(rows.accords ?? null);
+      const userId = await getUserId();
+      const safeTemperature = effectiveTemperature ?? 65;
+      const safeContext = nextContext ?? 'daily';
 
-      // Fetch 3 alternatives excluding the main card (separate from layering)
-      const { data: altRows } = await supabaseClient
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .neq('id', rows.id)
-        .not('family_key', 'is', null)
-        .limit(3);
+      const { data, error: rpcErr } = await supabaseClient.rpc('get_todays_oracle_v3', {
+        p_user: userId,
+        p_temperature: safeTemperature,
+        p_context: safeContext,
+        p_brand: null,
+      } as any);
 
-      const liveAlternates = (altRows ?? []).map((r: any) => ({
-        fragrance_id: r.id,
-        name: r.name,
-        family: r.family_key ?? '',
-        reason: rows.brand ?? '',
-      }));
+      console.log('ODARA userId', userId);
+      console.log('ODARA temperature', safeTemperature);
+      console.log('ODARA context', safeContext);
+      console.log('ODARA oracle data', data);
+      console.log('ODARA oracle error', rpcErr);
 
-      // Fetch layer candidates — get more rows to maximize family diversity
-      const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
-      const { data: layerRows } = await supabaseClient
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .not('family_key', 'is', null)
-        .limit(20);
+      if (rpcErr || !data) {
+        setOracle(null);
+        setError(true);
+        setErrorMsg("Couldn't load today's scent");
+        setLoading(false);
+        return;
+      }
 
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? []);
-      setLayerModes(newLayerModes);
-      setLayerFragrance(newLayerModes.balance ?? null);
-      setSelectedMood('balance');
+      const oracleData = data as any;
 
+      // Map oracle response to OracleData
       const liveOracle: OracleData = {
-        today_pick: {
-          fragrance_id: rows.id,
-          name: rows.name,
-          family: rows.family_key ?? '',
-          reason: rows.brand ?? '',
-        },
-        layer: null,
-        alternates: liveAlternates,
+        today_pick: oracleData.today_pick,
+        layer: oracleData.layer ? {
+          balance: oracleData.layer.balanced ?? oracleData.layer.balance ?? null,
+          bold: oracleData.layer.bold ?? null,
+          smooth: oracleData.layer.smooth ?? null,
+          wild: oracleData.layer.wild ?? null,
+        } : null,
+        alternates: oracleData.alternates ?? null,
       };
       setOracle(liveOracle);
+
+      // Fetch notes/accords for the main fragrance from the table
+      if (oracleData.today_pick?.fragrance_id) {
+        const { data: fragRow } = await supabaseClient
+          .from('fragrances')
+          .select('notes, accords')
+          .eq('id', oracleData.today_pick.fragrance_id)
+          .single();
+        if (fragRow) {
+          setMainNotes(fragRow.notes ?? null);
+          setMainAccords(fragRow.accords ?? null);
+        } else {
+          setMainNotes(null);
+          setMainAccords(null);
+        }
+      }
+
+      // Build layer modes from oracle layer data for LayerCard compatibility
+      if (liveOracle.layer) {
+        const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+        const newLayerModes: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
+        for (const mood of moodKeys) {
+          const entry = liveOracle.layer[mood];
+          if (entry && entry.top_id) {
+            // Fetch layer fragrance details for notes/accords
+            const { data: layerRow } = await supabaseClient
+              .from('fragrances')
+              .select('id, name, brand, family_key, notes, accords')
+              .eq('id', entry.top_id)
+              .single();
+            if (layerRow) {
+              newLayerModes[mood] = {
+                id: layerRow.id,
+                name: layerRow.name,
+                brand: layerRow.brand ?? null,
+                family_key: layerRow.family_key ?? '',
+                notes: layerRow.notes ?? null,
+                accords: layerRow.accords ?? null,
+              };
+            }
+          }
+        }
+        setLayerModes(newLayerModes);
+        setLayerFragrance(newLayerModes.balance ?? null);
+        setSelectedMood('balance');
+      } else {
+        setLayerModes({ balance: null, bold: null, smooth: null, wild: null });
+      }
+
       setCardKey((k) => k + 1);
     } catch (e) {
       console.error("Oracle fetch failed:", e);
       setError(true);
+      setErrorMsg("Couldn't load today's scent");
     } finally {
       setLoading(false);
     }
-  }, [selectedContext, effectiveTemperature]);
+  }, [context, effectiveTemperature, getUserId]);
+
+  const handleContextChange = useCallback(async (nextContext: string) => {
+    setContext(nextContext);
+    setSelectedContext(nextContext);
+    await loadOracle(nextContext);
+  }, [loadOracle]);
 
   // Load a specific fragrance as main card by id (for alt tap)
   const loadFragranceById = useCallback(async (id: string) => {
@@ -729,7 +774,6 @@ const OdaraScreen = () => {
         reason: row.brand ?? '',
       }));
 
-      // Fetch layer candidates — get more rows to maximize family diversity
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
@@ -761,7 +805,9 @@ const OdaraScreen = () => {
     }
   }, []);
 
-  useEffect(() => { fetchOracle(); }, [fetchOracle]);
+  useEffect(() => {
+    loadOracle('daily');
+  }, [effectiveTemperature]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
@@ -801,7 +847,7 @@ const OdaraScreen = () => {
       });
       if (rpcError) throw rpcError;
       // Silent — card transition communicates the skip
-      await fetchOracle();
+      await loadOracle(context);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -809,7 +855,7 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, getUserId, fetchOracle]);
+  }, [actionState, oracle, getUserId, loadOracle, context]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
@@ -853,7 +899,7 @@ const OdaraScreen = () => {
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
-            onClick={() => fetchOracle()}
+            onClick={() => loadOracle(context)}
             className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
             style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
           >
@@ -907,8 +953,7 @@ const OdaraScreen = () => {
             <button
               key={ctx}
               onClick={() => {
-                setSelectedContext(ctx);
-                fetchOracle(ctx, selectedTemperature);
+                handleContextChange(ctx);
               }}
               disabled={isBusy || loading}
               className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
@@ -968,7 +1013,7 @@ const OdaraScreen = () => {
                       onClick={() => {
                         setManualTemperatureOverride(temp);
                         setSelectedTemperature(temp);
-                        fetchOracle(selectedContext, temp);
+                        loadOracle(context);
                       }}
                       disabled={isBusy || loading}
                       className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
