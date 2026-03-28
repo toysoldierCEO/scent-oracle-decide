@@ -77,7 +77,7 @@ interface OracleData {
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
 
 
-const CONTEXTS = ["daily", "office", "hangout", "date"] as const;
+const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
 
 /* ── Fragrance family → color mapping (expanded with tint HSL values) ── */
@@ -761,35 +761,36 @@ const OdaraScreen = () => {
     setExitDirection(null);
     setSelectionState("neutral");
     try {
-      // Fetch main card — if excludeId provided, skip that row (used after alt tap)
-      let mainQuery = supabaseClient
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .limit(1);
-      if (excludeId) mainQuery = mainQuery.neq('id', excludeId);
-      const { data: rows, error: qErr } = await mainQuery.single();
-      if (qErr) throw qErr;
-      console.log('[ODARA] Live fragrance row:', rows);
-      setMainNotes(rows.notes ?? null);
-      setMainAccords(rows.accords ?? null);
+      const userId = await getUserId();
+      const contextVal = ctx ?? selectedContext ?? "daily";
+      const tempVal = temp ?? effectiveTemperature ?? 25;
 
-      // Fetch 3 alternatives excluding the main card (separate from layering)
-      const { data: altRows } = await supabaseClient
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .neq('id', rows.id)
-        .not('family_key', 'is', null)
-        .limit(3);
+      // Call backend RPC with context
+      const { data: rpcResult, error: rpcErr } = await supabaseClient
+        .rpc('get_todays_oracle_v3', {
+          p_user_id: userId,
+          p_temperature: tempVal,
+          p_context: contextVal,
+        });
 
-      const liveAlternates = (altRows ?? []).map((r: any) => ({
-        fragrance_id: r.id,
-        name: r.name,
-        family: r.family_key ?? '',
-        reason: rows.brand ?? '',
+      if (rpcErr) throw rpcErr;
+      const result = rpcResult as any;
+      const pick = result.today_pick;
+
+      console.log('[ODARA] Oracle RPC result:', result);
+
+      setMainNotes(pick.notes ?? null);
+      setMainAccords(pick.accords ?? null);
+
+      const liveAlternates = (result.alternates ?? []).map((a: any) => ({
+        fragrance_id: a.fragrance_id,
+        name: a.name,
+        family: a.family ?? '',
+        reason: a.reason ?? '',
       }));
 
-      // Fetch layer candidates — get more rows to maximize family diversity
-      const excludeIds = [rows.id, ...(altRows ?? []).map((r: any) => r.id)];
+      // Fetch layer candidates from the table (context-independent diversity scoring)
+      const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
       const { data: layerRows } = await supabaseClient
         .from('fragrances')
         .select('id, name, brand, family_key, notes, accords')
@@ -797,17 +798,17 @@ const OdaraScreen = () => {
         .not('family_key', 'is', null)
         .limit(20);
 
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], rows.family_key ?? '');
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], pick.family ?? '');
       setLayerModes(newLayerModes);
       setLayerFragrance(newLayerModes.balance ?? null);
       setSelectedMood('balance');
 
       const liveOracle: OracleData = {
         today_pick: {
-          fragrance_id: rows.id,
-          name: rows.name,
-          family: rows.family_key ?? '',
-          reason: rows.brand ?? '',
+          fragrance_id: pick.fragrance_id,
+          name: pick.name,
+          family: pick.family ?? '',
+          reason: pick.reason ?? pick.brand ?? '',
         },
         layer: null,
         alternates: liveAlternates,
@@ -820,7 +821,7 @@ const OdaraScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedContext, effectiveTemperature]);
+  }, [selectedContext, effectiveTemperature, getUserId]);
 
   // Load a specific fragrance as main card by id (for alt tap)
   const loadFragranceById = useCallback(async (id: string) => {
