@@ -300,7 +300,6 @@ function buildWhyItWorks(
     return `${bDoes[0].toUpperCase() + bDoes.slice(1)} on one side, ${lDoes} on the other — neither takes over.`;
   }
 }
-}
 
 /* ── Props ── */
 interface LayerCardProps {
