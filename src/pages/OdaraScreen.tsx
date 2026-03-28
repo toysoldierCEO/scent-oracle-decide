@@ -1075,6 +1075,13 @@ const OdaraScreen = () => {
                         : `0 12px 35px rgba(0,0,0,0.5), inset 0 1px 0 0 rgba(255,255,255,0.05), inset 0 0 0 1px rgba(255,255,255,0.03)`,
                     }}
                   >
+                    {/* Temperature — quiet metadata top-right */}
+                    {isCenter && (displayedTemperature ?? effectiveTemperature) > 0 && (
+                      <span className="absolute top-3 right-4 text-[10px] font-mono text-white/30 select-none">
+                        {displayedTemperature ?? effectiveTemperature}°
+                      </span>
+                    )}
+
                     {/* Day/date label */}
                     <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70 mb-[6px] select-none">
                       {dayData.label} · {dayData.day}
