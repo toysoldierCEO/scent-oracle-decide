@@ -941,7 +941,7 @@ const OdaraScreen = () => {
               key={ctx}
               onClick={() => {
                 setSelectedContext(ctx);
-                fetchOracle(ctx, selectedTemperature);
+                fetchOracle(ctx);
               }}
               disabled={isBusy || loading}
               className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
@@ -1001,7 +1001,7 @@ const OdaraScreen = () => {
                       onClick={() => {
                         setManualTemperatureOverride(temp);
                         setSelectedTemperature(temp);
-                        fetchOracle(selectedContext, temp);
+                        fetchOracle();
                       }}
                       disabled={isBusy || loading}
                       className="absolute -translate-x-1/2 -top-1 flex flex-col items-center group disabled:opacity-40"
