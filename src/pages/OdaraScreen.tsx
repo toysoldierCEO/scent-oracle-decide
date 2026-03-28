@@ -1169,7 +1169,7 @@ const OdaraScreen = () => {
 
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
-                      <div className="flex gap-2 justify-center mb-[6px] flex-nowrap">
+                      <div className="flex gap-2 justify-center mb-[6px] flex-wrap max-w-full overflow-hidden">
                         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 w-full text-center mb-[4px] font-medium">Alternatives</span>
                         {cardAlternates!.map((alt) => {
                           const altFamily = alt.family ?? "";
