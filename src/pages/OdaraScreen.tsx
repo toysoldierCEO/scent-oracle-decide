@@ -786,6 +786,7 @@ const OdaraScreen = () => {
 
       setMainNotes(pick.notes ?? null);
       setMainAccords(pick.accords ?? null);
+      setMainProjection(pick.projection ?? null);
 
       const liveAlternates = (result.alternates ?? []).map((a: any) => ({
         fragrance_id: a.fragrance_id,
