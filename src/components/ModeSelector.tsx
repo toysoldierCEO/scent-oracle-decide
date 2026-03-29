@@ -53,7 +53,7 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
               ...(selectedMood === mood ? {
                 background: `${mColor}33`,
                 boxShadow: `inset 0 0 0 1px ${mColor}66`,
-                animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
+                animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
               } : undefined),
             }}
           >
