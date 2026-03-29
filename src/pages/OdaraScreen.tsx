@@ -923,11 +923,14 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
-    // Save current state for undo
-    setPreviousOracle(oracle);
-    setPreviousMainNotes(mainNotes);
-    setPreviousMainAccords(mainAccords);
-    setPreviousLayerModes(layerModes);
+    // Push current state onto skip history stack
+    setSkipHistory(prev => [...prev, {
+      oracle,
+      mainNotes,
+      mainAccords,
+      layerModes,
+      mainProjection,
+    }]);
     
     try {
       const userId = await getUserId();
@@ -938,7 +941,6 @@ const OdaraScreen = () => {
       });
       if (rpcError) throw rpcError;
       await fetchOracle();
-      setShowUndoArrow(true);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -946,26 +948,22 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, mainNotes, mainAccords, layerModes, getUserId, fetchOracle]);
+  }, [actionState, oracle, mainNotes, mainAccords, layerModes, mainProjection, getUserId, fetchOracle, selectedContext]);
 
   const handleUndo = useCallback(() => {
-    if (!previousOracle) return;
-    setOracle(previousOracle);
-    setMainNotes(previousMainNotes);
-    setMainAccords(previousMainAccords);
-    if (previousLayerModes) {
-      setLayerModes(previousLayerModes);
-      setLayerFragrance(previousLayerModes.balance ?? null);
-      setSelectedMood('balance');
-    }
-    setPreviousOracle(null);
-    setPreviousMainNotes(null);
-    setPreviousMainAccords(null);
-    setPreviousLayerModes(null);
-    setShowUndoArrow(false);
+    if (skipHistory.length === 0) return;
+    const snapshot = skipHistory[skipHistory.length - 1];
+    setSkipHistory(prev => prev.slice(0, -1));
+    setOracle(snapshot.oracle);
+    setMainNotes(snapshot.mainNotes);
+    setMainAccords(snapshot.mainAccords);
+    setLayerModes(snapshot.layerModes);
+    setMainProjection(snapshot.mainProjection);
+    setLayerFragrance(snapshot.layerModes.balance ?? null);
+    setSelectedMood('balance');
     setSelectionState("neutral");
     setCardKey((k) => k + 1);
-  }, [previousOracle, previousMainNotes, previousMainAccords, previousLayerModes]);
+  }, [skipHistory]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
