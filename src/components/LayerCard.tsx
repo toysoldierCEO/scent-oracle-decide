@@ -528,7 +528,7 @@ const LayerCard = ({
               {(() => {
                 const baseNotes = normalizeNotes(mainNotes ?? [], 4);
                 const layerNotes = normalizeNotes(activeModeEntry.notes ?? [], 4);
-                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType, selectedRatio);
+                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType, selectedRatio as RatioOption);
                 return (
                   <div>
                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
