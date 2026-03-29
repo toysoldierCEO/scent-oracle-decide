@@ -700,6 +700,7 @@ const OdaraScreen = () => {
   // Locked recipes: full recipe state keyed by context
   interface LockedRecipe {
     context: string;
+    lockState: "selected";
     oracle: OracleData;
     mainNotes: string[] | null;
     mainAccords: string[] | null;
@@ -713,10 +714,14 @@ const OdaraScreen = () => {
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
-  // 3-state selection: neutral / selected / undo-ready
-  const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
+  // Persistent lock states are only: neutral / selected
+  const [selectionState, setSelectionState] = useState<"neutral" | "selected">("neutral");
+  const [isUnlockTransition, setIsUnlockTransition] = useState(false);
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
+  const selectedContextRef = useRef(selectedContext);
+  const latestFetchId = useRef(0);
+  const unlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Undo: stack-based skip history for multi-step undo
   interface SkipSnapshot {
     oracle: OracleData;
@@ -730,6 +735,16 @@ const OdaraScreen = () => {
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    selectedContextRef.current = selectedContext;
+  }, [selectedContext]);
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+    };
+  }, []);
 
   // Swipe feedback removed — silent UI
 
@@ -775,14 +790,19 @@ const OdaraScreen = () => {
   }, []);
 
   const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
+    const contextVal = ctx ?? selectedContext ?? "daily";
+    const tempVal = temp ?? effectiveTemperature ?? 25;
+    const fetchId = ++latestFetchId.current;
+
+    console.log('ODARA current context', contextVal);
+    console.log('ODARA found locked recipe', !!lockedRecipes.current[contextVal]);
+    console.log('ODARA saved lock state', lockedRecipes.current[contextVal]?.lockState ?? 'neutral');
+
     setLoading(true);
     setError(false);
     setExitDirection(null);
-    setSelectionState("neutral");
     try {
       const userId = await getUserId();
-      const contextVal = ctx ?? selectedContext ?? "daily";
-      const tempVal = temp ?? effectiveTemperature ?? 25;
 
       const rpcParams = {
         p_user_id: userId,
@@ -797,6 +817,11 @@ const OdaraScreen = () => {
       if (rpcErr) throw rpcErr;
       const result = rpcResult as any;
       const pick = result.today_pick;
+
+      if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
+        console.log('ODARA stale fetch ignored for', contextVal);
+        return;
+      }
 
       console.log('[ODARA] Oracle RPC result:', result);
 
@@ -837,13 +862,21 @@ const OdaraScreen = () => {
         layer: null,
         alternates: liveAlternates,
       };
+      setIsUnlockTransition(false);
+      setSelectionState("neutral");
       setOracle(liveOracle);
       setCardKey((k) => k + 1);
     } catch (e) {
+      if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
+        console.log('ODARA stale fetch error ignored for', contextVal);
+        return;
+      }
       console.error("Oracle fetch failed:", e);
       setError(true);
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchId.current && selectedContextRef.current === contextVal) {
+        setLoading(false);
+      }
     }
   }, [selectedContext, effectiveTemperature, getUserId]);
 
@@ -908,28 +941,59 @@ const OdaraScreen = () => {
     }
   }, []);
 
-  // Only fetch oracle on mount or when fetchOracle deps change,
-  // but skip if a locked recipe already exists for the current context
-  useEffect(() => {
-    if (lockedRecipes.current[selectedContext]) {
-      console.log('ODARA skipping fetchOracle — locked recipe exists for', selectedContext);
-      // Restore the locked recipe instead
-      const recipe = lockedRecipes.current[selectedContext];
-      setOracle(recipe.oracle);
-      setMainNotes(recipe.mainNotes);
-      setMainAccords(recipe.mainAccords);
-      setLayerModes(recipe.layerModes);
-      setMainProjection(recipe.mainProjection);
-      setSelectedMood(recipe.selectedMood);
-      setSelectedRatio(recipe.selectedRatio);
-      setLayerFragrance(recipe.layerFragrance);
-      setSelectionState("selected");
-      setLoading(false);
-      setCardKey((k) => k + 1);
+  const restoreLockedRecipe = useCallback((ctx: string, recipe: LockedRecipe) => {
+    latestFetchId.current += 1;
+    console.log('ODARA restoring locked recipe for', ctx);
+    console.log('ODARA restored lock state', 'selected');
+    setOracle(recipe.oracle);
+    setMainNotes(recipe.mainNotes);
+    setMainAccords(recipe.mainAccords);
+    setLayerModes(recipe.layerModes);
+    setMainProjection(recipe.mainProjection);
+    setSelectedMood(recipe.selectedMood);
+    setSelectedRatio(recipe.selectedRatio);
+    setLayerFragrance(recipe.layerFragrance);
+    setIsUnlockTransition(false);
+    setSelectionState("selected");
+    setCardExiting(false);
+    setError(false);
+    setLoading(false);
+    setCardKey((k) => k + 1);
+  }, []);
+
+  const handleContextSwitch = useCallback((ctx: string) => {
+    if (ctx === selectedContext) return;
+
+    console.log('ODARA context switch', ctx);
+    console.log('ODARA current context', selectedContextRef.current);
+
+    setSelectedContext(ctx);
+    setCardExiting(false);
+    setLayerSheetOpen(false);
+    setSkipHistory([]);
+
+    const recipe = lockedRecipes.current[ctx];
+    console.log('ODARA found locked recipe', !!recipe);
+    console.log('ODARA saved lock state', recipe?.lockState ?? 'neutral');
+
+    if (recipe) {
+      restoreLockedRecipe(ctx, recipe);
       return;
     }
-    fetchOracle();
-  }, [fetchOracle]);
+
+    setIsUnlockTransition(false);
+    setSelectionState("neutral");
+    fetchOracle(ctx, selectedTemperature);
+  }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
+
+  useEffect(() => {
+    const recipe = lockedRecipes.current[selectedContext];
+    if (recipe) {
+      restoreLockedRecipe(selectedContext, recipe);
+      return;
+    }
+    fetchOracle(selectedContext, selectedTemperature);
+  }, []);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
@@ -1097,29 +1161,7 @@ const OdaraScreen = () => {
             {CONTEXTS.map((ctx) => (
               <button
                 key={ctx}
-                onClick={() => {
-                  setSelectedContext(ctx);
-                  // Restore locked recipe if one exists for this context
-                  console.log('ODARA context switch', ctx);
-                  console.log('ODARA found locked recipe', lockedRecipes.current[ctx]);
-                  const recipe = lockedRecipes.current[ctx];
-                  if (recipe) {
-                    console.log('ODARA restoring locked recipe for', ctx);
-                    setOracle(recipe.oracle);
-                    setMainNotes(recipe.mainNotes);
-                    setMainAccords(recipe.mainAccords);
-                    setLayerModes(recipe.layerModes);
-                    setMainProjection(recipe.mainProjection);
-                    setSelectedMood(recipe.selectedMood);
-                    setSelectedRatio(recipe.selectedRatio);
-                    setLayerFragrance(recipe.layerFragrance);
-                    setSelectionState("selected");
-                    setLoading(false);
-                    setCardKey((k) => k + 1);
-                  } else {
-                    fetchOracle(ctx, selectedTemperature);
-                  }
-                }}
+                onClick={() => handleContextSwitch(ctx)}
                 disabled={isBusy || loading}
                 className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
                   selectedContext === ctx
@@ -1206,6 +1248,7 @@ const OdaraScreen = () => {
                 if (offset.y < -vThreshold || velocity.y < -vVel) {
                   if (selectionState === "neutral") {
                     setSelectionState("selected");
+                    setIsUnlockTransition(false);
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
                     setSkipHistory([]);
@@ -1213,6 +1256,7 @@ const OdaraScreen = () => {
                     if (oracle) {
                       const recipe: LockedRecipe = {
                         context: selectedContext,
+                        lockState: "selected",
                         oracle,
                         mainNotes,
                         mainAccords,
@@ -1224,21 +1268,29 @@ const OdaraScreen = () => {
                       };
                       lockedRecipes.current[selectedContext] = recipe;
                       console.log('ODARA saved locked recipe', selectedContext, recipe);
+                      console.log('ODARA saved lock state', recipe.lockState);
                     }
                     handleAccept();
                   }
                 }
-                // Swipe DOWN from selected = yellow undo-ready (no skip yet)
-                // Swipe DOWN from undo-ready = red skip
+                // Swipe DOWN from selected = temporary yellow unlock transition, then neutral
+                // Swipe DOWN from neutral = red skip
                 else if (offset.y > vThreshold || velocity.y > vVel) {
                   if (selectionState === "selected") {
-                    setSelectionState("undo-ready");
+                    if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+                    setIsUnlockTransition(true);
                     setLockFlashColor("#eab308");
-                    setTimeout(() => setLockFlashColor(null), 400);
-                  } else if (selectionState === "undo-ready" || selectionState === "neutral") {
-                    // Clear locked recipe for this context on skip
                     delete lockedRecipes.current[selectedContext];
-                    console.log('ODARA cleared locked recipe for', selectedContext);
+                    console.log('ODARA recipe deleted for', selectedContext);
+                    unlockTimeoutRef.current = setTimeout(() => {
+                      setLockFlashColor(null);
+                      setIsUnlockTransition(false);
+                      setSelectionState("neutral");
+                    }, 360);
+                  } else if (selectionState === "neutral") {
+                    // Defensive clear before skip in case stale recipe exists
+                    delete lockedRecipes.current[selectedContext];
+                    console.log('ODARA recipe deleted for', selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
                     setTimeout(() => {
@@ -1488,7 +1540,7 @@ const OdaraScreen = () => {
                               {/* Neon line traces around the lock shape */}
                               <rect x="3" y="9" width="14" height="9" rx="2" stroke={lockFlashColor} strokeWidth="1.5" fill="none"
                                 filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`} />
-                              <path d={selectionState === "selected"
+                              <path d={(selectionState === "selected" && !isUnlockTransition)
                                 ? "M7 9V6a3 3 0 0 1 6 0v3"
                                 : "M7 9V6a3 3 0 0 1 6 0"
                               } stroke={lockFlashColor} strokeWidth="1.5" fill="none" strokeLinecap="round"
@@ -1510,22 +1562,22 @@ const OdaraScreen = () => {
                           }
                           transition={{ duration: 0.3 }}
                         >
-                          {selectionState === "selected" ? (
-                            <Lock
-                              size={16}
-                              className="transition-all duration-200"
-                              style={{
-                                color: "#22c55e",
-                                filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
-                              }}
-                            />
-                          ) : selectionState === "undo-ready" ? (
+                          {isUnlockTransition ? (
                             <LockOpen
                               size={16}
                               className="transition-all duration-200"
                               style={{
                                 color: "#eab308",
                                 filter: `drop-shadow(0 0 4px rgba(234,179,8,0.5))`,
+                              }}
+                            />
+                          ) : selectionState === "selected" ? (
+                            <Lock
+                              size={16}
+                              className="transition-all duration-200"
+                              style={{
+                                color: "#22c55e",
+                                filter: `drop-shadow(0 0 4px rgba(34,197,94,0.5))`,
                               }}
                             />
                           ) : (
