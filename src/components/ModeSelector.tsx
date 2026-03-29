@@ -49,10 +49,13 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
                 ? "text-white"
                 : "text-white/40 hover:text-white/70"
             }`}
-            style={selectedMood === mood ? {
-              background: `${mColor}33`,
-              boxShadow: `inset 0 0 0 1px ${mColor}66`,
-            } : undefined}
+            style={{
+              ...(selectedMood === mood ? {
+                background: `${mColor}33`,
+                boxShadow: `inset 0 0 0 1px ${mColor}66`,
+                animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
+              } : undefined),
+            }}
           >
             {mood}
           </button>

@@ -424,6 +424,7 @@ const LayerCard = ({
         boxShadow: `0 2px 16px ${layerTint.glow}, inset 0 1px 0 ${layerTint.border}`,
         backdropFilter: 'blur(24px)',
         pointerEvents: 'auto',
+        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
       }}
     >
       <p className="text-lg font-serif tracking-wide text-white leading-tight">
@@ -465,6 +466,7 @@ const LayerCard = ({
           selectedMood={selectedMood}
           onSelectMood={onSelectMood}
           familyColors={FAMILY_COLORS}
+          lockPulse={lockPulse}
         />
       </div>
 
