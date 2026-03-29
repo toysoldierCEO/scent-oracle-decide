@@ -1068,9 +1068,8 @@ const OdaraScreen = () => {
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id || selectionState === "selected") return;
-    // Phase 1: simply load the tapped fragrance as main card from live Supabase
     loadFragranceById(alt.fragrance_id);
-  }, [actionState, loadFragranceById]);
+  }, [actionState, loadFragranceById, selectionState]);
 
   const isBusy = actionState !== "idle";
 
