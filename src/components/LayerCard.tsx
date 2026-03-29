@@ -368,6 +368,7 @@ interface LayerCardProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   lockPulse?: boolean;
+  locked?: boolean;
 }
 
 const LayerCard = ({
@@ -384,6 +385,7 @@ const LayerCard = ({
   isExpanded,
   onToggleExpand,
   lockPulse = false,
+  locked = false,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
 
@@ -466,6 +468,7 @@ const LayerCard = ({
           onSelectMood={onSelectMood}
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
+          locked={locked}
         />
       </div>
 
@@ -489,8 +492,10 @@ const LayerCard = ({
                   return (
                     <button
                       key={opt.ratio}
-                      onClick={() => onSelectRatio(opt.ratio)}
+                      onClick={() => { if (!locked) onSelectRatio(opt.ratio); }}
                       className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
+                        locked && !isSelected ? 'opacity-30 cursor-default' : ''
+                      } ${
                         isSelected
                           ? "text-white"
                           : "text-white/35 hover:text-white/60"

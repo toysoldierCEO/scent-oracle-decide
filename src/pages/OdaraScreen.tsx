@@ -1067,7 +1067,7 @@ const OdaraScreen = () => {
   }, [skipHistory]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
-    if (actionState !== "idle" || !alt.fragrance_id) return;
+    if (actionState !== "idle" || !alt.fragrance_id || selectionState === "selected") return;
     // Phase 1: simply load the tapped fragrance as main card from live Supabase
     loadFragranceById(alt.fragrance_id);
   }, [actionState, loadFragranceById]);
@@ -1463,14 +1463,19 @@ const OdaraScreen = () => {
                         layerModes={layerModes}
                         selectedMood={selectedMood}
                         onSelectMood={(mood) => {
+                          if (selectionState === "selected") return;
                           setSelectedMood(mood);
                           setLayerFragrance(layerModes[mood]);
                         }}
                         selectedRatio={selectedRatio}
-                        onSelectRatio={setSelectedRatio}
+                        onSelectRatio={(r) => {
+                          if (selectionState === "selected") return;
+                          setSelectedRatio(r);
+                        }}
                         isExpanded={layerSheetOpen}
                         onToggleExpand={() => setLayerSheetOpen((o) => !o)}
                         lockPulse={lockPulse}
+                        locked={selectionState === "selected"}
                       />
                     )}
 
@@ -1505,7 +1510,7 @@ const OdaraScreen = () => {
                                       e.stopPropagation();
                                       handleAlternateTap(alt);
                                     }}
-                                    disabled={isBusy}
+                                    disabled={isBusy || selectionState === "selected"}
                                     className="text-[13px] text-white/90 rounded-full px-4 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap shrink-0"
                                     style={{
                                       background: isSelected ? `${altColor}55` : `${altColor}22`,

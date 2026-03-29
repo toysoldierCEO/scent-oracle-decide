@@ -26,6 +26,7 @@ interface ModeSelectorProps {
   onSelectMood: (mood: LayerMood) => void;
   familyColors: Record<string, string>;
   lockPulse?: boolean;
+  locked?: boolean;
 }
 
 /**
@@ -33,7 +34,7 @@ interface ModeSelectorProps {
  * It does NOT own card color, family token text, or fragrance name.
  * It ONLY changes which layer fragrance is active via onSelectMood.
  */
-const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false }: ModeSelectorProps) => {
+const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false, locked = false }: ModeSelectorProps) => {
   return (
     <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
       {LAYER_MOODS.map((mood) => {
@@ -43,8 +44,10 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
         return (
           <button
             key={mood}
-            onClick={() => onSelectMood(mood)}
+            onClick={() => { if (!locked) onSelectMood(mood); }}
             className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+              locked && selectedMood !== mood ? 'opacity-30 cursor-default' : ''
+            } ${
               selectedMood === mood
                 ? "text-white"
                 : "text-white/40 hover:text-white/70"
