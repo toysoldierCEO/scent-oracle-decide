@@ -367,6 +367,7 @@ interface LayerCardProps {
   onSelectRatio: (ratio: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  lockPulse?: boolean;
 }
 
 const LayerCard = ({
@@ -382,6 +383,7 @@ const LayerCard = ({
   onSelectRatio,
   isExpanded,
   onToggleExpand,
+  lockPulse = false,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
 
@@ -422,6 +424,7 @@ const LayerCard = ({
         boxShadow: `0 2px 16px ${layerTint.glow}, inset 0 1px 0 ${layerTint.border}`,
         backdropFilter: 'blur(24px)',
         pointerEvents: 'auto',
+        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
       }}
     >
       <p className="text-lg font-serif tracking-wide text-white leading-tight">
@@ -463,6 +466,7 @@ const LayerCard = ({
           selectedMood={selectedMood}
           onSelectMood={onSelectMood}
           familyColors={FAMILY_COLORS}
+          lockPulse={lockPulse}
         />
       </div>
 
@@ -495,6 +499,7 @@ const LayerCard = ({
                       style={isSelected ? {
                         background: `${layerColor}30`,
                         boxShadow: `inset 0 0 0 1px ${layerColor}55`,
+                        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
                       } : undefined}
                     >
                       <span>{opt.ratio}</span>
