@@ -363,6 +363,8 @@ interface LayerCardProps {
   layerModes: LayerModes;
   selectedMood: LayerMood;
   onSelectMood: (mood: LayerMood) => void;
+  selectedRatio: string;
+  onSelectRatio: (ratio: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
@@ -376,19 +378,21 @@ const LayerCard = ({
   layerModes,
   selectedMood,
   onSelectMood,
+  selectedRatio,
+  onSelectRatio,
   isExpanded,
   onToggleExpand,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
 
-  // Ratio system — hooks must be before early return
+  // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
     mainFamily, mainProjection,
     activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
   );
-  const [selectedRatio, setSelectedRatio] = React.useState<RatioOption>(recommendedRatio);
+  // Sync to recommended when mood changes (if parent hasn't overridden)
   React.useEffect(() => {
-    setSelectedRatio(recommendedRatio);
+    onSelectRatio(recommendedRatio);
   }, [recommendedRatio, selectedMood]);
 
   if (!activeModeEntry) return null;
@@ -482,7 +486,7 @@ const LayerCard = ({
                   return (
                     <button
                       key={opt.ratio}
-                      onClick={() => setSelectedRatio(opt.ratio)}
+                      onClick={() => onSelectRatio(opt.ratio)}
                       className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
                         isSelected
                           ? "text-white"
@@ -524,7 +528,7 @@ const LayerCard = ({
               {(() => {
                 const baseNotes = normalizeNotes(mainNotes ?? [], 4);
                 const layerNotes = normalizeNotes(activeModeEntry.notes ?? [], 4);
-                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType, selectedRatio);
+                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType, selectedRatio as RatioOption);
                 return (
                   <div>
                     <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
