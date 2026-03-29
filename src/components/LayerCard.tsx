@@ -454,38 +454,6 @@ const LayerCard = ({
         />
       </div>
 
-      {/* Ratio selector */}
-      <div className="flex gap-1.5 mt-[6px]" onClick={(e) => e.stopPropagation()}>
-        {RATIO_OPTIONS.map((opt) => {
-          const isSelected = selectedRatio === opt.ratio;
-          const isRecommended = recommendedRatio === opt.ratio;
-          return (
-            <button
-              key={opt.ratio}
-              onClick={() => setSelectedRatio(opt.ratio)}
-              className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
-                isSelected
-                  ? "text-white"
-                  : "text-white/35 hover:text-white/60"
-              }`}
-              style={isSelected ? {
-                background: `${layerColor}30`,
-                boxShadow: `inset 0 0 0 1px ${layerColor}55`,
-              } : undefined}
-            >
-              <span>{opt.ratio}</span>
-              <span className="text-[8px] normal-case tracking-normal">{opt.label}</span>
-              {isRecommended && (
-                <span
-                  className="w-[4px] h-[4px] rounded-full ml-[2px] flex-shrink-0"
-                  style={{ background: layerColor, boxShadow: `0 0 4px ${layerColor}80` }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Expanded layer detail */}
       <AnimatePresence initial={false}>
         {isExpanded && (
@@ -497,6 +465,38 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+
+              {/* Ratio selector */}
+              <div className="flex gap-1.5 justify-center" onClick={(e) => e.stopPropagation()}>
+                {RATIO_OPTIONS.map((opt) => {
+                  const isSelected = selectedRatio === opt.ratio;
+                  const isRecommended = recommendedRatio === opt.ratio;
+                  return (
+                    <button
+                      key={opt.ratio}
+                      onClick={() => setSelectedRatio(opt.ratio)}
+                      className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
+                        isSelected
+                          ? "text-white"
+                          : "text-white/35 hover:text-white/60"
+                      }`}
+                      style={isSelected ? {
+                        background: `${layerColor}30`,
+                        boxShadow: `inset 0 0 0 1px ${layerColor}55`,
+                      } : undefined}
+                    >
+                      <span>{opt.ratio}</span>
+                      <span className="text-[8px] normal-case tracking-normal">{opt.label}</span>
+                      {isRecommended && (
+                        <span
+                          className="w-[4px] h-[4px] rounded-full ml-[2px] flex-shrink-0"
+                          style={{ background: layerColor, boxShadow: `0 0 4px ${layerColor}80` }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Spray order — ratio-aware */}
               <div>
