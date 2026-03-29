@@ -468,6 +468,7 @@ const LayerCard = ({
           onSelectMood={onSelectMood}
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
+          locked={locked}
         />
       </div>
 
