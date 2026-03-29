@@ -771,7 +771,7 @@ const OdaraScreen = () => {
         p_brand: null,
       };
 
-      console.log('ODARA active supabase url', supabase.supabaseUrl ?? 'no-url');
+      console.log('ODARA active supabase url', import.meta.env.VITE_SUPABASE_URL ?? 'no-url');
       console.log('ODARA rpc params', rpcParams);
 
       const { data: rpcResult, error: rpcErr } = await supabase
