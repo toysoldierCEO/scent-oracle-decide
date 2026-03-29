@@ -1696,8 +1696,7 @@ const OdaraScreen = () => {
                         background: "white",
                         opacity: Math.max(0, fade),
                         boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * fade).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * fade).toFixed(3)})`,
-                        animation: fade > 0.1 ? "orbBreathe 4s ease-in-out infinite 2s" : "none",
-                        transition: "opacity 0.5s ease, box-shadow 0.5s ease",
+                        transition: "opacity 0.5s ease, box-shadow 0.5s ease, left 0.5s ease",
                       }}
                     />
                   </div>
