@@ -702,12 +702,15 @@ const OdaraScreen = () => {
   const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
-  // Undo: store previous scent data after skip
-  const [previousOracle, setPreviousOracle] = useState<OracleData | null>(null);
-  const [previousMainNotes, setPreviousMainNotes] = useState<string[] | null>(null);
-  const [previousMainAccords, setPreviousMainAccords] = useState<string[] | null>(null);
-  const [previousLayerModes, setPreviousLayerModes] = useState<LayerModes | null>(null);
-  const [showUndoArrow, setShowUndoArrow] = useState(false);
+  // Undo: stack-based skip history for multi-step undo
+  interface SkipSnapshot {
+    oracle: OracleData;
+    mainNotes: string[] | null;
+    mainAccords: string[] | null;
+    layerModes: LayerModes;
+    mainProjection: number | null;
+  }
+  const [skipHistory, setSkipHistory] = useState<SkipSnapshot[]>([]);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
