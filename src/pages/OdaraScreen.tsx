@@ -1510,7 +1510,7 @@ const OdaraScreen = () => {
                                       e.stopPropagation();
                                       handleAlternateTap(alt);
                                     }}
-                                    disabled={isBusy}
+                                    disabled={isBusy || selectionState === "selected"}
                                     className="text-[13px] text-white/90 rounded-full px-4 py-1.5 transition-all disabled:opacity-40 whitespace-nowrap shrink-0"
                                     style={{
                                       background: isSelected ? `${altColor}55` : `${altColor}22`,
