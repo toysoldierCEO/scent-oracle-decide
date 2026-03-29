@@ -694,6 +694,7 @@ const OdaraScreen = () => {
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [mainProjection, setMainProjection] = useState<number | null>(null);
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
