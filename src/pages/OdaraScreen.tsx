@@ -694,7 +694,22 @@ const OdaraScreen = () => {
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [selectedRatio, setSelectedRatio] = useState<string>('1:1');
   const [mainProjection, setMainProjection] = useState<number | null>(null);
+
+  // Locked recipes: full recipe state keyed by context
+  interface LockedRecipe {
+    context: string;
+    oracle: OracleData;
+    mainNotes: string[] | null;
+    mainAccords: string[] | null;
+    layerModes: LayerModes;
+    mainProjection: number | null;
+    selectedMood: LayerMood;
+    selectedRatio: string;
+    layerFragrance: { id: string; name: string; family_key: string } | null;
+  }
+  const lockedRecipes = useRef<Record<string, LockedRecipe>>({});
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
@@ -1063,8 +1078,23 @@ const OdaraScreen = () => {
                 key={ctx}
                 onClick={() => {
                   setSelectedContext(ctx);
-                  fetchOracle(ctx, selectedTemperature);
-                }}
+                  // Restore locked recipe if one exists for this context
+                  const recipe = lockedRecipes.current[ctx];
+                  if (recipe) {
+                    setOracle(recipe.oracle);
+                    setMainNotes(recipe.mainNotes);
+                    setMainAccords(recipe.mainAccords);
+                    setLayerModes(recipe.layerModes);
+                    setMainProjection(recipe.mainProjection);
+                    setSelectedMood(recipe.selectedMood);
+                    setSelectedRatio(recipe.selectedRatio);
+                    setLayerFragrance(recipe.layerFragrance);
+                    setSelectionState("selected");
+                    setCardKey((k) => k + 1);
+                  } else {
+                    fetchOracle(ctx, selectedTemperature);
+                  }
+                }
                 disabled={isBusy || loading}
                 className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
                   selectedContext === ctx
@@ -1154,6 +1184,20 @@ const OdaraScreen = () => {
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
                     setSkipHistory([]);
+                    // Store full recipe for this context
+                    if (oracle) {
+                      lockedRecipes.current[selectedContext] = {
+                        context: selectedContext,
+                        oracle,
+                        mainNotes,
+                        mainAccords,
+                        layerModes,
+                        mainProjection,
+                        selectedMood,
+                        selectedRatio,
+                        layerFragrance,
+                      };
+                    }
                     handleAccept();
                   }
                 }
@@ -1337,6 +1381,8 @@ const OdaraScreen = () => {
                           setSelectedMood(mood);
                           setLayerFragrance(layerModes[mood]);
                         }}
+                        selectedRatio={selectedRatio}
+                        onSelectRatio={setSelectedRatio}
                         isExpanded={layerSheetOpen}
                         onToggleExpand={() => setLayerSheetOpen((o) => !o)}
                       />
