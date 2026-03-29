@@ -367,6 +367,7 @@ interface LayerCardProps {
   onSelectRatio: (ratio: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  lockPulse?: boolean;
 }
 
 const LayerCard = ({
@@ -382,6 +383,7 @@ const LayerCard = ({
   onSelectRatio,
   isExpanded,
   onToggleExpand,
+  lockPulse = false,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
 

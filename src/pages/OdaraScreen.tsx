@@ -718,6 +718,7 @@ const OdaraScreen = () => {
   const [selectionState, setSelectionState] = useState<"neutral" | "selected">("neutral");
   const [isUnlockTransition, setIsUnlockTransition] = useState(false);
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
+  const [lockPulse, setLockPulse] = useState(false);
   const [cardExiting, setCardExiting] = useState(false);
   const selectedContextRef = useRef(selectedContext);
   const latestFetchId = useRef(0);
@@ -1251,6 +1252,8 @@ const OdaraScreen = () => {
                     setIsUnlockTransition(false);
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
+                    setLockPulse(true);
+                    setTimeout(() => setLockPulse(false), 380);
                     setSkipHistory([]);
                     // Store full recipe for this context
                     if (oracle) {
@@ -1467,6 +1470,7 @@ const OdaraScreen = () => {
                         onSelectRatio={setSelectedRatio}
                         isExpanded={layerSheetOpen}
                         onToggleExpand={() => setLayerSheetOpen((o) => !o)}
+                        lockPulse={lockPulse}
                       />
                     )}
 
