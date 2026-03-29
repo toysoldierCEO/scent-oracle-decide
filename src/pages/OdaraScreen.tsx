@@ -797,7 +797,7 @@ const OdaraScreen = () => {
       const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
       const { data: layerRows } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(20);
@@ -859,7 +859,7 @@ const OdaraScreen = () => {
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(20);
