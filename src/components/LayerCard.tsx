@@ -373,6 +373,15 @@ const LayerCard = ({
   const activeModeEntry = layerModes[selectedMood];
   if (!activeModeEntry) return null;
 
+  // Ratio system
+  const recommendedRatio = computeRecommendedRatio(mainFamily, mainProjection, activeModeEntry.family_key, activeModeEntry.projection);
+  const [selectedRatio, setSelectedRatio] = React.useState<RatioOption>(recommendedRatio);
+
+  // Reset ratio when mode changes
+  React.useEffect(() => {
+    setSelectedRatio(recommendedRatio);
+  }, [recommendedRatio, selectedMood]);
+
   // COLOR: derived solely from the selected layer fragrance's family_key
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
   const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
@@ -383,7 +392,6 @@ const LayerCard = ({
 
   // Backend-driven text — no frontend generation
   const reasonText = activeModeEntry.reason || '';
-  const whyText = activeModeEntry.why_it_works || '';
 
   return (
     <div
