@@ -303,12 +303,54 @@ function buildWhyItWorks(
   }
 }
 
+/* ── Ratio system ── */
+export type RatioOption = '2:1' | '1:1' | '1:2';
+
+interface RatioChoice {
+  ratio: RatioOption;
+  label: string;
+}
+
+const RATIO_OPTIONS: RatioChoice[] = [
+  { ratio: '2:1', label: 'base-forward' },
+  { ratio: '1:1', label: 'balanced' },
+  { ratio: '1:2', label: 'top-accented' },
+];
+
+/** Weight score: 0 (lightest) to 1 (heaviest) based on family + projection */
+function computeWeight(familyKey: string | null, projection: number | null): number {
+  let weight = 0.5;
+  if (familyKey && HEAVY_FAMILIES.has(familyKey)) weight += 0.25;
+  if (familyKey && LIGHT_FAMILIES.has(familyKey)) weight -= 0.25;
+  // Projection is stored as integer 1-10 in DB, normalize to 0-1
+  if (projection != null) {
+    const norm = Math.max(0, Math.min(1, projection / 10));
+    weight = weight * 0.4 + norm * 0.6; // projection-weighted blend
+  }
+  return Math.max(0, Math.min(1, weight));
+}
+
+function computeRecommendedRatio(
+  baseFamily: string | null,
+  baseProjection: number | null,
+  layerFamily: string | null,
+  layerProjection: number | null,
+): RatioOption {
+  const baseW = computeWeight(baseFamily, baseProjection);
+  const layerW = computeWeight(layerFamily, layerProjection);
+  const delta = baseW - layerW;
+  if (delta > 0.12) return '2:1';   // base is stronger → base-forward
+  if (delta < -0.12) return '1:2';  // layer is stronger → top-accented
+  return '1:1';                      // similar → balanced
+}
+
 /* ── Props ── */
 interface LayerCardProps {
   mainName: string;
   mainBrand: string | null;
   mainNotes: string[] | null;
   mainFamily: string | null;
+  mainProjection: number | null;
   layerModes: LayerModes;
   selectedMood: LayerMood;
   onSelectMood: (mood: LayerMood) => void;
@@ -316,23 +358,12 @@ interface LayerCardProps {
   onToggleExpand: () => void;
 }
 
-/**
- * LayerCard — a self-contained component for the layering suggestion.
- *
- * COLOR OWNERSHIP:
- *   - LayerCard color = FAMILY_COLORS[selectedLayer.family_key]
- *   - LayerCard NEVER controls or reads the main scent card color
- *
- * DATA OWNERSHIP:
- *   - layer fragrance name
- *   - layer family token
- *   - mode-specific explanation, spray order, placement, result
- */
 const LayerCard = ({
   mainName,
   mainBrand,
   mainNotes,
   mainFamily,
+  mainProjection,
   layerModes,
   selectedMood,
   onSelectMood,
