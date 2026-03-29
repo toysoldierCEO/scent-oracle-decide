@@ -1094,7 +1094,7 @@ const OdaraScreen = () => {
                   } else {
                     fetchOracle(ctx, selectedTemperature);
                   }
-                }
+                }}
                 disabled={isBusy || loading}
                 className={`text-[10px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-all duration-200 disabled:opacity-40 ${
                   selectedContext === ctx
