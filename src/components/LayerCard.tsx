@@ -1,3 +1,4 @@
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, LAYER_MOODS } from "./ModeSelector";
 import { normalizeNotes } from "@/lib/normalizeNotes";
@@ -303,12 +304,54 @@ function buildWhyItWorks(
   }
 }
 
+/* ── Ratio system ── */
+export type RatioOption = '2:1' | '1:1' | '1:2';
+
+interface RatioChoice {
+  ratio: RatioOption;
+  label: string;
+}
+
+const RATIO_OPTIONS: RatioChoice[] = [
+  { ratio: '2:1', label: 'base-forward' },
+  { ratio: '1:1', label: 'balanced' },
+  { ratio: '1:2', label: 'top-accented' },
+];
+
+/** Weight score: 0 (lightest) to 1 (heaviest) based on family + projection */
+function computeWeight(familyKey: string | null, projection: number | null): number {
+  let weight = 0.5;
+  if (familyKey && HEAVY_FAMILIES.has(familyKey)) weight += 0.25;
+  if (familyKey && LIGHT_FAMILIES.has(familyKey)) weight -= 0.25;
+  // Projection is stored as integer 1-10 in DB, normalize to 0-1
+  if (projection != null) {
+    const norm = Math.max(0, Math.min(1, projection / 10));
+    weight = weight * 0.4 + norm * 0.6; // projection-weighted blend
+  }
+  return Math.max(0, Math.min(1, weight));
+}
+
+function computeRecommendedRatio(
+  baseFamily: string | null,
+  baseProjection: number | null,
+  layerFamily: string | null,
+  layerProjection: number | null,
+): RatioOption {
+  const baseW = computeWeight(baseFamily, baseProjection);
+  const layerW = computeWeight(layerFamily, layerProjection);
+  const delta = baseW - layerW;
+  if (delta > 0.12) return '2:1';   // base is stronger → base-forward
+  if (delta < -0.12) return '1:2';  // layer is stronger → top-accented
+  return '1:1';                      // similar → balanced
+}
+
 /* ── Props ── */
 interface LayerCardProps {
   mainName: string;
   mainBrand: string | null;
   mainNotes: string[] | null;
   mainFamily: string | null;
+  mainProjection: number | null;
   layerModes: LayerModes;
   selectedMood: LayerMood;
   onSelectMood: (mood: LayerMood) => void;
@@ -316,23 +359,12 @@ interface LayerCardProps {
   onToggleExpand: () => void;
 }
 
-/**
- * LayerCard — a self-contained component for the layering suggestion.
- *
- * COLOR OWNERSHIP:
- *   - LayerCard color = FAMILY_COLORS[selectedLayer.family_key]
- *   - LayerCard NEVER controls or reads the main scent card color
- *
- * DATA OWNERSHIP:
- *   - layer fragrance name
- *   - layer family token
- *   - mode-specific explanation, spray order, placement, result
- */
 const LayerCard = ({
   mainName,
   mainBrand,
   mainNotes,
   mainFamily,
+  mainProjection,
   layerModes,
   selectedMood,
   onSelectMood,
@@ -340,6 +372,17 @@ const LayerCard = ({
   onToggleExpand,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
+
+  // Ratio system — hooks must be before early return
+  const recommendedRatio = computeRecommendedRatio(
+    mainFamily, mainProjection,
+    activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
+  );
+  const [selectedRatio, setSelectedRatio] = React.useState<RatioOption>(recommendedRatio);
+  React.useEffect(() => {
+    setSelectedRatio(recommendedRatio);
+  }, [recommendedRatio, selectedMood]);
+
   if (!activeModeEntry) return null;
 
   // COLOR: derived solely from the selected layer fragrance's family_key
@@ -411,6 +454,38 @@ const LayerCard = ({
         />
       </div>
 
+      {/* Ratio selector */}
+      <div className="flex gap-1.5 mt-[6px]" onClick={(e) => e.stopPropagation()}>
+        {RATIO_OPTIONS.map((opt) => {
+          const isSelected = selectedRatio === opt.ratio;
+          const isRecommended = recommendedRatio === opt.ratio;
+          return (
+            <button
+              key={opt.ratio}
+              onClick={() => setSelectedRatio(opt.ratio)}
+              className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
+                isSelected
+                  ? "text-white"
+                  : "text-white/35 hover:text-white/60"
+              }`}
+              style={isSelected ? {
+                background: `${layerColor}30`,
+                boxShadow: `inset 0 0 0 1px ${layerColor}55`,
+              } : undefined}
+            >
+              <span>{opt.ratio}</span>
+              <span className="text-[8px] normal-case tracking-normal">{opt.label}</span>
+              {isRecommended && (
+                <span
+                  className="w-[4px] h-[4px] rounded-full ml-[2px] flex-shrink-0"
+                  style={{ background: layerColor, boxShadow: `0 0 4px ${layerColor}80` }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Expanded layer detail */}
       <AnimatePresence initial={false}>
         {isExpanded && (
@@ -423,22 +498,35 @@ const LayerCard = ({
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
 
-              {/* Spray order */}
+              {/* Spray order — ratio-aware */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Spray order</span>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Spray order · {selectedRatio}</span>
                 <div className="mt-1 space-y-2">
-                  <div>
-                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
-                    <p className="text-[11px] text-white/80 mt-0.5">
-                      {cfg.baseLabel} · {cfg.baseZones}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Top — {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</p>
-                    <p className="text-[11px] text-white/80 mt-0.5">
-                      {cfg.topLabel} · {cfg.topZones}
-                    </p>
-                  </div>
+                  {(() => {
+                    // Compute spray counts based on ratio
+                    const baseHeavy = isHeavy(mainFamily);
+                    const topHeavy = isHeavy(activeModeEntry.family_key);
+                    const totalBase = selectedRatio === '2:1' ? (baseHeavy ? 3 : 4) : selectedRatio === '1:2' ? (baseHeavy ? 1 : 2) : (baseHeavy ? 2 : 3);
+                    const totalTop = selectedRatio === '1:2' ? (topHeavy ? 2 : 3) : selectedRatio === '2:1' ? (topHeavy ? 1 : 1) : (topHeavy ? 1 : 2);
+                    const baseZone = totalBase <= 2 ? `chest (${Math.min(totalBase, 2)})` : `chest (2), back of neck (${totalBase - 2})`;
+                    const topZone = totalTop <= 1 ? 'front neck (1)' : `front neck (1), wrist${totalTop > 2 ? 's' : ''} (${totalTop - 1})`;
+                    return (
+                      <>
+                        <div>
+                          <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
+                          <p className="text-[11px] text-white/80 mt-0.5">
+                            {totalBase} spray{totalBase !== 1 ? 's' : ''} · {baseZone}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Top — {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</p>
+                          <p className="text-[11px] text-white/80 mt-0.5">
+                            {totalTop} spray{totalTop !== 1 ? 's' : ''} · {topZone}
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 

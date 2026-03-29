@@ -15,6 +15,7 @@ export interface LayerModeEntry {
   interactionType: InteractionType;
   reason: string;
   why_it_works: string;
+  projection: number | null;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;

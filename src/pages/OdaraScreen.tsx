@@ -665,6 +665,7 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
         interactionType: iType,
         reason: INTERACTION_REASON[iType](chosen.family_key),
         why_it_works: INTERACTION_WHY[iType](mainFamily, chosen.family_key),
+        projection: chosen.projection ?? null,
       };
     }
   }
@@ -693,6 +694,7 @@ const OdaraScreen = () => {
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [mainProjection, setMainProjection] = useState<number | null>(null);
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
@@ -784,6 +786,7 @@ const OdaraScreen = () => {
 
       setMainNotes(pick.notes ?? null);
       setMainAccords(pick.accords ?? null);
+      setMainProjection(pick.projection ?? null);
 
       const liveAlternates = (result.alternates ?? []).map((a: any) => ({
         fragrance_id: a.fragrance_id,
@@ -796,7 +799,7 @@ const OdaraScreen = () => {
       const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
       const { data: layerRows } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(20);
@@ -833,12 +836,13 @@ const OdaraScreen = () => {
     try {
       const { data: row, error: qErr } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
       setMainNotes(row.notes ?? null);
       setMainAccords(row.accords ?? null);
+      setMainProjection(row.projection ?? null);
 
       const { data: altRows } = await supabase
         .from('fragrances')
@@ -858,7 +862,7 @@ const OdaraScreen = () => {
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .not('id', 'in', `(${excludeIds.join(',')})`)
         .not('family_key', 'is', null)
         .limit(20);
@@ -1325,6 +1329,7 @@ const OdaraScreen = () => {
                         mainBrand={cardPick.reason}
                         mainNotes={mainNotes}
                         mainFamily={cardPick.family ?? null}
+                        mainProjection={mainProjection}
                         layerModes={layerModes}
                         selectedMood={selectedMood}
                         onSelectMood={(mood) => {
