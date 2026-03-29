@@ -44,8 +44,10 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
         return (
           <button
             key={mood}
-            onClick={() => onSelectMood(mood)}
+            onClick={() => { if (!locked) onSelectMood(mood); }}
             className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
+              locked && selectedMood !== mood ? 'opacity-30 cursor-default' : ''
+            } ${
               selectedMood === mood
                 ? "text-white"
                 : "text-white/40 hover:text-white/70"
