@@ -702,12 +702,15 @@ const OdaraScreen = () => {
   const [selectionState, setSelectionState] = useState<"neutral" | "selected" | "undo-ready">("neutral");
   const [lockFlashColor, setLockFlashColor] = useState<string | null>(null);
   const [cardExiting, setCardExiting] = useState(false);
-  // Undo: store previous scent data after skip
-  const [previousOracle, setPreviousOracle] = useState<OracleData | null>(null);
-  const [previousMainNotes, setPreviousMainNotes] = useState<string[] | null>(null);
-  const [previousMainAccords, setPreviousMainAccords] = useState<string[] | null>(null);
-  const [previousLayerModes, setPreviousLayerModes] = useState<LayerModes | null>(null);
-  const [showUndoArrow, setShowUndoArrow] = useState(false);
+  // Undo: stack-based skip history for multi-step undo
+  interface SkipSnapshot {
+    oracle: OracleData;
+    mainNotes: string[] | null;
+    mainAccords: string[] | null;
+    layerModes: LayerModes;
+    mainProjection: number | null;
+  }
+  const [skipHistory, setSkipHistory] = useState<SkipSnapshot[]>([]);
   const [selectedForecastDay, setSelectedForecastDay] = useState(0);
   const [displayedTemperature, setDisplayedTemperature] = useState<number | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -920,11 +923,14 @@ const OdaraScreen = () => {
   const handleSkip = useCallback(async () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
-    // Save current state for undo
-    setPreviousOracle(oracle);
-    setPreviousMainNotes(mainNotes);
-    setPreviousMainAccords(mainAccords);
-    setPreviousLayerModes(layerModes);
+    // Push current state onto skip history stack
+    setSkipHistory(prev => [...prev, {
+      oracle,
+      mainNotes,
+      mainAccords,
+      layerModes,
+      mainProjection,
+    }]);
     
     try {
       const userId = await getUserId();
@@ -935,7 +941,6 @@ const OdaraScreen = () => {
       });
       if (rpcError) throw rpcError;
       await fetchOracle();
-      setShowUndoArrow(true);
     } catch (e) {
       console.error("Skip failed:", e);
       console.warn("Couldn't skip — try again");
@@ -943,26 +948,22 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, mainNotes, mainAccords, layerModes, getUserId, fetchOracle]);
+  }, [actionState, oracle, mainNotes, mainAccords, layerModes, mainProjection, getUserId, fetchOracle, selectedContext]);
 
   const handleUndo = useCallback(() => {
-    if (!previousOracle) return;
-    setOracle(previousOracle);
-    setMainNotes(previousMainNotes);
-    setMainAccords(previousMainAccords);
-    if (previousLayerModes) {
-      setLayerModes(previousLayerModes);
-      setLayerFragrance(previousLayerModes.balance ?? null);
-      setSelectedMood('balance');
-    }
-    setPreviousOracle(null);
-    setPreviousMainNotes(null);
-    setPreviousMainAccords(null);
-    setPreviousLayerModes(null);
-    setShowUndoArrow(false);
+    if (skipHistory.length === 0) return;
+    const snapshot = skipHistory[skipHistory.length - 1];
+    setSkipHistory(prev => prev.slice(0, -1));
+    setOracle(snapshot.oracle);
+    setMainNotes(snapshot.mainNotes);
+    setMainAccords(snapshot.mainAccords);
+    setLayerModes(snapshot.layerModes);
+    setMainProjection(snapshot.mainProjection);
+    setLayerFragrance(snapshot.layerModes.balance ?? null);
+    setSelectedMood('balance');
     setSelectionState("neutral");
     setCardKey((k) => k + 1);
-  }, [previousOracle, previousMainNotes, previousMainAccords, previousLayerModes]);
+  }, [skipHistory]);
 
   const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
     if (actionState !== "idle" || !alt.fragrance_id) return;
@@ -1152,7 +1153,7 @@ const OdaraScreen = () => {
                     setSelectionState("selected");
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
-                    setShowUndoArrow(false);
+                    setSkipHistory([]);
                     handleAccept();
                   }
                 }
@@ -1460,7 +1461,7 @@ const OdaraScreen = () => {
                         </motion.div>
                         {/* Undo back arrow — appears after skip */}
                         <AnimatePresence>
-                          {showUndoArrow && (
+                          {skipHistory.length > 0 && (
                             <motion.button
                               initial={{ opacity: 0, y: -4 }}
                               animate={{ opacity: 1, y: 0 }}
