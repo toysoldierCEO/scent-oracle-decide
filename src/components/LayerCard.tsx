@@ -487,12 +487,6 @@ const LayerCard = ({
                     >
                       <span>{opt.ratio}</span>
                       <span className="text-[8px] normal-case tracking-normal">{opt.label}</span>
-                      {isRecommended && (
-                        <span
-                          className="w-[4px] h-[4px] rounded-full ml-[2px] flex-shrink-0"
-                          style={{ background: layerColor, boxShadow: `0 0 4px ${layerColor}80` }}
-                        />
-                      )}
                     </button>
                   );
                 })}
