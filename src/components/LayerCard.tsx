@@ -424,7 +424,6 @@ const LayerCard = ({
         boxShadow: `0 2px 16px ${layerTint.glow}, inset 0 1px 0 ${layerTint.border}`,
         backdropFilter: 'blur(24px)',
         pointerEvents: 'auto',
-        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
       }}
     >
       <p className="text-lg font-serif tracking-wide text-white leading-tight">
@@ -499,7 +498,7 @@ const LayerCard = ({
                       style={isSelected ? {
                         background: `${layerColor}30`,
                         boxShadow: `inset 0 0 0 1px ${layerColor}55`,
-                        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
+                        animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
                       } : undefined}
                     >
                       <span>{opt.ratio}</span>

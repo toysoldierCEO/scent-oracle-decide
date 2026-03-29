@@ -60,10 +60,10 @@
   }
 }
 
-@keyframes lockConfirmPulse {
-  0% { opacity: 1; box-shadow: inherit; }
-  40% { opacity: 1; box-shadow: 0 0 8px 2px rgba(34,197,94,0.35), inset 0 0 0 1px rgba(34,197,94,0.5); }
-  100% { opacity: 1; box-shadow: inherit; }
+@keyframes lockConfirmTint {
+  0% { background-color: rgba(34,197,94,0); }
+  30% { background-color: rgba(34,197,94,0.18); }
+  100% { background-color: rgba(34,197,94,0); }
 }
 
 @keyframes orbBreathe {
