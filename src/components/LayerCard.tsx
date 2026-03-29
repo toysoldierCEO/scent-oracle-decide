@@ -1,3 +1,4 @@
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, LAYER_MOODS } from "./ModeSelector";
 import { normalizeNotes } from "@/lib/normalizeNotes";
@@ -371,16 +372,18 @@ const LayerCard = ({
   onToggleExpand,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
-  if (!activeModeEntry) return null;
 
-  // Ratio system
-  const recommendedRatio = computeRecommendedRatio(mainFamily, mainProjection, activeModeEntry.family_key, activeModeEntry.projection);
+  // Ratio system — hooks must be before early return
+  const recommendedRatio = computeRecommendedRatio(
+    mainFamily, mainProjection,
+    activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
+  );
   const [selectedRatio, setSelectedRatio] = React.useState<RatioOption>(recommendedRatio);
-
-  // Reset ratio when mode changes
   React.useEffect(() => {
     setSelectedRatio(recommendedRatio);
   }, [recommendedRatio, selectedMood]);
+
+  if (!activeModeEntry) return null;
 
   // COLOR: derived solely from the selected layer fragrance's family_key
   const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
@@ -392,6 +395,7 @@ const LayerCard = ({
 
   // Backend-driven text — no frontend generation
   const reasonText = activeModeEntry.reason || '';
+  const whyText = activeModeEntry.why_it_works || '';
 
   return (
     <div
