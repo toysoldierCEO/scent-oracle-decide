@@ -908,7 +908,28 @@ const OdaraScreen = () => {
     }
   }, []);
 
-  useEffect(() => { fetchOracle(); }, [fetchOracle]);
+  // Only fetch oracle on mount or when fetchOracle deps change,
+  // but skip if a locked recipe already exists for the current context
+  useEffect(() => {
+    if (lockedRecipes.current[selectedContext]) {
+      console.log('ODARA skipping fetchOracle — locked recipe exists for', selectedContext);
+      // Restore the locked recipe instead
+      const recipe = lockedRecipes.current[selectedContext];
+      setOracle(recipe.oracle);
+      setMainNotes(recipe.mainNotes);
+      setMainAccords(recipe.mainAccords);
+      setLayerModes(recipe.layerModes);
+      setMainProjection(recipe.mainProjection);
+      setSelectedMood(recipe.selectedMood);
+      setSelectedRatio(recipe.selectedRatio);
+      setLayerFragrance(recipe.layerFragrance);
+      setSelectionState("selected");
+      setLoading(false);
+      setCardKey((k) => k + 1);
+      return;
+    }
+    fetchOracle();
+  }, [fetchOracle]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
@@ -1079,8 +1100,11 @@ const OdaraScreen = () => {
                 onClick={() => {
                   setSelectedContext(ctx);
                   // Restore locked recipe if one exists for this context
+                  console.log('ODARA context switch', ctx);
+                  console.log('ODARA found locked recipe', lockedRecipes.current[ctx]);
                   const recipe = lockedRecipes.current[ctx];
                   if (recipe) {
+                    console.log('ODARA restoring locked recipe for', ctx);
                     setOracle(recipe.oracle);
                     setMainNotes(recipe.mainNotes);
                     setMainAccords(recipe.mainAccords);
@@ -1090,6 +1114,7 @@ const OdaraScreen = () => {
                     setSelectedRatio(recipe.selectedRatio);
                     setLayerFragrance(recipe.layerFragrance);
                     setSelectionState("selected");
+                    setLoading(false);
                     setCardKey((k) => k + 1);
                   } else {
                     fetchOracle(ctx, selectedTemperature);
@@ -1186,7 +1211,7 @@ const OdaraScreen = () => {
                     setSkipHistory([]);
                     // Store full recipe for this context
                     if (oracle) {
-                      lockedRecipes.current[selectedContext] = {
+                      const recipe: LockedRecipe = {
                         context: selectedContext,
                         oracle,
                         mainNotes,
@@ -1197,6 +1222,8 @@ const OdaraScreen = () => {
                         selectedRatio,
                         layerFragrance,
                       };
+                      lockedRecipes.current[selectedContext] = recipe;
+                      console.log('ODARA saved locked recipe', selectedContext, recipe);
                     }
                     handleAccept();
                   }
