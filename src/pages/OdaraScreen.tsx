@@ -771,9 +771,6 @@ const OdaraScreen = () => {
         p_brand: null,
       };
 
-      console.log('ODARA active supabase url', import.meta.env.VITE_SUPABASE_URL ?? 'no-url');
-      console.log('ODARA rpc params', rpcParams);
-
       const { data: rpcResult, error: rpcErr } = await supabase
         .rpc('get_todays_oracle_v3', rpcParams);
 
