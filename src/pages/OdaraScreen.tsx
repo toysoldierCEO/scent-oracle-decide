@@ -836,12 +836,13 @@ const OdaraScreen = () => {
     try {
       const { data: row, error: qErr } = await supabase
         .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
+        .select('id, name, brand, family_key, notes, accords, projection')
         .eq('id', id)
         .single();
       if (qErr) throw qErr;
       setMainNotes(row.notes ?? null);
       setMainAccords(row.accords ?? null);
+      setMainProjection(row.projection ?? null);
 
       const { data: altRows } = await supabase
         .from('fragrances')
