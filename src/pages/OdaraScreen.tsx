@@ -665,6 +665,7 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
         interactionType: iType,
         reason: INTERACTION_REASON[iType](chosen.family_key),
         why_it_works: INTERACTION_WHY[iType](mainFamily, chosen.family_key),
+        projection: chosen.projection ?? null,
       };
     }
   }
