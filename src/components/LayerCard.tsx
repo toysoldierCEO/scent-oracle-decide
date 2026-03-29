@@ -496,6 +496,7 @@ const LayerCard = ({
                       className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
                         locked && !isSelected ? 'opacity-30 cursor-default' : ''
                       } ${
+                        isSelected
                           ? "text-white"
                           : "text-white/35 hover:text-white/60"
                       }`}
