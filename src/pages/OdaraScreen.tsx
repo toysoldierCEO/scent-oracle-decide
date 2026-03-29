@@ -1153,7 +1153,7 @@ const OdaraScreen = () => {
                     setSelectionState("selected");
                     setLockFlashColor("#22c55e");
                     setTimeout(() => setLockFlashColor(null), 400);
-                    setShowUndoArrow(false);
+                    setSkipHistory([]);
                     handleAccept();
                   }
                 }
@@ -1461,7 +1461,7 @@ const OdaraScreen = () => {
                         </motion.div>
                         {/* Undo back arrow — appears after skip */}
                         <AnimatePresence>
-                          {showUndoArrow && (
+                          {skipHistory.length > 0 && (
                             <motion.button
                               initial={{ opacity: 0, y: -4 }}
                               animate={{ opacity: 1, y: 0 }}
