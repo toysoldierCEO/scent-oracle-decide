@@ -126,6 +126,7 @@ function buildEffectText(
   baseNotes: string[],
   layerNotes: string[],
   interactionType: InteractionType,
+  ratio: RatioOption = '1:1',
 ): string {
   const baseRole = detectRole(baseNotes);
   const layerRole = detectRole(layerNotes);
@@ -138,6 +139,13 @@ function buildEffectText(
     layerAddition = altRole ? (ROLE_ADDITIONS[altRole.role] ?? 'a contrasting edge') : 'a contrasting edge';
   }
 
+  // Ratio-aware effect text
+  if (ratio === '2:1') {
+    return `${mainStrength.charAt(0).toUpperCase() + mainStrength.slice(1)} leads the wear — ${layerAddition} sits behind, felt more than heard.`;
+  } else if (ratio === '1:2') {
+    return `${layerAddition.charAt(0).toUpperCase() + layerAddition.slice(1)} pushes forward — ${mainStrength} anchors underneath without competing.`;
+  }
+  // 1:1 balanced — use interaction-type templates
   const templates = INTERACTION_EFFECT_TEMPLATES[interactionType](mainStrength, layerAddition);
   const idx = (baseName.length + layerName.length) % templates.length;
   return templates[idx];
