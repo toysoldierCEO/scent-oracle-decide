@@ -1236,6 +1236,9 @@ const OdaraScreen = () => {
                     setLockFlashColor("#eab308");
                     setTimeout(() => setLockFlashColor(null), 400);
                   } else if (selectionState === "undo-ready" || selectionState === "neutral") {
+                    // Clear locked recipe for this context on skip
+                    delete lockedRecipes.current[selectedContext];
+                    console.log('ODARA cleared locked recipe for', selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
                     setTimeout(() => {
