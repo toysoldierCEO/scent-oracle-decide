@@ -499,6 +499,7 @@ const LayerCard = ({
                       style={isSelected ? {
                         background: `${layerColor}30`,
                         boxShadow: `inset 0 0 0 1px ${layerColor}55`,
+                        animation: lockPulse ? 'lockConfirmPulse 350ms ease-out' : undefined,
                       } : undefined}
                     >
                       <span>{opt.ratio}</span>
