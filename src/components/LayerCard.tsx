@@ -363,6 +363,8 @@ interface LayerCardProps {
   layerModes: LayerModes;
   selectedMood: LayerMood;
   onSelectMood: (mood: LayerMood) => void;
+  selectedRatio: string;
+  onSelectRatio: (ratio: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
@@ -376,19 +378,21 @@ const LayerCard = ({
   layerModes,
   selectedMood,
   onSelectMood,
+  selectedRatio,
+  onSelectRatio,
   isExpanded,
   onToggleExpand,
 }: LayerCardProps) => {
   const activeModeEntry = layerModes[selectedMood];
 
-  // Ratio system — hooks must be before early return
+  // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
     mainFamily, mainProjection,
     activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
   );
-  const [selectedRatio, setSelectedRatio] = React.useState<RatioOption>(recommendedRatio);
+  // Sync to recommended when mood changes (if parent hasn't overridden)
   React.useEffect(() => {
-    setSelectedRatio(recommendedRatio);
+    onSelectRatio(recommendedRatio);
   }, [recommendedRatio, selectedMood]);
 
   if (!activeModeEntry) return null;
