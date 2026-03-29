@@ -498,22 +498,35 @@ const LayerCard = ({
           >
             <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
 
-              {/* Spray order */}
+              {/* Spray order — ratio-aware */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Spray order</span>
+                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Spray order · {selectedRatio}</span>
                 <div className="mt-1 space-y-2">
-                  <div>
-                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
-                    <p className="text-[11px] text-white/80 mt-0.5">
-                      {cfg.baseLabel} · {cfg.baseZones}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Top — {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</p>
-                    <p className="text-[11px] text-white/80 mt-0.5">
-                      {cfg.topLabel} · {cfg.topZones}
-                    </p>
-                  </div>
+                  {(() => {
+                    // Compute spray counts based on ratio
+                    const baseHeavy = isHeavy(mainFamily);
+                    const topHeavy = isHeavy(activeModeEntry.family_key);
+                    const totalBase = selectedRatio === '2:1' ? (baseHeavy ? 3 : 4) : selectedRatio === '1:2' ? (baseHeavy ? 1 : 2) : (baseHeavy ? 2 : 3);
+                    const totalTop = selectedRatio === '1:2' ? (topHeavy ? 2 : 3) : selectedRatio === '2:1' ? (topHeavy ? 1 : 1) : (topHeavy ? 1 : 2);
+                    const baseZone = totalBase <= 2 ? `chest (${Math.min(totalBase, 2)})` : `chest (2), back of neck (${totalBase - 2})`;
+                    const topZone = totalTop <= 1 ? 'front neck (1)' : `front neck (1), wrist${totalTop > 2 ? 's' : ''} (${totalTop - 1})`;
+                    return (
+                      <>
+                        <div>
+                          <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Base — {mn}</p>
+                          <p className="text-[11px] text-white/80 mt-0.5">
+                            {totalBase} spray{totalBase !== 1 ? 's' : ''} · {baseZone}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/50 uppercase tracking-[0.1em]">Top — {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</p>
+                          <p className="text-[11px] text-white/80 mt-0.5">
+                            {totalTop} spray{totalTop !== 1 ? 's' : ''} · {topZone}
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
