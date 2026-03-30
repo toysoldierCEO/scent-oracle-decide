@@ -1271,6 +1271,7 @@ const OdaraScreen = () => {
                         layerFragrance,
                       };
                       lockedRecipes.current[selectedContext] = recipe;
+                      bumpRecipeVersion();
                       console.log('ODARA saved locked recipe', selectedContext, recipe);
                       console.log('ODARA saved lock state', recipe.lockState);
                     }
