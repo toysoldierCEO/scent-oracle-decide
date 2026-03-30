@@ -1801,13 +1801,66 @@ const OdaraScreen = () => {
                     {d.day}
                   </span>
 
-                  {isSelected && (
-                    <motion.div
-                      layoutId="forecastUnderline"
-                      className="rounded-full"
-                      style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
-                    />
-                  )}
+                  {/* Recipe-driven forecast bar */}
+                  {(() => {
+                    // Only today (index 0) has real locked recipe data
+                    if (i !== 0) {
+                      // Show selection underline for non-today days only if tapped
+                      return isSelected ? (
+                        <motion.div
+                          layoutId="forecastUnderline"
+                          className="rounded-full"
+                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
+                        />
+                      ) : null;
+                    }
+                    // Today: check if any locked recipe exists
+                    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+                    recipeVersion; // subscribe to recipe changes
+                    const recipes = Object.values(lockedRecipes.current);
+                    if (recipes.length === 0) {
+                      // No locked recipe — show selection underline if selected
+                      return isSelected ? (
+                        <motion.div
+                          layoutId="forecastUnderline"
+                          className="rounded-full"
+                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
+                        />
+                      ) : null;
+                    }
+                    // Use the first locked recipe (current context preferred)
+                    const activeRecipe = lockedRecipes.current[selectedContext] ?? recipes[0];
+                    const mainFamily = activeRecipe.oracle.today_pick.family;
+                    const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
+                    const hasLayer = !!activeRecipe.layerFragrance;
+                    const layerColor = hasLayer
+                      ? (FAMILY_COLORS[activeRecipe.layerFragrance!.family_key] ?? "#666")
+                      : null;
+
+                    return (
+                      <motion.div
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: 1 }}
+                        exit={{ scaleX: 0 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className="rounded-full overflow-hidden"
+                        style={{
+                          width: "18px",
+                          height: "3px",
+                          marginTop: "3px",
+                          display: "flex",
+                          background: hasLayer ? "transparent" : mainColor,
+                        }}
+                      >
+                        {hasLayer && (
+                          <>
+                            <div style={{ flex: 1, background: mainColor }} />
+                            <div style={{ flex: 1, background: layerColor! }} />
+                          </>
+                        )}
+                      </motion.div>
+                    );
+                  })()}
                 </button>
               );
             })}
