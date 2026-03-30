@@ -438,6 +438,7 @@ function recommendDailySet(
 interface ForecastDay {
   label: string;
   day: number;
+  dateKey: string;
   fragrance: {
     fragrance_id: string;
     name: string;
