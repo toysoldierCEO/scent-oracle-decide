@@ -1296,6 +1296,7 @@ const OdaraScreen = () => {
                   } else if (selectionState === "neutral") {
                     // Defensive clear before skip in case stale recipe exists
                     delete lockedRecipes.current[selectedContext];
+                    bumpRecipeVersion();
                     console.log('ODARA recipe deleted for', selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
