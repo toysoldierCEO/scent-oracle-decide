@@ -1013,8 +1013,8 @@ const OdaraScreen = () => {
         const { data: rpcResult, error: rpcErr } = await supabase.rpc("get_todays_oracle_v3", rpcParams);
 
         if (rpcErr) throw rpcErr;
-        const result = rpcResult as any;
-        const pick = result.today_pick;
+        const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+        const pick = result?.today_pick;
 
         if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
           console.log("ODARA stale fetch ignored for", contextVal);
@@ -1041,7 +1041,7 @@ const OdaraScreen = () => {
         const { data: layerRows } = await supabase
           .from("fragrances")
           .select("id, name, brand, family_key, notes, accords, projection")
-          .not("id", "in", `(${excludeIds.join(",")})`)
+          .not("id", "in", `(${excludeIds.map((id) => `'${id}'`).join(",")})`)
           .not("family_key", "is", null)
           .limit(20);
 
