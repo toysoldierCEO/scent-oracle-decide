@@ -1350,7 +1350,7 @@ const OdaraScreen = () => {
               if (absOffset > 3) return null;
 
               // Phase 1: only render day 0 (live main card), skip forecast cards
-              if (i !== 0) return null;
+              if (!isCenter) return null;
               const cardPick = oraclePick;
               const cardAlternates = oracleAlternates ?? [];
               const cardHasAlternates = cardAlternates.length > 0;
