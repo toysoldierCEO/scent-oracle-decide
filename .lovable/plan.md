@@ -1,62 +1,51 @@
 
+### Goal
+Fix the forecast orb so it **never overlaps Monday (or any weekday text)** while still moving by local time and keeping the midnight fade/emerge behavior.
 
-## Plan: Orb Lives Between Days, Never Crosses Labels
+### Root Cause
+Current orb math assumes weekday centers are at exact `%` points (`0%, 16.667%, ...`) plus fixed px offsets.  
+But the labels are laid out by `flex justify-between` with fixed label widths, so their real positions are not those exact centers. This mismatch puts the orb too far left and lets it overlap “Mon”.
 
-### Problem
-The orb currently moves from one day's center to the next, crossing over/under the day text. The user wants the orb to live strictly **between** day labels — never overlapping text — and fade into the next day label at midnight, then partially emerge from the other side at 12:01 like a horizontal sunrise.
+### Implementation Plan (single file: `src/pages/OdaraScreen.tsx`)
 
-### Mental Model
-```text
-  Mon  ·  Tue  ·  Wed  ·  Thu  ·  Fri  ·  Sat  ·  Sun
-      ↑        ↑
-      |  orb   |
-      |  lives |
-      |  here  |
-```
-The orb occupies the **gap** between two day labels. At midnight it fades into the right edge of the next day's text, then at 12:01 it emerges 1px to the right of that label, moving rightward toward the next gap.
+1. **Measure real label geometry**
+   - Add refs for:
+     - the weekday row container
+     - each weekday label element (`Mon`, `Tue`, etc.).
+   - In `useLayoutEffect` (and on resize), measure:
+     - `monRight` = right edge of label 0
+     - `tueLeft` = left edge of label 1
+     - all relative to the row container.
 
-### Position Logic
+2. **Build a safe “no-overlap corridor”**
+   - Define:
+     - `ORB_RADIUS = 2.5` (for 5px orb)
+     - `TEXT_BUFFER = 1`
+   - Compute:
+     - `trackStart = monRight + TEXT_BUFFER + ORB_RADIUS`
+     - `trackEnd = tueLeft - TEXT_BUFFER - ORB_RADIUS`
+   - Clamp if needed to avoid invalid ranges on tiny widths.
 
-The 7 day labels are evenly spaced via `flex justify-between`. Each label is 28px wide. The orb range for a given day is:
-- **Left bound**: right edge of today's label + 1px
-- **Right bound**: left edge of tomorrow's label - 1px
+3. **Position from time only (not day centers)**
+   - Keep `orbPosition` as daily progress (`0..1` from midnight to next midnight).
+   - Compute orb center X in pixels:
+     - `orbX = trackStart + orbPosition * (trackEnd - trackStart)`
+   - Set orb style:
+     - `left: ${orbX}px`
+     - `top: 50%`
+     - `transform: translate(-50%, -50%)`
+   - This guarantees the orb stays between labels and never crosses text.
 
-At `orbPosition = 0` (midnight): orb is at the **left bound** (just emerged from today's label).  
-At `orbPosition = 0.5` (noon): orb is at the **center** of the gap.  
-At `orbPosition = 1` (next midnight): orb fades into tomorrow's label (right bound).
+4. **Preserve sunrise-style midnight transition**
+   - Keep existing fade-out near day end and fade-in near day start.
+   - Apply opacity only (no position jump), so it appears to fade toward next day at midnight and re-emerge just after midnight while still respecting the 1px readability buffer.
 
-### Calculating Bounds
+5. **Keep weekday/date separation intact**
+   - Orb remains in weekday row container (`position: relative` parent).
+   - Date numbers stay in their separate row below (unchanged).
 
-Labels are centered at `(i / 6) * 100%` of the container. Each label is 28px wide, so:
-- Today's label right edge = `(i / 6) * 100% + 14px`
-- Tomorrow's label left edge = `((i+1) / 6) * 100% - 14px`
-
-The orb interpolates between these two edges + 1px gap on each side:
-- `leftEdge = calc((0/6) * 100% + 14px + 1px)` → `calc(0% + 15px)`
-- `rightEdge = calc((1/6) * 100% - 14px - 1px)` → `calc(16.667% - 15px)`
-- `orbLeft = calc(leftEdge + orbPosition * (rightEdge - leftEdge))`
-
-Using CSS calc: `left: calc(15px + ${orbPosition} * (16.667% - 30px))`
-
-### Midnight Fade / Sunrise Emerge
-
-- **Approaching midnight** (`orbPosition > 0.98`): orb opacity fades to 0 as it reaches the right edge (tomorrow's label).
-- **After midnight** (`orbPosition < 0.02`): orb emerges from 1px right of today's label with opacity ramping up — like a sun rising horizontally.
-- The label briefly glows during crossover (existing behavior, kept).
-
-### Changes (single file: `src/pages/OdaraScreen.tsx`)
-
-**Lines ~1702-1751** — Replace orb positioning:
-
-1. Calculate `leftEdge` and `rightEdge` using label positions + 14px half-width + 1px gap
-2. Interpolate orb `left` between these edges using `orbPosition`
-3. Use CSS `calc()` for mixed %-and-px math
-4. Keep fade/emerge opacity logic (adjust thresholds slightly for the new range)
-5. Keep `transform: translate(-50%, -50%)` for centering the orb dot on its coordinate
-
-### Result
-- Orb never overlaps any day text
-- Always 1px minimum separation from labels
-- Noon = center of the gap between today and tomorrow
-- Midnight = fade into label edge, then sunrise-emerge on the other side
-
+### Expected Result
+- Orb no longer overlaps “Mon”.
+- Orb remains on the weekday text line, in the gap between days.
+- Noon lands at the midpoint of the usable Mon–Tue gap.
+- Movement stays smooth and strictly local-time driven.
