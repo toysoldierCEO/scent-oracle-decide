@@ -1699,9 +1699,16 @@ const OdaraScreen = () => {
               })}
             </div>
 
-            {/* Orb — same line as weekday labels, positioned by time */}
+            {/* Orb — same line as weekday labels, offset to the right of each day label */}
             {(() => {
-              const orbPct = (orbPosition / 6) * 100;
+              // Each label is 28px wide, centered at (i/6)*100%
+              // Offset the orb to sit just right of the label (~18px right of center)
+              // At progress=0 (midnight), orb is right of today (i=0)
+              // At progress=1 (next midnight), orb is right of tomorrow (i=1)
+              // Interpolate between the two positions
+              const todayCenter = (0 / 6) * 100; // today's label center %
+              const tomorrowCenter = (1 / 6) * 100; // tomorrow's label center %
+              const orbPct = todayCenter + orbPosition * (tomorrowCenter - todayCenter);
               const dayFrac = orbPosition % 1;
               const FADE_START = 0.9896;
               const EMERGE_END = 0.0014;
