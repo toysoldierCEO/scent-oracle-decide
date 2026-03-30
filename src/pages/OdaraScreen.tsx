@@ -13,12 +13,12 @@ import { normalizeNotes } from "@/lib/normalizeNotes";
  *  and remove the brand name when it appears as a suffix in the fragrance name. */
 function getDisplayName(name: string, brand?: string | null): string {
   let display = name
-    .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, '')
+    .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, "")
     .trim();
   // Strip brand name from end (e.g. "Paradigme Prada" → "Paradigme")
   if (brand) {
-    const brandRegex = new RegExp(`\\s+${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i');
-    display = display.replace(brandRegex, '').trim();
+    const brandRegex = new RegExp(`\\s+${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i");
+    display = display.replace(brandRegex, "").trim();
   }
   return display;
 }
@@ -28,11 +28,11 @@ import { Lock, LockOpen, X, Undo2 } from "lucide-react";
 /* ── Weather helper (Open-Meteo, no key) ── */
 async function fetchLiveTemperature(): Promise<number> {
   const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 }),
   );
   const { latitude, longitude } = pos.coords;
   const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`,
   );
   if (!res.ok) throw new Error("Weather fetch failed");
   const json = await res.json();
@@ -53,7 +53,7 @@ interface LayerOption {
   mixing_rule?: string;
   why_it_works?: string;
   strength_note?: string;
-  dominance_level?: 'low' | 'medium' | 'high';
+  dominance_level?: "low" | "medium" | "high";
   reason: string;
 }
 interface OracleData {
@@ -64,17 +64,17 @@ interface OracleData {
     reason: string;
   };
   layer?: Record<LayerMood, LayerOption> | null;
-  alternates?: {
-    fragrance_id?: string;
-    name: string;
-    family?: string;
-    reason?: string;
-  }[] | null;
+  alternates?:
+    | {
+        fragrance_id?: string;
+        name: string;
+        family?: string;
+        reason?: string;
+      }[]
+    | null;
 }
 
-
 type ActionState = "idle" | "accepting" | "skipping" | "rebuilding";
-
 
 const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
 const TEMPERATURES = [35, 50, 65, 80] as const;
@@ -101,25 +101,110 @@ const FAMILY_COLORS: Record<string, string> = {
 
 /* Family → tint colors for card backgrounds (subtle, desaturated) */
 const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string; material: string }> = {
-  "fresh-blue":      { bg: "rgba(91,155,213,0.08)",  glow: "rgba(91,155,213,0.18)",  border: "rgba(91,155,213,0.14)", material: "rgba(70,130,190,0.06)" },
-  "sweet-gourmand":  { bg: "rgba(212,160,86,0.08)",  glow: "rgba(212,160,86,0.18)",  border: "rgba(212,160,86,0.14)", material: "rgba(180,130,60,0.07)" },
-  "oud-amber":       { bg: "rgba(192,138,62,0.10)",  glow: "rgba(192,138,62,0.22)",  border: "rgba(192,138,62,0.16)", material: "rgba(160,110,40,0.08)" },
-  "dark-leather":    { bg: "rgba(139,58,58,0.08)",   glow: "rgba(139,58,58,0.18)",   border: "rgba(139,58,58,0.14)", material: "rgba(120,40,50,0.07)" },
-  "woody-clean":     { bg: "rgba(107,155,122,0.08)", glow: "rgba(107,155,122,0.18)", border: "rgba(107,155,122,0.14)", material: "rgba(85,130,100,0.06)" },
-  "tobacco-boozy":   { bg: "rgba(107,66,38,0.10)",   glow: "rgba(107,66,38,0.22)",   border: "rgba(107,66,38,0.16)", material: "rgba(90,50,30,0.08)" },
-  "citrus-cologne":  { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
-  "citrus-aromatic": { bg: "rgba(184,201,78,0.07)",  glow: "rgba(184,201,78,0.15)",  border: "rgba(184,201,78,0.12)", material: "rgba(150,170,60,0.05)" },
-  "floral-musk":     { bg: "rgba(196,160,185,0.07)", glow: "rgba(196,160,185,0.15)", border: "rgba(196,160,185,0.12)", material: "rgba(170,130,160,0.05)" },
-  "fresh-citrus":    { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)", material: "rgba(200,180,60,0.05)" },
-  "spicy-warm":      { bg: "rgba(212,113,59,0.08)",  glow: "rgba(212,113,59,0.18)",  border: "rgba(212,113,59,0.14)", material: "rgba(180,90,40,0.07)" },
-  "fresh-aquatic":   { bg: "rgba(91,192,222,0.08)",  glow: "rgba(91,192,222,0.18)",  border: "rgba(91,192,222,0.14)", material: "rgba(70,160,190,0.06)" },
-  "earthy-patchouli":{ bg: "rgba(139,115,85,0.08)",  glow: "rgba(139,115,85,0.18)",  border: "rgba(139,115,85,0.14)", material: "rgba(115,90,65,0.07)" },
-  "aromatic-fougere":{ bg: "rgba(107,142,107,0.08)", glow: "rgba(107,142,107,0.18)", border: "rgba(107,142,107,0.14)", material: "rgba(85,120,85,0.06)" },
-  "floral-rich":     { bg: "rgba(212,131,158,0.07)", glow: "rgba(212,131,158,0.15)", border: "rgba(212,131,158,0.12)", material: "rgba(180,110,135,0.05)" },
-  "green-earthy":    { bg: "rgba(107,142,90,0.07)",  glow: "rgba(107,142,90,0.15)",  border: "rgba(107,142,90,0.12)", material: "rgba(85,120,70,0.05)" },
+  "fresh-blue": {
+    bg: "rgba(91,155,213,0.08)",
+    glow: "rgba(91,155,213,0.18)",
+    border: "rgba(91,155,213,0.14)",
+    material: "rgba(70,130,190,0.06)",
+  },
+  "sweet-gourmand": {
+    bg: "rgba(212,160,86,0.08)",
+    glow: "rgba(212,160,86,0.18)",
+    border: "rgba(212,160,86,0.14)",
+    material: "rgba(180,130,60,0.07)",
+  },
+  "oud-amber": {
+    bg: "rgba(192,138,62,0.10)",
+    glow: "rgba(192,138,62,0.22)",
+    border: "rgba(192,138,62,0.16)",
+    material: "rgba(160,110,40,0.08)",
+  },
+  "dark-leather": {
+    bg: "rgba(139,58,58,0.08)",
+    glow: "rgba(139,58,58,0.18)",
+    border: "rgba(139,58,58,0.14)",
+    material: "rgba(120,40,50,0.07)",
+  },
+  "woody-clean": {
+    bg: "rgba(107,155,122,0.08)",
+    glow: "rgba(107,155,122,0.18)",
+    border: "rgba(107,155,122,0.14)",
+    material: "rgba(85,130,100,0.06)",
+  },
+  "tobacco-boozy": {
+    bg: "rgba(107,66,38,0.10)",
+    glow: "rgba(107,66,38,0.22)",
+    border: "rgba(107,66,38,0.16)",
+    material: "rgba(90,50,30,0.08)",
+  },
+  "citrus-cologne": {
+    bg: "rgba(232,212,77,0.07)",
+    glow: "rgba(232,212,77,0.15)",
+    border: "rgba(232,212,77,0.12)",
+    material: "rgba(200,180,60,0.05)",
+  },
+  "citrus-aromatic": {
+    bg: "rgba(184,201,78,0.07)",
+    glow: "rgba(184,201,78,0.15)",
+    border: "rgba(184,201,78,0.12)",
+    material: "rgba(150,170,60,0.05)",
+  },
+  "floral-musk": {
+    bg: "rgba(196,160,185,0.07)",
+    glow: "rgba(196,160,185,0.15)",
+    border: "rgba(196,160,185,0.12)",
+    material: "rgba(170,130,160,0.05)",
+  },
+  "fresh-citrus": {
+    bg: "rgba(232,212,77,0.07)",
+    glow: "rgba(232,212,77,0.15)",
+    border: "rgba(232,212,77,0.12)",
+    material: "rgba(200,180,60,0.05)",
+  },
+  "spicy-warm": {
+    bg: "rgba(212,113,59,0.08)",
+    glow: "rgba(212,113,59,0.18)",
+    border: "rgba(212,113,59,0.14)",
+    material: "rgba(180,90,40,0.07)",
+  },
+  "fresh-aquatic": {
+    bg: "rgba(91,192,222,0.08)",
+    glow: "rgba(91,192,222,0.18)",
+    border: "rgba(91,192,222,0.14)",
+    material: "rgba(70,160,190,0.06)",
+  },
+  "earthy-patchouli": {
+    bg: "rgba(139,115,85,0.08)",
+    glow: "rgba(139,115,85,0.18)",
+    border: "rgba(139,115,85,0.14)",
+    material: "rgba(115,90,65,0.07)",
+  },
+  "aromatic-fougere": {
+    bg: "rgba(107,142,107,0.08)",
+    glow: "rgba(107,142,107,0.18)",
+    border: "rgba(107,142,107,0.14)",
+    material: "rgba(85,120,85,0.06)",
+  },
+  "floral-rich": {
+    bg: "rgba(212,131,158,0.07)",
+    glow: "rgba(212,131,158,0.15)",
+    border: "rgba(212,131,158,0.12)",
+    material: "rgba(180,110,135,0.05)",
+  },
+  "green-earthy": {
+    bg: "rgba(107,142,90,0.07)",
+    glow: "rgba(107,142,90,0.15)",
+    border: "rgba(107,142,90,0.12)",
+    material: "rgba(85,120,70,0.05)",
+  },
 };
 
-const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
+const DEFAULT_TINT = {
+  bg: "rgba(255,255,255,0.03)",
+  glow: "rgba(255,255,255,0.06)",
+  border: "rgba(255,255,255,0.08)",
+  material: "rgba(255,255,255,0.02)",
+};
 
 const FAMILY_LABELS: Record<string, string> = {
   "oud-amber": "Oud & Amber",
@@ -175,29 +260,31 @@ function getCuratedNotes(
   // 1. Try DB notes (comma-separated string)
   let pool: string[] = [];
   if (dbNotes) {
-    pool = dbNotes.split(",").map(n => n.trim()).filter(Boolean);
+    pool = dbNotes
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
   }
   // 2. Fallback: DB accords
   if (pool.length === 0 && dbAccords) {
-    pool = dbAccords.split(",").map(n => n.trim()).filter(Boolean);
+    pool = dbAccords
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
   }
   // 3. Fallback: local FRAGRANCE_PROFILES
   if (pool.length === 0) {
     const profile = FRAGRANCE_PROFILES[name];
     if (profile) {
-      const all = [
-        ...(profile.top_notes ?? []),
-        ...(profile.heart_notes ?? []),
-        ...(profile.base_notes ?? []),
-      ];
+      const all = [...(profile.top_notes ?? []), ...(profile.heart_notes ?? []), ...(profile.base_notes ?? [])];
       pool = all;
     }
   }
   if (pool.length === 0) return [];
 
   // Filter: remove generic, remove duplicates with other fragrance
-  const distinctive = pool.filter(n => !GENERIC_NOTES.has(n.toLowerCase()) && !exclude.has(n.toLowerCase()));
-  const fallback = pool.filter(n => !exclude.has(n.toLowerCase()));
+  const distinctive = pool.filter((n) => !GENERIC_NOTES.has(n.toLowerCase()) && !exclude.has(n.toLowerCase()));
+  const fallback = pool.filter((n) => !exclude.has(n.toLowerCase()));
   const source = distinctive.length >= 2 ? distinctive : fallback;
   return source.slice(0, 3);
 }
@@ -205,8 +292,14 @@ function getCuratedNotes(
 /** Build a "why it works" explanation referencing actual notes */
 function buildWhyItWorks(baseName: string, baseNotes: string[], layerName: string, layerNotes: string[]): string {
   if (baseNotes.length === 0 && layerNotes.length === 0) return "";
-  const bPart = baseNotes.length > 0 ? `The ${baseNotes.slice(0, 2).join(" and ")} in ${getDisplayName(baseName)}` : getDisplayName(baseName);
-  const lPart = layerNotes.length > 0 ? `while ${layerNotes.slice(0, 2).join(" and ")} from ${getDisplayName(layerName)} add${layerNotes.length === 1 ? "s" : ""} depth` : "";
+  const bPart =
+    baseNotes.length > 0
+      ? `The ${baseNotes.slice(0, 2).join(" and ")} in ${getDisplayName(baseName)}`
+      : getDisplayName(baseName);
+  const lPart =
+    layerNotes.length > 0
+      ? `while ${layerNotes.slice(0, 2).join(" and ")} from ${getDisplayName(layerName)} add${layerNotes.length === 1 ? "s" : ""} depth`
+      : "";
   if (lPart) return `${bPart} stay grounded ${lPart}.`;
   return `${bPart} anchors the blend with character.`;
 }
@@ -214,7 +307,7 @@ function buildWhyItWorks(baseName: string, baseNotes: string[], layerName: strin
 /* Brand mapping */
 const FRAGRANCE_BRANDS: Record<string, string> = {
   "Valley of the Kings": "Alexandria Fragrances",
-  "Agar": "Maison Alhambra",
+  Agar: "Maison Alhambra",
   "Noire Absolu": "Maison Alhambra",
   "Santal Sérénade": "Maison Alhambra",
   "Hafez 1984": "Alexandria Fragrances",
@@ -227,7 +320,7 @@ const FRAGRANCE_BRANDS: Record<string, string> = {
 /* Wear context tags per fragrance */
 const FRAGRANCE_WEAR_TAGS: Record<string, string[]> = {
   "Valley of the Kings": ["Date night", "Cold evenings", "Statement wear"],
-  "Agar": ["Daily driver", "Office safe", "Versatile"],
+  Agar: ["Daily driver", "Office safe", "Versatile"],
   "Noire Absolu": ["Night out", "Power move", "Cold weather"],
   "Santal Sérénade": ["Close encounters", "Cozy nights", "Indoor"],
   "Hafez 1984": ["Evening signature", "Cool weather", "Night out"],
@@ -250,7 +343,7 @@ const FRAGRANCE_PROFILES: Record<string, FragranceProfile> = {
     secondary_weather: "Also great in crisp autumn evenings",
     bottle_url: "https://fimgs.net/mdimg/perfume/375x500.77498.jpg",
   },
-  "Agar": {
+  Agar: {
     brand: "Maison Alhambra",
     top_notes: ["Elemi", "Green Cardamom"],
     heart_notes: ["Agarwood", "Cedar Atlas"],
@@ -343,12 +436,12 @@ const LAYER_COMPATIBILITY: Record<string, { family: string; score: number }[]> =
     { family: "tobacco-boozy", score: 0.75 },
   ],
   "fresh-blue": [
-    { family: "woody-clean", score: 0.90 },
+    { family: "woody-clean", score: 0.9 },
     { family: "citrus-aromatic", score: 0.85 },
   ],
   "woody-clean": [
     { family: "fresh-blue", score: 0.88 },
-    { family: "oud-amber", score: 0.80 },
+    { family: "oud-amber", score: 0.8 },
     { family: "floral-musk", score: 0.78 },
   ],
   "sweet-gourmand": [
@@ -358,7 +451,7 @@ const LAYER_COMPATIBILITY: Record<string, { family: string; score: number }[]> =
   ],
   "dark-leather": [
     { family: "tobacco-boozy", score: 0.88 },
-    { family: "oud-amber", score: 0.80 },
+    { family: "oud-amber", score: 0.8 },
     { family: "woody-clean", score: 0.75 },
   ],
   "tobacco-boozy": [
@@ -368,7 +461,7 @@ const LAYER_COMPATIBILITY: Record<string, { family: string; score: number }[]> =
   ],
   "floral-musk": [
     { family: "woody-clean", score: 0.85 },
-    { family: "fresh-blue", score: 0.80 },
+    { family: "fresh-blue", score: 0.8 },
   ],
   "citrus-aromatic": [
     { family: "fresh-blue", score: 0.88 },
@@ -393,11 +486,7 @@ function computeDominanceSafety(base: FragranceEntry, layer: FragranceEntry): nu
   return 1.0;
 }
 
-function recommendDailySet(
-  base: FragranceEntry,
-  candidates: FragranceEntry[],
-  dayIndex: number,
-): DailySet {
+function recommendDailySet(base: FragranceEntry, candidates: FragranceEntry[], dayIndex: number): DailySet {
   const baseFamily = base.family;
   const compatEntries = LAYER_COMPATIBILITY[baseFamily] ?? [];
 
@@ -406,12 +495,12 @@ function recommendDailySet(
 
   for (const candidate of candidates) {
     if (candidate.fragrance_id === base.fragrance_id) continue;
-    const compatMatch = compatEntries.find(c => c.family === candidate.family);
+    const compatMatch = compatEntries.find((c) => c.family === candidate.family);
     if (!compatMatch) continue;
     const compatibility = compatMatch.score;
     const dominanceSafety = computeDominanceSafety(base, candidate);
     const rotationValue = 1 - (dayIndex % 3) * 0.1;
-    const score = 0.45 * 0.85 + 0.20 * compatibility + 0.15 * dominanceSafety + 0.10 * 0.8 + 0.10 * rotationValue;
+    const score = 0.45 * 0.85 + 0.2 * compatibility + 0.15 * dominanceSafety + 0.1 * 0.8 + 0.1 * rotationValue;
     if (score > bestScore && dominanceSafety > 0.4 && compatibility > 0.7) {
       bestScore = score;
       bestLayer = candidate;
@@ -420,7 +509,9 @@ function recommendDailySet(
 
   if (bestLayer && bestScore > 0.65) {
     return {
-      base, layer: bestLayer, mode: "balance",
+      base,
+      layer: bestLayer,
+      mode: "balance",
       confidence: Math.round(bestScore * 100) / 100,
       reasoning: `${bestLayer.name} complements ${base.name} — compatible families with safe projection ratio.`,
       is_layered: true,
@@ -428,8 +519,10 @@ function recommendDailySet(
   }
 
   return {
-    base, layer: null, mode: null,
-    confidence: Math.round((0.45 * 0.85 + 0.10 * 0.8 + 0.10 * 0.9) * 100) / 100,
+    base,
+    layer: null,
+    mode: null,
+    confidence: Math.round((0.45 * 0.85 + 0.1 * 0.8 + 0.1 * 0.9) * 100) / 100,
     reasoning: `${base.name} wears best solo today — no layer improves the set.`,
     is_layered: false,
   };
@@ -452,22 +545,82 @@ interface ForecastDay {
 }
 
 function buildForecastDays(): ForecastDay[] {
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const today = new Date();
 
   const weekFragrances: (FragranceEntry & { temperature: number; reason: string })[] = [
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.', temperature: 42, longevity_score: 0.9, projection_score: 0.85 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.', temperature: 55, longevity_score: 0.6, projection_score: 0.45 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.', temperature: 38, longevity_score: 0.95, projection_score: 0.9 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.', temperature: 62, longevity_score: 0.7, projection_score: 0.3 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.', temperature: 45, longevity_score: 0.85, projection_score: 0.8 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.', temperature: 72, longevity_score: 0.45, projection_score: 0.5 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.', temperature: 48, longevity_score: 0.65, projection_score: 0.5 },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440001",
+      name: "Valley of the Kings",
+      family: "oud-amber",
+      reason: "Dark amber lane fits your strongest scent identity.",
+      temperature: 42,
+      longevity_score: 0.9,
+      projection_score: 0.85,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440003",
+      name: "Agar",
+      family: "woody-clean",
+      reason: "Clean woody undertones for a grounded midweek reset.",
+      temperature: 55,
+      longevity_score: 0.6,
+      projection_score: 0.45,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440006",
+      name: "Noire Absolu",
+      family: "dark-leather",
+      reason: "Raw leather intensity for a commanding presence.",
+      temperature: 38,
+      longevity_score: 0.95,
+      projection_score: 0.9,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440007",
+      name: "Santal Sérénade",
+      family: "sweet-gourmand",
+      reason: "Creamy sandalwood warmth for effortless comfort.",
+      temperature: 62,
+      longevity_score: 0.7,
+      projection_score: 0.3,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440004",
+      name: "Hafez 1984",
+      family: "tobacco-boozy",
+      reason: "Smoky depth that lingers through the evening.",
+      temperature: 45,
+      longevity_score: 0.85,
+      projection_score: 0.8,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440002",
+      name: "Mystere 28",
+      family: "fresh-blue",
+      reason: "Bright aquatic lift for a weekend refresh.",
+      temperature: 72,
+      longevity_score: 0.45,
+      projection_score: 0.5,
+    },
+    {
+      fragrance_id: "550e8400-e29b-41d4-a716-446655440008",
+      name: "Amber Dusk",
+      family: "oud-amber",
+      reason: "Warm amber close to round out the week.",
+      temperature: 48,
+      longevity_score: 0.65,
+      projection_score: 0.5,
+    },
   ];
 
-  const allEntries: FragranceEntry[] = weekFragrances.map(f => ({
-    fragrance_id: f.fragrance_id, name: f.name, family: f.family, reason: f.reason,
-    longevity_score: f.longevity_score, projection_score: f.projection_score,
+  const allEntries: FragranceEntry[] = weekFragrances.map((f) => ({
+    fragrance_id: f.fragrance_id,
+    name: f.name,
+    family: f.family,
+    reason: f.reason,
+    longevity_score: f.longevity_score,
+    projection_score: f.projection_score,
   }));
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -475,20 +628,30 @@ function buildForecastDays(): ForecastDay[] {
     d.setDate(d.getDate() + i);
     const frag = weekFragrances[i];
     const baseEntry: FragranceEntry = {
-      fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason,
-      longevity_score: frag.longevity_score, projection_score: frag.projection_score,
+      fragrance_id: frag.fragrance_id,
+      name: frag.name,
+      family: frag.family,
+      reason: frag.reason,
+      longevity_score: frag.longevity_score,
+      projection_score: frag.projection_score,
     };
     const dailySet = recommendDailySet(baseEntry, allEntries, i);
 
     let layerMap: Record<LayerMood, LayerOption> | null = null;
     if (dailySet.is_layered && dailySet.layer) {
       const layerOption: LayerOption = {
-        base_id: frag.fragrance_id, anchor_name: frag.name,
-        top_id: dailySet.layer.fragrance_id, top_name: dailySet.layer.name,
-        top: `Layer with ${dailySet.layer.name}`, mode: "balance",
-        reason: dailySet.reasoning, why_it_works: dailySet.reasoning,
-        anchor_sprays: 3, top_sprays: 1,
-        anchor_placement: "Neck, chest", top_placement: "Wrists",
+        base_id: frag.fragrance_id,
+        anchor_name: frag.name,
+        top_id: dailySet.layer.fragrance_id,
+        top_name: dailySet.layer.name,
+        top: `Layer with ${dailySet.layer.name}`,
+        mode: "balance",
+        reason: dailySet.reasoning,
+        why_it_works: dailySet.reasoning,
+        anchor_sprays: 3,
+        top_sprays: 1,
+        anchor_placement: "Neck, chest",
+        top_placement: "Wrists",
         strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
       };
       layerMap = {
@@ -499,23 +662,28 @@ function buildForecastDays(): ForecastDay[] {
       };
     }
 
-    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     return {
-      label: dayNames[d.getDay()], day: d.getDate(), dateKey,
+      label: dayNames[d.getDay()],
+      day: d.getDate(),
+      dateKey,
       fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
-      temperature: frag.temperature, layer: layerMap, alternates: null, dailySet,
+      temperature: frag.temperature,
+      layer: layerMap,
+      alternates: null,
+      dailySet,
     };
   });
 }
 
 /* ── Density classification for interaction types ── */
-const DENSE_FAMILIES = new Set(['oud-amber', 'dark-leather', 'tobacco-boozy', 'sweet-gourmand']);
-const AIRY_FAMILIES = new Set(['fresh-blue', 'citrus-cologne', 'fresh-citrus', 'fresh-aquatic', 'citrus-aromatic']);
+const DENSE_FAMILIES = new Set(["oud-amber", "dark-leather", "tobacco-boozy", "sweet-gourmand"]);
+const AIRY_FAMILIES = new Set(["fresh-blue", "citrus-cologne", "fresh-citrus", "fresh-aquatic", "citrus-aromatic"]);
 
-type InteractionType = 'amplify' | 'balance' | 'contrast';
+type InteractionType = "amplify" | "balance" | "contrast";
 
 function classifyInteraction(mainFamily: string, layerFamily: string): InteractionType {
-  if (mainFamily === layerFamily) return 'amplify';
+  if (mainFamily === layerFamily) return "amplify";
   const mainDense = DENSE_FAMILIES.has(mainFamily);
   const mainAiry = AIRY_FAMILIES.has(mainFamily);
   const layerDense = DENSE_FAMILIES.has(layerFamily);
@@ -524,36 +692,33 @@ function classifyInteraction(mainFamily: string, layerFamily: string): Interacti
   const layerNeutral = !layerDense && !layerAiry;
 
   // Opposite density → contrast
-  if ((mainDense && layerAiry) || (mainAiry && layerDense)) return 'contrast';
+  if ((mainDense && layerAiry) || (mainAiry && layerDense)) return "contrast";
   // Same density group but different family → amplify
-  if ((mainDense && layerDense) || (mainAiry && layerAiry)) return 'amplify';
+  if ((mainDense && layerDense) || (mainAiry && layerAiry)) return "amplify";
   // Neutral + extreme → contrast (pulling in a new direction)
-  if (mainNeutral && (layerDense || layerAiry)) return 'contrast';
-  if (layerNeutral && (mainDense || mainAiry)) return 'balance';
+  if (mainNeutral && (layerDense || layerAiry)) return "contrast";
+  if (layerNeutral && (mainDense || mainAiry)) return "balance";
   // Both neutral but different families → balance
-  return 'balance';
+  return "balance";
 }
 
-function scoreLayerCandidate(
-  mainFamily: string,
-  candidate: any,
-): { score: number; interaction: InteractionType } {
+function scoreLayerCandidate(mainFamily: string, candidate: any): { score: number; interaction: InteractionType } {
   const layerFamily = candidate.family_key as string;
   const interaction = classifyInteraction(mainFamily, layerFamily);
 
   let score = 0.5; // baseline
 
   // Interaction type boosts
-  if (interaction === 'balance') score += 0.25; // fills a gap — best
-  if (interaction === 'contrast') score += 0.15; // adds tension — good
-  if (interaction === 'amplify') score += 0.05; // same direction — only if meaningful
+  if (interaction === "balance") score += 0.25; // fills a gap — best
+  if (interaction === "contrast") score += 0.15; // adds tension — good
+  if (interaction === "amplify") score += 0.05; // same direction — only if meaningful
 
   // Penalty: same family as main (redundant, no transformation)
-  if (layerFamily === mainFamily) score -= 0.30;
+  if (layerFamily === mainFamily) score -= 0.3;
 
   // Penalty: both dense (muddy/cloying risk)
   if (DENSE_FAMILIES.has(mainFamily) && DENSE_FAMILIES.has(layerFamily) && mainFamily !== layerFamily) {
-    score -= 0.10;
+    score -= 0.1;
   }
 
   // Boost: layer adds missing dimension (different density)
@@ -562,7 +727,7 @@ function scoreLayerCandidate(
   const layerDense = DENSE_FAMILIES.has(layerFamily);
   const layerAiry = AIRY_FAMILIES.has(layerFamily);
   if ((mainDense && layerAiry) || (mainAiry && layerDense)) {
-    score += 0.10; // structural improvement
+    score += 0.1; // structural improvement
   }
 
   // Boost: neutral layer on extreme base (grounding/lifting)
@@ -575,22 +740,25 @@ function scoreLayerCandidate(
 
 /* ── Interaction-aware text generators ── */
 const INTERACTION_REASON: Record<InteractionType, (layerFamily: string) => string> = {
-  amplify: (lf) => `Reinforces ${lf.replace(/-/g, ' ')} character`,
-  balance: (lf) => `Adds ${lf.replace(/-/g, ' ')} dimension`,
-  contrast: (lf) => `Contrasts with ${lf.replace(/-/g, ' ')} energy`,
+  amplify: (lf) => `Reinforces ${lf.replace(/-/g, " ")} character`,
+  balance: (lf) => `Adds ${lf.replace(/-/g, " ")} dimension`,
+  contrast: (lf) => `Contrasts with ${lf.replace(/-/g, " ")} energy`,
 };
 
 const INTERACTION_WHY: Record<InteractionType, (mainFam: string, layerFam: string) => string> = {
   amplify: (mf, lf) => {
-    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    const m = mf.replace(/-/g, " "),
+      l = lf.replace(/-/g, " ");
     return `Both lean ${m} — the layer doubles down so the whole thing reads stronger without getting muddy.`;
   },
   balance: (mf, lf) => {
-    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    const m = mf.replace(/-/g, " "),
+      l = lf.replace(/-/g, " ");
     return `The ${m} base holds shape while ${l} fills what's missing — neither drops out.`;
   },
   contrast: (mf, lf) => {
-    const m = mf.replace(/-/g, ' '), l = lf.replace(/-/g, ' ');
+    const m = mf.replace(/-/g, " "),
+      l = lf.replace(/-/g, " ");
     return `${m.charAt(0).toUpperCase() + m.slice(1)} and ${l} pull in opposite directions — the tension keeps it interesting.`;
   },
 };
@@ -600,22 +768,22 @@ const INTERACTION_WHY: Record<InteractionType, (mainFam: string, layerFam: strin
  * Prioritizes family diversity + meaningful transformation.
  */
 function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerModes {
-  const moodKeys: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+  const moodKeys: LayerMood[] = ["balance", "bold", "smooth", "wild"];
   const result: LayerModes = { balance: null, bold: null, smooth: null, wild: null };
 
   if (!candidates || candidates.length === 0) return result;
 
   // Score and classify all candidates
   const scored = candidates
-    .filter(c => c.family_key)
-    .map(c => ({
+    .filter((c) => c.family_key)
+    .map((c) => ({
       ...c,
       ...scoreLayerCandidate(mainFamily, c),
     }))
     .sort((a, b) => b.score - a.score);
 
   // Pick top candidates ensuring family diversity
-  const picked: (typeof scored[0])[] = [];
+  const picked: (typeof scored)[0][] = [];
   const usedFamilies = new Set<string>();
   const usedIds = new Set<string>();
 
@@ -642,17 +810,17 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 
   // Assign to moods — try to match interaction type to mood intent
   const moodPreference: Record<LayerMood, InteractionType> = {
-    balance: 'balance',
-    bold: 'amplify',
-    smooth: 'balance',
-    wild: 'contrast',
+    balance: "balance",
+    bold: "amplify",
+    smooth: "balance",
+    wild: "contrast",
   };
 
   const assigned = new Set<string>();
   for (const mood of moodKeys) {
     const preferred = moodPreference[mood];
-    const match = picked.find(p => p.interaction === preferred && !assigned.has(p.id));
-    const fallback = picked.find(p => !assigned.has(p.id));
+    const match = picked.find((p) => p.interaction === preferred && !assigned.has(p.id));
+    const fallback = picked.find((p) => !assigned.has(p.id));
     const chosen = match ?? fallback;
     if (chosen) {
       assigned.add(chosen.id);
@@ -672,10 +840,15 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
     }
   }
 
-  console.log('[ODARA] Layer selections:', moodKeys.map(m => {
-    const e = result[m];
-    return `${m.toUpperCase()}=${e?.family_key ?? 'none'}(${e?.interactionType ?? '-'})`;
-  }).join(', '));
+  console.log(
+    "[ODARA] Layer selections:",
+    moodKeys
+      .map((m) => {
+        const e = result[m];
+        return `${m.toUpperCase()}=${e?.family_key ?? "none"}(${e?.interactionType ?? "-"})`;
+      })
+      .join(", "),
+  );
 
   return result;
 }
@@ -695,8 +868,8 @@ const OdaraScreen = () => {
   const [selectedContext, setSelectedContext] = useState<string>("daily");
   const [selectedTemperature, setSelectedTemperature] = useState<number>(40);
   const [layerSheetOpen, setLayerSheetOpen] = useState(false);
-  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
-  const [selectedRatio, setSelectedRatio] = useState<string>('1:1');
+  const [selectedMood, setSelectedMood] = useState<LayerMood>("balance");
+  const [selectedRatio, setSelectedRatio] = useState<string>("1:1");
   const [mainProjection, setMainProjection] = useState<number | null>(null);
 
   // Locked recipes: full recipe state keyed by context
@@ -715,10 +888,11 @@ const OdaraScreen = () => {
   // lockedRecipes: dateKey → context → recipe
   const lockedRecipes = useRef<Record<string, Record<string, LockedRecipe>>>({});
   const [recipeVersion, setRecipeVersion] = useState(0);
-  const bumpRecipeVersion = useCallback(() => setRecipeVersion(v => v + 1), []);
+  const bumpRecipeVersion = useCallback(() => setRecipeVersion((v) => v + 1), []);
 
   // Helper: build dateKey from a Date
-  const toDateKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const toDateKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
@@ -773,8 +947,7 @@ const OdaraScreen = () => {
     let raf: number;
     const tick = () => {
       const now = new Date();
-      const secondsSinceMidnight =
-        now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const secondsSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
       // Today is always index 0; orb moves from 0 toward 1 over 24h
       const progress = secondsSinceMidnight / 86400;
       setOrbPosition(progress);
@@ -789,110 +962,123 @@ const OdaraScreen = () => {
     let cancelled = false;
     setWeatherLoading(true);
     fetchLiveTemperature()
-      .then((temp) => { if (!cancelled) { setLiveTemperature(temp); setSelectedTemperature(temp); } })
+      .then((temp) => {
+        if (!cancelled) {
+          setLiveTemperature(temp);
+          setSelectedTemperature(temp);
+        }
+      })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setWeatherLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setWeatherLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const getUserId = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string, wearDate?: string) => {
-    const contextVal = ctx ?? selectedContext ?? "daily";
-    const tempVal = temp ?? effectiveTemperature ?? 25;
-    const dateForRpc = wearDate ?? selectedDateKey;
-    const fetchId = ++latestFetchId.current;
+  const fetchOracle = useCallback(
+    async (ctx?: string, temp?: number, excludeId?: string, wearDate?: string) => {
+      const contextVal = ctx ?? selectedContext ?? "daily";
+      const tempVal = temp ?? effectiveTemperature ?? 25;
+      const dateForRpc = wearDate ?? selectedDateKey;
+      const fetchId = ++latestFetchId.current;
 
-    const dateKey = dateForRpc;
-    console.log('ODARA current context', contextVal);
-    console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
-    console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
+      const dateKey = dateForRpc;
+      console.log("ODARA current context", contextVal);
+      console.log("ODARA found locked recipe", !!lockedRecipes.current[dateKey]?.[contextVal]);
+      console.log("ODARA saved lock state", lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? "neutral");
 
-    setLoading(true);
-    setError(false);
-    setExitDirection(null);
-    try {
-      const userId = await getUserId();
+      setLoading(true);
+      setError(false);
+      setExitDirection(null);
+      try {
+        const userId = await getUserId();
 
-      const rpcParams = {
-        p_user_id: userId,
-        p_temperature: tempVal,
-        p_context: contextVal,
-        p_brand: null,
-        p_wear_date: dateForRpc,
-      } as any;
+        const rpcParams = {
+          p_user_id: userId,
+          p_temperature: tempVal,
+          p_context: contextVal,
+          p_brand: null,
+          p_wear_date: dateForRpc,
+        } as any;
 
-      const { data: rpcResult, error: rpcErr } = await supabase
-        .rpc('get_todays_oracle_v3', rpcParams);
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc("get_todays_oracle_v3", rpcParams);
 
-      if (rpcErr) throw rpcErr;
-      const result = rpcResult as any;
-      const pick = result.today_pick;
+        if (rpcErr) throw rpcErr;
+        const result = rpcResult as any;
+        const pick = result.today_pick;
 
-      if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
-        console.log('ODARA stale fetch ignored for', contextVal);
-        return;
+        if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
+          console.log("ODARA stale fetch ignored for", contextVal);
+          return;
+        }
+
+        console.log("[ODARA] Oracle RPC result:", result);
+
+        if (!pick) throw new Error("No fragrance found for this context");
+
+        setMainNotes(pick.notes ?? null);
+        setMainAccords(pick.accords ?? null);
+        setMainProjection(pick.projection ?? null);
+
+        const liveAlternates = (result.alternates ?? []).map((a: any) => ({
+          fragrance_id: a.fragrance_id,
+          name: a.name,
+          family: a.family ?? "",
+          reason: a.reason ?? "",
+        }));
+
+        // Fetch layer candidates from the table (context-independent diversity scoring)
+        const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
+        const { data: layerRows } = await supabase
+          .from("fragrances")
+          .select("id, name, brand, family_key, notes, accords, projection")
+          .not("id", "in", `(${excludeIds.join(",")})`)
+          .not("family_key", "is", null)
+          .limit(20);
+
+        const newLayerModes = pickDiverseLayerModes(layerRows ?? [], pick.family ?? "");
+        setLayerModes(newLayerModes);
+        setLayerFragrance(newLayerModes.balance ?? null);
+        setSelectedMood("balance");
+
+        const liveOracle: OracleData = {
+          today_pick: {
+            fragrance_id: pick.fragrance_id,
+            name: pick.name,
+            family: pick.family ?? "",
+            reason: pick.reason ?? pick.brand ?? "",
+          },
+          layer: null,
+          alternates: liveAlternates,
+        };
+        setIsUnlockTransition(false);
+        setSelectionState("neutral");
+        setOracle(liveOracle);
+        setCardKey((k) => k + 1);
+      } catch (e) {
+        if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
+          console.log("ODARA stale fetch error ignored for", contextVal);
+          return;
+        }
+        console.error("Oracle fetch failed:", e);
+        setError(true);
+      } finally {
+        if (fetchId === latestFetchId.current && selectedContextRef.current === contextVal) {
+          setLoading(false);
+        }
       }
-
-      console.log('[ODARA] Oracle RPC result:', result);
-
-      if (!pick) throw new Error('No fragrance found for this context');
-
-      setMainNotes(pick.notes ?? null);
-      setMainAccords(pick.accords ?? null);
-      setMainProjection(pick.projection ?? null);
-
-      const liveAlternates = (result.alternates ?? []).map((a: any) => ({
-        fragrance_id: a.fragrance_id,
-        name: a.name,
-        family: a.family ?? '',
-        reason: a.reason ?? '',
-      }));
-
-      // Fetch layer candidates from the table (context-independent diversity scoring)
-      const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
-      const { data: layerRows } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords, projection')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .not('family_key', 'is', null)
-        .limit(20);
-
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], pick.family ?? '');
-      setLayerModes(newLayerModes);
-      setLayerFragrance(newLayerModes.balance ?? null);
-      setSelectedMood('balance');
-
-      const liveOracle: OracleData = {
-        today_pick: {
-          fragrance_id: pick.fragrance_id,
-          name: pick.name,
-          family: pick.family ?? '',
-          reason: pick.reason ?? pick.brand ?? '',
-        },
-        layer: null,
-        alternates: liveAlternates,
-      };
-      setIsUnlockTransition(false);
-      setSelectionState("neutral");
-      setOracle(liveOracle);
-      setCardKey((k) => k + 1);
-    } catch (e) {
-      if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
-        console.log('ODARA stale fetch error ignored for', contextVal);
-        return;
-      }
-      console.error("Oracle fetch failed:", e);
-      setError(true);
-    } finally {
-      if (fetchId === latestFetchId.current && selectedContextRef.current === contextVal) {
-        setLoading(false);
-      }
-    }
-  }, [selectedContext, effectiveTemperature, getUserId]);
+    },
+    [selectedContext, effectiveTemperature, getUserId],
+  );
 
   // Load a specific fragrance as main card by id (for alt tap)
   const loadFragranceById = useCallback(async (id: string) => {
@@ -900,9 +1086,9 @@ const OdaraScreen = () => {
     setError(false);
     try {
       const { data: row, error: qErr } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords, projection')
-        .eq('id', id)
+        .from("fragrances")
+        .select("id, name, brand, family_key, notes, accords, projection")
+        .eq("id", id)
         .single();
       if (qErr) throw qErr;
       setMainNotes(row.notes ?? null);
@@ -910,39 +1096,39 @@ const OdaraScreen = () => {
       setMainProjection(row.projection ?? null);
 
       const { data: altRows } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .neq('id', row.id)
-        .not('family_key', 'is', null)
+        .from("fragrances")
+        .select("id, name, brand, family_key, notes, accords")
+        .neq("id", row.id)
+        .not("family_key", "is", null)
         .limit(3);
 
       const liveAlternates = (altRows ?? []).map((r: any) => ({
         fragrance_id: r.id,
         name: r.name,
-        family: r.family_key ?? '',
-        reason: row.brand ?? '',
+        family: r.family_key ?? "",
+        reason: row.brand ?? "",
       }));
 
       // Fetch layer candidates — get more rows to maximize family diversity
       const excludeIds = [row.id, ...(altRows ?? []).map((r: any) => r.id)];
       const { data: layerRows } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords, projection')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .not('family_key', 'is', null)
+        .from("fragrances")
+        .select("id, name, brand, family_key, notes, accords, projection")
+        .not("id", "in", `(${excludeIds.join(",")})`)
+        .not("family_key", "is", null)
         .limit(20);
 
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], row.family_key ?? '');
+      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], row.family_key ?? "");
       setLayerModes(newLayerModes);
       setLayerFragrance(newLayerModes.balance ?? null);
-      setSelectedMood('balance');
+      setSelectedMood("balance");
 
       setOracle({
         today_pick: {
           fragrance_id: row.id,
           name: row.name,
-          family: row.family_key ?? '',
-          reason: row.brand ?? '',
+          family: row.family_key ?? "",
+          reason: row.brand ?? "",
         },
         layer: null,
         alternates: liveAlternates,
@@ -957,8 +1143,8 @@ const OdaraScreen = () => {
 
   const restoreLockedRecipe = useCallback((ctx: string, recipe: LockedRecipe) => {
     latestFetchId.current += 1;
-    console.log('ODARA restoring locked recipe for', ctx);
-    console.log('ODARA restored lock state', 'selected');
+    console.log("ODARA restoring locked recipe for", ctx);
+    console.log("ODARA restored lock state", "selected");
     setOracle(recipe.oracle);
     setMainNotes(recipe.mainNotes);
     setMainAccords(recipe.mainAccords);
@@ -975,31 +1161,34 @@ const OdaraScreen = () => {
     setCardKey((k) => k + 1);
   }, []);
 
-  const handleContextSwitch = useCallback((ctx: string) => {
-    if (ctx === selectedContext) return;
+  const handleContextSwitch = useCallback(
+    (ctx: string) => {
+      if (ctx === selectedContext) return;
 
-    console.log('ODARA context switch', ctx);
-    console.log('ODARA current context', selectedContextRef.current);
+      console.log("ODARA context switch", ctx);
+      console.log("ODARA current context", selectedContextRef.current);
 
-    setSelectedContext(ctx);
-    setCardExiting(false);
-    setLayerSheetOpen(false);
-    setSkipHistory([]);
+      setSelectedContext(ctx);
+      setCardExiting(false);
+      setLayerSheetOpen(false);
+      setSkipHistory([]);
 
-    const dateKey = selectedDateKey;
-    const recipe = lockedRecipes.current[dateKey]?.[ctx];
-    console.log('ODARA found locked recipe', !!recipe);
-    console.log('ODARA saved lock state', recipe?.lockState ?? 'neutral');
+      const dateKey = selectedDateKey;
+      const recipe = lockedRecipes.current[dateKey]?.[ctx];
+      console.log("ODARA found locked recipe", !!recipe);
+      console.log("ODARA saved lock state", recipe?.lockState ?? "neutral");
 
-    if (recipe) {
-      restoreLockedRecipe(ctx, recipe);
-      return;
-    }
+      if (recipe) {
+        restoreLockedRecipe(ctx, recipe);
+        return;
+      }
 
-    setIsUnlockTransition(false);
-    setSelectionState("neutral");
-    fetchOracle(ctx, selectedTemperature, undefined, selectedDateKey);
-  }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
+      setIsUnlockTransition(false);
+      setSelectionState("neutral");
+      fetchOracle(ctx, selectedTemperature, undefined, selectedDateKey);
+    },
+    [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature],
+  );
 
   useEffect(() => {
     const dateKey = selectedDateKey;
@@ -1008,8 +1197,8 @@ const OdaraScreen = () => {
       restoreLockedRecipe(selectedContext, recipe);
       return;
     }
-    fetchOracle(selectedContext, selectedTemperature);
-  }, []);
+    fetchOracle(selectedContext, selectedTemperature, undefined, selectedDateKey);
+  }, [selectedDateKey, selectedContext, selectedTemperature, fetchOracle, restoreLockedRecipe]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
@@ -1040,14 +1229,17 @@ const OdaraScreen = () => {
     if (actionState !== "idle" || !oracle?.today_pick?.fragrance_id) return;
     setActionState("skipping");
     // Push current state onto skip history stack
-    setSkipHistory(prev => [...prev, {
-      oracle,
-      mainNotes,
-      mainAccords,
-      layerModes,
-      mainProjection,
-    }]);
-    
+    setSkipHistory((prev) => [
+      ...prev,
+      {
+        oracle,
+        mainNotes,
+        mainAccords,
+        layerModes,
+        mainProjection,
+      },
+    ]);
+
     try {
       const userId = await getUserId();
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
@@ -1064,27 +1256,40 @@ const OdaraScreen = () => {
       setActionState("idle");
       swipeLocked.current = false;
     }
-  }, [actionState, oracle, mainNotes, mainAccords, layerModes, mainProjection, getUserId, fetchOracle, selectedContext]);
+  }, [
+    actionState,
+    oracle,
+    mainNotes,
+    mainAccords,
+    layerModes,
+    mainProjection,
+    getUserId,
+    fetchOracle,
+    selectedContext,
+  ]);
 
   const handleUndo = useCallback(() => {
     if (skipHistory.length === 0) return;
     const snapshot = skipHistory[skipHistory.length - 1];
-    setSkipHistory(prev => prev.slice(0, -1));
+    setSkipHistory((prev) => prev.slice(0, -1));
     setOracle(snapshot.oracle);
     setMainNotes(snapshot.mainNotes);
     setMainAccords(snapshot.mainAccords);
     setLayerModes(snapshot.layerModes);
     setMainProjection(snapshot.mainProjection);
     setLayerFragrance(snapshot.layerModes.balance ?? null);
-    setSelectedMood('balance');
+    setSelectedMood("balance");
     setSelectionState("neutral");
     setCardKey((k) => k + 1);
   }, [skipHistory]);
 
-  const handleAlternateTap = useCallback((alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
-    if (actionState !== "idle" || !alt.fragrance_id || selectionState === "selected") return;
-    loadFragranceById(alt.fragrance_id);
-  }, [actionState, loadFragranceById, selectionState]);
+  const handleAlternateTap = useCallback(
+    (alt: { fragrance_id?: string; name: string; family?: string; reason?: string }) => {
+      if (actionState !== "idle" || !alt.fragrance_id || selectionState === "selected") return;
+      loadFragranceById(alt.fragrance_id);
+    },
+    [actionState, loadFragranceById, selectionState],
+  );
 
   const isBusy = actionState !== "idle";
 
@@ -1097,7 +1302,10 @@ const OdaraScreen = () => {
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
           <Skeleton className="w-20 h-3 mb-6 bg-muted/20 rounded" />
-          <div className="w-full max-w-md rounded-[24px] px-[22px] py-[18px] flex flex-col items-center gap-[10px]" style={{ background: "var(--glass-bg)" }}>
+          <div
+            className="w-full max-w-md rounded-[24px] px-[22px] py-[18px] flex flex-col items-center gap-[10px]"
+            style={{ background: "var(--glass-bg)" }}
+          >
             <Skeleton className="w-3/4 h-10 bg-muted/20 rounded" />
             <Skeleton className="w-24 h-4 bg-muted/20 rounded" />
             <Skeleton className="w-full h-14 bg-muted/20 rounded" />
@@ -1139,7 +1347,7 @@ const OdaraScreen = () => {
   const today_pick = oraclePick;
   const alternates = oracleAlternates ?? [];
   const hasAlternates = alternates.length > 0;
-  const hasAnyLayerMode = Object.values(layerModes).some(v => v !== null);
+  const hasAnyLayerMode = Object.values(layerModes).some((v) => v !== null);
 
   // Card color stays fixed to main fragrance family
   const effectiveFamily = today_pick?.family;
@@ -1210,8 +1418,7 @@ const OdaraScreen = () => {
           transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         >
           {/* Gesture hint indicators removed — state communicates via card transitions */}
-          <AnimatePresence>
-          </AnimatePresence>
+          <AnimatePresence></AnimatePresence>
 
           {/* Card stack container — custom gesture handling */}
           <motion.div
@@ -1238,9 +1445,8 @@ const OdaraScreen = () => {
               const absY = Math.abs(offset.y);
 
               // Use the locked direction, or fall back to dominant axis
-              const dir = dragDirection.current !== "none"
-                ? dragDirection.current
-                : (absX > absY ? "horizontal" : "vertical");
+              const dir =
+                dragDirection.current !== "none" ? dragDirection.current : absX > absY ? "horizontal" : "vertical";
 
               dragDirection.current = "none";
               dragStart.current = null;
@@ -1249,15 +1455,9 @@ const OdaraScreen = () => {
                 const hThreshold = 50;
                 const hVel = 200;
                 let nextIndex: number | null = null;
-                if (
-                  (offset.x < -hThreshold || velocity.x < -hVel) &&
-                  selectedForecastDay < forecastDays.length - 1
-                ) {
+                if ((offset.x < -hThreshold || velocity.x < -hVel) && selectedForecastDay < forecastDays.length - 1) {
                   nextIndex = selectedForecastDay + 1;
-                } else if (
-                  (offset.x > hThreshold || velocity.x > hVel) &&
-                  selectedForecastDay > 0
-                ) {
+                } else if ((offset.x > hThreshold || velocity.x > hVel) && selectedForecastDay > 0) {
                   nextIndex = selectedForecastDay - 1;
                 }
                 if (nextIndex != null) {
@@ -1308,8 +1508,8 @@ const OdaraScreen = () => {
                       if (!lockedRecipes.current[dateKey]) lockedRecipes.current[dateKey] = {};
                       lockedRecipes.current[dateKey][selectedContext] = recipe;
                       bumpRecipeVersion();
-                      console.log('ODARA saved locked recipe', dateKey, selectedContext, recipe);
-                      console.log('ODARA saved lock state', recipe.lockState);
+                      console.log("ODARA saved locked recipe", dateKey, selectedContext, recipe);
+                      console.log("ODARA saved lock state", recipe.lockState);
                     }
                     handleAccept();
                   }
@@ -1324,10 +1524,11 @@ const OdaraScreen = () => {
                     const dateKey = selectedDateKey;
                     if (lockedRecipes.current[dateKey]) {
                       delete lockedRecipes.current[dateKey][selectedContext];
-                      if (Object.keys(lockedRecipes.current[dateKey]).length === 0) delete lockedRecipes.current[dateKey];
+                      if (Object.keys(lockedRecipes.current[dateKey]).length === 0)
+                        delete lockedRecipes.current[dateKey];
                     }
                     bumpRecipeVersion();
-                    console.log('ODARA recipe deleted for', dateKey, selectedContext);
+                    console.log("ODARA recipe deleted for", dateKey, selectedContext);
                     unlockTimeoutRef.current = setTimeout(() => {
                       setLockFlashColor(null);
                       setIsUnlockTransition(false);
@@ -1338,10 +1539,11 @@ const OdaraScreen = () => {
                     const dateKey2 = selectedDateKey;
                     if (lockedRecipes.current[dateKey2]) {
                       delete lockedRecipes.current[dateKey2][selectedContext];
-                      if (Object.keys(lockedRecipes.current[dateKey2]).length === 0) delete lockedRecipes.current[dateKey2];
+                      if (Object.keys(lockedRecipes.current[dateKey2]).length === 0)
+                        delete lockedRecipes.current[dateKey2];
                     }
                     bumpRecipeVersion();
-                    console.log('ODARA recipe deleted for', dateKey2, selectedContext);
+                    console.log("ODARA recipe deleted for", dateKey2, selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
                     setTimeout(() => {
@@ -1401,9 +1603,10 @@ const OdaraScreen = () => {
                     opacity: cardExiting && isCenter ? 0 : opacity,
                     z: translateZ,
                   }}
-                  transition={cardExiting && isCenter
-                    ? { duration: 0.4, ease: [0.4, 0, 1, 1] }
-                    : { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
+                  transition={
+                    cardExiting && isCenter
+                      ? { duration: 0.4, ease: [0.4, 0, 1, 1] }
+                      : { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
                   }
                   style={{
                     zIndex,
@@ -1477,7 +1680,7 @@ const OdaraScreen = () => {
                       {/* Family label with color accent — always uses base family */}
                       <p
                         className="text-xs text-center uppercase select-none w-full mt-[10px] mb-[6px]"
-                        style={{ color: baseFamilyColor, fontWeight: 500, letterSpacing: '0.12em', lineHeight: 1.4 }}
+                        style={{ color: baseFamilyColor, fontWeight: 500, letterSpacing: "0.12em", lineHeight: 1.4 }}
                       >
                         {cardPick.family}
                       </p>
@@ -1485,14 +1688,23 @@ const OdaraScreen = () => {
                       {/* Main fragrance accords — swappable for phased notes later */}
                       {(() => {
                         const displayNotes = normalizeNotes(mainNotes ?? [], 3);
-                        const displayAccords = (mainAccords ?? []).map(a => a.trim()).slice(0, 4);
+                        const displayAccords = (mainAccords ?? []).map((a) => a.trim()).slice(0, 4);
                         const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
                         if (!isCenter || !hasAny) return null;
                         return (
                           <div className="w-full px-2 mb-[10px] mt-[6px]">
                             {displayAccords.length > 0 && (
-                              <p className="text-[13px] text-center select-none lowercase" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 }}>
-                                <span style={{ color: 'rgba(255,255,255,0.50)' }}>Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                              <p
+                                className="text-[13px] text-center select-none lowercase"
+                                style={{
+                                  color: "rgba(255,255,255,0.85)",
+                                  fontWeight: 500,
+                                  letterSpacing: "0.06em",
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                <span style={{ color: "rgba(255,255,255,0.50)" }}>Accords:</span>{" "}
+                                {displayAccords.join(", ").toLowerCase()}
                               </p>
                             )}
                           </div>
@@ -1530,16 +1742,18 @@ const OdaraScreen = () => {
                     {/* Alternatives */}
                     {isCenter && cardHasAlternates && (
                       <div className="flex flex-col items-center mb-[6px] max-w-full">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mt-[2px] mb-[16px] font-medium">Alternatives</span>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 text-center mt-[2px] mb-[16px] font-medium">
+                          Alternatives
+                        </span>
                         <div className="relative w-full">
                           <div
                             className="flex flex-row gap-2.5 overflow-x-auto overflow-y-hidden px-4 pb-1"
                             style={{
-                              scrollbarWidth: 'none',
-                              msOverflowStyle: 'none',
-                              WebkitOverflowScrolling: 'touch',
-                              scrollBehavior: 'smooth',
-                              scrollSnapType: 'x mandatory',
+                              scrollbarWidth: "none",
+                              msOverflowStyle: "none",
+                              WebkitOverflowScrolling: "touch",
+                              scrollBehavior: "smooth",
+                              scrollSnapType: "x mandatory",
                             }}
                             onTouchStart={(e) => e.stopPropagation()}
                             onTouchMove={(e) => e.stopPropagation()}
@@ -1566,7 +1780,7 @@ const OdaraScreen = () => {
                                       boxShadow: "none",
                                       color: "#fff",
                                       fontWeight: 500,
-                                      scrollSnapAlign: 'start',
+                                      scrollSnapAlign: "start",
                                     }}
                                   >
                                     {getDisplayName(alt.name)}
@@ -1595,13 +1809,29 @@ const OdaraScreen = () => {
                           >
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                               {/* Neon line traces around the lock shape */}
-                              <rect x="3" y="9" width="14" height="9" rx="2" stroke={lockFlashColor} strokeWidth="1.5" fill="none"
-                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`} />
-                              <path d={(selectionState === "selected" && !isUnlockTransition)
-                                ? "M7 9V6a3 3 0 0 1 6 0v3"
-                                : "M7 9V6a3 3 0 0 1 6 0"
-                              } stroke={lockFlashColor} strokeWidth="1.5" fill="none" strokeLinecap="round"
-                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`} />
+                              <rect
+                                x="3"
+                                y="9"
+                                width="14"
+                                height="9"
+                                rx="2"
+                                stroke={lockFlashColor}
+                                strokeWidth="1.5"
+                                fill="none"
+                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`}
+                              />
+                              <path
+                                d={
+                                  selectionState === "selected" && !isUnlockTransition
+                                    ? "M7 9V6a3 3 0 0 1 6 0v3"
+                                    : "M7 9V6a3 3 0 0 1 6 0"
+                                }
+                                stroke={lockFlashColor}
+                                strokeWidth="1.5"
+                                fill="none"
+                                strokeLinecap="round"
+                                filter={`drop-shadow(0 0 4px ${lockFlashColor}) drop-shadow(0 0 8px ${lockFlashColor}80)`}
+                              />
                             </svg>
                           </motion.div>
                         )}
@@ -1613,10 +1843,7 @@ const OdaraScreen = () => {
                       <div className="absolute top-3 left-5 flex flex-col items-center z-10">
                         <motion.div
                           className="p-2"
-                          animate={lockFlashColor
-                            ? { scale: [1, 1.12, 1] }
-                            : { scale: 1 }
-                          }
+                          animate={lockFlashColor ? { scale: [1, 1.12, 1] } : { scale: 1 }}
                           transition={{ duration: 0.3 }}
                         >
                           {isUnlockTransition ? (
@@ -1638,10 +1865,7 @@ const OdaraScreen = () => {
                               }}
                             />
                           ) : (
-                            <LockOpen
-                              size={16}
-                              className="text-muted-foreground/40 transition-all duration-200"
-                            />
+                            <LockOpen size={16} className="text-muted-foreground/40 transition-all duration-200" />
                           )}
                         </motion.div>
                         {/* Undo back arrow — appears after skip */}
@@ -1710,20 +1934,21 @@ const OdaraScreen = () => {
 
                 const distToDay = Math.abs(i - orbPosition);
                 const PROXIMITY_RADIUS = 0.8;
-                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
+                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - distToDay / PROXIMITY_RADIUS : 0;
                 const smoothProximity = proximity * proximity * (3 - 2 * proximity);
                 const isCurrentOrbDay = i === 0;
                 const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
                 const isNextTarget = i === 1 && orbPosition > 0.5;
                 const handoffGlow = isNextTarget ? (orbPosition - 0.5) / 0.5 : 0;
                 const CROSSOVER_RADIUS = 0.15;
-                const crossoverGlow = distToDay < CROSSOVER_RADIUS
-                  ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
-                  : 0;
-                const labelOpacity = isSelected ? 0.95
-                  : isCurrentOrbDay ? 0.55 + todayOwnership * 0.3 + smoothProximity * 0.1
-                  : isNextTarget ? 0.4 + handoffGlow * 0.35 + crossoverGlow
-                  : 0.4 + smoothProximity * 0.08;
+                const crossoverGlow = distToDay < CROSSOVER_RADIUS ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35 : 0;
+                const labelOpacity = isSelected
+                  ? 0.95
+                  : isCurrentOrbDay
+                    ? 0.55 + todayOwnership * 0.3 + smoothProximity * 0.1
+                    : isNextTarget
+                      ? 0.4 + handoffGlow * 0.35 + crossoverGlow
+                      : 0.4 + smoothProximity * 0.08;
 
                 return (
                   <span
@@ -1736,9 +1961,10 @@ const OdaraScreen = () => {
                       fontWeight: isSelected ? 600 : isCurrentOrbDay ? 500 : 450,
                       minWidth: "28px",
                       width: "28px",
-                      textShadow: crossoverGlow > 0.01
-                        ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
-                        : "none",
+                      textShadow:
+                        crossoverGlow > 0.01
+                          ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
+                          : "none",
                       transition: "text-shadow 0.5s ease, color 0.3s ease",
                     }}
                   >
@@ -1759,7 +1985,7 @@ const OdaraScreen = () => {
               const todayCenterPct = (todayIdx / 6) * 100;
               const tomorrowCenterPct = (tomorrowIdx / 6) * 100;
               const LABEL_HALF = 14; // half of ~28px label width
-              const GAP_BUFFER = 1;  // 1px separation from label text
+              const GAP_BUFFER = 1; // 1px separation from label text
 
               // left: calc( todayCenter% + 15px + orbPosition * ( tomorrowCenter% - todayCenter% - 30px ) )
               const ORB_RADIUS = 2.5; // half of 5px orb dot
@@ -1785,7 +2011,7 @@ const OdaraScreen = () => {
               // Pre-compute the % and px components for CSS calc
               const gapPct = tomorrowCenterPct - todayCenterPct; // ~16.667%
               const pctPart = todayCenterPct + orbPosition * gapPct;
-              const pxPart = leftOffsetPx + orbPosition * (-totalOffsetPx);
+              const pxPart = leftOffsetPx + orbPosition * -totalOffsetPx;
               const orbLeft = `calc(${pctPart}% + ${pxPart}px)`;
 
               return (
@@ -1824,7 +2050,13 @@ const OdaraScreen = () => {
               const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
               const isNextTarget = i === 1 && orbPosition > 0.5;
               const handoffGlow = isNextTarget ? (orbPosition - 0.5) / 0.5 : 0;
-              const dateOpacity = isSelected ? 0.75 : isCurrentOrbDay ? 0.35 + todayOwnership * 0.2 : isNextTarget ? 0.3 + handoffGlow * 0.2 : 0.3;
+              const dateOpacity = isSelected
+                ? 0.75
+                : isCurrentOrbDay
+                  ? 0.35 + todayOwnership * 0.2
+                  : isNextTarget
+                    ? 0.3 + handoffGlow * 0.2
+                    : 0.3;
 
               return (
                 <button
@@ -1856,7 +2088,7 @@ const OdaraScreen = () => {
                     if (!dayRecipes || Object.keys(dayRecipes).length === 0) {
                       return isSelected ? (
                         <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "5px" }}>
-                          {CONTEXT_ORDER.map(ctx => (
+                          {CONTEXT_ORDER.map((ctx) => (
                             <div key={ctx} style={{ width: "18px", height: "3px" }} />
                           ))}
                         </div>
@@ -1913,232 +2145,269 @@ const OdaraScreen = () => {
 
         {/* Fragrance Profile Sheet */}
         <AnimatePresence>
-          {profileOpen && (() => {
-            const profile = FRAGRANCE_PROFILES[today_pick.name];
-            const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
-            const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
-            const familyTint = FAMILY_TINTS[today_pick.family] ?? DEFAULT_TINT;
-            return (
-              <motion.div
-                key="profile-overlay"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className="fixed inset-0 z-50 flex items-end justify-center"
-                style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
-                onClick={() => setProfileOpen(false)}
-              >
+          {profileOpen &&
+            (() => {
+              const profile = FRAGRANCE_PROFILES[today_pick.name];
+              const familyColor = FAMILY_COLORS[today_pick.family] ?? "#888";
+              const familyLabel = FAMILY_LABELS[today_pick.family] ?? today_pick.family;
+              const familyTint = FAMILY_TINTS[today_pick.family] ?? DEFAULT_TINT;
+              return (
                 <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
-                  className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto relative"
-                  style={{
-                    maxHeight: "85vh",
-                    background: "hsl(var(--background))",
-                    boxShadow: "0 -10px 40px rgba(0,0,0,0.3)",
-                  }}
-                  onClick={(e) => e.stopPropagation()}
+                  key="profile-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="fixed inset-0 z-50 flex items-end justify-center"
+                  style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+                  onClick={() => setProfileOpen(false)}
                 >
-                  <div className="flex justify-center mb-4">
-                    <div className="w-10 h-1 rounded-full bg-foreground/15" />
-                  </div>
-
-                  <button
-                    onClick={() => setProfileOpen(false)}
-                    className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors z-10"
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
+                    className="w-full max-w-md rounded-t-[28px] px-6 pt-5 pb-10 overflow-y-auto relative"
+                    style={{
+                      maxHeight: "85vh",
+                      background: "hsl(var(--background))",
+                      boxShadow: "0 -10px 40px rgba(0,0,0,0.3)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <X size={18} />
-                  </button>
+                    <div className="flex justify-center mb-4">
+                      <div className="w-10 h-1 rounded-full bg-foreground/15" />
+                    </div>
 
-                  {/* Top section: Name + Family + Bottle */}
-                  <div className="relative mb-6">
-                    {/* Bottle image — top right */}
-                    {profile?.bottle_url && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
-                        className="absolute -top-2 right-0 z-0"
-                        style={{ width: "25%", maxWidth: "100px" }}
-                      >
-                        <div
-                          className="relative rounded-xl overflow-hidden"
-                          style={{
-                            boxShadow: `0 8px 24px -6px rgba(0,0,0,0.4), 0 0 20px -4px ${familyTint.glow}`,
-                          }}
+                    <button
+                      onClick={() => setProfileOpen(false)}
+                      className="absolute top-5 right-5 p-2 text-muted-foreground/50 hover:text-foreground transition-colors z-10"
+                    >
+                      <X size={18} />
+                    </button>
+
+                    {/* Top section: Name + Family + Bottle */}
+                    <div className="relative mb-6">
+                      {/* Bottle image — top right */}
+                      {profile?.bottle_url && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
+                          className="absolute -top-2 right-0 z-0"
+                          style={{ width: "25%", maxWidth: "100px" }}
                         >
-                          <img
-                            src={profile.bottle_url}
-                            alt={`${today_pick.name} bottle`}
-                            className="w-full h-auto object-cover"
-                            style={{ aspectRatio: "2/3" }}
-                          />
-                          {/* Family glow overlay */}
                           <div
-                            className="absolute inset-0 pointer-events-none"
+                            className="relative rounded-xl overflow-hidden"
                             style={{
-                              background: `linear-gradient(180deg, transparent 40%, ${familyColor}15 100%)`,
+                              boxShadow: `0 8px 24px -6px rgba(0,0,0,0.4), 0 0 20px -4px ${familyTint.glow}`,
                             }}
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Name + family — left aligned to leave room for bottle */}
-                    <div style={{ paddingRight: profile?.bottle_url ? "30%" : "0" }}>
-                      <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
-                      {profile?.brand && (
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">{profile.brand}</p>
+                          >
+                            <img
+                              src={profile.bottle_url}
+                              alt={`${today_pick.name} bottle`}
+                              className="w-full h-auto object-cover"
+                              style={{ aspectRatio: "2/3" }}
+                            />
+                            {/* Family glow overlay */}
+                            <div
+                              className="absolute inset-0 pointer-events-none"
+                              style={{
+                                background: `linear-gradient(180deg, transparent 40%, ${familyColor}15 100%)`,
+                              }}
+                            />
+                          </div>
+                        </motion.div>
                       )}
-                      <span
-                        className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
-                        style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
-                      >
-                        {familyLabel}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Note Pyramid — raw, unfiltered notes for detail view */}
-                  {(() => {
-                    const hasProfileNotes = profile?.top_notes || profile?.heart_notes || profile?.base_notes;
-                    const hasDbNotes = (mainNotes && mainNotes.length > 0);
-                    const hasDbAccords = (mainAccords && mainAccords.length > 0);
-                    if (!hasProfileNotes && !hasDbNotes && !hasDbAccords) return null;
-                    return (
-                      <div className="mb-8 space-y-3">
-                        <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">
-                          {hasProfileNotes ? 'Note Pyramid' : 'Notes & Accords'}
+                      {/* Name + family — left aligned to leave room for bottle */}
+                      <div style={{ paddingRight: profile?.bottle_url ? "30%" : "0" }}>
+                        <h2 className="text-3xl font-serif text-foreground mb-1">{today_pick.name}</h2>
+                        {profile?.brand && (
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">
+                            {profile.brand}
+                          </p>
+                        )}
+                        <span
+                          className="inline-block text-[10px] uppercase tracking-[0.15em] px-3 py-1 rounded-full"
+                          style={{ color: familyColor, boxShadow: `inset 0 0 0 1px ${familyColor}33` }}
+                        >
+                          {familyLabel}
                         </span>
-                        {hasProfileNotes ? (
-                          <>
-                            {profile?.top_notes && (
-                              <div>
-                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Top</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.top_notes.join(" · ")}</p>
-                              </div>
-                            )}
-                            {profile?.heart_notes && (
-                              <div>
-                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Heart</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.heart_notes.join(" · ")}</p>
-                              </div>
-                            )}
-                            {profile?.base_notes && (
-                              <div>
-                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Base</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5">{profile.base_notes.join(" · ")}</p>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            {hasDbNotes && (
-                              <div>
-                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Notes</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5">{mainNotes!.join(" · ")}</p>
-                              </div>
-                            )}
-                            {hasDbAccords && (
-                              <div>
-                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Accords</span>
-                                <p className="text-[12px] text-foreground/80 mt-0.5 lowercase">{mainAccords!.join(" · ")}</p>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Performance Bars */}
-                  {(profile?.longevity_score != null || profile?.projection_score != null) && (
-                    <div className="mb-8">
-                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-3">Performance</span>
-                      <div className="space-y-4">
-                        {profile?.longevity_score != null && (
-                          <div>
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Longevity</span>
-                              <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.longevity_score * 10)}/10</span>
-                            </div>
-                            <div
-                              className="w-full h-[6px] rounded-full overflow-hidden"
-                              style={{ background: "rgba(255,255,255,0.06)" }}
-                            >
-                              <motion.div
-                                className="h-full rounded-full"
-                                initial={{ width: 0 }}
-                                animate={{ width: `${profile.longevity_score * 100}%` }}
-                                transition={{ duration: 0.5, delay: 0.2, ease: [0.2, 0, 0, 1] }}
-                                style={{
-                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
-                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                        {profile?.projection_score != null && (
-                          <div>
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">Projection</span>
-                              <span className="text-[10px] font-mono text-foreground/50">{Math.round(profile.projection_score * 10)}/10</span>
-                            </div>
-                            <div
-                              className="w-full h-[6px] rounded-full overflow-hidden"
-                              style={{ background: "rgba(255,255,255,0.06)" }}
-                            >
-                              <motion.div
-                                className="h-full rounded-full"
-                                initial={{ width: 0 }}
-                                animate={{ width: `${profile.projection_score * 100}%` }}
-                                transition={{ duration: 0.5, delay: 0.35, ease: [0.2, 0, 0, 1] }}
-                                style={{
-                                  background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
-                                  boxShadow: `0 0 10px -2px ${familyColor}44`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  )}
 
-                  {/* Wear Context + Weather (two-tier) */}
-                  {(profile?.wardrobe_role || profile?.weather) && (
-                    <div className="mb-8 grid grid-cols-2 gap-4">
-                      {profile.wardrobe_role && (
-                        <div>
-                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Wear it for</span>
-                          <p className="text-[12px] text-foreground/80 mt-1">{profile.wardrobe_role}</p>
-                        </div>
-                      )}
-                      {profile.weather && (
-                        <div>
-                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">Weather</span>
-                          <p className="text-[12px] text-foreground/80 mt-1">{profile.weather}</p>
-                          {profile.secondary_weather && (
-                            <p className="text-[11px] text-foreground/60 mt-1">{profile.secondary_weather}</p>
+                    {/* Note Pyramid — raw, unfiltered notes for detail view */}
+                    {(() => {
+                      const hasProfileNotes = profile?.top_notes || profile?.heart_notes || profile?.base_notes;
+                      const hasDbNotes = mainNotes && mainNotes.length > 0;
+                      const hasDbAccords = mainAccords && mainAccords.length > 0;
+                      if (!hasProfileNotes && !hasDbNotes && !hasDbAccords) return null;
+                      return (
+                        <div className="mb-8 space-y-3">
+                          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">
+                            {hasProfileNotes ? "Note Pyramid" : "Notes & Accords"}
+                          </span>
+                          {hasProfileNotes ? (
+                            <>
+                              {profile?.top_notes && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                    Top
+                                  </span>
+                                  <p className="text-[12px] text-foreground/80 mt-0.5">
+                                    {profile.top_notes.join(" · ")}
+                                  </p>
+                                </div>
+                              )}
+                              {profile?.heart_notes && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                    Heart
+                                  </span>
+                                  <p className="text-[12px] text-foreground/80 mt-0.5">
+                                    {profile.heart_notes.join(" · ")}
+                                  </p>
+                                </div>
+                              )}
+                              {profile?.base_notes && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                    Base
+                                  </span>
+                                  <p className="text-[12px] text-foreground/80 mt-0.5">
+                                    {profile.base_notes.join(" · ")}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {hasDbNotes && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                    Notes
+                                  </span>
+                                  <p className="text-[12px] text-foreground/80 mt-0.5">{mainNotes!.join(" · ")}</p>
+                                </div>
+                              )}
+                              {hasDbAccords && (
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                    Accords
+                                  </span>
+                                  <p className="text-[12px] text-foreground/80 mt-0.5 lowercase">
+                                    {mainAccords!.join(" · ")}
+                                  </p>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })()}
 
-                  {/* Why it fits */}
-                  <div className="mb-2">
-                    <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">Why it fits</span>
-                    <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
-                  </div>
+                    {/* Performance Bars */}
+                    {(profile?.longevity_score != null || profile?.projection_score != null) && (
+                      <div className="mb-8">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-3">
+                          Performance
+                        </span>
+                        <div className="space-y-4">
+                          {profile?.longevity_score != null && (
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                  Longevity
+                                </span>
+                                <span className="text-[10px] font-mono text-foreground/50">
+                                  {Math.round(profile.longevity_score * 10)}/10
+                                </span>
+                              </div>
+                              <div
+                                className="w-full h-[6px] rounded-full overflow-hidden"
+                                style={{ background: "rgba(255,255,255,0.06)" }}
+                              >
+                                <motion.div
+                                  className="h-full rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${profile.longevity_score * 100}%` }}
+                                  transition={{ duration: 0.5, delay: 0.2, ease: [0.2, 0, 0, 1] }}
+                                  style={{
+                                    background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                    boxShadow: `0 0 10px -2px ${familyColor}44`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {profile?.projection_score != null && (
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50">
+                                  Projection
+                                </span>
+                                <span className="text-[10px] font-mono text-foreground/50">
+                                  {Math.round(profile.projection_score * 10)}/10
+                                </span>
+                              </div>
+                              <div
+                                className="w-full h-[6px] rounded-full overflow-hidden"
+                                style={{ background: "rgba(255,255,255,0.06)" }}
+                              >
+                                <motion.div
+                                  className="h-full rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${profile.projection_score * 100}%` }}
+                                  transition={{ duration: 0.5, delay: 0.35, ease: [0.2, 0, 0, 1] }}
+                                  style={{
+                                    background: `linear-gradient(90deg, ${familyColor}CC, ${familyColor}88)`,
+                                    boxShadow: `0 0 10px -2px ${familyColor}44`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Wear Context + Weather (two-tier) */}
+                    {(profile?.wardrobe_role || profile?.weather) && (
+                      <div className="mb-8 grid grid-cols-2 gap-4">
+                        {profile.wardrobe_role && (
+                          <div>
+                            <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">
+                              Wear it for
+                            </span>
+                            <p className="text-[12px] text-foreground/80 mt-1">{profile.wardrobe_role}</p>
+                          </div>
+                        )}
+                        {profile.weather && (
+                          <div>
+                            <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70">
+                              Weather
+                            </span>
+                            <p className="text-[12px] text-foreground/80 mt-1">{profile.weather}</p>
+                            {profile.secondary_weather && (
+                              <p className="text-[11px] text-foreground/60 mt-1">{profile.secondary_weather}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Why it fits */}
+                    <div className="mb-2">
+                      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/70 block mb-1">
+                        Why it fits
+                      </span>
+                      <p className="text-[12px] text-foreground/70 leading-relaxed">{today_pick.reason}</p>
+                    </div>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
-            );
-          })()}
+              );
+            })()}
         </AnimatePresence>
       </div>
     </div>
