@@ -998,7 +998,8 @@ const OdaraScreen = () => {
   }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
 
   useEffect(() => {
-    const recipe = lockedRecipes.current[selectedContext];
+    const dateKey = toDateKey(new Date());
+    const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
       return;
