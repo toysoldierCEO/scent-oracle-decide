@@ -1829,13 +1829,12 @@ const OdaraScreen = () => {
                     const CONTEXT_ORDER: string[] = ["daily", "work", "hangout", "date"];
 
                     if (!dayRecipes || Object.keys(dayRecipes).length === 0) {
-                      // No recipes for this day — show selection underline if tapped
                       return isSelected ? (
-                        <motion.div
-                          layoutId="forecastUnderline"
-                          className="rounded-full"
-                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
-                        />
+                        <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "2px" }}>
+                          {CONTEXT_ORDER.map(ctx => (
+                            <div key={ctx} style={{ width: "18px", height: "3px" }} />
+                          ))}
+                        </div>
                       ) : null;
                     }
 
