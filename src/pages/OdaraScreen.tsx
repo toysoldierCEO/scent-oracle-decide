@@ -1732,8 +1732,11 @@ const OdaraScreen = () => {
               orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity);
               const glowScale = orbOpacity;
 
-              // CSS calc for mixed % + px positioning
-              const orbLeft = `calc(${todayCenterPct}% + ${leftOffsetPx}px + ${orbPosition} * (${tomorrowCenterPct - todayCenterPct}% - ${totalOffsetPx}px))`;
+              // Pre-compute the % and px components for CSS calc
+              const gapPct = tomorrowCenterPct - todayCenterPct; // ~16.667%
+              const pctPart = todayCenterPct + orbPosition * gapPct;
+              const pxPart = leftOffsetPx + orbPosition * (-totalOffsetPx);
+              const orbLeft = `calc(${pctPart}% + ${pxPart}px)`;
 
               return (
                 <div
