@@ -803,9 +803,10 @@ const OdaraScreen = () => {
     const tempVal = temp ?? effectiveTemperature ?? 25;
     const fetchId = ++latestFetchId.current;
 
+    const dateKey = toDateKey(new Date());
     console.log('ODARA current context', contextVal);
-    console.log('ODARA found locked recipe', !!lockedRecipes.current[contextVal]);
-    console.log('ODARA saved lock state', lockedRecipes.current[contextVal]?.lockState ?? 'neutral');
+    console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
+    console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
 
     setLoading(true);
     setError(false);
