@@ -1274,7 +1274,7 @@ const OdaraScreen = () => {
                     restoreLockedRecipe(selectedContext, lockedForDay);
                   } else {
                     setSelectionState("neutral");
-                    fetchOracle(selectedContext, dayTemp ?? effectiveTemperature);
+                    fetchOracle(selectedContext, dayTemp ?? effectiveTemperature, undefined, newDateKey);
                   }
                 }
               } else if (dir === "vertical") {
