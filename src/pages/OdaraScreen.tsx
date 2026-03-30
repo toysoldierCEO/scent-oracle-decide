@@ -1721,23 +1721,25 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                // Orb proximity — how close is the orb to this column?
-                const distToDay = Math.abs(i - orbPosition);
-                const PROXIMITY_RADIUS = 0.15; // columns — illumination zone
+                // Label's position on the 0–1 timeline (evenly spaced)
+                const labelTimePos = i / 6;
+                // Orb distance in timeline units (0–1 scale)
+                const distToDay = Math.abs(labelTimePos - orbPosition);
+                const PROXIMITY_RADIUS = 0.08; // timeline proximity zone
                 const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
-                // Smoothstep for elegant falloff
                 const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-                // Crossover glow — peaks when orb is fading into this label (at midnight)
-                const CROSSOVER_RADIUS = 0.0104; // ~15 min
-                const crossoverDist = Math.abs(i - orbPosition);
-                const crossoverGlow = crossoverDist < CROSSOVER_RADIUS
-                  ? (1 - crossoverDist / CROSSOVER_RADIUS) * 0.35
+                // Crossover glow at midnight boundary
+                const CROSSOVER_RADIUS = 0.015;
+                const crossoverGlow = distToDay < CROSSOVER_RADIUS
+                  ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
                   : 0;
 
                 const isCurrentOrbDay = i === 0;
-                const isNextTarget = i === 1 && (i - orbPosition) > 0 && (i - orbPosition) <= 0.20;
-                const handoffGlow = isNextTarget ? 1 - ((i - orbPosition) / 0.20) : 0;
+                const nextLabelPos = 1 / 6;
+                const distToNextLabel = nextLabelPos - orbPosition;
+                const isNextTarget = i === 1 && distToNextLabel > 0 && distToNextLabel <= 0.05;
+                const handoffGlow = isNextTarget ? 1 - (distToNextLabel / 0.05) : 0;
 
                 const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
                 const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
