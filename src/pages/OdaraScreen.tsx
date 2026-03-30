@@ -780,6 +780,30 @@ const OdaraScreen = () => {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // Measure real label positions for orb corridor
+  useLayoutEffect(() => {
+    const measure = () => {
+      const row = weekdayRowRef.current;
+      if (!row || dayLabelRefs.current.length < 2) return;
+      const rowRect = row.getBoundingClientRect();
+      const label0 = dayLabelRefs.current[0];
+      const label1 = dayLabelRefs.current[1];
+      if (!label0 || !label1) return;
+      const r0 = label0.getBoundingClientRect();
+      const r1 = label1.getBoundingClientRect();
+      const ORB_RADIUS = 2.5;
+      const TEXT_BUFFER = 1;
+      const trackStart = (r0.right - rowRect.left) + TEXT_BUFFER + ORB_RADIUS;
+      const trackEnd = (r1.left - rowRect.left) - TEXT_BUFFER - ORB_RADIUS;
+      if (trackEnd > trackStart) {
+        setOrbTrack({ start: trackStart, end: trackEnd });
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [forecastDays]);
+
   // Fetch live weather on mount
   useEffect(() => {
     let cancelled = false;
