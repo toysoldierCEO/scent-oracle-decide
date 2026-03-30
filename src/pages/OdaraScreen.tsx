@@ -800,12 +800,13 @@ const OdaraScreen = () => {
     return user?.id ?? "00000000-0000-0000-0000-000000000000";
   }, []);
 
-  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string) => {
+  const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string, wearDate?: string) => {
     const contextVal = ctx ?? selectedContext ?? "daily";
     const tempVal = temp ?? effectiveTemperature ?? 25;
+    const dateForRpc = wearDate ?? selectedDateKey;
     const fetchId = ++latestFetchId.current;
 
-    const dateKey = selectedDateKey;
+    const dateKey = dateForRpc;
     console.log('ODARA current context', contextVal);
     console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
     console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
@@ -821,7 +822,8 @@ const OdaraScreen = () => {
         p_temperature: tempVal,
         p_context: contextVal,
         p_brand: null,
-      };
+        p_wear_date: dateForRpc,
+      } as any;
 
       const { data: rpcResult, error: rpcErr } = await supabase
         .rpc('get_todays_oracle_v3', rpcParams);
