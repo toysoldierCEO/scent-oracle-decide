@@ -717,18 +717,8 @@ const OdaraScreen = () => {
   const [recipeVersion, setRecipeVersion] = useState(0);
   const bumpRecipeVersion = useCallback(() => setRecipeVersion(v => v + 1), []);
 
-  /** Get the dateKey for the currently selected forecast day */
-  const getActiveDateKey = useCallback(() => {
-    const today = new Date();
-    const d = new Date(today);
-    d.setDate(d.getDate() + selectedForecastDay);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, [selectedForecastDay]);
-
-  const getTodayDateKey = useCallback(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
+  // Helper: build dateKey from a Date
+  const toDateKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
