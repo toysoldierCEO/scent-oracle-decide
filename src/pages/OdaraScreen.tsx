@@ -1310,9 +1310,13 @@ const OdaraScreen = () => {
                     }, 360);
                   } else if (selectionState === "neutral") {
                     // Defensive clear before skip in case stale recipe exists
-                    delete lockedRecipes.current[selectedContext];
+                    const dateKey2 = toDateKey(new Date());
+                    if (lockedRecipes.current[dateKey2]) {
+                      delete lockedRecipes.current[dateKey2][selectedContext];
+                      if (Object.keys(lockedRecipes.current[dateKey2]).length === 0) delete lockedRecipes.current[dateKey2];
+                    }
                     bumpRecipeVersion();
-                    console.log('ODARA recipe deleted for', selectedContext);
+                    console.log('ODARA recipe deleted for', dateKey2, selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
                     setTimeout(() => {
