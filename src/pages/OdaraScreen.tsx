@@ -1655,7 +1655,10 @@ const OdaraScreen = () => {
           <div className="flex justify-between relative" style={{ position: "relative" }}>
             {/* Global orb — absolutely positioned, not tied to any day cell */}
             {(() => {
-              const orbPct = (orbPosition / 7) * 100;
+              // orbPosition is 0–1 for today (0=midnight, 0.5=noon, 1=next midnight)
+              // Labels are at indices 0–6, laid out with justify-between (0% to 100%)
+              // So label i is at (i/6)*100%. Orb maps the same way.
+              const orbPct = (orbPosition / 6) * 100;
 
               // Midnight crossover fade per-day boundary
               const dayFrac = orbPosition % 1;
