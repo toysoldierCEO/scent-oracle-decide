@@ -1322,7 +1322,7 @@ const OdaraScreen = () => {
                     }, 360);
                   } else if (selectionState === "neutral") {
                     // Defensive clear before skip in case stale recipe exists
-                    const dateKey2 = toDateKey(new Date());
+                    const dateKey2 = selectedDateKey;
                     if (lockedRecipes.current[dateKey2]) {
                       delete lockedRecipes.current[dateKey2][selectedContext];
                       if (Object.keys(lockedRecipes.current[dateKey2]).length === 0) delete lockedRecipes.current[dateKey2];
