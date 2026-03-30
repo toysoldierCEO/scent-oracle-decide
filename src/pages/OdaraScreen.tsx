@@ -1767,44 +1767,6 @@ const OdaraScreen = () => {
                       {d.day}
                     </span>
 
-                    <div className="flex flex-col items-center justify-center" style={{ height: "26px", gap: "6px" }}>
-                      <motion.div
-                        className="rounded-full"
-                        animate={{
-                          width: isSelected ? "9px" : "7px",
-                          height: isSelected ? "9px" : "7px",
-                          scale: isSelected ? 1.1 : isNextTarget ? 1 + handoffGlow * 0.05 : 1,
-                          boxShadow: isSelected
-                            ? `0 0 8px 3px ${familyColor}55`
-                            : isNextTarget
-                              ? `0 0 ${3 + handoffGlow * 4}px ${1 + handoffGlow * 2}px ${familyColor}${Math.round(0x22 + handoffGlow * 0x33).toString(16)}`
-                              : hasFragrance
-                                ? `0 0 3px 1px ${familyColor}22`
-                                : `0 0 3px 1px ${FALLBACK_ORB_COLOR}`,
-                          opacity: hasFragrance ? 1 : 0.5,
-                        }}
-                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                        style={{ background: familyColor }}
-                      />
-
-                      {isLayered && (
-                        <motion.div
-                          className="rounded-full"
-                          initial={{ opacity: 0, scale: 0 }}
-                          animate={{
-                            opacity: 0.85, scale: 1,
-                            width: isSelected ? "7px" : "6px",
-                            height: isSelected ? "7px" : "6px",
-                            boxShadow: isSelected
-                              ? `0 0 6px 2px ${layerColor}44`
-                              : `0 0 2px 1px ${layerColor}22`,
-                          }}
-                          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                          style={{ background: layerColor }}
-                        />
-                      )}
-                    </div>
-
                     {isSelected && (
                       <motion.div
                         layoutId="forecastUnderline"
