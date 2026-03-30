@@ -1,5 +1,5 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
-import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import LayerCard from "@/components/LayerCard";
@@ -737,6 +737,12 @@ const OdaraScreen = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Refs for measuring real label positions for orb corridor
+  const weekdayRowRef = useRef<HTMLDivElement>(null);
+  const dayLabelRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const [orbTrack, setOrbTrack] = useState<{ start: number; end: number } | null>(null);
+
+
   useEffect(() => {
     selectedContextRef.current = selectedContext;
   }, [selectedContext]);
@@ -773,6 +779,30 @@ const OdaraScreen = () => {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // Measure real label positions for orb corridor
+  useLayoutEffect(() => {
+    const measure = () => {
+      const row = weekdayRowRef.current;
+      if (!row || dayLabelRefs.current.length < 2) return;
+      const rowRect = row.getBoundingClientRect();
+      const label0 = dayLabelRefs.current[0];
+      const label1 = dayLabelRefs.current[1];
+      if (!label0 || !label1) return;
+      const r0 = label0.getBoundingClientRect();
+      const r1 = label1.getBoundingClientRect();
+      const ORB_RADIUS = 2.5;
+      const TEXT_BUFFER = 1;
+      const trackStart = (r0.right - rowRect.left) + TEXT_BUFFER + ORB_RADIUS;
+      const trackEnd = (r1.left - rowRect.left) - TEXT_BUFFER - ORB_RADIUS;
+      if (trackEnd > trackStart) {
+        setOrbTrack({ start: trackStart, end: trackEnd });
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [forecastDays]);
 
   // Fetch live weather on mount
   useEffect(() => {
@@ -1652,7 +1682,7 @@ const OdaraScreen = () => {
             Forecast
           </span>
           {/* Weekday label row with orb on the same line */}
-          <div className="relative" style={{ marginBottom: "4px" }}>
+          <div className="relative" ref={weekdayRowRef} style={{ marginBottom: "4px" }}>
             {/* Day name labels */}
             <div className="flex justify-between">
               {forecastDays.map((d, i) => {
@@ -1679,6 +1709,7 @@ const OdaraScreen = () => {
                 return (
                   <span
                     key={i}
+                    ref={(el) => { dayLabelRefs.current[i] = el; }}
                     className="font-mono text-center leading-none"
                     style={{
                       fontSize: "11px",
@@ -1699,24 +1730,8 @@ const OdaraScreen = () => {
               })}
             </div>
 
-            {/* Orb — lives in the gap between day labels, never overlaps text */}
-            {(() => {
-              // Labels are centered at (i/6)*100%. Each ~28px wide → half = 14px.
-              // Gap left edge = today's center + 14px + 1px buffer
-              // Gap right edge = tomorrow's center - 14px - 1px buffer
-              // orbPosition 0→1 maps midnight→next midnight within this gap.
-              const todayIdx = 0;
-              const tomorrowIdx = 1;
-              const todayCenterPct = (todayIdx / 6) * 100;
-              const tomorrowCenterPct = (tomorrowIdx / 6) * 100;
-              const LABEL_HALF = 14; // half of ~28px label width
-              const GAP_BUFFER = 1;  // 1px separation from label text
-
-              // left: calc( todayCenter% + 15px + orbPosition * ( tomorrowCenter% - todayCenter% - 30px ) )
-              const leftOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const rightOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const totalOffsetPx = leftOffsetPx + rightOffsetPx; // 30px
-
+            {/* Orb — pixel-positioned in measured gap between day labels */}
+            {orbTrack && (() => {
               // Fade/emerge at midnight boundaries
               const dayFrac = orbPosition % 1;
               const FADE_START = 0.96;
@@ -1732,18 +1747,14 @@ const OdaraScreen = () => {
               orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity);
               const glowScale = orbOpacity;
 
-              // Pre-compute the % and px components for CSS calc
-              const gapPct = tomorrowCenterPct - todayCenterPct; // ~16.667%
-              const pctPart = todayCenterPct + orbPosition * gapPct;
-              const pxPart = leftOffsetPx + orbPosition * (-totalOffsetPx);
-              const orbLeft = `calc(${pctPart}% + ${pxPart}px)`;
+              const orbX = orbTrack.start + orbPosition * (orbTrack.end - orbTrack.start);
 
               return (
                 <div
                   className="pointer-events-none"
                   style={{
                     position: "absolute",
-                    left: orbLeft,
+                    left: `${orbX}px`,
                     top: "50%",
                     transform: "translate(-50%, -50%)",
                     zIndex: 10,
