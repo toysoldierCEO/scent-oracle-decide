@@ -1291,7 +1291,7 @@ const OdaraScreen = () => {
                         selectedRatio,
                         layerFragrance,
                       };
-                      const dateKey = toDateKey(new Date());
+                      const dateKey = selectedDateKey;
                       if (!lockedRecipes.current[dateKey]) lockedRecipes.current[dateKey] = {};
                       lockedRecipes.current[dateKey][selectedContext] = recipe;
                       bumpRecipeVersion();
