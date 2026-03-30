@@ -1235,24 +1235,34 @@ const OdaraScreen = () => {
               if (dir === "horizontal") {
                 const hThreshold = 50;
                 const hVel = 200;
+                let nextIndex: number | null = null;
                 if (
                   (offset.x < -hThreshold || velocity.x < -hVel) &&
                   selectedForecastDay < forecastDays.length - 1
                 ) {
-                  const next = selectedForecastDay + 1;
-                  setSelectedForecastDay(next);
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[next]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                  nextIndex = selectedForecastDay + 1;
                 } else if (
                   (offset.x > hThreshold || velocity.x > hVel) &&
                   selectedForecastDay > 0
                 ) {
-                  const prev = selectedForecastDay - 1;
-                  setSelectedForecastDay(prev);
+                  nextIndex = selectedForecastDay - 1;
+                }
+                if (nextIndex != null) {
+                  const nextDay = forecastDays[nextIndex];
+                  const newDateKey = nextDay?.dateKey;
+                  setSelectedForecastDay(nextIndex);
                   setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[prev]?.temperature;
+                  setSkipHistory([]);
+                  const dayTemp = nextDay?.temperature;
                   if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                  // Load correct data for the new day
+                  const lockedForDay = lockedRecipes.current?.[newDateKey]?.[selectedContext];
+                  if (lockedForDay) {
+                    restoreLockedRecipe(selectedContext, lockedForDay);
+                  } else {
+                    setSelectionState("neutral");
+                    fetchOracle(selectedContext, dayTemp ?? effectiveTemperature);
+                  }
                 }
               } else if (dir === "vertical") {
                 const vThreshold = 60;
