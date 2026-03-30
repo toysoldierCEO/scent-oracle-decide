@@ -1308,7 +1308,7 @@ const OdaraScreen = () => {
                     if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
                     setIsUnlockTransition(true);
                     setLockFlashColor("#eab308");
-                    const dateKey = toDateKey(new Date());
+                    const dateKey = selectedDateKey;
                     if (lockedRecipes.current[dateKey]) {
                       delete lockedRecipes.current[dateKey][selectedContext];
                       if (Object.keys(lockedRecipes.current[dateKey]).length === 0) delete lockedRecipes.current[dateKey];
