@@ -1652,36 +1652,25 @@ const OdaraScreen = () => {
             Forecast
           </span>
           <div className="relative">
-            {/* White orb — continuous time indicator, moves across the orb lane */}
+            {/* Orb track — full-width independent timeline, not tied to day columns */}
             {(() => {
-              const progress = orbPosition;
-              // Each column center in a 7-col justify-between: (i / 6) * 100%
-              const colCenterPct = (progress / 6) * 100;
+              const progress = orbPosition; // 0..1 = full day progress
 
-              // Proximity to next day label (column 1 = 1/6 of row)
-              // The orb fades as it enters the label zone and re-emerges after
-              const nextDayPos = 1; // column index of tomorrow
-              const distToNext = nextDayPos - progress; // 0 = exactly at next day
+              // Orb position = raw progress across full track width
+              const orbPct = progress * 100;
 
-              // Fade zone: orb starts fading ~15min before midnight (progress ~0.9896)
-              // and re-emerges ~2min after (progress slightly > 1, but we handle via distToNext)
-              const FADE_RADIUS = 0.0104; // ~15 minutes in day-fraction
-              const EMERGE_RADIUS = 0.0014; // ~2 minutes in day-fraction
+              // Midnight fade: orb fades near end of track, re-emerges at start
+              const FADE_START = 0.9896; // ~15 min before end
+              const EMERGE_END = 0.0014; // ~2 min after start
 
               let orbOpacity: number;
-              if (distToNext > FADE_RADIUS) {
-                // Normal travel — full opacity
-                orbOpacity = 1;
-              } else if (distToNext > 0) {
-                // Approaching label — fade out smoothly
-                orbOpacity = distToNext / FADE_RADIUS;
-              } else if (distToNext > -EMERGE_RADIUS) {
-                // Just past label — fade back in
-                orbOpacity = Math.abs(distToNext) / EMERGE_RADIUS;
+              if (progress >= FADE_START) {
+                orbOpacity = (1 - progress) / (1 - FADE_START);
+              } else if (progress <= EMERGE_END) {
+                orbOpacity = progress / EMERGE_END;
               } else {
                 orbOpacity = 1;
               }
-              // Ease the opacity for smoother feel
               orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity); // smoothstep
 
               const glowScale = orbOpacity;
@@ -1700,7 +1689,7 @@ const OdaraScreen = () => {
                   <div
                     style={{
                       position: "absolute",
-                      left: `${colCenterPct}%`,
+                      left: `${orbPct}%`,
                       top: "50%",
                       transform: "translate(-50%, -50%)",
                       willChange: "transform, opacity",
@@ -1732,23 +1721,25 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                // Orb proximity — how close is the orb to this column?
-                const distToDay = Math.abs(i - orbPosition);
-                const PROXIMITY_RADIUS = 0.15; // columns — illumination zone
+                // Label's position on the 0–1 timeline (evenly spaced)
+                const labelTimePos = i / 6;
+                // Orb distance in timeline units (0–1 scale)
+                const distToDay = Math.abs(labelTimePos - orbPosition);
+                const PROXIMITY_RADIUS = 0.08; // timeline proximity zone
                 const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
-                // Smoothstep for elegant falloff
                 const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-                // Crossover glow — peaks when orb is fading into this label (at midnight)
-                const CROSSOVER_RADIUS = 0.0104; // ~15 min
-                const crossoverDist = Math.abs(i - orbPosition);
-                const crossoverGlow = crossoverDist < CROSSOVER_RADIUS
-                  ? (1 - crossoverDist / CROSSOVER_RADIUS) * 0.35
+                // Crossover glow at midnight boundary
+                const CROSSOVER_RADIUS = 0.015;
+                const crossoverGlow = distToDay < CROSSOVER_RADIUS
+                  ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
                   : 0;
 
                 const isCurrentOrbDay = i === 0;
-                const isNextTarget = i === 1 && (i - orbPosition) > 0 && (i - orbPosition) <= 0.20;
-                const handoffGlow = isNextTarget ? 1 - ((i - orbPosition) / 0.20) : 0;
+                const nextLabelPos = 1 / 6;
+                const distToNextLabel = nextLabelPos - orbPosition;
+                const isNextTarget = i === 1 && distToNextLabel > 0 && distToNextLabel <= 0.05;
+                const handoffGlow = isNextTarget ? 1 - (distToNextLabel / 0.05) : 0;
 
                 const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
                 const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
