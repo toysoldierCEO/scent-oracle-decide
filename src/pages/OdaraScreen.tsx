@@ -737,6 +737,34 @@ const OdaraScreen = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Refs for measuring real label positions for orb corridor
+  const weekdayRowRef = useRef<HTMLDivElement>(null);
+  const dayLabelRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const [orbTrack, setOrbTrack] = useState<{ start: number; end: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const row = weekdayRowRef.current;
+      if (!row || dayLabelRefs.current.length < 2) return;
+      const rowRect = row.getBoundingClientRect();
+      const label0 = dayLabelRefs.current[0];
+      const label1 = dayLabelRefs.current[1];
+      if (!label0 || !label1) return;
+      const r0 = label0.getBoundingClientRect();
+      const r1 = label1.getBoundingClientRect();
+      const ORB_RADIUS = 2.5;
+      const TEXT_BUFFER = 1;
+      const trackStart = (r0.right - rowRect.left) + TEXT_BUFFER + ORB_RADIUS;
+      const trackEnd = (r1.left - rowRect.left) - TEXT_BUFFER - ORB_RADIUS;
+      if (trackEnd > trackStart) {
+        setOrbTrack({ start: trackStart, end: trackEnd });
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [forecastDays]);
+
   useEffect(() => {
     selectedContextRef.current = selectedContext;
   }, [selectedContext]);
@@ -1652,7 +1680,7 @@ const OdaraScreen = () => {
             Forecast
           </span>
           {/* Weekday label row with orb on the same line */}
-          <div className="relative" style={{ marginBottom: "4px" }}>
+          <div className="relative" ref={weekdayRowRef} style={{ marginBottom: "4px" }}>
             {/* Day name labels */}
             <div className="flex justify-between">
               {forecastDays.map((d, i) => {
