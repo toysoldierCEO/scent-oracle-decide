@@ -1679,10 +1679,10 @@ const OdaraScreen = () => {
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    top: "19px",
+                    top: 0,
                     left: 0,
                     right: 0,
-                    height: "11px",
+                    bottom: 0,
                     zIndex: 10,
                   }}
                 >
@@ -1690,8 +1690,8 @@ const OdaraScreen = () => {
                     style={{
                       position: "absolute",
                       left: `${orbPct}%`,
-                      top: "50%",
-                      transform: "translate(-50%, -50%)",
+                      top: "6px",
+                      transform: "translate(-50%, 0)",
                       willChange: "transform, opacity",
                     }}
                   >
