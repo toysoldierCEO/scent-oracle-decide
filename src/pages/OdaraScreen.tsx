@@ -757,16 +757,16 @@ const OdaraScreen = () => {
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
   const forecastDays = useMemo(() => buildForecastDays(), []);
 
-  // Continuous timepiece orb position (0–7 scale across the week)
+  // Continuous timepiece orb position (0–6 scale, 0 = today start, 1 = tomorrow start)
   const [orbPosition, setOrbPosition] = useState(0);
   useEffect(() => {
     let raf: number;
     const tick = () => {
       const now = new Date();
-      const dayIndex = now.getDay(); // 0=Sun … 6=Sat
       const secondsSinceMidnight =
         now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-      const progress = dayIndex + secondsSinceMidnight / 86400;
+      // Today is always index 0; orb moves from 0 toward 1 over 24h
+      const progress = secondsSinceMidnight / 86400;
       setOrbPosition(progress);
       raf = requestAnimationFrame(tick);
     };
@@ -1655,7 +1655,10 @@ const OdaraScreen = () => {
           <div className="flex justify-between relative" style={{ position: "relative" }}>
             {/* Global orb — absolutely positioned, not tied to any day cell */}
             {(() => {
-              const orbPct = (orbPosition / 7) * 100;
+              // orbPosition is 0–1 for today (0=midnight, 0.5=noon, 1=next midnight)
+              // Labels are at indices 0–6, laid out with justify-between (0% to 100%)
+              // So label i is at (i/6)*100%. Orb maps the same way.
+              const orbPct = (orbPosition / 6) * 100;
 
               // Midnight crossover fade per-day boundary
               const dayFrac = orbPosition % 1;
@@ -1708,25 +1711,29 @@ const OdaraScreen = () => {
               const isSelected = selectedForecastDay === i;
               const hasFragrance = !!d.fragrance;
 
-              // Each label sits at position i on the 0–7 scale
+              // orbPosition is 0–1 (today's progress). Label i=0 is today.
               const distToDay = Math.abs(i - orbPosition);
-              const PROXIMITY_RADIUS = 0.5;
+              const PROXIMITY_RADIUS = 0.8;
               const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
               const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-              const CROSSOVER_RADIUS = 0.1;
+              const CROSSOVER_RADIUS = 0.15;
               const crossoverGlow = distToDay < CROSSOVER_RADIUS
                 ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
                 : 0;
 
-              const isCurrentOrbDay = Math.floor(orbPosition) === i;
-              const nextIdx = Math.floor(orbPosition) + 1;
-              const distToNext = nextIdx - orbPosition;
-              const isNextTarget = i === nextIdx && distToNext > 0 && distToNext <= 0.3;
-              const handoffGlow = isNextTarget ? 1 - (distToNext / 0.3) : 0;
+              // Today (i=0) is current day; i=1 is next day
+              const isCurrentOrbDay = i === 0;
+              const isNextTarget = i === 1 && orbPosition > 0.5;
+              const handoffGlow = isNextTarget ? (orbPosition - 0.5) / 0.5 : 0;
 
-              const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
-              const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
+              // Current day stays dominant — stronger base opacity that fades as orb moves away
+              const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
+              const labelOpacity = isSelected ? 0.95
+                : isCurrentOrbDay ? 0.55 + todayOwnership * 0.3 + smoothProximity * 0.1
+                : isNextTarget ? 0.4 + handoffGlow * 0.35 + crossoverGlow
+                : 0.4 + smoothProximity * 0.08;
+              const dateOpacity = isSelected ? 0.75 : isCurrentOrbDay ? 0.35 + todayOwnership * 0.2 : isNextTarget ? 0.3 + handoffGlow * 0.2 : 0.3;
 
               const isLayered = d.dailySet?.is_layered ?? false;
               const layerFamily = d.dailySet?.layer?.family;
