@@ -1730,24 +1730,8 @@ const OdaraScreen = () => {
               })}
             </div>
 
-            {/* Orb — lives in the gap between day labels, never overlaps text */}
-            {(() => {
-              // Labels are centered at (i/6)*100%. Each ~28px wide → half = 14px.
-              // Gap left edge = today's center + 14px + 1px buffer
-              // Gap right edge = tomorrow's center - 14px - 1px buffer
-              // orbPosition 0→1 maps midnight→next midnight within this gap.
-              const todayIdx = 0;
-              const tomorrowIdx = 1;
-              const todayCenterPct = (todayIdx / 6) * 100;
-              const tomorrowCenterPct = (tomorrowIdx / 6) * 100;
-              const LABEL_HALF = 14; // half of ~28px label width
-              const GAP_BUFFER = 1;  // 1px separation from label text
-
-              // left: calc( todayCenter% + 15px + orbPosition * ( tomorrowCenter% - todayCenter% - 30px ) )
-              const leftOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const rightOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const totalOffsetPx = leftOffsetPx + rightOffsetPx; // 30px
-
+            {/* Orb — pixel-positioned in measured gap between day labels */}
+            {orbTrack && (() => {
               // Fade/emerge at midnight boundaries
               const dayFrac = orbPosition % 1;
               const FADE_START = 0.96;
@@ -1763,18 +1747,14 @@ const OdaraScreen = () => {
               orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity);
               const glowScale = orbOpacity;
 
-              // Pre-compute the % and px components for CSS calc
-              const gapPct = tomorrowCenterPct - todayCenterPct; // ~16.667%
-              const pctPart = todayCenterPct + orbPosition * gapPct;
-              const pxPart = leftOffsetPx + orbPosition * (-totalOffsetPx);
-              const orbLeft = `calc(${pctPart}% + ${pxPart}px)`;
+              const orbX = orbTrack.start + orbPosition * (orbTrack.end - orbTrack.start);
 
               return (
                 <div
                   className="pointer-events-none"
                   style={{
                     position: "absolute",
-                    left: orbLeft,
+                    left: `${orbX}px`,
                     top: "50%",
                     transform: "translate(-50%, -50%)",
                     zIndex: 10,
