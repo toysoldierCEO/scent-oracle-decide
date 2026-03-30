@@ -1651,16 +1651,57 @@ const OdaraScreen = () => {
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
             Forecast
           </span>
-          {/* Weekday row with embedded orb */}
-          <div className="flex justify-between relative" style={{ position: "relative" }}>
-            {/* Global orb — absolutely positioned, not tied to any day cell */}
-            {(() => {
-              // orbPosition is 0–1 for today (0=midnight, 0.5=noon, 1=next midnight)
-              // Labels are at indices 0–6, laid out with justify-between (0% to 100%)
-              // So label i is at (i/6)*100%. Orb maps the same way.
-              const orbPct = (orbPosition / 6) * 100;
+          {/* Weekday label row with orb on the same line */}
+          <div className="relative" style={{ marginBottom: "4px" }}>
+            {/* Day name labels */}
+            <div className="flex justify-between">
+              {forecastDays.map((d, i) => {
+                const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
+                const isSelected = selectedForecastDay === i;
 
-              // Midnight crossover fade per-day boundary
+                const distToDay = Math.abs(i - orbPosition);
+                const PROXIMITY_RADIUS = 0.8;
+                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
+                const smoothProximity = proximity * proximity * (3 - 2 * proximity);
+                const isCurrentOrbDay = i === 0;
+                const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
+                const isNextTarget = i === 1 && orbPosition > 0.5;
+                const handoffGlow = isNextTarget ? (orbPosition - 0.5) / 0.5 : 0;
+                const CROSSOVER_RADIUS = 0.15;
+                const crossoverGlow = distToDay < CROSSOVER_RADIUS
+                  ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
+                  : 0;
+                const labelOpacity = isSelected ? 0.95
+                  : isCurrentOrbDay ? 0.55 + todayOwnership * 0.3 + smoothProximity * 0.1
+                  : isNextTarget ? 0.4 + handoffGlow * 0.35 + crossoverGlow
+                  : 0.4 + smoothProximity * 0.08;
+
+                return (
+                  <span
+                    key={i}
+                    className="font-mono text-center leading-none"
+                    style={{
+                      fontSize: "11px",
+                      letterSpacing: "0.1em",
+                      color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
+                      fontWeight: isSelected ? 600 : isCurrentOrbDay ? 500 : 450,
+                      minWidth: "28px",
+                      width: "28px",
+                      textShadow: crossoverGlow > 0.01
+                        ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
+                        : "none",
+                      transition: "text-shadow 0.5s ease, color 0.3s ease",
+                    }}
+                  >
+                    {d.label}
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Orb — same line as weekday labels, positioned by time */}
+            {(() => {
+              const orbPct = (orbPosition / 6) * 100;
               const dayFrac = orbPosition % 1;
               const FADE_START = 0.9896;
               const EMERGE_END = 0.0014;
@@ -1690,54 +1731,28 @@ const OdaraScreen = () => {
                   <div
                     className="rounded-full"
                     style={{
-                      width: "6px",
-                      height: "6px",
+                      width: "5px",
+                      height: "5px",
                       background: "white",
                       opacity: Math.max(0, orbOpacity),
-                      boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * orbOpacity).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * orbOpacity).toFixed(3)})`,
+                      boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * orbOpacity).toFixed(3)}), 0 0 ${8 * glowScale}px ${3 * glowScale}px rgba(255,255,255,${(0.05 * orbOpacity).toFixed(3)})`,
                       transition: "opacity 0.3s ease, box-shadow 0.3s ease",
                     }}
                   />
                 </div>
               );
             })()}
+          </div>
 
-            {/* Day labels */}
+          {/* Date numbers + underline row (separate from orb line) */}
+          <div className="flex justify-between">
             {forecastDays.map((d, i) => {
-              const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
-              const familyColor = d.fragrance
-                ? (FAMILY_COLORS[d.fragrance.family] ?? FALLBACK_ORB_COLOR)
-                : FALLBACK_ORB_COLOR;
               const isSelected = selectedForecastDay === i;
-              const hasFragrance = !!d.fragrance;
-
-              // orbPosition is 0–1 (today's progress). Label i=0 is today.
-              const distToDay = Math.abs(i - orbPosition);
-              const PROXIMITY_RADIUS = 0.8;
-              const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
-              const smoothProximity = proximity * proximity * (3 - 2 * proximity);
-
-              const CROSSOVER_RADIUS = 0.15;
-              const crossoverGlow = distToDay < CROSSOVER_RADIUS
-                ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
-                : 0;
-
-              // Today (i=0) is current day; i=1 is next day
               const isCurrentOrbDay = i === 0;
+              const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
               const isNextTarget = i === 1 && orbPosition > 0.5;
               const handoffGlow = isNextTarget ? (orbPosition - 0.5) / 0.5 : 0;
-
-              // Current day stays dominant — stronger base opacity that fades as orb moves away
-              const todayOwnership = isCurrentOrbDay ? Math.max(0, 1 - orbPosition) : 0;
-              const labelOpacity = isSelected ? 0.95
-                : isCurrentOrbDay ? 0.55 + todayOwnership * 0.3 + smoothProximity * 0.1
-                : isNextTarget ? 0.4 + handoffGlow * 0.35 + crossoverGlow
-                : 0.4 + smoothProximity * 0.08;
               const dateOpacity = isSelected ? 0.75 : isCurrentOrbDay ? 0.35 + todayOwnership * 0.2 : isNextTarget ? 0.3 + handoffGlow * 0.2 : 0.3;
-
-              const isLayered = d.dailySet?.is_layered ?? false;
-              const layerFamily = d.dailySet?.layer?.family;
-              const layerColor = layerFamily ? (FAMILY_COLORS[layerFamily] ?? FALLBACK_ORB_COLOR) : FALLBACK_ORB_COLOR;
 
               return (
                 <button
@@ -1747,44 +1762,28 @@ const OdaraScreen = () => {
                   style={{ minWidth: "28px", width: "28px" }}
                 >
                   <span
-                    className="font-mono transition-all duration-200 text-center leading-none"
+                    className="font-mono text-center leading-none transition-all duration-200"
                     style={{
-                      fontSize: "11px", letterSpacing: "0.1em",
-                      color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
-                      fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : isCurrentOrbDay ? 500 : 450,
-                      marginBottom: "4px",
-                      textShadow: crossoverGlow > 0.01
-                        ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
-                        : "none",
-                      transition: "text-shadow 0.5s ease, color 0.3s ease",
+                      fontSize: "13px",
+                      fontWeight: isSelected ? 600 : 500,
+                      color: `rgba(255,255,255,${Math.min(dateOpacity + 0.15, 1)})`,
+                      marginBottom: "5px",
                     }}
                   >
-                    {d.label}
+                    {d.day}
                   </span>
 
-                    <span
-                      className="font-mono text-center leading-none transition-all duration-200"
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: isSelected ? 600 : 500,
-                        color: `rgba(255,255,255,${Math.min(dateOpacity + 0.15, 1)})`,
-                        marginBottom: "7px",
-                      }}
-                    >
-                      {d.day}
-                    </span>
-
-                    {isSelected && (
-                      <motion.div
-                        layoutId="forecastUnderline"
-                        className="rounded-full"
-                        style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  {isSelected && (
+                    <motion.div
+                      layoutId="forecastUnderline"
+                      className="rounded-full"
+                      style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.3)", marginTop: "3px" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </motion.div>
 
         {/* Fragrance Profile Sheet */}
