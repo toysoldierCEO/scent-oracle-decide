@@ -1651,128 +1651,109 @@ const OdaraScreen = () => {
           <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60 block text-center mb-3">
             Forecast
           </span>
-          <div className="relative">
-            {/* Orb track — full-width independent timeline, not tied to day columns */}
+          {/* Weekday row with embedded orb */}
+          <div className="flex justify-between relative" style={{ position: "relative" }}>
+            {/* Global orb — absolutely positioned, not tied to any day cell */}
             {(() => {
-              const progress = orbPosition; // 0..1 = full day progress
+              const orbPct = (orbPosition / 7) * 100;
 
-              // Orb position = raw progress across full track width
-              const orbPct = progress * 100;
-
-              // Midnight fade: orb fades near end of track, re-emerges at start
-              const FADE_START = 0.9896; // ~15 min before end
-              const EMERGE_END = 0.0014; // ~2 min after start
-
+              // Midnight crossover fade per-day boundary
+              const dayFrac = orbPosition % 1;
+              const FADE_START = 0.9896;
+              const EMERGE_END = 0.0014;
               let orbOpacity: number;
-              if (progress >= FADE_START) {
-                orbOpacity = (1 - progress) / (1 - FADE_START);
-              } else if (progress <= EMERGE_END) {
-                orbOpacity = progress / EMERGE_END;
+              if (dayFrac >= FADE_START) {
+                orbOpacity = (1 - dayFrac) / (1 - FADE_START);
+              } else if (dayFrac <= EMERGE_END) {
+                orbOpacity = dayFrac / EMERGE_END;
               } else {
                 orbOpacity = 1;
               }
-              orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity); // smoothstep
-
+              orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity);
               const glowScale = orbOpacity;
 
               return (
                 <div
-                  className="absolute pointer-events-none"
+                  className="pointer-events-none"
                   style={{
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
+                    position: "absolute",
+                    left: `${orbPct}%`,
+                    top: "50%",
+                    transform: "translate(-50%, -50%)",
                     zIndex: 10,
+                    willChange: "transform, opacity",
                   }}
                 >
                   <div
+                    className="rounded-full"
                     style={{
-                      position: "absolute",
-                      left: `${orbPct}%`,
-                      top: "6px",
-                      transform: "translate(-50%, 0)",
-                      willChange: "transform, opacity",
+                      width: "6px",
+                      height: "6px",
+                      background: "white",
+                      opacity: Math.max(0, orbOpacity),
+                      boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * orbOpacity).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * orbOpacity).toFixed(3)})`,
+                      transition: "opacity 0.3s ease, box-shadow 0.3s ease",
                     }}
-                  >
-                    <div
-                      className="rounded-full"
-                      style={{
-                        width: "6px",
-                        height: "6px",
-                        background: "white",
-                        opacity: Math.max(0, orbOpacity),
-                        boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * orbOpacity).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * orbOpacity).toFixed(3)})`,
-                        transition: "opacity 0.3s ease, box-shadow 0.3s ease",
-                      }}
-                    />
-                  </div>
+                  />
                 </div>
               );
             })()}
 
-            {/* Day markers */}
-            <div className="flex justify-between relative">
-              {forecastDays.map((d, i) => {
-                const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
-                const familyColor = d.fragrance
-                  ? (FAMILY_COLORS[d.fragrance.family] ?? FALLBACK_ORB_COLOR)
-                  : FALLBACK_ORB_COLOR;
-                const isSelected = selectedForecastDay === i;
-                const hasFragrance = !!d.fragrance;
+            {/* Day labels */}
+            {forecastDays.map((d, i) => {
+              const FALLBACK_ORB_COLOR = "rgba(255,255,255,0.18)";
+              const familyColor = d.fragrance
+                ? (FAMILY_COLORS[d.fragrance.family] ?? FALLBACK_ORB_COLOR)
+                : FALLBACK_ORB_COLOR;
+              const isSelected = selectedForecastDay === i;
+              const hasFragrance = !!d.fragrance;
 
-                // Label's position on the 0–1 timeline (evenly spaced)
-                const labelTimePos = i / 6;
-                // Orb distance in timeline units (0–1 scale)
-                const distToDay = Math.abs(labelTimePos - orbPosition);
-                const PROXIMITY_RADIUS = 0.08; // timeline proximity zone
-                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
-                const smoothProximity = proximity * proximity * (3 - 2 * proximity);
+              // Each label sits at position i on the 0–7 scale
+              const distToDay = Math.abs(i - orbPosition);
+              const PROXIMITY_RADIUS = 0.5;
+              const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
+              const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-                // Crossover glow at midnight boundary
-                const CROSSOVER_RADIUS = 0.015;
-                const crossoverGlow = distToDay < CROSSOVER_RADIUS
-                  ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
-                  : 0;
+              const CROSSOVER_RADIUS = 0.1;
+              const crossoverGlow = distToDay < CROSSOVER_RADIUS
+                ? (1 - distToDay / CROSSOVER_RADIUS) * 0.35
+                : 0;
 
-                const isCurrentOrbDay = i === 0;
-                const nextLabelPos = 1 / 6;
-                const distToNextLabel = nextLabelPos - orbPosition;
-                const isNextTarget = i === 1 && distToNextLabel > 0 && distToNextLabel <= 0.05;
-                const handoffGlow = isNextTarget ? 1 - (distToNextLabel / 0.05) : 0;
+              const isCurrentOrbDay = Math.floor(orbPosition) === i;
+              const nextIdx = Math.floor(orbPosition) + 1;
+              const distToNext = nextIdx - orbPosition;
+              const isNextTarget = i === nextIdx && distToNext > 0 && distToNext <= 0.3;
+              const handoffGlow = isNextTarget ? 1 - (distToNext / 0.3) : 0;
 
-                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
-                const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
+              const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
+              const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
 
-                const isLayered = d.dailySet?.is_layered ?? false;
-                const layerFamily = d.dailySet?.layer?.family;
-                const layerColor = layerFamily ? (FAMILY_COLORS[layerFamily] ?? FALLBACK_ORB_COLOR) : FALLBACK_ORB_COLOR;
+              const isLayered = d.dailySet?.is_layered ?? false;
+              const layerFamily = d.dailySet?.layer?.family;
+              const layerColor = layerFamily ? (FAMILY_COLORS[layerFamily] ?? FALLBACK_ORB_COLOR) : FALLBACK_ORB_COLOR;
 
-                return (
-                  <button
-                    key={i}
-                    onClick={() => handleForecastDayTap(i)}
-                    className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
-                    style={{ minWidth: "28px", width: "28px" }}
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleForecastDayTap(i)}
+                  className="flex flex-col items-center justify-start bg-transparent border-none outline-none cursor-pointer"
+                  style={{ minWidth: "28px", width: "28px" }}
+                >
+                  <span
+                    className="font-mono transition-all duration-200 text-center leading-none"
+                    style={{
+                      fontSize: "11px", letterSpacing: "0.1em",
+                      color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
+                      fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : isCurrentOrbDay ? 500 : 450,
+                      marginBottom: "4px",
+                      textShadow: crossoverGlow > 0.01
+                        ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
+                        : "none",
+                      transition: "text-shadow 0.5s ease, color 0.3s ease",
+                    }}
                   >
-                    <span
-                      className="font-mono transition-all duration-200 text-center leading-none"
-                      style={{
-                        fontSize: "11px", letterSpacing: "0.1em",
-                        color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
-                        fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
-                        marginBottom: "4px",
-                        textShadow: crossoverGlow > 0.01
-                          ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
-                          : "none",
-                        transition: "text-shadow 0.5s ease, color 0.3s ease",
-                      }}
-                    >
-                      {d.label}
-                    </span>
-
-                    {/* Orb lane spacer — orb is now absolutely positioned above */}
-                    <div style={{ height: "11px", marginBottom: "3px" }} />
+                    {d.label}
+                  </span>
 
                     <span
                       className="font-mono text-center leading-none transition-all duration-200"
