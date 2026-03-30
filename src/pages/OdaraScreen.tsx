@@ -1731,13 +1731,25 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                const FADE_ZONE = 0.20;
-                const distToDay = i - orbPosition;
-                const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
-                const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
-                const isCurrentOrbDay = i === 0;
+                // Orb proximity — how close is the orb to this column?
+                const distToDay = Math.abs(i - orbPosition);
+                const PROXIMITY_RADIUS = 0.15; // columns — illumination zone
+                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
+                // Smoothstep for elegant falloff
+                const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 : isNextTarget ? 0.45 + handoffGlow * 0.3 : 0.45;
+                // Crossover glow — peaks when orb is fading into this label (at midnight)
+                const CROSSOVER_RADIUS = 0.0104; // ~15 min
+                const crossoverDist = Math.abs(i - orbPosition);
+                const crossoverGlow = crossoverDist < CROSSOVER_RADIUS
+                  ? (1 - crossoverDist / CROSSOVER_RADIUS) * 0.35
+                  : 0;
+
+                const isCurrentOrbDay = i === 0;
+                const isNextTarget = i === 1 && (i - orbPosition) > 0 && (i - orbPosition) <= 0.20;
+                const handoffGlow = isNextTarget ? 1 - ((i - orbPosition) / 0.20) : 0;
+
+                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
                 const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
 
                 const isLayered = d.dailySet?.is_layered ?? false;
