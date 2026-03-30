@@ -1816,6 +1816,7 @@ const OdaraScreen = () => {
                 );
               })}
             </div>
+        </motion.div>
 
         {/* Fragrance Profile Sheet */}
         <AnimatePresence>
