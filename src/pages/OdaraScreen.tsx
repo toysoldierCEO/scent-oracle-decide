@@ -1839,14 +1839,15 @@ const OdaraScreen = () => {
                       ) : null;
                     }
 
-                    // Stack bars in fixed context order
-                    const orderedRecipes = CONTEXT_ORDER
-                      .filter(ctx => dayRecipes[ctx])
-                      .map(ctx => dayRecipes[ctx]);
-
+                    // Fixed 4-lane structure per day
                     return (
-                      <div className="flex flex-col items-center gap-[1px]" style={{ marginTop: "3px" }}>
-                        {orderedRecipes.map((recipe, ri) => {
+                      <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "2px" }}>
+                        {CONTEXT_ORDER.map((ctx) => {
+                          const recipe = dayRecipes[ctx];
+                          if (!recipe) {
+                            // Empty lane — reserve space, render nothing visible
+                            return <div key={ctx} style={{ width: "18px", height: "3px" }} />;
+                          }
                           const mainFamily = recipe.oracle.today_pick.family;
                           const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
                           const hasLayer = !!recipe.layerFragrance;
@@ -1855,7 +1856,7 @@ const OdaraScreen = () => {
                             : null;
                           return (
                             <motion.div
-                              key={ri}
+                              key={ctx}
                               initial={{ scaleX: 0 }}
                               animate={{ scaleX: 1 }}
                               exit={{ scaleX: 0 }}
