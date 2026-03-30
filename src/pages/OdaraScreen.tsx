@@ -1699,19 +1699,28 @@ const OdaraScreen = () => {
               })}
             </div>
 
-            {/* Orb — same line as weekday labels, offset to the right of each day label */}
+            {/* Orb — lives in the gap between day labels, never overlaps text */}
             {(() => {
-              // Each label is 28px wide, centered at (i/6)*100%
-              // Offset the orb to sit just right of the label (~18px right of center)
-              // At progress=0 (midnight), orb is right of today (i=0)
-              // At progress=1 (next midnight), orb is right of tomorrow (i=1)
-              // Interpolate between the two positions
-              const todayCenter = (0 / 6) * 100; // today's label center %
-              const tomorrowCenter = (1 / 6) * 100; // tomorrow's label center %
-              const orbPct = todayCenter + orbPosition * (tomorrowCenter - todayCenter);
+              // Labels are centered at (i/6)*100%. Each ~28px wide → half = 14px.
+              // Gap left edge = today's center + 14px + 1px buffer
+              // Gap right edge = tomorrow's center - 14px - 1px buffer
+              // orbPosition 0→1 maps midnight→next midnight within this gap.
+              const todayIdx = 0;
+              const tomorrowIdx = 1;
+              const todayCenterPct = (todayIdx / 6) * 100;
+              const tomorrowCenterPct = (tomorrowIdx / 6) * 100;
+              const LABEL_HALF = 14; // half of ~28px label width
+              const GAP_BUFFER = 1;  // 1px separation from label text
+
+              // left: calc( todayCenter% + 15px + orbPosition * ( tomorrowCenter% - todayCenter% - 30px ) )
+              const leftOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
+              const rightOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
+              const totalOffsetPx = leftOffsetPx + rightOffsetPx; // 30px
+
+              // Fade/emerge at midnight boundaries
               const dayFrac = orbPosition % 1;
-              const FADE_START = 0.9896;
-              const EMERGE_END = 0.0014;
+              const FADE_START = 0.96;
+              const EMERGE_END = 0.02;
               let orbOpacity: number;
               if (dayFrac >= FADE_START) {
                 orbOpacity = (1 - dayFrac) / (1 - FADE_START);
@@ -1723,12 +1732,15 @@ const OdaraScreen = () => {
               orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity);
               const glowScale = orbOpacity;
 
+              // CSS calc for mixed % + px positioning
+              const orbLeft = `calc(${todayCenterPct}% + ${leftOffsetPx}px + ${orbPosition} * (${tomorrowCenterPct - todayCenterPct}% - ${totalOffsetPx}px))`;
+
               return (
                 <div
                   className="pointer-events-none"
                   style={{
                     position: "absolute",
-                    left: `${orbPct}%`,
+                    left: orbLeft,
                     top: "50%",
                     transform: "translate(-50%, -50%)",
                     zIndex: 10,
