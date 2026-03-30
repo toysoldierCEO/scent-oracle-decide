@@ -1145,13 +1145,24 @@ const OdaraScreen = () => {
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
+    const nextDay = forecastDays[index];
+    const newDateKey = nextDay?.dateKey;
     setSelectedForecastDay(index);
     setLayerSheetOpen(false);
     setCardKey((k) => k + 1);
     setExitDirection(null);
-    const dayTemp = forecastDays[index]?.temperature;
+    setSkipHistory([]);
+    const dayTemp = nextDay?.temperature;
     if (dayTemp != null) setDisplayedTemperature(dayTemp);
     else setDisplayedTemperature(null);
+    // Load correct data for tapped day
+    const lockedForDay = lockedRecipes.current?.[newDateKey]?.[selectedContext];
+    if (lockedForDay) {
+      restoreLockedRecipe(selectedContext, lockedForDay);
+    } else {
+      setSelectionState("neutral");
+      fetchOracle(selectedContext, dayTemp ?? effectiveTemperature);
+    }
   };
 
   return (
