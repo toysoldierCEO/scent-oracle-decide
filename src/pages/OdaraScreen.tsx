@@ -438,6 +438,7 @@ function recommendDailySet(
 interface ForecastDay {
   label: string;
   day: number;
+  dateKey: string;
   fragrance: {
     fragrance_id: string;
     name: string;
@@ -498,8 +499,9 @@ function buildForecastDays(): ForecastDay[] {
       };
     }
 
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return {
-      label: dayNames[d.getDay()], day: d.getDate(),
+      label: dayNames[d.getDay()], day: d.getDate(), dateKey,
       fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
       temperature: frag.temperature, layer: layerMap, alternates: null, dailySet,
     };
@@ -710,9 +712,13 @@ const OdaraScreen = () => {
     selectedRatio: string;
     layerFragrance: { id: string; name: string; family_key: string } | null;
   }
-  const lockedRecipes = useRef<Record<string, LockedRecipe>>({});
+  // lockedRecipes: dateKey → context → recipe
+  const lockedRecipes = useRef<Record<string, Record<string, LockedRecipe>>>({});
   const [recipeVersion, setRecipeVersion] = useState(0);
   const bumpRecipeVersion = useCallback(() => setRecipeVersion(v => v + 1), []);
+
+  // Helper: build dateKey from a Date
+  const toDateKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
@@ -797,9 +803,10 @@ const OdaraScreen = () => {
     const tempVal = temp ?? effectiveTemperature ?? 25;
     const fetchId = ++latestFetchId.current;
 
+    const dateKey = toDateKey(new Date());
     console.log('ODARA current context', contextVal);
-    console.log('ODARA found locked recipe', !!lockedRecipes.current[contextVal]);
-    console.log('ODARA saved lock state', lockedRecipes.current[contextVal]?.lockState ?? 'neutral');
+    console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
+    console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
 
     setLoading(true);
     setError(false);
@@ -975,7 +982,8 @@ const OdaraScreen = () => {
     setLayerSheetOpen(false);
     setSkipHistory([]);
 
-    const recipe = lockedRecipes.current[ctx];
+    const dateKey = toDateKey(new Date());
+    const recipe = lockedRecipes.current[dateKey]?.[ctx];
     console.log('ODARA found locked recipe', !!recipe);
     console.log('ODARA saved lock state', recipe?.lockState ?? 'neutral');
 
@@ -990,7 +998,8 @@ const OdaraScreen = () => {
   }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
 
   useEffect(() => {
-    const recipe = lockedRecipes.current[selectedContext];
+    const dateKey = toDateKey(new Date());
+    const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
       return;
@@ -1270,9 +1279,11 @@ const OdaraScreen = () => {
                         selectedRatio,
                         layerFragrance,
                       };
-                      lockedRecipes.current[selectedContext] = recipe;
+                      const dateKey = toDateKey(new Date());
+                      if (!lockedRecipes.current[dateKey]) lockedRecipes.current[dateKey] = {};
+                      lockedRecipes.current[dateKey][selectedContext] = recipe;
                       bumpRecipeVersion();
-                      console.log('ODARA saved locked recipe', selectedContext, recipe);
+                      console.log('ODARA saved locked recipe', dateKey, selectedContext, recipe);
                       console.log('ODARA saved lock state', recipe.lockState);
                     }
                     handleAccept();
@@ -1285,9 +1296,13 @@ const OdaraScreen = () => {
                     if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
                     setIsUnlockTransition(true);
                     setLockFlashColor("#eab308");
-                    delete lockedRecipes.current[selectedContext];
+                    const dateKey = toDateKey(new Date());
+                    if (lockedRecipes.current[dateKey]) {
+                      delete lockedRecipes.current[dateKey][selectedContext];
+                      if (Object.keys(lockedRecipes.current[dateKey]).length === 0) delete lockedRecipes.current[dateKey];
+                    }
                     bumpRecipeVersion();
-                    console.log('ODARA recipe deleted for', selectedContext);
+                    console.log('ODARA recipe deleted for', dateKey, selectedContext);
                     unlockTimeoutRef.current = setTimeout(() => {
                       setLockFlashColor(null);
                       setIsUnlockTransition(false);
@@ -1295,9 +1310,13 @@ const OdaraScreen = () => {
                     }, 360);
                   } else if (selectionState === "neutral") {
                     // Defensive clear before skip in case stale recipe exists
-                    delete lockedRecipes.current[selectedContext];
+                    const dateKey2 = toDateKey(new Date());
+                    if (lockedRecipes.current[dateKey2]) {
+                      delete lockedRecipes.current[dateKey2][selectedContext];
+                      if (Object.keys(lockedRecipes.current[dateKey2]).length === 0) delete lockedRecipes.current[dateKey2];
+                    }
                     bumpRecipeVersion();
-                    console.log('ODARA recipe deleted for', selectedContext);
+                    console.log('ODARA recipe deleted for', dateKey2, selectedContext);
                     setLockFlashColor("#ef4444");
                     setCardExiting(true);
                     setTimeout(() => {
@@ -1801,25 +1820,16 @@ const OdaraScreen = () => {
                     {d.day}
                   </span>
 
-                  {/* Recipe-driven forecast bar */}
+                  {/* Recipe-driven forecast bars (multi-day, multi-context) */}
                   {(() => {
-                    // Only today (index 0) has real locked recipe data
-                    if (i !== 0) {
-                      // Show selection underline for non-today days only if tapped
-                      return isSelected ? (
-                        <motion.div
-                          layoutId="forecastUnderline"
-                          className="rounded-full"
-                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
-                        />
-                      ) : null;
-                    }
-                    // Today: check if any locked recipe exists
                     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
                     recipeVersion; // subscribe to recipe changes
-                    const recipes = Object.values(lockedRecipes.current);
-                    if (recipes.length === 0) {
-                      // No locked recipe — show selection underline if selected
+                    const dayDateKey = d.dateKey;
+                    const dayRecipes = lockedRecipes.current[dayDateKey];
+                    const CONTEXT_ORDER: string[] = ["daily", "work", "hangout", "date"];
+
+                    if (!dayRecipes || Object.keys(dayRecipes).length === 0) {
+                      // No recipes for this day — show selection underline if tapped
                       return isSelected ? (
                         <motion.div
                           layoutId="forecastUnderline"
@@ -1828,37 +1838,46 @@ const OdaraScreen = () => {
                         />
                       ) : null;
                     }
-                    // Use the first locked recipe (current context preferred)
-                    const activeRecipe = lockedRecipes.current[selectedContext] ?? recipes[0];
-                    const mainFamily = activeRecipe.oracle.today_pick.family;
-                    const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
-                    const hasLayer = !!activeRecipe.layerFragrance;
-                    const layerColor = hasLayer
-                      ? (FAMILY_COLORS[activeRecipe.layerFragrance!.family_key] ?? "#666")
-                      : null;
+
+                    // Stack bars in fixed context order
+                    const orderedRecipes = CONTEXT_ORDER
+                      .filter(ctx => dayRecipes[ctx])
+                      .map(ctx => dayRecipes[ctx]);
 
                     return (
-                      <motion.div
-                        initial={{ scaleX: 0 }}
-                        animate={{ scaleX: 1 }}
-                        exit={{ scaleX: 0 }}
-                        transition={{ duration: 0.25, ease: "easeOut" }}
-                        className="rounded-full overflow-hidden"
-                        style={{
-                          width: "18px",
-                          height: "3px",
-                          marginTop: "3px",
-                          display: "flex",
-                          background: hasLayer ? "transparent" : mainColor,
-                        }}
-                      >
-                        {hasLayer && (
-                          <>
-                            <div style={{ flex: 1, background: mainColor }} />
-                            <div style={{ flex: 1, background: layerColor! }} />
-                          </>
-                        )}
-                      </motion.div>
+                      <div className="flex flex-col items-center gap-[1px]" style={{ marginTop: "3px" }}>
+                        {orderedRecipes.map((recipe, ri) => {
+                          const mainFamily = recipe.oracle.today_pick.family;
+                          const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
+                          const hasLayer = !!recipe.layerFragrance;
+                          const layerColor = hasLayer
+                            ? (FAMILY_COLORS[recipe.layerFragrance!.family_key] ?? "#666")
+                            : null;
+                          return (
+                            <motion.div
+                              key={ri}
+                              initial={{ scaleX: 0 }}
+                              animate={{ scaleX: 1 }}
+                              exit={{ scaleX: 0 }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="rounded-full overflow-hidden"
+                              style={{
+                                width: "18px",
+                                height: "3px",
+                                display: "flex",
+                                background: hasLayer ? "transparent" : mainColor,
+                              }}
+                            >
+                              {hasLayer && (
+                                <>
+                                  <div style={{ flex: 1, background: mainColor }} />
+                                  <div style={{ flex: 1, background: layerColor! }} />
+                                </>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
                     );
                   })()}
                 </button>
