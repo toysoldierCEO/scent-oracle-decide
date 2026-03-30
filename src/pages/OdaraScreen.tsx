@@ -1286,6 +1286,7 @@ const OdaraScreen = () => {
                     setIsUnlockTransition(true);
                     setLockFlashColor("#eab308");
                     delete lockedRecipes.current[selectedContext];
+                    bumpRecipeVersion();
                     console.log('ODARA recipe deleted for', selectedContext);
                     unlockTimeoutRef.current = setTimeout(() => {
                       setLockFlashColor(null);
