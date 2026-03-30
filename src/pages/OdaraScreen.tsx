@@ -1840,7 +1840,7 @@ const OdaraScreen = () => {
 
                     // Fixed 4-lane structure per day
                     return (
-                      <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "3px" }}>
+                      <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "5px" }}>
                         {CONTEXT_ORDER.map((ctx) => {
                           const recipe = dayRecipes[ctx];
                           if (!recipe) {
