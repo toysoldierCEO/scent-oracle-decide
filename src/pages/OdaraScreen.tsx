@@ -1770,6 +1770,10 @@ const OdaraScreen = () => {
                         color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
                         marginBottom: "4px",
+                        textShadow: crossoverGlow > 0.01
+                          ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
+                          : "none",
+                        transition: "text-shadow 0.5s ease, color 0.3s ease",
                       }}
                     >
                       {d.label}
