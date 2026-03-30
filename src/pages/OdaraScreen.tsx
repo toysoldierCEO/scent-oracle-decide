@@ -1728,9 +1728,9 @@ const OdaraScreen = () => {
                   className="pointer-events-none"
                   style={{
                     position: "absolute",
-                    left: `${orbPct}%`,
+                    left: `calc(${orbPct}% + 20px)`,
                     top: "50%",
-                    transform: "translate(-50%, -50%)",
+                    transform: "translate(0, -50%)",
                     zIndex: 10,
                     willChange: "transform, opacity",
                   }}
