@@ -1820,25 +1820,16 @@ const OdaraScreen = () => {
                     {d.day}
                   </span>
 
-                  {/* Recipe-driven forecast bar */}
+                  {/* Recipe-driven forecast bars (multi-day, multi-context) */}
                   {(() => {
-                    // Only today (index 0) has real locked recipe data
-                    if (i !== 0) {
-                      // Show selection underline for non-today days only if tapped
-                      return isSelected ? (
-                        <motion.div
-                          layoutId="forecastUnderline"
-                          className="rounded-full"
-                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
-                        />
-                      ) : null;
-                    }
-                    // Today: check if any locked recipe exists
                     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
                     recipeVersion; // subscribe to recipe changes
-                    const recipes = Object.values(lockedRecipes.current);
-                    if (recipes.length === 0) {
-                      // No locked recipe — show selection underline if selected
+                    const dayDateKey = d.dateKey;
+                    const dayRecipes = lockedRecipes.current[dayDateKey];
+                    const CONTEXT_ORDER: string[] = ["daily", "work", "hangout", "date"];
+
+                    if (!dayRecipes || Object.keys(dayRecipes).length === 0) {
+                      // No recipes for this day — show selection underline if tapped
                       return isSelected ? (
                         <motion.div
                           layoutId="forecastUnderline"
@@ -1847,37 +1838,46 @@ const OdaraScreen = () => {
                         />
                       ) : null;
                     }
-                    // Use the first locked recipe (current context preferred)
-                    const activeRecipe = lockedRecipes.current[selectedContext] ?? recipes[0];
-                    const mainFamily = activeRecipe.oracle.today_pick.family;
-                    const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
-                    const hasLayer = !!activeRecipe.layerFragrance;
-                    const layerColor = hasLayer
-                      ? (FAMILY_COLORS[activeRecipe.layerFragrance!.family_key] ?? "#666")
-                      : null;
+
+                    // Stack bars in fixed context order
+                    const orderedRecipes = CONTEXT_ORDER
+                      .filter(ctx => dayRecipes[ctx])
+                      .map(ctx => dayRecipes[ctx]);
 
                     return (
-                      <motion.div
-                        initial={{ scaleX: 0 }}
-                        animate={{ scaleX: 1 }}
-                        exit={{ scaleX: 0 }}
-                        transition={{ duration: 0.25, ease: "easeOut" }}
-                        className="rounded-full overflow-hidden"
-                        style={{
-                          width: "18px",
-                          height: "3px",
-                          marginTop: "3px",
-                          display: "flex",
-                          background: hasLayer ? "transparent" : mainColor,
-                        }}
-                      >
-                        {hasLayer && (
-                          <>
-                            <div style={{ flex: 1, background: mainColor }} />
-                            <div style={{ flex: 1, background: layerColor! }} />
-                          </>
-                        )}
-                      </motion.div>
+                      <div className="flex flex-col items-center gap-[1px]" style={{ marginTop: "3px" }}>
+                        {orderedRecipes.map((recipe, ri) => {
+                          const mainFamily = recipe.oracle.today_pick.family;
+                          const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
+                          const hasLayer = !!recipe.layerFragrance;
+                          const layerColor = hasLayer
+                            ? (FAMILY_COLORS[recipe.layerFragrance!.family_key] ?? "#666")
+                            : null;
+                          return (
+                            <motion.div
+                              key={ri}
+                              initial={{ scaleX: 0 }}
+                              animate={{ scaleX: 1 }}
+                              exit={{ scaleX: 0 }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="rounded-full overflow-hidden"
+                              style={{
+                                width: "18px",
+                                height: "3px",
+                                display: "flex",
+                                background: hasLayer ? "transparent" : mainColor,
+                              }}
+                            >
+                              {hasLayer && (
+                                <>
+                                  <div style={{ flex: 1, background: mainColor }} />
+                                  <div style={{ flex: 1, background: layerColor! }} />
+                                </>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
                     );
                   })()}
                 </button>
