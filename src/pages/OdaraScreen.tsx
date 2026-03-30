@@ -984,7 +984,7 @@ const OdaraScreen = () => {
     setLayerSheetOpen(false);
     setSkipHistory([]);
 
-    const dateKey = toDateKey(new Date());
+    const dateKey = selectedDateKey;
     const recipe = lockedRecipes.current[dateKey]?.[ctx];
     console.log('ODARA found locked recipe', !!recipe);
     console.log('ODARA saved lock state', recipe?.lockState ?? 'neutral');
