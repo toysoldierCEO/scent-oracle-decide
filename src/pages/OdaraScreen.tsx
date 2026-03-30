@@ -764,6 +764,8 @@ const OdaraScreen = () => {
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
   const forecastDays = useMemo(() => buildForecastDays(), []);
+  // Derived selected date key — used everywhere instead of toDateKey(new Date())
+  const selectedDateKey = forecastDays[selectedForecastDay]?.dateKey ?? toDateKey(new Date());
 
   // Continuous timepiece orb position (0–6 scale, 0 = today start, 1 = tomorrow start)
   const [orbPosition, setOrbPosition] = useState(0);
@@ -803,7 +805,7 @@ const OdaraScreen = () => {
     const tempVal = temp ?? effectiveTemperature ?? 25;
     const fetchId = ++latestFetchId.current;
 
-    const dateKey = toDateKey(new Date());
+    const dateKey = selectedDateKey;
     console.log('ODARA current context', contextVal);
     console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
     console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
@@ -982,7 +984,7 @@ const OdaraScreen = () => {
     setLayerSheetOpen(false);
     setSkipHistory([]);
 
-    const dateKey = toDateKey(new Date());
+    const dateKey = selectedDateKey;
     const recipe = lockedRecipes.current[dateKey]?.[ctx];
     console.log('ODARA found locked recipe', !!recipe);
     console.log('ODARA saved lock state', recipe?.lockState ?? 'neutral');
@@ -998,7 +1000,7 @@ const OdaraScreen = () => {
   }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
 
   useEffect(() => {
-    const dateKey = toDateKey(new Date());
+    const dateKey = selectedDateKey;
     const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
@@ -1143,13 +1145,24 @@ const OdaraScreen = () => {
 
   const handleForecastDayTap = (index: number) => {
     if (index === selectedForecastDay) return;
+    const nextDay = forecastDays[index];
+    const newDateKey = nextDay?.dateKey;
     setSelectedForecastDay(index);
     setLayerSheetOpen(false);
     setCardKey((k) => k + 1);
     setExitDirection(null);
-    const dayTemp = forecastDays[index]?.temperature;
+    setSkipHistory([]);
+    const dayTemp = nextDay?.temperature;
     if (dayTemp != null) setDisplayedTemperature(dayTemp);
     else setDisplayedTemperature(null);
+    // Load correct data for tapped day
+    const lockedForDay = lockedRecipes.current?.[newDateKey]?.[selectedContext];
+    if (lockedForDay) {
+      restoreLockedRecipe(selectedContext, lockedForDay);
+    } else {
+      setSelectionState("neutral");
+      fetchOracle(selectedContext, dayTemp ?? effectiveTemperature);
+    }
   };
 
   return (
@@ -1233,24 +1246,34 @@ const OdaraScreen = () => {
               if (dir === "horizontal") {
                 const hThreshold = 50;
                 const hVel = 200;
+                let nextIndex: number | null = null;
                 if (
                   (offset.x < -hThreshold || velocity.x < -hVel) &&
                   selectedForecastDay < forecastDays.length - 1
                 ) {
-                  const next = selectedForecastDay + 1;
-                  setSelectedForecastDay(next);
-                  setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[next]?.temperature;
-                  if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                  nextIndex = selectedForecastDay + 1;
                 } else if (
                   (offset.x > hThreshold || velocity.x > hVel) &&
                   selectedForecastDay > 0
                 ) {
-                  const prev = selectedForecastDay - 1;
-                  setSelectedForecastDay(prev);
+                  nextIndex = selectedForecastDay - 1;
+                }
+                if (nextIndex != null) {
+                  const nextDay = forecastDays[nextIndex];
+                  const newDateKey = nextDay?.dateKey;
+                  setSelectedForecastDay(nextIndex);
                   setLayerSheetOpen(false);
-                  const dayTemp = forecastDays[prev]?.temperature;
+                  setSkipHistory([]);
+                  const dayTemp = nextDay?.temperature;
                   if (dayTemp != null) setDisplayedTemperature(dayTemp);
+                  // Load correct data for the new day
+                  const lockedForDay = lockedRecipes.current?.[newDateKey]?.[selectedContext];
+                  if (lockedForDay) {
+                    restoreLockedRecipe(selectedContext, lockedForDay);
+                  } else {
+                    setSelectionState("neutral");
+                    fetchOracle(selectedContext, dayTemp ?? effectiveTemperature);
+                  }
                 }
               } else if (dir === "vertical") {
                 const vThreshold = 60;
@@ -1279,7 +1302,7 @@ const OdaraScreen = () => {
                         selectedRatio,
                         layerFragrance,
                       };
-                      const dateKey = toDateKey(new Date());
+                      const dateKey = selectedDateKey;
                       if (!lockedRecipes.current[dateKey]) lockedRecipes.current[dateKey] = {};
                       lockedRecipes.current[dateKey][selectedContext] = recipe;
                       bumpRecipeVersion();
@@ -1296,7 +1319,7 @@ const OdaraScreen = () => {
                     if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
                     setIsUnlockTransition(true);
                     setLockFlashColor("#eab308");
-                    const dateKey = toDateKey(new Date());
+                    const dateKey = selectedDateKey;
                     if (lockedRecipes.current[dateKey]) {
                       delete lockedRecipes.current[dateKey][selectedContext];
                       if (Object.keys(lockedRecipes.current[dateKey]).length === 0) delete lockedRecipes.current[dateKey];
@@ -1310,7 +1333,7 @@ const OdaraScreen = () => {
                     }, 360);
                   } else if (selectionState === "neutral") {
                     // Defensive clear before skip in case stale recipe exists
-                    const dateKey2 = toDateKey(new Date());
+                    const dateKey2 = selectedDateKey;
                     if (lockedRecipes.current[dateKey2]) {
                       delete lockedRecipes.current[dateKey2][selectedContext];
                       if (Object.keys(lockedRecipes.current[dateKey2]).length === 0) delete lockedRecipes.current[dateKey2];
@@ -1338,7 +1361,7 @@ const OdaraScreen = () => {
               if (absOffset > 3) return null;
 
               // Phase 1: only render day 0 (live main card), skip forecast cards
-              if (i !== 0) return null;
+              if (!isCenter) return null;
               const cardPick = oraclePick;
               const cardAlternates = oracleAlternates ?? [];
               const cardHasAlternates = cardAlternates.length > 0;
