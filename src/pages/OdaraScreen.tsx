@@ -499,8 +499,9 @@ function buildForecastDays(): ForecastDay[] {
       };
     }
 
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return {
-      label: dayNames[d.getDay()], day: d.getDate(),
+      label: dayNames[d.getDay()], day: d.getDate(), dateKey,
       fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
       temperature: frag.temperature, layer: layerMap, alternates: null, dailySet,
     };
