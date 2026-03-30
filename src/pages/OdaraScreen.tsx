@@ -1279,9 +1279,11 @@ const OdaraScreen = () => {
                         selectedRatio,
                         layerFragrance,
                       };
-                      lockedRecipes.current[selectedContext] = recipe;
+                      const dateKey = toDateKey(new Date());
+                      if (!lockedRecipes.current[dateKey]) lockedRecipes.current[dateKey] = {};
+                      lockedRecipes.current[dateKey][selectedContext] = recipe;
                       bumpRecipeVersion();
-                      console.log('ODARA saved locked recipe', selectedContext, recipe);
+                      console.log('ODARA saved locked recipe', dateKey, selectedContext, recipe);
                       console.log('ODARA saved lock state', recipe.lockState);
                     }
                     handleAccept();
