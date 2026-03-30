@@ -1654,25 +1654,42 @@ const OdaraScreen = () => {
           <div className="relative">
             {/* White orb — continuous time indicator, moves across the orb lane */}
             {(() => {
-              // progress: 0.0 = midnight (start of today), 1.0 = midnight (start of tomorrow)
               const progress = orbPosition;
-              // Fade-out zone: 80% → 100% the orb tightens and fades before midnight handoff
-              const FADE_START = 0.80;
-              const fade = progress >= FADE_START
-                ? 1 - ((progress - FADE_START) / (1 - FADE_START))
-                : 1;
-              // Glow tightens as orb approaches next day
-              const glowScale = progress >= FADE_START ? fade : 1;
-              // Position: orb travels from column 0 center to column 1 center
-              // In a 7-col flex justify-between, each column center is at (i / 6) * 100%
-              // So col 0 = 0%, col 1 = 16.667%
+              // Each column center in a 7-col justify-between: (i / 6) * 100%
               const colCenterPct = (progress / 6) * 100;
+
+              // Proximity to next day label (column 1 = 1/6 of row)
+              // The orb fades as it enters the label zone and re-emerges after
+              const nextDayPos = 1; // column index of tomorrow
+              const distToNext = nextDayPos - progress; // 0 = exactly at next day
+
+              // Fade zone: orb starts fading ~15min before midnight (progress ~0.9896)
+              // and re-emerges ~2min after (progress slightly > 1, but we handle via distToNext)
+              const FADE_RADIUS = 0.0104; // ~15 minutes in day-fraction
+              const EMERGE_RADIUS = 0.0014; // ~2 minutes in day-fraction
+
+              let orbOpacity: number;
+              if (distToNext > FADE_RADIUS) {
+                // Normal travel — full opacity
+                orbOpacity = 1;
+              } else if (distToNext > 0) {
+                // Approaching label — fade out smoothly
+                orbOpacity = distToNext / FADE_RADIUS;
+              } else if (distToNext > -EMERGE_RADIUS) {
+                // Just past label — fade back in
+                orbOpacity = Math.abs(distToNext) / EMERGE_RADIUS;
+              } else {
+                orbOpacity = 1;
+              }
+              // Ease the opacity for smoother feel
+              orbOpacity = orbOpacity * orbOpacity * (3 - 2 * orbOpacity); // smoothstep
+
+              const glowScale = orbOpacity;
+
               return (
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    // The orb lane sits at the same vertical position as the per-column orb lanes
-                    // weekday label height (~15px) + marginBottom 4px = 19px offset, centered in 11px lane
                     top: "19px",
                     left: 0,
                     right: 0,
@@ -1694,9 +1711,9 @@ const OdaraScreen = () => {
                         width: "6px",
                         height: "6px",
                         background: "white",
-                        opacity: Math.max(0, fade),
-                        boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * fade).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * fade).toFixed(3)})`,
-                        transition: "opacity 0.5s ease, box-shadow 0.5s ease, left 0.5s ease",
+                        opacity: Math.max(0, orbOpacity),
+                        boxShadow: `0 0 ${4 * glowScale}px ${2 * glowScale}px rgba(255,255,255,${(0.15 * orbOpacity).toFixed(3)}), 0 0 ${10 * glowScale}px ${4 * glowScale}px rgba(255,255,255,${(0.06 * orbOpacity).toFixed(3)})`,
+                        transition: "opacity 0.3s ease, box-shadow 0.3s ease",
                       }}
                     />
                   </div>
@@ -1714,13 +1731,25 @@ const OdaraScreen = () => {
                 const isSelected = selectedForecastDay === i;
                 const hasFragrance = !!d.fragrance;
 
-                const FADE_ZONE = 0.20;
-                const distToDay = i - orbPosition;
-                const isNextTarget = i === 1 && distToDay > 0 && distToDay <= FADE_ZONE;
-                const handoffGlow = isNextTarget ? 1 - (distToDay / FADE_ZONE) : 0;
-                const isCurrentOrbDay = i === 0;
+                // Orb proximity — how close is the orb to this column?
+                const distToDay = Math.abs(i - orbPosition);
+                const PROXIMITY_RADIUS = 0.15; // columns — illumination zone
+                const proximity = distToDay < PROXIMITY_RADIUS ? 1 - (distToDay / PROXIMITY_RADIUS) : 0;
+                // Smoothstep for elegant falloff
+                const smoothProximity = proximity * proximity * (3 - 2 * proximity);
 
-                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 : isNextTarget ? 0.45 + handoffGlow * 0.3 : 0.45;
+                // Crossover glow — peaks when orb is fading into this label (at midnight)
+                const CROSSOVER_RADIUS = 0.0104; // ~15 min
+                const crossoverDist = Math.abs(i - orbPosition);
+                const crossoverGlow = crossoverDist < CROSSOVER_RADIUS
+                  ? (1 - crossoverDist / CROSSOVER_RADIUS) * 0.35
+                  : 0;
+
+                const isCurrentOrbDay = i === 0;
+                const isNextTarget = i === 1 && (i - orbPosition) > 0 && (i - orbPosition) <= 0.20;
+                const handoffGlow = isNextTarget ? 1 - ((i - orbPosition) / 0.20) : 0;
+
+                const labelOpacity = isSelected ? 0.95 : isCurrentOrbDay ? 0.65 + smoothProximity * 0.15 : isNextTarget ? 0.45 + handoffGlow * 0.3 + crossoverGlow : 0.45 + smoothProximity * 0.1;
                 const dateOpacity = isSelected ? 0.75 : isNextTarget ? 0.35 + handoffGlow * 0.2 : 0.35;
 
                 const isLayered = d.dailySet?.is_layered ?? false;
@@ -1741,6 +1770,10 @@ const OdaraScreen = () => {
                         color: `rgba(255,255,255,${Math.min(labelOpacity + 0.15, 1)})`,
                         fontWeight: isSelected ? 600 : (isNextTarget && handoffGlow > 0.5) ? 500 : i === 0 ? 500 : 450,
                         marginBottom: "4px",
+                        textShadow: crossoverGlow > 0.01
+                          ? `0 0 ${6 * crossoverGlow}px rgba(255,255,255,${(crossoverGlow * 0.6).toFixed(3)})`
+                          : "none",
+                        transition: "text-shadow 0.5s ease, color 0.3s ease",
                       }}
                     >
                       {d.label}
