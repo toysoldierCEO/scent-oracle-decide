@@ -711,6 +711,8 @@ const OdaraScreen = () => {
     layerFragrance: { id: string; name: string; family_key: string } | null;
   }
   const lockedRecipes = useRef<Record<string, LockedRecipe>>({});
+  const [recipeVersion, setRecipeVersion] = useState(0);
+  const bumpRecipeVersion = useCallback(() => setRecipeVersion(v => v + 1), []);
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
