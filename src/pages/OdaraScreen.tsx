@@ -764,6 +764,8 @@ const OdaraScreen = () => {
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
   const forecastDays = useMemo(() => buildForecastDays(), []);
+  // Derived selected date key — used everywhere instead of toDateKey(new Date())
+  const selectedDateKey = forecastDays[selectedForecastDay]?.dateKey ?? toDateKey(new Date());
 
   // Continuous timepiece orb position (0–6 scale, 0 = today start, 1 = tomorrow start)
   const [orbPosition, setOrbPosition] = useState(0);
