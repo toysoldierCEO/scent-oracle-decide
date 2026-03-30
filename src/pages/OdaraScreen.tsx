@@ -1713,9 +1713,10 @@ const OdaraScreen = () => {
               const GAP_BUFFER = 1;  // 1px separation from label text
 
               // left: calc( todayCenter% + 15px + orbPosition * ( tomorrowCenter% - todayCenter% - 30px ) )
-              const leftOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const rightOffsetPx = LABEL_HALF + GAP_BUFFER; // 15px
-              const totalOffsetPx = leftOffsetPx + rightOffsetPx; // 30px
+              const ORB_RADIUS = 2.5; // half of 5px orb dot
+              const leftOffsetPx = LABEL_HALF + ORB_RADIUS + GAP_BUFFER; // 17.5px
+              const rightOffsetPx = LABEL_HALF + ORB_RADIUS + GAP_BUFFER; // 17.5px
+              const totalOffsetPx = leftOffsetPx + rightOffsetPx; // 35px
 
               // Fade/emerge at midnight boundaries
               const dayFrac = orbPosition % 1;
