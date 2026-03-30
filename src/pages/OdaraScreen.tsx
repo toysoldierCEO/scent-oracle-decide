@@ -1829,24 +1829,24 @@ const OdaraScreen = () => {
                     const CONTEXT_ORDER: string[] = ["daily", "work", "hangout", "date"];
 
                     if (!dayRecipes || Object.keys(dayRecipes).length === 0) {
-                      // No recipes for this day — show selection underline if tapped
                       return isSelected ? (
-                        <motion.div
-                          layoutId="forecastUnderline"
-                          className="rounded-full"
-                          style={{ width: "14px", height: "1px", background: "rgba(255,255,255,0.2)", marginTop: "3px" }}
-                        />
+                        <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "2px" }}>
+                          {CONTEXT_ORDER.map(ctx => (
+                            <div key={ctx} style={{ width: "18px", height: "3px" }} />
+                          ))}
+                        </div>
                       ) : null;
                     }
 
-                    // Stack bars in fixed context order
-                    const orderedRecipes = CONTEXT_ORDER
-                      .filter(ctx => dayRecipes[ctx])
-                      .map(ctx => dayRecipes[ctx]);
-
+                    // Fixed 4-lane structure per day
                     return (
-                      <div className="flex flex-col items-center gap-[1px]" style={{ marginTop: "3px" }}>
-                        {orderedRecipes.map((recipe, ri) => {
+                      <div className="flex flex-col items-center" style={{ marginTop: "3px", gap: "2px" }}>
+                        {CONTEXT_ORDER.map((ctx) => {
+                          const recipe = dayRecipes[ctx];
+                          if (!recipe) {
+                            // Empty lane — reserve space, render nothing visible
+                            return <div key={ctx} style={{ width: "18px", height: "3px" }} />;
+                          }
                           const mainFamily = recipe.oracle.today_pick.family;
                           const mainColor = FAMILY_COLORS[mainFamily] ?? "#888";
                           const hasLayer = !!recipe.layerFragrance;
@@ -1855,7 +1855,7 @@ const OdaraScreen = () => {
                             : null;
                           return (
                             <motion.div
-                              key={ri}
+                              key={ctx}
                               initial={{ scaleX: 0 }}
                               animate={{ scaleX: 1 }}
                               exit={{ scaleX: 0 }}
