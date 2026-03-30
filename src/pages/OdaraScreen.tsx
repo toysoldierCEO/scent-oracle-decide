@@ -1709,6 +1709,7 @@ const OdaraScreen = () => {
                 return (
                   <span
                     key={i}
+                    ref={(el) => { dayLabelRefs.current[i] = el; }}
                     className="font-mono text-center leading-none"
                     style={{
                       fontSize: "11px",
