@@ -757,17 +757,17 @@ const OdaraScreen = () => {
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
   const forecastDays = useMemo(() => buildForecastDays(), []);
 
-  // Continuous timepiece orb position
+  // Continuous timepiece orb position (0–7 scale across the week)
   const [orbPosition, setOrbPosition] = useState(0);
   useEffect(() => {
     let raf: number;
     const tick = () => {
       const now = new Date();
-      const startOfDay = new Date(now);
-      startOfDay.setHours(0, 0, 0, 0);
-      const msInDay = 24 * 60 * 60 * 1000;
-      const dayProgress = (now.getTime() - startOfDay.getTime()) / msInDay;
-      setOrbPosition(dayProgress);
+      const dayIndex = now.getDay(); // 0=Sun … 6=Sat
+      const secondsSinceMidnight =
+        now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const progress = dayIndex + secondsSinceMidnight / 86400;
+      setOrbPosition(progress);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
