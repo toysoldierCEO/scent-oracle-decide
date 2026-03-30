@@ -1698,11 +1698,12 @@ const OdaraScreen = () => {
                   }}
                 >
                   <div
-                    className="absolute"
                     style={{
+                      position: "absolute",
                       left: `${colCenterPct}%`,
                       top: "50%",
                       transform: "translate(-50%, -50%)",
+                      willChange: "transform, opacity",
                     }}
                   >
                     <div
