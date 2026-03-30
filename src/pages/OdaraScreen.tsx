@@ -998,7 +998,7 @@ const OdaraScreen = () => {
 
     setIsUnlockTransition(false);
     setSelectionState("neutral");
-    fetchOracle(ctx, selectedTemperature);
+    fetchOracle(ctx, selectedTemperature, undefined, selectedDateKey);
   }, [fetchOracle, restoreLockedRecipe, selectedContext, selectedTemperature]);
 
   useEffect(() => {
