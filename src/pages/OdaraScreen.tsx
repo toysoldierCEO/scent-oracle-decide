@@ -712,9 +712,23 @@ const OdaraScreen = () => {
     selectedRatio: string;
     layerFragrance: { id: string; name: string; family_key: string } | null;
   }
-  const lockedRecipes = useRef<Record<string, LockedRecipe>>({});
+  // lockedRecipes: dateKey → context → recipe
+  const lockedRecipes = useRef<Record<string, Record<string, LockedRecipe>>>({});
   const [recipeVersion, setRecipeVersion] = useState(0);
   const bumpRecipeVersion = useCallback(() => setRecipeVersion(v => v + 1), []);
+
+  /** Get the dateKey for the currently selected forecast day */
+  const getActiveDateKey = useCallback(() => {
+    const today = new Date();
+    const d = new Date(today);
+    d.setDate(d.getDate() + selectedForecastDay);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [selectedForecastDay]);
+
+  const getTodayDateKey = useCallback(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
   const [liveTemperature, setLiveTemperature] = useState<number | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [manualTemperatureOverride, setManualTemperatureOverride] = useState<number | null>(null);
