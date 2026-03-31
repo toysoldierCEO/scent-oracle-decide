@@ -1495,9 +1495,9 @@ const OdaraScreen = () => {
                       </h1>
 
                       {/* Brand name — from live Supabase data */}
-                      {cardPick.reason && (
+                      {cardPick.brand && (
                         <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
-                          {cardPick.reason}
+                          {cardPick.brand}
                         </p>
                       )}
 
