@@ -852,18 +852,41 @@ const OdaraScreen = () => {
         reason: a.reason ?? '',
       }));
 
-      // Fetch layer candidates from the table (context-independent diversity scoring)
-      const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
-      const { data: layerRows } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords, projection')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .not('family_key', 'is', null)
-        .limit(20);
+      // Use layer from backend response as source of truth
+      const rpcLayer = result.layer;
+      if (rpcLayer && rpcLayer.fragrance_id) {
+        const mainFamily = pick.family ?? '';
+        const layerFamily = rpcLayer.family ?? '';
+        const interaction = classifyInteraction(mainFamily, layerFamily);
+        const mainDisplayName = getDisplayName(pick.name, pick.brand);
+        const layerDisplayName = getDisplayName(rpcLayer.name, rpcLayer.brand);
+        const mainCurated = getCuratedNotes(pick.name, JSON.stringify(pick.notes), JSON.stringify(pick.accords), new Set());
+        const layerCurated = getCuratedNotes(rpcLayer.name, JSON.stringify(rpcLayer.notes), JSON.stringify(rpcLayer.accords), new Set(mainCurated));
 
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], pick.family ?? '');
-      setLayerModes(newLayerModes);
-      setLayerFragrance(newLayerModes.balance ?? null);
+        const layerEntry: LayerModeEntry = {
+          id: rpcLayer.fragrance_id,
+          name: rpcLayer.name,
+          brand: rpcLayer.brand ?? null,
+          family_key: layerFamily,
+          notes: rpcLayer.notes ?? null,
+          accords: rpcLayer.accords ?? null,
+          projection: rpcLayer.projection ?? 5,
+          interactionType: interaction,
+          reason: INTERACTION_REASON[interaction](layerFamily),
+          why_it_works: buildWhyItWorks(mainDisplayName, mainCurated, layerDisplayName, layerCurated),
+        };
+        const singleLayerMode: LayerModes = {
+          balance: layerEntry,
+          bold: layerEntry,
+          smooth: layerEntry,
+          wild: layerEntry,
+        };
+        setLayerModes(singleLayerMode);
+        setLayerFragrance(layerEntry);
+      } else {
+        setLayerModes({ balance: null, bold: null, smooth: null, wild: null });
+        setLayerFragrance(null);
+      }
       setSelectedMood('balance');
 
       const liveOracle: OracleData = {
