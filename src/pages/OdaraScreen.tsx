@@ -862,7 +862,7 @@ const OdaraScreen = () => {
           notes: rpcLayer.notes ?? null,
           accords: rpcLayer.accords ?? null,
           projection: rpcLayer.projection ?? null,
-          interactionType: "balance",
+          interactionType: "balance" as const,
           reason: rpcLayer.reason ?? "",
           why_it_works: rpcLayer.reason ?? "",
         };
