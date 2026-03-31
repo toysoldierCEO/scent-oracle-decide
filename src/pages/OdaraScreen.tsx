@@ -1531,7 +1531,7 @@ const OdaraScreen = () => {
                     {isCenter && hasAnyLayerMode && (
                       <LayerCard
                         mainName={cardPick.name}
-                        mainBrand={cardPick.reason}
+                        mainBrand={cardPick.brand}
                         mainNotes={mainNotes}
                         mainFamily={cardPick.family ?? null}
                         mainProjection={mainProjection}
