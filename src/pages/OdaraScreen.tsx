@@ -890,7 +890,8 @@ const OdaraScreen = () => {
           fragrance_id: pick.fragrance_id,
           name: pick.name,
           family: pick.family ?? '',
-          reason: pick.reason ?? pick.brand ?? '',
+          reason: pick.reason ?? '',
+          brand: pick.brand ?? '',
         },
         layer: rpcLayer
           ? {
