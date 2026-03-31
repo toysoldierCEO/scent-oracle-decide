@@ -872,7 +872,7 @@ const OdaraScreen = () => {
           accords: rpcLayer.accords ?? null,
           projection: rpcLayer.projection ?? 5,
           interactionType: interaction,
-          reason: INTERACTION_REASON[interaction] ?? '',
+          reason: INTERACTION_REASON[interaction](layerFamily),
           why_it_works: buildWhyItWorks(mainDisplayName, mainCurated, layerDisplayName, layerCurated),
         };
         const singleLayerMode: LayerModes = {
