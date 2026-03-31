@@ -855,14 +855,25 @@ const OdaraScreen = () => {
       // Use layer from backend response as source of truth
       const rpcLayer = result.layer;
       if (rpcLayer && rpcLayer.fragrance_id) {
-        const layerEntry = {
+        const mainFamily = pick.family ?? '';
+        const layerFamily = rpcLayer.family ?? '';
+        const interaction = classifyInteraction(mainFamily, layerFamily);
+        const mainDisplayName = getDisplayName(pick.name, pick.brand);
+        const layerDisplayName = getDisplayName(rpcLayer.name, rpcLayer.brand);
+        const mainCurated = getCuratedNotes(pick.name, JSON.stringify(pick.notes), JSON.stringify(pick.accords), new Set());
+        const layerCurated = getCuratedNotes(rpcLayer.name, JSON.stringify(rpcLayer.notes), JSON.stringify(rpcLayer.accords), new Set(mainCurated));
+
+        const layerEntry: LayerModeEntry = {
           id: rpcLayer.fragrance_id,
           name: rpcLayer.name,
           brand: rpcLayer.brand ?? null,
-          family_key: rpcLayer.family ?? null,
+          family_key: layerFamily,
           notes: rpcLayer.notes ?? null,
           accords: rpcLayer.accords ?? null,
           projection: rpcLayer.projection ?? 5,
+          interactionType: interaction,
+          reason: INTERACTION_REASON[interaction] ?? '',
+          why_it_works: buildWhyItWorks(mainDisplayName, mainCurated, layerDisplayName, layerCurated),
         };
         const singleLayerMode: LayerModes = {
           balance: layerEntry,
@@ -885,12 +896,7 @@ const OdaraScreen = () => {
           family: pick.family ?? '',
           reason: pick.reason ?? pick.brand ?? '',
         },
-        layer: rpcLayer ? {
-          fragrance_id: rpcLayer.fragrance_id,
-          name: rpcLayer.name,
-          family: rpcLayer.family ?? '',
-          reason: rpcLayer.brand ?? '',
-        } : null,
+        layer: null,
         alternates: liveAlternates,
       };
       setIsUnlockTransition(false);
