@@ -129,16 +129,27 @@ export type Database = {
         Args: { p_fragrance_id: string; p_user: string }
         Returns: Json
       }
-      get_todays_oracle_v3: {
-        Args: {
-          p_brand?: string
-          p_context?: string
-          p_temperature?: number
-          p_user_id: string
-          p_wear_date?: string
-        }
-        Returns: Json
-      }
+      get_todays_oracle_v3:
+        | {
+            Args: {
+              p_brand?: string
+              p_context?: string
+              p_temperature?: number
+              p_user_id: string
+              p_wear_date?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_brand?: string
+              p_context: string
+              p_temperature: number
+              p_user_id: string
+              p_wear_date?: string
+            }
+            Returns: Json
+          }
       skip_today_pick_v1: {
         Args: { p_context?: string; p_fragrance_id: string; p_user: string }
         Returns: Json
