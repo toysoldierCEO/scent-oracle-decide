@@ -63,7 +63,7 @@ interface OracleData {
     family: string;
     reason: string;
   };
-  layer?: Record<LayerMood, LayerOption> | null;
+  layer?: { fragrance_id: string; name: string; family: string; reason: string } | null;
   alternates?: {
     fragrance_id?: string;
     name: string;
@@ -852,42 +852,37 @@ const OdaraScreen = () => {
         reason: a.reason ?? '',
       }));
 
-      // Use layer from backend response as source of truth
       const rpcLayer = result.layer;
       if (rpcLayer && rpcLayer.fragrance_id) {
-        const mainFamily = pick.family ?? '';
-        const layerFamily = rpcLayer.family ?? '';
-        const interaction = classifyInteraction(mainFamily, layerFamily);
-        const mainDisplayName = getDisplayName(pick.name, pick.brand);
-        const layerDisplayName = getDisplayName(rpcLayer.name, rpcLayer.brand);
-        const mainCurated = getCuratedNotes(pick.name, JSON.stringify(pick.notes), JSON.stringify(pick.accords), new Set());
-        const layerCurated = getCuratedNotes(rpcLayer.name, JSON.stringify(rpcLayer.notes), JSON.stringify(rpcLayer.accords), new Set(mainCurated));
-
-        const layerEntry: LayerModeEntry = {
+        const layerEntry = {
           id: rpcLayer.fragrance_id,
           name: rpcLayer.name,
           brand: rpcLayer.brand ?? null,
-          family_key: layerFamily,
+          family_key: rpcLayer.family ?? null,
           notes: rpcLayer.notes ?? null,
           accords: rpcLayer.accords ?? null,
-          projection: rpcLayer.projection ?? 5,
-          interactionType: interaction,
-          reason: INTERACTION_REASON[interaction](layerFamily),
-          why_it_works: buildWhyItWorks(mainDisplayName, mainCurated, layerDisplayName, layerCurated),
+          projection: rpcLayer.projection ?? null,
+          interactionType: "balance" as const,
+          reason: rpcLayer.reason ?? "",
+          why_it_works: rpcLayer.reason ?? "",
         };
-        const singleLayerMode: LayerModes = {
+        setLayerModes({
           balance: layerEntry,
           bold: layerEntry,
           smooth: layerEntry,
           wild: layerEntry,
-        };
-        setLayerModes(singleLayerMode);
+        });
         setLayerFragrance(layerEntry);
       } else {
-        setLayerModes({ balance: null, bold: null, smooth: null, wild: null });
+        setLayerModes({
+          balance: null,
+          bold: null,
+          smooth: null,
+          wild: null,
+        });
         setLayerFragrance(null);
       }
-      setSelectedMood('balance');
+      setSelectedMood("balance");
 
       const liveOracle: OracleData = {
         today_pick: {
@@ -896,7 +891,14 @@ const OdaraScreen = () => {
           family: pick.family ?? '',
           reason: pick.reason ?? pick.brand ?? '',
         },
-        layer: null,
+        layer: rpcLayer
+          ? {
+              fragrance_id: rpcLayer.fragrance_id,
+              name: rpcLayer.name,
+              family: rpcLayer.family ?? '',
+              reason: rpcLayer.brand ?? '',
+            }
+          : null,
         alternates: liveAlternates,
       };
       setIsUnlockTransition(false);
