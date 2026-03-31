@@ -852,18 +852,30 @@ const OdaraScreen = () => {
         reason: a.reason ?? '',
       }));
 
-      // Fetch layer candidates from the table (context-independent diversity scoring)
-      const excludeIds = [pick.fragrance_id, ...liveAlternates.map((a: any) => a.fragrance_id)];
-      const { data: layerRows } = await supabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords, projection')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .not('family_key', 'is', null)
-        .limit(20);
-
-      const newLayerModes = pickDiverseLayerModes(layerRows ?? [], pick.family ?? '');
-      setLayerModes(newLayerModes);
-      setLayerFragrance(newLayerModes.balance ?? null);
+      // Use layer from backend response as source of truth
+      const rpcLayer = result.layer;
+      if (rpcLayer && rpcLayer.fragrance_id) {
+        const layerEntry = {
+          id: rpcLayer.fragrance_id,
+          name: rpcLayer.name,
+          brand: rpcLayer.brand ?? null,
+          family_key: rpcLayer.family ?? null,
+          notes: rpcLayer.notes ?? null,
+          accords: rpcLayer.accords ?? null,
+          projection: rpcLayer.projection ?? 5,
+        };
+        const singleLayerMode: LayerModes = {
+          balance: layerEntry,
+          bold: layerEntry,
+          smooth: layerEntry,
+          wild: layerEntry,
+        };
+        setLayerModes(singleLayerMode);
+        setLayerFragrance(layerEntry);
+      } else {
+        setLayerModes({ balance: null, bold: null, smooth: null, wild: null });
+        setLayerFragrance(null);
+      }
       setSelectedMood('balance');
 
       const liveOracle: OracleData = {
@@ -873,7 +885,12 @@ const OdaraScreen = () => {
           family: pick.family ?? '',
           reason: pick.reason ?? pick.brand ?? '',
         },
-        layer: null,
+        layer: rpcLayer ? {
+          fragrance_id: rpcLayer.fragrance_id,
+          name: rpcLayer.name,
+          family: rpcLayer.family ?? '',
+          reason: rpcLayer.brand ?? '',
+        } : null,
         alternates: liveAlternates,
       };
       setIsUnlockTransition(false);
