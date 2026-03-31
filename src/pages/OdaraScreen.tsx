@@ -62,6 +62,7 @@ interface OracleData {
     name: string;
     family: string;
     reason: string;
+    brand?: string;
   };
   layer?: { fragrance_id: string; name: string; family: string; reason: string } | null;
   alternates?: {
