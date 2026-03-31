@@ -1013,8 +1013,7 @@ const OdaraScreen = () => {
         const { data: rpcResult, error: rpcErr } = await supabase.rpc("get_todays_oracle_v3", rpcParams);
 
         if (rpcErr) throw rpcErr;
-
-        const result = (Array.isArray(rpcResult) ? rpcResult[0] : rpcResult) as OracleData | null;
+        const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
         const pick = result?.today_pick;
 
         if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
@@ -1030,7 +1029,7 @@ const OdaraScreen = () => {
         setMainAccords(pick.accords ?? null);
         setMainProjection(pick.projection ?? null);
 
-        const liveAlternates = ((result?.alternates ?? []) as NonNullable<OracleData["alternates"]>).map((a) => ({
+        const liveAlternates = (result.alternates ?? []).map((a: any) => ({
           fragrance_id: a.fragrance_id,
           name: a.name,
           family: a.family ?? "",
