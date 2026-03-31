@@ -63,7 +63,7 @@ interface OracleData {
     family: string;
     reason: string;
   };
-  layer?: Record<LayerMood, LayerOption> | null;
+  layer?: { fragrance_id: string; name: string; family: string; reason: string } | null;
   alternates?: {
     fragrance_id?: string;
     name: string;
