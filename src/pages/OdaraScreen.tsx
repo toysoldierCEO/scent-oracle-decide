@@ -62,6 +62,7 @@ interface OracleData {
     name: string;
     family: string;
     reason: string;
+    brand?: string;
   };
   layer?: { fragrance_id: string; name: string; family: string; reason: string } | null;
   alternates?: {
@@ -889,14 +890,15 @@ const OdaraScreen = () => {
           fragrance_id: pick.fragrance_id,
           name: pick.name,
           family: pick.family ?? '',
-          reason: pick.reason ?? pick.brand ?? '',
+          reason: pick.reason ?? '',
+          brand: pick.brand ?? '',
         },
         layer: rpcLayer
           ? {
               fragrance_id: rpcLayer.fragrance_id,
               name: rpcLayer.name,
               family: rpcLayer.family ?? '',
-              reason: rpcLayer.brand ?? '',
+              reason: rpcLayer.reason ?? '',
             }
           : null,
         alternates: liveAlternates,
@@ -1489,13 +1491,13 @@ const OdaraScreen = () => {
                       onContextMenu={(e) => e.preventDefault()}
                     >
                       <h1 className="text-4xl font-serif text-foreground text-center mb-1 leading-tight select-none">
-                        {getDisplayName(cardPick.name, cardPick.reason)}
+                        {getDisplayName(cardPick.name, cardPick.brand)}
                       </h1>
 
                       {/* Brand name — from live Supabase data */}
-                      {cardPick.reason && (
+                      {cardPick.brand && (
                         <p className="text-[11px] text-center tracking-[0.12em] text-muted-foreground/70 mb-1 select-none">
-                          {cardPick.reason}
+                          {cardPick.brand}
                         </p>
                       )}
 
@@ -1529,7 +1531,7 @@ const OdaraScreen = () => {
                     {isCenter && hasAnyLayerMode && (
                       <LayerCard
                         mainName={cardPick.name}
-                        mainBrand={cardPick.reason}
+                        mainBrand={cardPick.brand}
                         mainNotes={mainNotes}
                         mainFamily={cardPick.family ?? null}
                         mainProjection={mainProjection}
