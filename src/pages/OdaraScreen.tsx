@@ -1,6 +1,6 @@
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { odaraSupabase as supabase } from "@/lib/odara-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, LayerModeEntry } from "@/components/ModeSelector";
@@ -452,59 +452,17 @@ interface ForecastDay {
   dailySet: DailySet | null;
 }
 
+/** Build empty forecast day shells — actual data filled via RPC */
 function buildForecastDays(): ForecastDay[] {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
-
-  const weekFragrances: (FragranceEntry & { temperature: number; reason: string })[] = [
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440001', name: 'Valley of the Kings', family: 'oud-amber', reason: 'Dark amber lane fits your strongest scent identity.', temperature: 42, longevity_score: 0.9, projection_score: 0.85 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440003', name: 'Agar', family: 'woody-clean', reason: 'Clean woody undertones for a grounded midweek reset.', temperature: 55, longevity_score: 0.6, projection_score: 0.45 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440006', name: 'Noire Absolu', family: 'dark-leather', reason: 'Raw leather intensity for a commanding presence.', temperature: 38, longevity_score: 0.95, projection_score: 0.9 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440007', name: 'Santal Sérénade', family: 'sweet-gourmand', reason: 'Creamy sandalwood warmth for effortless comfort.', temperature: 62, longevity_score: 0.7, projection_score: 0.3 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440004', name: 'Hafez 1984', family: 'tobacco-boozy', reason: 'Smoky depth that lingers through the evening.', temperature: 45, longevity_score: 0.85, projection_score: 0.8 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440002', name: 'Mystere 28', family: 'fresh-blue', reason: 'Bright aquatic lift for a weekend refresh.', temperature: 72, longevity_score: 0.45, projection_score: 0.5 },
-    { fragrance_id: '550e8400-e29b-41d4-a716-446655440008', name: 'Amber Dusk', family: 'oud-amber', reason: 'Warm amber close to round out the week.', temperature: 48, longevity_score: 0.65, projection_score: 0.5 },
-  ];
-
-  const allEntries: FragranceEntry[] = weekFragrances.map(f => ({
-    fragrance_id: f.fragrance_id, name: f.name, family: f.family, reason: f.reason,
-    longevity_score: f.longevity_score, projection_score: f.projection_score,
-  }));
-
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    const frag = weekFragrances[i];
-    const baseEntry: FragranceEntry = {
-      fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason,
-      longevity_score: frag.longevity_score, projection_score: frag.projection_score,
-    };
-    const dailySet = recommendDailySet(baseEntry, allEntries, i);
-
-    let layerMap: Record<LayerMood, LayerOption> | null = null;
-    if (dailySet.is_layered && dailySet.layer) {
-      const layerOption: LayerOption = {
-        base_id: frag.fragrance_id, anchor_name: frag.name,
-        top_id: dailySet.layer.fragrance_id, top_name: dailySet.layer.name,
-        top: `Layer with ${dailySet.layer.name}`, mode: "balance",
-        reason: dailySet.reasoning, why_it_works: dailySet.reasoning,
-        anchor_sprays: 3, top_sprays: 1,
-        anchor_placement: "Neck, chest", top_placement: "Wrists",
-        strength_note: `A balanced blend of ${frag.name} and ${dailySet.layer.name}`,
-      };
-      layerMap = {
-        balance: layerOption,
-        bold: { ...layerOption, mode: "amplify", top_sprays: 2, top_placement: "Neck, wrists" },
-        smooth: { ...layerOption, mode: "soften", top_sprays: 1, anchor_sprays: 2 },
-        wild: { ...layerOption, mode: "contrast", top_sprays: 2, top_placement: "Clothes, hair" },
-      };
-    }
-
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return {
       label: dayNames[d.getDay()], day: d.getDate(), dateKey,
-      fragrance: { fragrance_id: frag.fragrance_id, name: frag.name, family: frag.family, reason: frag.reason },
-      temperature: frag.temperature, layer: layerMap, alternates: null, dailySet,
+      fragrance: null, temperature: 0, layer: null, alternates: null, dailySet: null,
     };
   });
 }
@@ -798,7 +756,8 @@ const OdaraScreen = () => {
 
   const getUserId = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    return user?.id ?? "00000000-0000-0000-0000-000000000000";
+    if (!user?.id) throw new Error("Not authenticated — please sign in.");
+    return user.id;
   }, []);
 
   const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string, wearDate?: string) => {
@@ -822,7 +781,7 @@ const OdaraScreen = () => {
         p_user_id: userId,
         p_temperature: tempVal,
         p_context: contextVal,
-        p_brand: null,
+        p_brand: "Alexandria",
         p_wear_date: dateForRpc,
       } as any;
 
