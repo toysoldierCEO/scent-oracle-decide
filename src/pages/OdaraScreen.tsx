@@ -722,7 +722,7 @@ const OdaraScreen = () => {
   const LOCK_THRESHOLD = 12; // px before direction locks
 
   const effectiveTemperature = manualTemperatureOverride ?? liveTemperature ?? 40;
-  const forecastDays = useMemo(() => buildForecastDays(), []);
+  const [forecastDays, setForecastDays] = useState<ForecastDay[]>(() => buildForecastDays());
   // Derived selected date key — used everywhere instead of toDateKey(new Date())
   const selectedDateKey = forecastDays[selectedForecastDay]?.dateKey ?? toDateKey(new Date());
 
