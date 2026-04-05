@@ -844,7 +844,11 @@ const OdaraScreen = () => {
         return;
       }
 
-      console.log('[ODARA] Oracle RPC result:', result);
+      console.log('[ODARA DEBUG] RPC params:', rpcParams);
+      console.log('[ODARA DEBUG] raw RPC result:', result);
+      console.log('[ODARA DEBUG] today_pick:', pick?.name, 'brand:', pick?.brand);
+      console.log('[ODARA DEBUG] layer:', result.layer?.name);
+      console.log('[ODARA DEBUG] alternates:', (result.alternates ?? []).map((a: any) => a.name));
 
       if (!pick) throw new Error('No fragrance found for this context');
 
