@@ -756,9 +756,56 @@ const OdaraScreen = () => {
 
   const getUserId = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('[ODARA DEBUG] authenticated user id:', user?.id ?? 'NONE');
     if (!user?.id) throw new Error("Not authenticated — please sign in.");
     return user.id;
   }, []);
+
+  // Hydrate forecast strip from live RPC on mount
+  useEffect(() => {
+    let cancelled = false;
+    const hydrateForecast = async () => {
+      try {
+        const userId = await getUserId();
+        const temp = effectiveTemperature;
+        const shells = buildForecastDays();
+        const hydrated = await Promise.all(
+          shells.map(async (day) => {
+            const { data, error } = await supabase.rpc('get_todays_oracle_v3', {
+              p_user_id: userId,
+              p_temperature: temp,
+              p_context: 'daily',
+              p_brand: 'Alexandria',
+              p_wear_date: day.dateKey,
+            } as any);
+            if (error || !data) return day;
+            const r = data as any;
+            const pick = r.today_pick;
+            if (!pick) return day;
+            return {
+              ...day,
+              fragrance: {
+                fragrance_id: pick.fragrance_id,
+                name: pick.name,
+                family: pick.family ?? '',
+                reason: pick.reason ?? '',
+              },
+              temperature: temp,
+              alternates: r.alternates ?? null,
+            };
+          })
+        );
+        if (!cancelled) {
+          console.log('[ODARA DEBUG] forecast hydrated from RPC:', hydrated.map(d => d.fragrance?.name));
+          setForecastDays(hydrated);
+        }
+      } catch (e) {
+        console.warn('[ODARA] forecast hydration failed (auth?):', e);
+      }
+    };
+    hydrateForecast();
+    return () => { cancelled = true; };
+  }, [effectiveTemperature, getUserId]);
 
   const fetchOracle = useCallback(async (ctx?: string, temp?: number, excludeId?: string, wearDate?: string) => {
     const contextVal = ctx ?? selectedContext ?? "daily";
