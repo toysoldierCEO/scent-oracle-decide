@@ -640,6 +640,9 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 }
 
 const OdaraScreen = () => {
+  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_A';
+  console.log('[ODARA BUILD]', ODARA_DEBUG_BUILD);
+  console.log('[ODARA DEBUG] component render start');
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [mainAccords, setMainAccords] = useState<string[] | null>(null);
@@ -769,23 +772,36 @@ const OdaraScreen = () => {
   useEffect(() => {
     let cancelled = false;
     const hydrateForecast = async () => {
+      console.log('[ODARA DEBUG] before forecast hydration', {
+        build: ODARA_DEBUG_BUILD,
+        effectiveTemperature,
+      });
       try {
         const userId = await getUserId();
         const temp = effectiveTemperature;
         const shells = buildForecastDays();
+        console.log('[ODARA DEBUG] forecast shells before hydration', shells);
         const hydrated = await Promise.all(
           shells.map(async (day) => {
-            const { data, error } = await supabase.rpc('get_todays_oracle_v3', {
+            const params = {
               p_user_id: userId,
               p_temperature: temp,
               p_context: 'daily',
               p_brand: 'Alexandria',
               p_wear_date: day.dateKey,
-            } as any);
-            if (error || !data) return day;
+            } as any;
+            console.log('[ODARA DEBUG] forecast rpc params', params);
+            const { data, error } = await supabase.rpc('get_todays_oracle_v3', params);
+            if (error || !data) {
+              console.error('[ODARA DEBUG] forecast rpc failed for day', day.dateKey, { error, data });
+              return day;
+            }
             const r = data as any;
             const pick = r.today_pick;
-            if (!pick) return day;
+            if (!pick) {
+              console.error('[ODARA DEBUG] forecast rpc missing today_pick for day', day.dateKey, r);
+              return day;
+            }
             return {
               ...day,
               fragrance: {
@@ -804,6 +820,7 @@ const OdaraScreen = () => {
           setForecastDays(hydrated);
         }
       } catch (e) {
+        console.error('[ODARA DEBUG] forecast hydration catch full error:', e);
         console.warn('[ODARA] forecast hydration failed (auth?):', e);
       }
     };
@@ -818,6 +835,15 @@ const OdaraScreen = () => {
     const fetchId = ++latestFetchId.current;
 
     const dateKey = dateForRpc;
+    console.log('[ODARA DEBUG] before fetchOracle', {
+      build: ODARA_DEBUG_BUILD,
+      contextVal,
+      tempVal,
+      excludeId,
+      wearDate,
+      selectedDateKey,
+      fetchId,
+    });
     console.log('ODARA current context', contextVal);
     console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
     console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
@@ -917,11 +943,13 @@ const OdaraScreen = () => {
           : null,
         alternates: liveAlternates,
       };
+      console.log('[ODARA DEBUG] liveOracle mapped:', liveOracle);
       setIsUnlockTransition(false);
       setSelectionState("neutral");
       setOracle(liveOracle);
       setCardKey((k) => k + 1);
     } catch (e) {
+      console.error('[ODARA DEBUG] fetchOracle catch full error:', e);
       if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
         console.log('ODARA stale fetch error ignored for', contextVal);
         return;
@@ -933,7 +961,7 @@ const OdaraScreen = () => {
         setLoading(false);
       }
     }
-  }, [selectedContext, effectiveTemperature, getUserId]);
+  }, [selectedContext, effectiveTemperature, getUserId, selectedDateKey]);
 
   // Load a specific fragrance as main card by id (for alt tap)
   const loadFragranceById = useCallback(async (id: string) => {
@@ -1045,10 +1073,18 @@ const OdaraScreen = () => {
   useEffect(() => {
     const dateKey = selectedDateKey;
     const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
+    console.log('[ODARA DEBUG] boot effect start', {
+      build: ODARA_DEBUG_BUILD,
+      selectedContext,
+      selectedTemperature,
+      selectedDateKey,
+      hasLockedRecipe: !!recipe,
+    });
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
       return;
     }
+    console.log('[ODARA DEBUG] boot effect before fetchOracle');
     fetchOracle(selectedContext, selectedTemperature);
   }, []);
 
@@ -1134,6 +1170,9 @@ const OdaraScreen = () => {
     return (
       <div className="dark">
         <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
+          <div className="pt-3 text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <header className="flex flex-col items-center pt-12 pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
@@ -1160,6 +1199,9 @@ const OdaraScreen = () => {
     return (
       <div className="dark">
         <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
@@ -1219,6 +1261,9 @@ const OdaraScreen = () => {
         />
         {/* Header + Context chips grouped */}
         <div className="flex flex-col items-center pt-[16px] mb-[14px]">
+          <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60 mb-2">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <header className="flex flex-col items-center pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
