@@ -112,19 +112,6 @@ const Index = () => {
             {isSignUp ? 'Create Account' : 'Sign In'}
           </button>
 
-          <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px bg-border/10" />
-            <span className="text-[11px] text-muted-foreground/50">or</span>
-            <div className="flex-1 h-px bg-border/10" />
-          </div>
-
-          <button
-            onClick={handleGoogle} disabled={loading}
-            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all"
-          >
-            Continue with Google
-          </button>
-
           {error && (
             <p className={`text-xs text-center ${error.startsWith('Check') ? 'text-green-400' : 'text-red-400'}`}>{error}</p>
           )}
