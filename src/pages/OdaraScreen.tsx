@@ -1073,10 +1073,18 @@ const OdaraScreen = () => {
   useEffect(() => {
     const dateKey = selectedDateKey;
     const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
+    console.log('[ODARA DEBUG] boot effect start', {
+      build: ODARA_DEBUG_BUILD,
+      selectedContext,
+      selectedTemperature,
+      selectedDateKey,
+      hasLockedRecipe: !!recipe,
+    });
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
       return;
     }
+    console.log('[ODARA DEBUG] boot effect before fetchOracle');
     fetchOracle(selectedContext, selectedTemperature);
   }, []);
 
