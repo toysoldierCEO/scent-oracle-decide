@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 
-const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V1';
+const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
@@ -22,11 +21,11 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
       setAuthLoading(false);
     });
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    odaraSupabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
       setAuthLoading(false);
     });
@@ -41,7 +40,7 @@ const Index = () => {
       setOracleError(null);
       try {
         const today = new Date().toISOString().split('T')[0];
-        const { data, error: rpcError } = await supabase.rpc('get_todays_oracle_v3', {
+        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
           p_user_id: user.id,
           p_temperature: 75,
           p_context: selectedContext,
@@ -64,27 +63,16 @@ const Index = () => {
     setLoading(true);
     try {
       if (isSignUp) {
-        const { error: err } = await supabase.auth.signUp({ email: email.trim(), password: password.trim() });
+        const { error: err } = await odaraSupabase.auth.signUp({ email: email.trim(), password: password.trim() });
         if (err) { setError(err.message); } else { setError('Check your email to confirm your account.'); }
       } else {
-        const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
+        const { error: err } = await odaraSupabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
         if (err) setError(err.message);
       }
     } finally { setLoading(false); }
   };
 
-  const handleGoogle = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
-      if (result.error) {
-        setError(result.error instanceof Error ? result.error.message : String(result.error));
-      }
-    } finally { setLoading(false); }
-  };
-
-  const handleSignOut = async () => { await supabase.auth.signOut(); };
+  const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
 
   // Auth loading
   if (authLoading) {
@@ -122,19 +110,6 @@ const Index = () => {
             className="bg-foreground text-background rounded-lg py-2.5 text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-all"
           >
             {isSignUp ? 'Create Account' : 'Sign In'}
-          </button>
-
-          <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px bg-border/10" />
-            <span className="text-[11px] text-muted-foreground/50">or</span>
-            <div className="flex-1 h-px bg-border/10" />
-          </div>
-
-          <button
-            onClick={handleGoogle} disabled={loading}
-            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all"
-          >
-            Continue with Google
           </button>
 
           {error && (
