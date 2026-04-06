@@ -141,7 +141,7 @@ const Index = () => {
             onClick={handleGoogle} disabled={loading}
             className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all"
           >
-            Continue with Google
+            {isEditorPreview ? 'Open shared preview to sign in with Google' : 'Continue with Google'}
           </button>
 
           {error && (
