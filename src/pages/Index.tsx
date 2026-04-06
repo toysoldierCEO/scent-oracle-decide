@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
 
 const ODARA_DEBUG_BUILD = 'ODARA_AUTH_GATE_V3';
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -18,6 +24,37 @@ const Index = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleEmailAuth = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        const { error: err } = await supabase.auth.signUp({ email: email.trim(), password: password.trim() });
+        if (err) { setError(err.message); } else { setError('Check your email to confirm your account.'); }
+      } else {
+        const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
+        if (err) setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: window.location.origin,
+      });
+      if (result.error) {
+        setError(result.error instanceof Error ? result.error.message : String(result.error));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -36,7 +73,54 @@ const Index = () => {
       <div style={{ background: '#0a0a0a', color: '#e0e0e0', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui', padding: 24 }}>
         <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>{ODARA_DEBUG_BUILD}</p>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>ODARA</h1>
-        <p style={{ fontSize: 14, color: '#888' }}>Sign in to access your scent profile</p>
+        <p style={{ fontSize: 14, color: '#888', marginBottom: 24 }}>{isSignUp ? 'Create your account' : 'Sign in to access your scent profile'}</p>
+
+        <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={{ background: '#161616', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', color: '#e0e0e0', fontSize: 14, outline: 'none' }}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            style={{ background: '#161616', border: '1px solid #333', borderRadius: 8, padding: '10px 14px', color: '#e0e0e0', fontSize: 14, outline: 'none' }}
+          />
+          <button
+            onClick={handleEmailAuth}
+            disabled={loading || !email.trim() || !password.trim()}
+            style={{ background: '#fff', color: '#0a0a0a', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.5 : 1 }}
+          >
+            {isSignUp ? 'Create Account' : 'Sign In'}
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+            <div style={{ flex: 1, height: 1, background: '#333' }} />
+            <span style={{ fontSize: 11, color: '#666' }}>or</span>
+            <div style={{ flex: 1, height: 1, background: '#333' }} />
+          </div>
+
+          <button
+            onClick={handleGoogle}
+            disabled={loading}
+            style={{ background: '#161616', color: '#e0e0e0', border: '1px solid #333', borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 500, cursor: 'pointer', opacity: loading ? 0.5 : 1 }}
+          >
+            Continue with Google
+          </button>
+
+          {error && <p style={{ fontSize: 12, color: error.startsWith('Check') ? '#6a6' : '#e55', textAlign: 'center' }}>{error}</p>}
+
+          <p style={{ fontSize: 13, color: '#888', textAlign: 'center', marginTop: 8 }}>
+            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+            <span onClick={() => { setIsSignUp(!isSignUp); setError(''); }} style={{ color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>
+              {isSignUp ? 'Sign in' : 'Sign up'}
+            </span>
+          </p>
+        </div>
       </div>
     );
   }
