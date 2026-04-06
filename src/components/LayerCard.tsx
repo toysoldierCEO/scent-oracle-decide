@@ -45,7 +45,8 @@ export const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: st
 const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
 
 /** Display-only name shortening */
-function getDisplayName(name: string, brand?: string | null): string {
+function getDisplayName(name: string | null | undefined, brand?: string | null): string {
+  if (!name) return 'Unknown';
   let display = name
     .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, '')
     .trim();
