@@ -1181,6 +1181,37 @@ const OdaraScreen = () => {
 
   const isBusy = actionState !== "idle";
 
+  // Auth loading
+  if (authLoading) {
+    return (
+      <div className="dark">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
+          <p className="text-sm text-muted-foreground">Checking authentication…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Signed-out state
+  if (!authUser) {
+    return (
+      <div className="dark">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
+          <p className="text-sm text-muted-foreground">Sign in to access your scent profile</p>
+          <button
+            onClick={() => { /* TODO: wire to real sign-in flow */ }}
+            className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
+            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Loading skeleton
   if (loading) {
     return (
