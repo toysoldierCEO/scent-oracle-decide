@@ -40,7 +40,7 @@ const Index = () => {
       setOracleError(null);
       try {
         const today = new Date().toISOString().split('T')[0];
-        const { data, error: rpcError } = await supabase.rpc('get_todays_oracle_v3', {
+        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
           p_user_id: user.id,
           p_temperature: 75,
           p_context: selectedContext,
