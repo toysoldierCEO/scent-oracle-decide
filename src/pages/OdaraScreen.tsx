@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
+import LayerCard from "@/components/LayerCard";
+import type { LayerMood, LayerModes, InteractionType } from "@/components/ModeSelector";
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -63,7 +66,6 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
-const LAYER_MOODS = ["balance", "bold", "smooth", "wild"] as const;
 
 function getDisplayName(name: string | null | undefined, brand?: string | null): string {
   if (!name) return 'Unknown';
@@ -137,11 +139,45 @@ function getTodayLabel() {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
+/** Build LayerModes from a single oracle layer (same fragrance for all 4 moods) */
+function buildLayerModes(layer: OracleLayer): LayerModes {
+  const interactionTypes: Record<string, InteractionType> = {
+    balance: 'balance',
+    bold: 'amplify',
+    smooth: 'balance',
+    wild: 'contrast',
+  };
+  const entry = (mood: string) => ({
+    id: layer.fragrance_id,
+    name: layer.name,
+    brand: layer.brand,
+    family_key: layer.family,
+    notes: layer.notes,
+    accords: layer.accords,
+    interactionType: interactionTypes[mood] as InteractionType,
+    reason: layer.reason || '',
+    why_it_works: '',
+    projection: null,
+  });
+  return {
+    balance: entry('balance'),
+    bold: entry('bold'),
+    smooth: entry('smooth'),
+    wild: entry('wild'),
+  };
+}
+
 const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedContext, onContextChange }: OdaraScreenProps) => {
   const pick = oracle?.today_pick;
   const layer = oracle?.layer;
   const alts = oracle?.alternates ?? [];
   const forecastDays = buildForecastShells();
+
+  // Interactive state
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [selectedRatio, setSelectedRatio] = useState('1:1');
+  const [layerExpanded, setLayerExpanded] = useState(false);
+  const [selectedAltIndex, setSelectedAltIndex] = useState<number | null>(null);
 
   const familyKey = pick?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
@@ -150,26 +186,23 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
 
   const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
 
-  const layerFamilyKey = layer?.family ?? '';
-  const layerTint = FAMILY_TINTS[layerFamilyKey] ?? DEFAULT_TINT;
-  const layerColor = FAMILY_COLORS[layerFamilyKey] ?? '#888';
-  const layerLabel = FAMILY_LABELS[layerFamilyKey] ?? layerFamilyKey.toUpperCase();
-  const layerAccords = layer?.accords ? normalizeNotes(layer.accords, 4) : [];
+  // Build layer modes from oracle layer
+  const layerModes = layer ? buildLayerModes(layer) : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-      <div className="max-w-md mx-auto px-4 pt-4 pb-6 flex flex-col gap-0">
+      <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
 
-        {/* Build marker - tiny */}
-        <span className="text-[8px] tracking-[0.15em] uppercase text-muted-foreground/30 mb-3">{ODARA_DEBUG_BUILD}</span>
+        {/* Build marker */}
+        <span className="text-[8px] tracking-[0.15em] uppercase text-muted-foreground/30 mb-2">{ODARA_DEBUG_BUILD}</span>
 
         {/* Context chips */}
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-1.5 mb-2">
           {CONTEXTS.map(ctx => (
             <button
               key={ctx}
               onClick={() => onContextChange(ctx)}
-              className={`text-[11px] uppercase tracking-[0.1em] px-4 py-1.5 rounded-full transition-all duration-200 ${
+              className={`text-[11px] uppercase tracking-[0.1em] px-3.5 py-1.5 rounded-full transition-all duration-200 ${
                 selectedContext === ctx
                   ? 'bg-foreground/10 text-foreground border border-foreground/20'
                   : 'text-muted-foreground/50 hover:text-foreground/70 border border-transparent'
@@ -196,7 +229,7 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
         {/* ── Unified main card ── */}
         {!oracleLoading && !oracleError && pick && (
           <div
-            className="rounded-[24px] px-[22px] pt-[16px] pb-[20px] flex flex-col relative overflow-hidden"
+            className="rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden"
             style={{
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
@@ -210,48 +243,45 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
             />
 
             {/* Top row: lock · date · temp */}
-            <div className="flex items-center mb-2 relative z-10">
-              <div className="flex items-center gap-3 flex-1">
-                {/* Lock icon */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/40">
+            <div className="flex items-center mb-1.5 relative z-10">
+              <div className="flex items-center gap-2.5 flex-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/40">
                   <rect x="3" y="11" width="18" height="11" rx="2" />
                   <path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
-                {/* Date */}
                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
                   {getTodayLabel()}
                 </span>
               </div>
-              {/* Temperature */}
               <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 83°
               </span>
             </div>
 
-            {/* Fragrance name — large serif */}
+            {/* Fragrance name */}
             <h2
-              className="text-[32px] leading-[1.1] font-normal text-foreground mt-1 mb-1 text-center"
+              className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
               {getDisplayName(pick.name, pick.brand)}
             </h2>
 
             {/* Brand */}
-            <span className="text-[13px] text-muted-foreground/60 text-center mb-2">
+            <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
               {pick.brand}
             </span>
 
-            {/* Family label — text, not pill */}
+            {/* Family label */}
             <span
-              className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-2"
+              className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
               style={{ color: familyColor }}
             >
               {familyLabel}
             </span>
 
-            {/* Accords — inline text */}
+            {/* Accords */}
             {pickAccords.length > 0 && (
-              <p className="text-[13px] text-center mb-4" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
+              <p className="text-[13px] text-center mb-3" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
                 <span className="text-foreground/50">accords: </span>
                 <span className="text-foreground/85 font-medium lowercase">
                   {pickAccords.join(', ')}
@@ -259,92 +289,71 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
               </p>
             )}
 
-            {/* ── Nested Layer Card ── */}
-            {layer && (
-              <div
-                className="rounded-[16px] px-5 py-4 flex flex-col items-center gap-1.5 mb-3 relative"
-                style={{
-                  background: `linear-gradient(170deg, ${layerTint.bg} 0%, rgba(12,8,6,0.95) 80%)`,
-                  border: `1px solid ${layerTint.border}`,
-                  boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4)',
-                }}
-              >
-                {/* Layer name */}
-                <span
-                  className="text-[20px] font-normal text-foreground text-center"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                >
-                  {getDisplayName(layer.name, layer.brand)}
-                </span>
-                {/* Layer brand */}
-                <span className="text-[11px] text-muted-foreground/50">{layer.brand}</span>
-                {/* Layer family pill */}
-                <span
-                  className="text-[10px] uppercase tracking-[0.12em] px-3 py-0.5 rounded-full mt-1"
-                  style={{
-                    background: `${layerColor}18`,
-                    color: layerColor,
-                    border: `1px solid ${layerColor}33`,
-                  }}
-                >
-                  {layerLabel}
-                </span>
-                {/* Layer accords */}
-                {layerAccords.length > 0 && (
-                  <p className="text-[12px] mt-1.5" style={{ letterSpacing: '0.06em' }}>
-                    <span className="text-foreground/40">accords: </span>
-                    <span className="text-foreground/75 font-medium lowercase">{layerAccords.join(', ')}</span>
-                  </p>
-                )}
-                {/* Mode chips */}
-                <div className="flex gap-1.5 mt-2">
-                  {LAYER_MOODS.map((mood, i) => (
-                    <span
-                      key={mood}
-                      className={`text-[10px] uppercase tracking-[0.12em] px-3 py-1 rounded-full ${
-                        i === 0
-                          ? 'text-foreground/90 border border-foreground/20 bg-foreground/8'
-                          : 'text-foreground/30'
-                      }`}
-                    >
-                      {mood}
-                    </span>
-                  ))}
-                </div>
-              </div>
+            {/* ── Layer Card (interactive) ── */}
+            {layer && layerModes && (
+              <LayerCard
+                mainName={pick.name}
+                mainBrand={pick.brand}
+                mainNotes={pick.notes}
+                mainFamily={pick.family}
+                mainProjection={null}
+                layerModes={layerModes}
+                selectedMood={selectedMood}
+                onSelectMood={setSelectedMood}
+                selectedRatio={selectedRatio}
+                onSelectRatio={setSelectedRatio}
+                isExpanded={layerExpanded}
+                onToggleExpand={() => setLayerExpanded(!layerExpanded)}
+              />
             )}
 
-            {/* ── Alternatives inside card ── */}
+            {/* ── Alternatives (interactive) ── */}
             {alts.length > 0 && (
-              <div className="flex flex-col items-center gap-3 mt-1">
+              <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
                 </span>
-                <div className="flex gap-2.5 overflow-x-auto w-full pb-1 px-1">
+                <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1">
                   {alts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
+                    const isSelected = selectedAltIndex === i;
                     return (
-                      <div
+                      <button
                         key={alt.fragrance_id || i}
-                        className="flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium text-foreground/90"
+                        onClick={() => setSelectedAltIndex(isSelected ? null : i)}
+                        className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 ${
+                          isSelected
+                            ? 'text-foreground scale-[1.03]'
+                            : 'text-foreground/70 hover:text-foreground/90 active:scale-95'
+                        }`}
                         style={{
-                          border: `1px solid ${altColor}44`,
-                          background: `${altColor}0A`,
+                          border: `1px solid ${isSelected ? `${altColor}88` : `${altColor}44`}`,
+                          background: isSelected ? `${altColor}20` : `${altColor}0A`,
+                          boxShadow: isSelected ? `0 0 12px ${altColor}25` : 'none',
                         }}
                       >
                         {getDisplayName(alt.name)}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
+                {/* Selected alternate detail */}
+                {selectedAltIndex !== null && alts[selectedAltIndex] && (
+                  <div className="w-full px-2 py-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <span className="text-[12px] text-foreground/80">{alts[selectedAltIndex].name}</span>
+                    {alts[selectedAltIndex].reason && (
+                      <p className="text-[11px] text-muted-foreground/60 mt-1 leading-relaxed">{alts[selectedAltIndex].reason}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* ── Forecast strip — separate panel ── */}
+        {/* ── Forecast strip ── */}
         <div
-          className="rounded-[16px] px-5 py-3 mt-3 flex flex-col items-center gap-2"
+          className="rounded-[16px] px-5 py-3 mt-2.5 flex flex-col items-center gap-2"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
@@ -367,10 +376,10 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
           </div>
         </div>
 
-        {/* Sign out — subtle */}
+        {/* Sign out */}
         <button
           onClick={onSignOut}
-          className="text-[10px] text-muted-foreground/30 mt-4 self-center hover:text-muted-foreground/60 transition-colors"
+          className="text-[10px] text-muted-foreground/30 mt-3 self-center hover:text-muted-foreground/60 transition-colors"
         >
           Sign out
         </button>
