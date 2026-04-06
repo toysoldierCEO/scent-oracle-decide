@@ -772,23 +772,36 @@ const OdaraScreen = () => {
   useEffect(() => {
     let cancelled = false;
     const hydrateForecast = async () => {
+      console.log('[ODARA DEBUG] before forecast hydration', {
+        build: ODARA_DEBUG_BUILD,
+        effectiveTemperature,
+      });
       try {
         const userId = await getUserId();
         const temp = effectiveTemperature;
         const shells = buildForecastDays();
+        console.log('[ODARA DEBUG] forecast shells before hydration', shells);
         const hydrated = await Promise.all(
           shells.map(async (day) => {
-            const { data, error } = await supabase.rpc('get_todays_oracle_v3', {
+            const params = {
               p_user_id: userId,
               p_temperature: temp,
               p_context: 'daily',
               p_brand: 'Alexandria',
               p_wear_date: day.dateKey,
-            } as any);
-            if (error || !data) return day;
+            } as any;
+            console.log('[ODARA DEBUG] forecast rpc params', params);
+            const { data, error } = await supabase.rpc('get_todays_oracle_v3', params);
+            if (error || !data) {
+              console.error('[ODARA DEBUG] forecast rpc failed for day', day.dateKey, { error, data });
+              return day;
+            }
             const r = data as any;
             const pick = r.today_pick;
-            if (!pick) return day;
+            if (!pick) {
+              console.error('[ODARA DEBUG] forecast rpc missing today_pick for day', day.dateKey, r);
+              return day;
+            }
             return {
               ...day,
               fragrance: {
@@ -807,6 +820,7 @@ const OdaraScreen = () => {
           setForecastDays(hydrated);
         }
       } catch (e) {
+        console.error('[ODARA DEBUG] forecast hydration catch full error:', e);
         console.warn('[ODARA] forecast hydration failed (auth?):', e);
       }
     };
