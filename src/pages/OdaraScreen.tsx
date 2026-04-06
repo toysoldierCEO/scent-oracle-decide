@@ -641,9 +641,25 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 }
 
 const OdaraScreen = () => {
-  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_A';
+  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_B';
   console.log('[ODARA BUILD]', ODARA_DEBUG_BUILD);
   console.log('[ODARA DEBUG] component render start');
+
+  // Auth state
+  const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ? { id: session.user.id } : null);
+      setAuthLoading(false);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ? { id: session.user.id } : null);
+      setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [mainAccords, setMainAccords] = useState<string[] | null>(null);
