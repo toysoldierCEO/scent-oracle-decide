@@ -782,12 +782,13 @@ const OdaraScreen = () => {
   useEffect(() => {
     let cancelled = false;
     const hydrateForecast = async () => {
+      const userId = getUserId();
+      if (!userId) return;
       console.log('[ODARA DEBUG] before forecast hydration', {
         build: ODARA_DEBUG_BUILD,
         effectiveTemperature,
       });
       try {
-        const userId = await getUserId();
         const temp = effectiveTemperature;
         const shells = buildForecastDays();
         console.log('[ODARA DEBUG] forecast shells before hydration', shells);
