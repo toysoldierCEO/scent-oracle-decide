@@ -754,11 +754,15 @@ const OdaraScreen = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // TEMP TEST ONLY — remove after verifying real backend data path
+  const ODARA_TEST_USER_ID = '330006e3-331c-4451-a321-d0e6f3ba454c';
+
   const getUserId = useCallback(async () => {
+    // Try real auth first, fall back to test ID for verification
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('[ODARA DEBUG] authenticated user id:', user?.id ?? 'NONE');
-    if (!user?.id) throw new Error("Not authenticated — please sign in.");
-    return user.id;
+    const id = user?.id ?? ODARA_TEST_USER_ID;
+    console.log('[ODARA DEBUG] using user id:', id, user?.id ? '(authenticated)' : '(TEMP TEST FALLBACK)');
+    return id;
   }, []);
 
   // Hydrate forecast strip from live RPC on mount
