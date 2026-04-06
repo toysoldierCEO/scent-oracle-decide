@@ -835,6 +835,15 @@ const OdaraScreen = () => {
     const fetchId = ++latestFetchId.current;
 
     const dateKey = dateForRpc;
+    console.log('[ODARA DEBUG] before fetchOracle', {
+      build: ODARA_DEBUG_BUILD,
+      contextVal,
+      tempVal,
+      excludeId,
+      wearDate,
+      selectedDateKey,
+      fetchId,
+    });
     console.log('ODARA current context', contextVal);
     console.log('ODARA found locked recipe', !!lockedRecipes.current[dateKey]?.[contextVal]);
     console.log('ODARA saved lock state', lockedRecipes.current[dateKey]?.[contextVal]?.lockState ?? 'neutral');
@@ -934,11 +943,13 @@ const OdaraScreen = () => {
           : null,
         alternates: liveAlternates,
       };
+      console.log('[ODARA DEBUG] liveOracle mapped:', liveOracle);
       setIsUnlockTransition(false);
       setSelectionState("neutral");
       setOracle(liveOracle);
       setCardKey((k) => k + 1);
     } catch (e) {
+      console.error('[ODARA DEBUG] fetchOracle catch full error:', e);
       if (fetchId !== latestFetchId.current || selectedContextRef.current !== contextVal) {
         console.log('ODARA stale fetch error ignored for', contextVal);
         return;
@@ -950,7 +961,7 @@ const OdaraScreen = () => {
         setLoading(false);
       }
     }
-  }, [selectedContext, effectiveTemperature, getUserId]);
+  }, [selectedContext, effectiveTemperature, getUserId, selectedDateKey]);
 
   // Load a specific fragrance as main card by id (for alt tap)
   const loadFragranceById = useCallback(async (id: string) => {
