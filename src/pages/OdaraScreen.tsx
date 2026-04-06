@@ -1084,6 +1084,7 @@ const OdaraScreen = () => {
 
   useEffect(() => {
     const dateKey = selectedDateKey;
+    if (!authUser) return; // Don't fetch without auth
     const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
     console.log('[ODARA DEBUG] boot effect start', {
       build: ODARA_DEBUG_BUILD,
@@ -1091,6 +1092,7 @@ const OdaraScreen = () => {
       selectedTemperature,
       selectedDateKey,
       hasLockedRecipe: !!recipe,
+      userId: authUser.id,
     });
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
@@ -1098,7 +1100,7 @@ const OdaraScreen = () => {
     }
     console.log('[ODARA DEBUG] boot effect before fetchOracle');
     fetchOracle(selectedContext, selectedTemperature);
-  }, []);
+  }, [authUser]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
