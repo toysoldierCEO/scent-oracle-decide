@@ -641,8 +641,52 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 }
 
 const OdaraScreen = () => {
-  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_B';
+  const ODARA_DEBUG_BUILD = 'ODARA_RENDER_TEST_V1';
   console.log('[ODARA BUILD]', ODARA_DEBUG_BUILD);
+
+  return (
+    <div className="dark">
+      <div className="min-h-screen bg-background flex flex-col items-center px-6 py-8 gap-6">
+        {/* Build marker */}
+        <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60">
+          {ODARA_DEBUG_BUILD}
+        </div>
+
+        {/* Header */}
+        <header className="flex flex-col items-center gap-2">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA STATIC SHELL</span>
+          <span className="text-sm text-muted-foreground">Render test</span>
+        </header>
+
+        {/* Today card */}
+        <div className="w-full max-w-md rounded-[24px] px-6 py-5 flex flex-col gap-3"
+          style={{ background: 'rgba(192,138,62,0.10)', border: '1px solid rgba(192,138,62,0.16)' }}>
+          <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Today's Pick</span>
+          <span className="text-2xl font-bold text-foreground">Karnak Temple</span>
+          <span className="text-sm text-muted-foreground">Alexandria Fragrances</span>
+          <span className="text-xs text-muted-foreground/70">oud-amber</span>
+          <span className="text-xs text-muted-foreground italic">Static render test only</span>
+        </div>
+
+        {/* Layer row */}
+        <div className="w-full max-w-md rounded-[16px] px-5 py-4 flex flex-col gap-2"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Layer</span>
+          <span className="text-lg font-semibold text-foreground">Barricade</span>
+        </div>
+
+        {/* Alternate row */}
+        <div className="w-full max-w-md rounded-[16px] px-5 py-4 flex flex-col gap-2"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Alternate</span>
+          <span className="text-lg font-semibold text-foreground">Miraculous Oud</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default OdaraScreen;
   console.log('[ODARA DEBUG] component render start');
 
   // Auth state
