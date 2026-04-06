@@ -63,27 +63,16 @@ const Index = () => {
     setLoading(true);
     try {
       if (isSignUp) {
-        const { error: err } = await supabase.auth.signUp({ email: email.trim(), password: password.trim() });
+        const { error: err } = await odaraSupabase.auth.signUp({ email: email.trim(), password: password.trim() });
         if (err) { setError(err.message); } else { setError('Check your email to confirm your account.'); }
       } else {
-        const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
+        const { error: err } = await odaraSupabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
         if (err) setError(err.message);
       }
     } finally { setLoading(false); }
   };
 
-  const handleGoogle = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
-      if (result.error) {
-        setError(result.error instanceof Error ? result.error.message : String(result.error));
-      }
-    } finally { setLoading(false); }
-  };
-
-  const handleSignOut = async () => { await supabase.auth.signOut(); };
+  const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
 
   // Auth loading
   if (authLoading) {
