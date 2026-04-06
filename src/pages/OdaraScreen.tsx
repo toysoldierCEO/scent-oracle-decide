@@ -641,9 +641,25 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 }
 
 const OdaraScreen = () => {
-  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_A';
+  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_B';
   console.log('[ODARA BUILD]', ODARA_DEBUG_BUILD);
   console.log('[ODARA DEBUG] component render start');
+
+  // Auth state
+  const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ? { id: session.user.id } : null);
+      setAuthLoading(false);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ? { id: session.user.id } : null);
+      setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [mainAccords, setMainAccords] = useState<string[] | null>(null);
@@ -758,27 +774,21 @@ const OdaraScreen = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // TEMP TEST ONLY — remove after verifying real backend data path
-  const ODARA_TEST_USER_ID = '330006e3-331c-4451-a321-d0e6f3ba454c';
-
-  const getUserId = useCallback(async () => {
-    // Try real auth first, fall back to test ID for verification
-    const { data: { user } } = await supabase.auth.getUser();
-    const id = user?.id ?? ODARA_TEST_USER_ID;
-    console.log('[ODARA DEBUG] using user id:', id, user?.id ? '(authenticated)' : '(TEMP TEST FALLBACK)');
-    return id;
-  }, []);
+  const getUserId = useCallback((): string | null => {
+    return authUser?.id ?? null;
+  }, [authUser]);
 
   // Hydrate forecast strip from live RPC on mount
   useEffect(() => {
     let cancelled = false;
     const hydrateForecast = async () => {
+      const userId = getUserId();
+      if (!userId) return;
       console.log('[ODARA DEBUG] before forecast hydration', {
         build: ODARA_DEBUG_BUILD,
         effectiveTemperature,
       });
       try {
-        const userId = await getUserId();
         const temp = effectiveTemperature;
         const shells = buildForecastDays();
         console.log('[ODARA DEBUG] forecast shells before hydration', shells);
@@ -853,7 +863,8 @@ const OdaraScreen = () => {
     setError(false);
     setExitDirection(null);
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) { setError(true); setLoading(false); return; }
 
       const rpcParams = {
         p_user_id: userId,
@@ -1073,6 +1084,7 @@ const OdaraScreen = () => {
 
   useEffect(() => {
     const dateKey = selectedDateKey;
+    if (!authUser) return; // Don't fetch without auth
     const recipe = lockedRecipes.current[dateKey]?.[selectedContext];
     console.log('[ODARA DEBUG] boot effect start', {
       build: ODARA_DEBUG_BUILD,
@@ -1080,6 +1092,7 @@ const OdaraScreen = () => {
       selectedTemperature,
       selectedDateKey,
       hasLockedRecipe: !!recipe,
+      userId: authUser.id,
     });
     if (recipe) {
       restoreLockedRecipe(selectedContext, recipe);
@@ -1087,7 +1100,7 @@ const OdaraScreen = () => {
     }
     console.log('[ODARA DEBUG] boot effect before fetchOracle');
     fetchOracle(selectedContext, selectedTemperature);
-  }, []);
+  }, [authUser]);
 
   const handleAccept = useCallback(async () => {
     if (actionState !== "idle") return;
@@ -1097,7 +1110,8 @@ const OdaraScreen = () => {
 
     setActionState("accepting");
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) return;
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: entry.fragrance_id,
@@ -1127,7 +1141,8 @@ const OdaraScreen = () => {
     }]);
     
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) return;
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: oracle.today_pick.fragrance_id,
@@ -1165,6 +1180,37 @@ const OdaraScreen = () => {
   }, [actionState, loadFragranceById, selectionState]);
 
   const isBusy = actionState !== "idle";
+
+  // Auth loading
+  if (authLoading) {
+    return (
+      <div className="dark">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
+          <p className="text-sm text-muted-foreground">Checking authentication…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Signed-out state
+  if (!authUser) {
+    return (
+      <div className="dark">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
+          <p className="text-sm text-muted-foreground">Sign in to access your scent profile</p>
+          <button
+            onClick={() => { /* TODO: wire to real sign-in flow */ }}
+            className="text-xs text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors duration-300 px-6 py-3 rounded-full"
+            style={{ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.1)" }}
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Loading skeleton
   if (loading) {
