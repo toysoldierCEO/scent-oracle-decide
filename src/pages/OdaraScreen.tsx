@@ -640,6 +640,9 @@ function pickDiverseLayerModes(candidates: any[], mainFamily: string): LayerMode
 }
 
 const OdaraScreen = () => {
+  const ODARA_DEBUG_BUILD = 'ODARA_BUILD_2026_04_05_A';
+  console.log('[ODARA BUILD]', ODARA_DEBUG_BUILD);
+  console.log('[ODARA DEBUG] component render start');
   const [oracle, setOracle] = useState<OracleData | null>(null);
   const [mainNotes, setMainNotes] = useState<string[] | null>(null);
   const [mainAccords, setMainAccords] = useState<string[] | null>(null);
