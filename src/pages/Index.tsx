@@ -21,11 +21,11 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
       setAuthLoading(false);
     });
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    odaraSupabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
       setAuthLoading(false);
     });
