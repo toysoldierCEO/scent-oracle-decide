@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, InteractionType } from "@/components/ModeSelector";
@@ -7,21 +7,11 @@ const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
 /* ── Fragrance family → color mapping ── */
 const FAMILY_COLORS: Record<string, string> = {
-  "oud-amber": "#D4A373",
-  "fresh-blue": "#4DA3FF",
-  "tobacco-boozy": "#8B5E3C",
-  "sweet-gourmand": "#C77DFF",
-  "dark-leather": "#5A3A2E",
-  "woody-clean": "#7FAF8E",
-  "citrus-cologne": "#F4D35E",
-  "floral-musk": "#C4A0B9",
-  "citrus-aromatic": "#B8C94E",
-  "fresh-citrus": "#F4D35E",
-  "spicy-warm": "#D4713B",
-  "fresh-aquatic": "#5BC0DE",
-  "earthy-patchouli": "#8B7355",
-  "aromatic-fougere": "#6B8E6B",
-  "floral-rich": "#D4839E",
+  "oud-amber": "#D4A373", "fresh-blue": "#4DA3FF", "tobacco-boozy": "#8B5E3C",
+  "sweet-gourmand": "#C77DFF", "dark-leather": "#5A3A2E", "woody-clean": "#7FAF8E",
+  "citrus-cologne": "#F4D35E", "floral-musk": "#C4A0B9", "citrus-aromatic": "#B8C94E",
+  "fresh-citrus": "#F4D35E", "spicy-warm": "#D4713B", "fresh-aquatic": "#5BC0DE",
+  "earthy-patchouli": "#8B7355", "aromatic-fougere": "#6B8E6B", "floral-rich": "#D4839E",
   "green-earthy": "#6B8E5A",
 };
 
@@ -47,22 +37,12 @@ const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string }>
 const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)" };
 
 const FAMILY_LABELS: Record<string, string> = {
-  "oud-amber": "OUD-AMBER",
-  "fresh-blue": "FRESH-BLUE",
-  "woody-clean": "WOODY-CLEAN",
-  "sweet-gourmand": "SWEET-GOURMAND",
-  "dark-leather": "DARK-LEATHER",
-  "tobacco-boozy": "TOBACCO-BOOZY",
-  "floral-musk": "FLORAL-MUSK",
-  "citrus-aromatic": "CITRUS-AROMATIC",
-  "citrus-cologne": "CITRUS-COLOGNE",
-  "fresh-citrus": "FRESH-CITRUS",
-  "spicy-warm": "SPICY-WARM",
-  "fresh-aquatic": "FRESH-AQUATIC",
-  "earthy-patchouli": "EARTHY-PATCHOULI",
-  "aromatic-fougere": "AROMATIC-FOUGÈRE",
-  "floral-rich": "FLORAL-RICH",
-  "green-earthy": "GREEN-EARTHY",
+  "oud-amber": "OUD-AMBER", "fresh-blue": "FRESH-BLUE", "woody-clean": "WOODY-CLEAN",
+  "sweet-gourmand": "SWEET-GOURMAND", "dark-leather": "DARK-LEATHER", "tobacco-boozy": "TOBACCO-BOOZY",
+  "floral-musk": "FLORAL-MUSK", "citrus-aromatic": "CITRUS-AROMATIC", "citrus-cologne": "CITRUS-COLOGNE",
+  "fresh-citrus": "FRESH-CITRUS", "spicy-warm": "SPICY-WARM", "fresh-aquatic": "FRESH-AQUATIC",
+  "earthy-patchouli": "EARTHY-PATCHOULI", "aromatic-fougere": "AROMATIC-FOUGÈRE",
+  "floral-rich": "FLORAL-RICH", "green-earthy": "GREEN-EARTHY",
 };
 
 const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
@@ -81,30 +61,18 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
 
 /* ── Types ── */
 export interface OraclePick {
-  fragrance_id: string;
-  name: string;
-  family: string;
-  reason: string;
-  brand: string;
-  notes: string[];
-  accords: string[];
+  fragrance_id: string; name: string; family: string; reason: string;
+  brand: string; notes: string[]; accords: string[];
 }
 
 export interface OracleLayer {
-  fragrance_id: string;
-  name: string;
-  family: string;
-  brand: string;
-  notes: string[];
-  accords: string[];
-  reason: string;
+  fragrance_id: string; name: string; family: string; brand: string;
+  notes: string[]; accords: string[]; reason: string;
 }
 
 export interface OracleAlternate {
-  fragrance_id: string;
-  name: string;
-  family: string;
-  reason: string;
+  fragrance_id: string; name: string; family: string; reason: string;
+  brand?: string; notes?: string[]; accords?: string[];
 }
 
 export interface OracleResult {
@@ -120,34 +88,44 @@ interface OdaraScreenProps {
   onSignOut: () => void;
   selectedContext: string;
   onContextChange: (ctx: string) => void;
+  selectedDate: string;
+  onDateChange: (date: string) => void;
+  onAccept: (fragranceId: string) => Promise<void>;
+  onSkip: (fragranceId: string) => Promise<void>;
 }
 
-/* ── Forecast placeholder ── */
-function buildForecastShells() {
+/* ── Forecast days ── */
+function buildForecastDays(selectedDate: string) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    return { label: dayNames[d.getDay()], day: d.getDate(), isToday: i === 0 };
+    const dateStr = d.toISOString().split('T')[0];
+    return {
+      label: dayNames[d.getDay()],
+      day: d.getDate(),
+      dateStr,
+      isToday: dateStr === todayStr,
+      isSelected: dateStr === selectedDate,
+    };
   });
 }
 
-function getTodayLabel() {
-  const d = new Date();
+function getDateLabel(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00');
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-/** Build LayerModes from a single oracle layer (same fragrance for all 4 moods) */
-function buildLayerModes(layer: OracleLayer): LayerModes {
+/** Build LayerModes: balance→layer, bold/smooth/wild→alternates when available */
+function buildLayerModes(layer: OracleLayer, alternates: OracleAlternate[]): LayerModes {
   const interactionTypes: Record<string, InteractionType> = {
-    balance: 'balance',
-    bold: 'amplify',
-    smooth: 'balance',
-    wild: 'contrast',
+    balance: 'balance', bold: 'amplify', smooth: 'balance', wild: 'contrast',
   };
-  const entry = (mood: string) => ({
+
+  const fromLayer = (mood: string) => ({
     id: layer.fragrance_id,
     name: layer.name,
     brand: layer.brand,
@@ -159,19 +137,49 @@ function buildLayerModes(layer: OracleLayer): LayerModes {
     why_it_works: '',
     projection: null,
   });
+
+  const fromAlt = (alt: OracleAlternate, mood: string) => ({
+    id: alt.fragrance_id,
+    name: alt.name,
+    brand: alt.brand ?? null,
+    family_key: alt.family,
+    notes: alt.notes ?? [],
+    accords: alt.accords ?? [],
+    interactionType: interactionTypes[mood] as InteractionType,
+    reason: alt.reason || '',
+    why_it_works: '',
+    projection: null,
+  });
+
+  // Map moods to different fragrances: balance→layer, others→distinct alternates
+  // Only use alternates that differ from the layer fragrance
+  const distinctAlts = alternates.filter(a => a.fragrance_id !== layer.fragrance_id);
+
   return {
-    balance: entry('balance'),
-    bold: entry('bold'),
-    smooth: entry('smooth'),
-    wild: entry('wild'),
+    balance: fromLayer('balance'),
+    bold: distinctAlts[0] ? fromAlt(distinctAlts[0], 'bold') : fromLayer('bold'),
+    smooth: distinctAlts[1] ? fromAlt(distinctAlts[1], 'smooth') : fromLayer('smooth'),
+    wild: distinctAlts[2] ? fromAlt(distinctAlts[2], 'wild') : fromLayer('wild'),
   };
 }
 
-const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedContext, onContextChange }: OdaraScreenProps) => {
+/* ── Lock state type ── */
+type LockState = 'neutral' | 'locked' | 'skipping';
+
+/* ── Gesture constants ── */
+const DIRECTION_LOCK_THRESHOLD = 12;
+const SWIPE_DISTANCE = 50;
+
+const OdaraScreen = ({
+  oracle, oracleLoading, oracleError, onSignOut,
+  selectedContext, onContextChange,
+  selectedDate, onDateChange,
+  onAccept, onSkip,
+}: OdaraScreenProps) => {
   const pick = oracle?.today_pick;
   const layer = oracle?.layer;
   const alts = oracle?.alternates ?? [];
-  const forecastDays = buildForecastShells();
+  const forecastDays = buildForecastDays(selectedDate);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -179,21 +187,86 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
   const [layerExpanded, setLayerExpanded] = useState(false);
   const [selectedAltIndex, setSelectedAltIndex] = useState<number | null>(null);
 
+  // Lock & gesture state
+  const [lockState, setLockState] = useState<LockState>('neutral');
+  const [lockPulse, setLockPulse] = useState(false);
+  const [cardTranslateY, setCardTranslateY] = useState(0);
+
+  // Touch refs
+  const touchRef = useRef<{ startX: number; startY: number; locked: 'v' | 'h' | null }>({ startX: 0, startY: 0, locked: null });
+
   const familyKey = pick?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
-
   const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
 
-  // Build layer modes from oracle layer
-  const layerModes = layer ? buildLayerModes(layer) : null;
+  // Build layer modes from oracle layer + alternates
+  const layerModes = layer ? buildLayerModes(layer, alts) : null;
+
+  // Lock icon color
+  const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
+
+  /* ── Gesture handlers ── */
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (lockState === 'locked') return; // no gestures when locked
+    const t = e.touches[0];
+    touchRef.current = { startX: t.clientX, startY: t.clientY, locked: null };
+  }, [lockState]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (lockState === 'locked') return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchRef.current.startX;
+    const dy = t.clientY - touchRef.current.startY;
+
+    // Direction lock
+    if (!touchRef.current.locked) {
+      if (Math.abs(dy) > DIRECTION_LOCK_THRESHOLD || Math.abs(dx) > DIRECTION_LOCK_THRESHOLD) {
+        touchRef.current.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+      } else return;
+    }
+
+    if (touchRef.current.locked === 'v') {
+      // Clamp vertical drag for visual feedback
+      const clamped = Math.max(-80, Math.min(80, dy));
+      setCardTranslateY(clamped);
+    }
+  }, [lockState]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (lockState === 'locked') return;
+    const dy = cardTranslateY;
+    setCardTranslateY(0);
+
+    if (touchRef.current.locked !== 'v') return;
+    if (!pick) return;
+
+    if (dy < -SWIPE_DISTANCE) {
+      // Swipe UP → lock
+      setLockState('locked');
+      setLockPulse(true);
+      setTimeout(() => setLockPulse(false), 400);
+      await onAccept(pick.fragrance_id);
+    } else if (dy > SWIPE_DISTANCE) {
+      // Swipe DOWN → skip
+      setLockState('skipping');
+      setTimeout(() => setLockState('neutral'), 600);
+      await onSkip(pick.fragrance_id);
+    }
+  }, [cardTranslateY, lockState, pick, onAccept, onSkip]);
+
+  // Unlock handler
+  const handleUnlock = useCallback(() => {
+    if (lockState === 'locked') {
+      setLockState('neutral');
+    }
+  }, [lockState]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
 
-        {/* Build marker */}
         <span className="text-[8px] tracking-[0.15em] uppercase text-muted-foreground/30 mb-2">{ODARA_DEBUG_BUILD}</span>
 
         {/* Context chips */}
@@ -226,15 +299,19 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
           </div>
         )}
 
-        {/* ── Unified main card ── */}
+        {/* ── Unified main card with gestures ── */}
         {!oracleLoading && !oracleError && pick && (
           <div
-            className="rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden"
+            className="rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden transition-transform duration-150"
             style={{
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
+              transform: `translateY(${cardTranslateY * 0.4}px)`,
             }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             {/* Glow orb */}
             <div
@@ -245,12 +322,28 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
             {/* Top row: lock · date · temp */}
             <div className="flex items-center mb-1.5 relative z-10">
               <div className="flex items-center gap-2.5 flex-1">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/40">
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0110 0v4" />
-                </svg>
+                <button onClick={handleUnlock} className="p-0.5 -ml-0.5">
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke={lockIconColor} strokeWidth="1.5"
+                    className="transition-colors duration-300"
+                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                  >
+                    {lockState === 'locked' ? (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0110 0v4" />
+                      </>
+                    ) : (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0110 0v4" />
+                      </>
+                    )}
+                  </svg>
+                </button>
                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {getTodayLabel()}
+                  {getDateLabel(selectedDate)}
                 </span>
               </div>
               <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
@@ -289,7 +382,7 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
               </p>
             )}
 
-            {/* ── Layer Card (interactive) ── */}
+            {/* ── Layer Card (interactive, mood-mapped) ── */}
             {layer && layerModes && (
               <LayerCard
                 mainName={pick.name}
@@ -299,11 +392,13 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
                 mainProjection={null}
                 layerModes={layerModes}
                 selectedMood={selectedMood}
-                onSelectMood={setSelectedMood}
+                onSelectMood={lockState !== 'locked' ? setSelectedMood : () => {}}
                 selectedRatio={selectedRatio}
                 onSelectRatio={setSelectedRatio}
                 isExpanded={layerExpanded}
                 onToggleExpand={() => setLayerExpanded(!layerExpanded)}
+                lockPulse={lockPulse}
+                locked={lockState === 'locked'}
               />
             )}
 
@@ -320,12 +415,15 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={() => setSelectedAltIndex(isSelected ? null : i)}
+                        onClick={() => {
+                          if (lockState === 'locked') return;
+                          setSelectedAltIndex(isSelected ? null : i);
+                        }}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 ${
                           isSelected
                             ? 'text-foreground scale-[1.03]'
                             : 'text-foreground/70 hover:text-foreground/90 active:scale-95'
-                        }`}
+                        } ${lockState === 'locked' && !isSelected ? 'opacity-30' : ''}`}
                         style={{
                           border: `1px solid ${isSelected ? `${altColor}88` : `${altColor}44`}`,
                           background: isSelected ? `${altColor}20` : `${altColor}0A`,
@@ -337,7 +435,6 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
                     );
                   })}
                 </div>
-                {/* Selected alternate detail */}
                 {selectedAltIndex !== null && alts[selectedAltIndex] && (
                   <div className="w-full px-2 py-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <span className="text-[12px] text-foreground/80">{alts[selectedAltIndex].name}</span>
@@ -348,10 +445,20 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
                 )}
               </div>
             )}
+
+            {/* Lock state indicator */}
+            {lockState === 'locked' && (
+              <div className="flex justify-center mt-2">
+                <span className="text-[9px] uppercase tracking-[0.18em] px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}>
+                  Locked · tap lock to undo
+                </span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Forecast strip ── */}
+        {/* ── Clickable Forecast strip ── */}
         <div
           className="rounded-[16px] px-5 py-3 mt-2.5 flex flex-col items-center gap-2"
           style={{
@@ -363,16 +470,39 @@ const OdaraScreen = ({ oracle, oracleLoading, oracleError, onSignOut, selectedCo
             Forecast
           </span>
           <div className="flex w-full justify-between">
-            {forecastDays.map((fd, i) => (
-              <div key={i} className="flex flex-col items-center gap-0.5">
-                <span className={`text-[11px] ${fd.isToday ? 'text-foreground font-semibold' : 'text-muted-foreground/40'}`}>
-                  {fd.label}
-                </span>
-                <span className={`text-[13px] font-medium ${fd.isToday ? 'text-foreground' : 'text-muted-foreground/30'}`}>
-                  {fd.day}
-                </span>
-              </div>
-            ))}
+            {forecastDays.map((fd, i) => {
+              const dayColor = fd.isSelected ? familyColor : undefined;
+              return (
+                <button
+                  key={i}
+                  onClick={() => onDateChange(fd.dateStr)}
+                  className="flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg transition-all duration-200"
+                  style={fd.isSelected ? {
+                    background: `${dayColor}15`,
+                    boxShadow: `0 0 8px ${dayColor}20`,
+                  } : undefined}
+                >
+                  <span className={`text-[11px] transition-colors ${
+                    fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
+                  }`}>
+                    {fd.label}
+                  </span>
+                  <span className={`text-[13px] font-medium transition-colors ${
+                    fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
+                  }`}>
+                    {fd.day}
+                  </span>
+                  {/* Day dot - family colored for selected */}
+                  <div
+                    className="w-1 h-1 rounded-full mt-0.5 transition-all"
+                    style={{
+                      background: fd.isSelected ? dayColor : fd.isToday ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)',
+                      boxShadow: fd.isSelected ? `0 0 4px ${dayColor}` : 'none',
+                    }}
+                  />
+                </button>
+              );
+            })}
           </div>
         </div>
 

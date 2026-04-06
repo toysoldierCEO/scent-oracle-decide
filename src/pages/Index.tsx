@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
@@ -19,6 +19,7 @@ const Index = () => {
   const [oracleLoading, setOracleLoading] = useState(false);
   const [oracleError, setOracleError] = useState<string | null>(null);
   const [selectedContext, setSelectedContext] = useState('daily');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
@@ -32,20 +33,19 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch oracle when user is authenticated or context changes
+  // Fetch oracle when user, context, or date changes
   useEffect(() => {
     if (!user) { setOracle(null); return; }
     const fetchOracle = async () => {
       setOracleLoading(true);
       setOracleError(null);
       try {
-        const today = new Date().toISOString().split('T')[0];
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
           p_user_id: user.id,
           p_temperature: 75,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
-          p_wear_date: today,
+          p_wear_date: selectedDate,
         });
         if (rpcError) { setOracleError(rpcError.message); }
         else { setOracle(data as unknown as OracleResult); }
@@ -56,6 +56,25 @@ const Index = () => {
       }
     };
     fetchOracle();
+  }, [user, selectedContext, selectedDate]);
+
+  // Accept / Skip RPCs
+  const handleAccept = useCallback(async (fragranceId: string) => {
+    if (!user) return;
+    await odaraSupabase.rpc('accept_today_pick_v1', {
+      p_user: user.id,
+      p_fragrance_id: fragranceId,
+      p_context: selectedContext,
+    });
+  }, [user, selectedContext]);
+
+  const handleSkip = useCallback(async (fragranceId: string) => {
+    if (!user) return;
+    await odaraSupabase.rpc('skip_today_pick_v1', {
+      p_user: user.id,
+      p_fragrance_id: fragranceId,
+      p_context: selectedContext,
+    });
   }, [user, selectedContext]);
 
   const handleEmailAuth = async () => {
@@ -93,7 +112,6 @@ const Index = () => {
 
   const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
 
-  // Auth loading
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -102,7 +120,6 @@ const Index = () => {
     );
   }
 
-  // Signed out
   if (!user) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -111,43 +128,27 @@ const Index = () => {
         <p className="text-sm text-muted-foreground mb-8">
           {isSignUp ? 'Create your account' : 'Sign in to access your scent profile'}
         </p>
-
         <div className="w-full max-w-xs flex flex-col gap-3">
-          <input
-            type="email" placeholder="Email" value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors"
-          />
-          <input
-            type="password" placeholder="Password" value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors"
-          />
-          <button
-            onClick={handleEmailAuth}
-            disabled={loading || !email.trim() || !password.trim()}
-            className="bg-foreground text-background rounded-lg py-2.5 text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-all"
-          >
+          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors" />
+          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
+            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors" />
+          <button onClick={handleEmailAuth} disabled={loading || !email.trim() || !password.trim()}
+            className="bg-foreground text-background rounded-lg py-2.5 text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-all">
             {isSignUp ? 'Create Account' : 'Sign In'}
           </button>
-
           <div className="flex items-center gap-3 my-1">
             <div className="flex-1 h-px bg-border/10" />
             <span className="text-[11px] text-muted-foreground/50">or</span>
             <div className="flex-1 h-px bg-border/10" />
           </div>
-
-          <button
-            onClick={handleGoogle} disabled={loading}
-            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all"
-          >
+          <button onClick={handleGoogle} disabled={loading}
+            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all">
             {isEditorPreview ? 'Open shared preview to sign in with Google' : 'Continue with Google'}
           </button>
-
           {error && (
             <p className={`text-xs text-center ${error.startsWith('Check') ? 'text-green-400' : 'text-red-400'}`}>{error}</p>
           )}
-
           <p className="text-[13px] text-muted-foreground text-center mt-2">
             {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
             <span onClick={() => { setIsSignUp(!isSignUp); setError(''); }} className="text-foreground/70 cursor-pointer underline underline-offset-2">
@@ -159,7 +160,6 @@ const Index = () => {
     );
   }
 
-  // Authenticated → premium Odara shell
   return (
     <OdaraScreen
       oracle={oracle}
@@ -168,6 +168,10 @@ const Index = () => {
       onSignOut={handleSignOut}
       selectedContext={selectedContext}
       onContextChange={setSelectedContext}
+      selectedDate={selectedDate}
+      onDateChange={setSelectedDate}
+      onAccept={handleAccept}
+      onSkip={handleSkip}
     />
   );
 };
