@@ -1139,7 +1139,8 @@ const OdaraScreen = () => {
     }]);
     
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) return;
       const { error: rpcError } = await supabase.rpc("skip_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: oracle.today_pick.fragrance_id,
