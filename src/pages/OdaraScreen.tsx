@@ -1170,6 +1170,9 @@ const OdaraScreen = () => {
     return (
       <div className="dark">
         <div className="min-h-screen bg-background flex flex-col items-center justify-between px-6 py-0 overflow-hidden">
+          <div className="pt-3 text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <header className="flex flex-col items-center pt-12 pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
@@ -1196,6 +1199,9 @@ const OdaraScreen = () => {
     return (
       <div className="dark">
         <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 gap-6">
+          <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           <p className="text-sm text-muted-foreground">Couldn't load today's scent</p>
           <button
