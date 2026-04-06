@@ -863,7 +863,8 @@ const OdaraScreen = () => {
     setError(false);
     setExitDirection(null);
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) { setError(true); setLoading(false); return; }
 
       const rpcParams = {
         p_user_id: userId,
