@@ -1261,6 +1261,9 @@ const OdaraScreen = () => {
         />
         {/* Header + Context chips grouped */}
         <div className="flex flex-col items-center pt-[16px] mb-[14px]">
+          <div className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/60 mb-2">
+            {ODARA_DEBUG_BUILD}
+          </div>
           <header className="flex flex-col items-center pb-6">
             <span className="text-lg tracking-[0.5em] font-bold text-foreground uppercase">ODARA</span>
           </header>
