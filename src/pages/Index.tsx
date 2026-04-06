@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 
-const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V1';
+const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
