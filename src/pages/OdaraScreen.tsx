@@ -11,7 +11,8 @@ import { normalizeNotes } from "@/lib/normalizeNotes";
 
 /** Display-only: strip trailing filler like "for Men", "for Women", "Eau de Parfum" etc.,
  *  and remove the brand name when it appears as a suffix in the fragrance name. */
-function getDisplayName(name: string, brand?: string | null): string {
+function getDisplayName(name: string | null | undefined, brand?: string | null): string {
+  if (!name) return 'Unknown';
   let display = name
     .replace(/\s+(for\s+(Men|Women|Him|Her|Unisex)|Eau\s+de\s+(Parfum|Toilette|Cologne)|EDP|EDT)\s*$/i, '')
     .trim();
@@ -787,7 +788,7 @@ const OdaraScreen = () => {
               p_user_id: userId,
               p_temperature: temp,
               p_context: 'daily',
-              p_brand: 'Alexandria',
+              p_brand: 'Alexandria Fragrances',
               p_wear_date: day.dateKey,
             } as any;
             console.log('[ODARA DEBUG] forecast rpc params', params);
@@ -858,7 +859,7 @@ const OdaraScreen = () => {
         p_user_id: userId,
         p_temperature: tempVal,
         p_context: contextVal,
-        p_brand: "Alexandria",
+        p_brand: "Alexandria Fragrances",
         p_wear_date: dateForRpc,
       } as any;
 
