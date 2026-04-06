@@ -1,5 +1,1 @@
 project_id = "ejuhyhlefeonvunkegid"
-
-[auth]
-site_url = "https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app"
-additional_redirect_urls = ["https://*.lovable.app"]

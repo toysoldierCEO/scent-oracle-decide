@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-const ODARA_DEBUG_BUILD = 'ODARA_AUTH_GATE_V1';
+const ODARA_DEBUG_BUILD = 'ODARA_AUTH_GATE_V2';
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -23,17 +25,28 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleMagicLink = async () => {
+  const handleAuth = async () => {
     setError('');
-    if (!email.trim()) { setError('Enter your email'); return; }
+    setMessage('');
+    if (!email.trim() || !password.trim()) { setError('Enter email and password'); return; }
     setSending(true);
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
-    });
-    setSending(false);
-    if (authError) { setError(authError.message); return; }
-    setSent(true);
+
+    if (isSignUp) {
+      const { error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password.trim(),
+      });
+      setSending(false);
+      if (authError) { setError(authError.message); return; }
+      setMessage('Check your email for a confirmation link, then sign in.');
+    } else {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+      setSending(false);
+      if (authError) { setError(authError.message); return; }
+    }
   };
 
   const handleSignOut = async () => {
@@ -53,36 +66,42 @@ const Index = () => {
       <div style={{ background: '#0a0a0a', color: '#e0e0e0', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui', padding: 24 }}>
         <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>{ODARA_DEBUG_BUILD}</p>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>ODARA</h1>
-        <p style={{ fontSize: 14, color: '#888', marginBottom: 24 }}>Sign in to access your scent profile</p>
+        <p style={{ fontSize: 14, color: '#888', marginBottom: 24 }}>
+          {isSignUp ? 'Create an account' : 'Sign in to access your scent profile'}
+        </p>
 
-        {sent ? (
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: '#aaa', marginBottom: 8 }}>✓ Magic link sent to <strong>{email}</strong></p>
-            <p style={{ fontSize: 12, color: '#666' }}>Check your inbox and click the link to sign in.</p>
-            <button onClick={() => { setSent(false); setEmail(''); }} style={{ marginTop: 16, background: 'none', border: '1px solid #333', color: '#888', padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
-              Try another email
-            </button>
-          </div>
-        ) : (
-          <div style={{ width: '100%', maxWidth: 300 }}>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleMagicLink()}
-              style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #333', background: '#161616', color: '#e0e0e0', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
-            />
-            <button
-              onClick={handleMagicLink}
-              disabled={sending}
-              style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: sending ? '#333' : '#fff', color: '#000', fontSize: 14, fontWeight: 600, cursor: sending ? 'default' : 'pointer' }}
-            >
-              {sending ? 'Sending…' : 'Send Magic Link'}
-            </button>
-            {error && <p style={{ color: '#e55', fontSize: 12, marginTop: 8 }}>{error}</p>}
-          </div>
-        )}
+        <div style={{ width: '100%', maxWidth: 300 }}>
+          <input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #333', background: '#161616', color: '#e0e0e0', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' }}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAuth()}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #333', background: '#161616', color: '#e0e0e0', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
+          />
+          <button
+            onClick={handleAuth}
+            disabled={sending}
+            style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: sending ? '#333' : '#fff', color: '#000', fontSize: 14, fontWeight: 600, cursor: sending ? 'default' : 'pointer' }}
+          >
+            {sending ? 'Please wait…' : isSignUp ? 'Sign Up' : 'Sign In'}
+          </button>
+          {error && <p style={{ color: '#e55', fontSize: 12, marginTop: 8 }}>{error}</p>}
+          {message && <p style={{ color: '#8b8', fontSize: 12, marginTop: 8 }}>{message}</p>}
+          <button
+            onClick={() => { setIsSignUp(!isSignUp); setError(''); setMessage(''); }}
+            style={{ marginTop: 16, background: 'none', border: 'none', color: '#888', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
+        </div>
       </div>
     );
   }
