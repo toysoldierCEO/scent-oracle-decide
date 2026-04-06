@@ -77,7 +77,7 @@ const Index = () => {
         const { data, error: rpcError } = await supabase.rpc('get_todays_oracle_v3', {
           p_user_id: user.id,
           p_temperature: 75,
-          p_context: 'casual',
+          p_context: 'daily',
           p_brand: 'Alexandria Fragrances',
           p_wear_date: today,
         });
