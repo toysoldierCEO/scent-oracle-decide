@@ -72,6 +72,18 @@ const Index = () => {
     } finally { setLoading(false); }
   };
 
+  const handleGoogle = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const { error: err } = await odaraSupabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (err) setError(err.message);
+    } finally { setLoading(false); }
+  };
+
   const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
 
   // Auth loading
@@ -110,6 +122,19 @@ const Index = () => {
             className="bg-foreground text-background rounded-lg py-2.5 text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-all"
           >
             {isSignUp ? 'Create Account' : 'Sign In'}
+          </button>
+
+          <div className="flex items-center gap-3 my-1">
+            <div className="flex-1 h-px bg-border/10" />
+            <span className="text-[11px] text-muted-foreground/50">or</span>
+            <div className="flex-1 h-px bg-border/10" />
+          </div>
+
+          <button
+            onClick={handleGoogle} disabled={loading}
+            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all"
+          >
+            Continue with Google
           </button>
 
           {error && (
