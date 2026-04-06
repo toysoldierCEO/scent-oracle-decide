@@ -72,13 +72,20 @@ const Index = () => {
     } finally { setLoading(false); }
   };
 
+  const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
+  const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
+
   const handleGoogle = async () => {
+    if (isEditorPreview) {
+      window.open(SHARED_PREVIEW_ORIGIN, '_blank');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: SHARED_PREVIEW_ORIGIN },
       });
       if (err) setError(err.message);
     } finally { setLoading(false); }
