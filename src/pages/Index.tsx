@@ -6,6 +6,10 @@ const ODARA_DEBUG_BUILD = 'ODARA_AUTH_GATE_V1';
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -18,6 +22,23 @@ const Index = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleMagicLink = async () => {
+    setError('');
+    if (!email.trim()) { setError('Enter your email'); return; }
+    setSending(true);
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setSending(false);
+    if (authError) { setError(authError.message); return; }
+    setSent(true);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   if (authLoading) {
     return (
@@ -33,15 +54,45 @@ const Index = () => {
         <p style={{ fontSize: 10, color: '#555', marginBottom: 16 }}>{ODARA_DEBUG_BUILD}</p>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>ODARA</h1>
         <p style={{ fontSize: 14, color: '#888', marginBottom: 24 }}>Sign in to access your scent profile</p>
-        <p style={{ fontSize: 12, color: '#555' }}>No authenticated session detected.</p>
+
+        {sent ? (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 14, color: '#aaa', marginBottom: 8 }}>✓ Magic link sent to <strong>{email}</strong></p>
+            <p style={{ fontSize: 12, color: '#666' }}>Check your inbox and click the link to sign in.</p>
+            <button onClick={() => { setSent(false); setEmail(''); }} style={{ marginTop: 16, background: 'none', border: '1px solid #333', color: '#888', padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+              Try another email
+            </button>
+          </div>
+        ) : (
+          <div style={{ width: '100%', maxWidth: 300 }}>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleMagicLink()}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #333', background: '#161616', color: '#e0e0e0', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
+            />
+            <button
+              onClick={handleMagicLink}
+              disabled={sending}
+              style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: sending ? '#333' : '#fff', color: '#000', fontSize: 14, fontWeight: 600, cursor: sending ? 'default' : 'pointer' }}
+            >
+              {sending ? 'Sending…' : 'Send Magic Link'}
+            </button>
+            {error && <p style={{ color: '#e55', fontSize: 12, marginTop: 8 }}>{error}</p>}
+          </div>
+        )}
       </div>
     );
   }
 
-  // Authenticated — render static shell (no RPC yet)
   return (
     <div style={{ background: '#0a0a0a', color: '#e0e0e0', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', padding: '24px 16px' }}>
-      <p style={{ fontSize: 10, color: '#555', marginBottom: 8 }}>{ODARA_DEBUG_BUILD}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <p style={{ fontSize: 10, color: '#555' }}>{ODARA_DEBUG_BUILD}</p>
+        <button onClick={handleSignOut} style={{ background: 'none', border: '1px solid #333', color: '#888', padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>Sign out</button>
+      </div>
       <p style={{ fontSize: 10, color: '#444', marginBottom: 16 }}>uid: {user.id}</p>
 
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>ODARA STATIC SHELL</h1>
