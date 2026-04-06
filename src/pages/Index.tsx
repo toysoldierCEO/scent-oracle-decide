@@ -2,7 +2,40 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
 
-const ODARA_DEBUG_BUILD = 'ODARA_AUTH_GATE_V3';
+const ODARA_DEBUG_BUILD = 'ODARA_ORACLE_V1';
+
+interface OraclePick {
+  fragrance_id: string;
+  name: string;
+  family: string;
+  reason: string;
+  brand: string;
+  notes: string[];
+  accords: string[];
+}
+
+interface OracleLayer {
+  fragrance_id: string;
+  name: string;
+  family: string;
+  brand: string;
+  notes: string[];
+  accords: string[];
+  reason: string;
+}
+
+interface OracleAlternate {
+  fragrance_id: string;
+  name: string;
+  family: string;
+  reason: string;
+}
+
+interface OracleResult {
+  today_pick: OraclePick;
+  layer: OracleLayer | null;
+  alternates: OracleAlternate[];
+}
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
@@ -12,6 +45,11 @@ const Index = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Oracle state
+  const [oracle, setOracle] = useState<OracleResult | null>(null);
+  const [oracleLoading, setOracleLoading] = useState(false);
+  const [oracleError, setOracleError] = useState<string | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -24,6 +62,38 @@ const Index = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch oracle when user is authenticated
+  useEffect(() => {
+    if (!user) {
+      setOracle(null);
+      return;
+    }
+    const fetchOracle = async () => {
+      setOracleLoading(true);
+      setOracleError(null);
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data, error: rpcError } = await supabase.rpc('get_todays_oracle_v3', {
+          p_user_id: user.id,
+          p_temperature: 75,
+          p_context: 'casual',
+          p_brand: 'Alexandria Fragrances',
+          p_wear_date: today,
+        });
+        if (rpcError) {
+          setOracleError(rpcError.message);
+        } else {
+          setOracle(data as unknown as OracleResult);
+        }
+      } catch (e: any) {
+        setOracleError(e?.message || 'Unknown error');
+      } finally {
+        setOracleLoading(false);
+      }
+    };
+    fetchOracle();
+  }, [user]);
 
   const handleEmailAuth = async () => {
     setError('');
@@ -125,6 +195,11 @@ const Index = () => {
     );
   }
 
+  // Authenticated view — live oracle data
+  const pick = oracle?.today_pick;
+  const layer = oracle?.layer;
+  const alts = oracle?.alternates ?? [];
+
   return (
     <div style={{ background: '#0a0a0a', color: '#e0e0e0', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', padding: '24px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -133,32 +208,55 @@ const Index = () => {
       </div>
       <p style={{ fontSize: 10, color: '#444', marginBottom: 16 }}>uid: {user.id}</p>
 
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>ODARA STATIC SHELL</h1>
-      <p style={{ fontSize: 13, color: '#888', marginBottom: 32 }}>Authenticated — awaiting RPC reintroduction</p>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>ODARA</h1>
 
-      <section style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Today's Pick</p>
-        <div style={{ background: '#161616', borderRadius: 12, padding: 20, border: '1px solid #222' }}>
-          <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>Karnak Temple</h2>
-          <p style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>Alexandria Fragrances</p>
-          <span style={{ fontSize: 11, background: '#1a1a2e', color: '#8b7daa', padding: '3px 10px', borderRadius: 999 }}>oud-amber</span>
-          <p style={{ fontSize: 12, color: '#666', marginTop: 12 }}>Static render test only</p>
-        </div>
-      </section>
+      {oracleLoading && <p style={{ fontSize: 13, color: '#888', marginBottom: 32 }}>Loading oracle…</p>}
+      {oracleError && <p style={{ fontSize: 13, color: '#e55', marginBottom: 32 }}>RPC error: {oracleError}</p>}
 
-      <section style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Layer</p>
-        <div style={{ background: '#161616', borderRadius: 12, padding: 16, border: '1px solid #222' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 500 }}>Barricade</h3>
-        </div>
-      </section>
+      {!oracleLoading && !oracleError && oracle && (
+        <>
+          <p style={{ fontSize: 13, color: '#888', marginBottom: 32 }}>Live data from oracle</p>
 
-      <section style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Alternate</p>
-        <div style={{ background: '#161616', borderRadius: 12, padding: 16, border: '1px solid #222' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 500 }}>Miraculous Oud</h3>
-        </div>
-      </section>
+          <section style={{ marginBottom: 28 }}>
+            <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Today's Pick</p>
+            <div style={{ background: '#161616', borderRadius: 12, padding: 20, border: '1px solid #222' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>{pick?.name ?? '—'}</h2>
+              <p style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>{pick?.brand ?? '—'}</p>
+              {pick?.family && (
+                <span style={{ fontSize: 11, background: '#1a1a2e', color: '#8b7daa', padding: '3px 10px', borderRadius: 999 }}>{pick.family}</span>
+              )}
+              <p style={{ fontSize: 12, color: '#666', marginTop: 12 }}>{pick?.reason ?? ''}</p>
+            </div>
+          </section>
+
+          {layer && (
+            <section style={{ marginBottom: 28 }}>
+              <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Layer</p>
+              <div style={{ background: '#161616', borderRadius: 12, padding: 16, border: '1px solid #222' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 500 }}>{layer.name}</h3>
+                <p style={{ fontSize: 12, color: '#999' }}>{layer.brand}</p>
+                <p style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{layer.reason}</p>
+              </div>
+            </section>
+          )}
+
+          {alts.length > 0 && (
+            <section style={{ marginBottom: 28 }}>
+              <p style={{ fontSize: 11, textTransform: 'uppercase', color: '#666', marginBottom: 6 }}>Alternates</p>
+              {alts.map((alt, i) => (
+                <div key={alt.fragrance_id || i} style={{ background: '#161616', borderRadius: 12, padding: 16, border: '1px solid #222', marginBottom: 8 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 500 }}>{alt.name}</h3>
+                  <p style={{ fontSize: 12, color: '#999' }}>{alt.reason}</p>
+                </div>
+              ))}
+            </section>
+          )}
+        </>
+      )}
+
+      {!oracleLoading && !oracleError && !oracle && (
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 32 }}>No oracle data returned</p>
+      )}
     </div>
   );
 };
