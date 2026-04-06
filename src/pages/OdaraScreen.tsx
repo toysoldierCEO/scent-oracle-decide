@@ -1108,7 +1108,8 @@ const OdaraScreen = () => {
 
     setActionState("accepting");
     try {
-      const userId = await getUserId();
+      const userId = getUserId();
+      if (!userId) return;
       const { error: rpcError } = await supabase.rpc("accept_today_pick_v1" as any, {
         p_user: userId,
         p_fragrance_id: entry.fragrance_id,
