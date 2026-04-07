@@ -119,45 +119,38 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-/** Build LayerModes: balance→layer, bold/smooth/wild→alternates when available */
-function buildLayerModes(layer: OracleLayer, alternates: OracleAlternate[]): LayerModes {
-  const interactionTypes: Record<string, InteractionType> = {
-    balance: 'balance', bold: 'amplify', smooth: 'balance', wild: 'contrast',
+/**
+ * Build LayerModes — all four moods use the SAME real layer fragrance
+ * from the oracle. Moods only change the interaction type (how you layer),
+ * not which companion scent is used. The backend provides one layer; the
+ * frontend must not substitute alternates as fake mood variants.
+ */
+function buildLayerModes(layer: OracleLayer): LayerModes {
+  const MOOD_INTERACTIONS: Record<LayerMood, InteractionType> = {
+    balance: 'balance',
+    bold: 'amplify',
+    smooth: 'balance',
+    wild: 'contrast',
   };
 
-  const fromLayer = (mood: string) => ({
+  const entry = (mood: LayerMood) => ({
     id: layer.fragrance_id,
     name: layer.name,
     brand: layer.brand,
     family_key: layer.family,
     notes: layer.notes,
     accords: layer.accords,
-    interactionType: interactionTypes[mood] as InteractionType,
+    interactionType: MOOD_INTERACTIONS[mood],
     reason: layer.reason || '',
     why_it_works: '',
     projection: null,
   });
 
-  const fromAlt = (alt: OracleAlternate, mood: string) => ({
-    id: alt.fragrance_id,
-    name: alt.name,
-    brand: alt.brand ?? null,
-    family_key: alt.family,
-    notes: alt.notes ?? [],
-    accords: alt.accords ?? [],
-    interactionType: interactionTypes[mood] as InteractionType,
-    reason: alt.reason || '',
-    why_it_works: '',
-    projection: null,
-  });
-
-  const distinctAlts = alternates.filter(a => a.fragrance_id !== layer.fragrance_id);
-
   return {
-    balance: fromLayer('balance'),
-    bold: distinctAlts[0] ? fromAlt(distinctAlts[0], 'bold') : fromLayer('bold'),
-    smooth: distinctAlts[1] ? fromAlt(distinctAlts[1], 'smooth') : fromLayer('smooth'),
-    wild: distinctAlts[2] ? fromAlt(distinctAlts[2], 'wild') : fromLayer('wild'),
+    balance: entry('balance'),
+    bold: entry('bold'),
+    smooth: entry('smooth'),
+    wild: entry('wild'),
   };
 }
 
