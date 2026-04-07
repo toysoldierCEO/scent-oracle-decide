@@ -202,7 +202,7 @@ const OdaraScreen = ({
   const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
 
   // Build layer modes from oracle layer + alternates (relative to current active pick)
-  const layerModes = layer ? buildLayerModes(layer, alts) : null;
+  const layerModes = layer ? buildLayerModes(layer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
