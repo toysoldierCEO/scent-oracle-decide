@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, InteractionType } from "@/components/ModeSelector";
@@ -151,8 +151,6 @@ function buildLayerModes(layer: OracleLayer, alternates: OracleAlternate[]): Lay
     projection: null,
   });
 
-  // Map moods to different fragrances: balance→layer, others→distinct alternates
-  // Only use alternates that differ from the layer fragrance
   const distinctAlts = alternates.filter(a => a.fragrance_id !== layer.fragrance_id);
 
   return {
@@ -176,16 +174,25 @@ const OdaraScreen = ({
   selectedDate, onDateChange,
   onAccept, onSkip,
 }: OdaraScreenProps) => {
-  const pick = oracle?.today_pick;
-  const layer = oracle?.layer;
+  const originalPick = oracle?.today_pick ?? null;
+  const layer = oracle?.layer ?? null;
   const alts = oracle?.alternates ?? [];
   const forecastDays = buildForecastDays(selectedDate);
+
+  // Active pick — either original or an alternate promoted to main
+  const [overridePick, setOverridePick] = useState<OraclePick | null>(null);
+  const pick = overridePick ?? originalPick;
+  const isOverridden = overridePick !== null;
+
+  // Reset override when oracle data changes (context/date switch)
+  useEffect(() => {
+    setOverridePick(null);
+  }, [oracle]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
-  const [selectedAltIndex, setSelectedAltIndex] = useState<number | null>(null);
 
   // Lock & gesture state
   const [lockState, setLockState] = useState<LockState>('neutral');
@@ -201,15 +208,38 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
 
-  // Build layer modes from oracle layer + alternates
+  // Build layer modes from oracle layer + alternates (relative to current active pick)
   const layerModes = layer ? buildLayerModes(layer, alts) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
+  // Promote alternate into the main card
+  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
+    if (lockState === 'locked') return;
+    setOverridePick({
+      fragrance_id: alt.fragrance_id,
+      name: alt.name,
+      family: alt.family,
+      reason: alt.reason,
+      brand: alt.brand ?? '',
+      notes: alt.notes ?? [],
+      accords: alt.accords ?? [],
+    });
+    setSelectedMood('balance');
+    setLayerExpanded(false);
+  }, [lockState]);
+
+  // Back button — undo alternate promotion
+  const handleBack = useCallback(() => {
+    setOverridePick(null);
+    setSelectedMood('balance');
+    setLayerExpanded(false);
+  }, []);
+
   /* ── Gesture handlers ── */
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (lockState === 'locked') return; // no gestures when locked
+    if (lockState === 'locked') return;
     const t = e.touches[0];
     touchRef.current = { startX: t.clientX, startY: t.clientY, locked: null };
   }, [lockState]);
@@ -220,7 +250,6 @@ const OdaraScreen = ({
     const dx = t.clientX - touchRef.current.startX;
     const dy = t.clientY - touchRef.current.startY;
 
-    // Direction lock
     if (!touchRef.current.locked) {
       if (Math.abs(dy) > DIRECTION_LOCK_THRESHOLD || Math.abs(dx) > DIRECTION_LOCK_THRESHOLD) {
         touchRef.current.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
@@ -228,7 +257,6 @@ const OdaraScreen = ({
     }
 
     if (touchRef.current.locked === 'v') {
-      // Clamp vertical drag for visual feedback
       const clamped = Math.max(-80, Math.min(80, dy));
       setCardTranslateY(clamped);
     }
@@ -262,6 +290,11 @@ const OdaraScreen = ({
       setLockState('neutral');
     }
   }, [lockState]);
+
+  // Remaining alternates to show (exclude the currently promoted one)
+  const visibleAlts = isOverridden
+    ? [originalPick, ...alts].filter(Boolean).filter(a => a!.fragrance_id !== pick?.fragrance_id) as OracleAlternate[]
+    : alts;
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -319,36 +352,42 @@ const OdaraScreen = ({
               style={{ background: tint.glow, opacity: 0.35 }}
             />
 
-            {/* Top row: lock · date · temp */}
-            <div className="flex items-center mb-1.5 relative z-10">
-              <div className="flex items-center gap-2.5 flex-1">
-                <button onClick={handleUnlock} className="p-0.5 -ml-0.5">
-                  <svg
-                    width="14" height="14" viewBox="0 0 24 24" fill="none"
-                    stroke={lockIconColor} strokeWidth="1.5"
-                    className="transition-colors duration-300"
-                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
-                  >
-                    {lockState === 'locked' ? (
-                      <>
-                        <rect x="3" y="11" width="18" height="11" rx="2" />
-                        <path d="M7 11V7a5 5 0 0110 0v4" />
-                      </>
-                    ) : (
-                      <>
-                        <rect x="3" y="11" width="18" height="11" rx="2" />
-                        <path d="M7 11V7a5 5 0 0110 0v4" />
-                      </>
-                    )}
-                  </svg>
-                </button>
+            {/* Top row: lock · centered date · temp */}
+            <div className="flex items-center justify-between mb-1.5 relative z-10">
+              {/* Left: back or lock */}
+              <div className="flex items-center gap-2 w-[60px]">
+                {isOverridden ? (
+                  <button onClick={handleBack} className="p-0.5 -ml-0.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/60">
+                      <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button onClick={handleUnlock} className="p-0.5 -ml-0.5">
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={lockIconColor} strokeWidth="1.5"
+                      className="transition-colors duration-300"
+                      style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                      <path d="M7 11V7a5 5 0 0110 0v4" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Center: date */}
+              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
+                {getDateLabel(selectedDate)}
+              </span>
+
+              {/* Right: temp */}
+              <div className="w-[60px] flex justify-end">
                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {getDateLabel(selectedDate)}
+                  83°
                 </span>
               </div>
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                83°
-              </span>
             </div>
 
             {/* Fragrance name */}
@@ -402,32 +441,25 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives (interactive) ── */}
-            {alts.length > 0 && (
+            {/* ── Alternatives (tap to promote into main card) ── */}
+            {visibleAlts.length > 0 && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
                 </span>
-                <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1">
-                  {alts.map((alt, i) => {
+                <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                  {visibleAlts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
-                    const isSelected = selectedAltIndex === i;
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={() => {
-                          if (lockState === 'locked') return;
-                          setSelectedAltIndex(isSelected ? null : i);
-                        }}
-                        className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 ${
-                          isSelected
-                            ? 'text-foreground scale-[1.03]'
-                            : 'text-foreground/70 hover:text-foreground/90 active:scale-95'
-                        } ${lockState === 'locked' && !isSelected ? 'opacity-30' : ''}`}
+                        onClick={() => handlePromoteAlternate(alt)}
+                        className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
+                          text-foreground/70 hover:text-foreground/90 active:scale-95
+                          ${lockState === 'locked' ? 'opacity-30 pointer-events-none' : ''}`}
                         style={{
-                          border: `1px solid ${isSelected ? `${altColor}88` : `${altColor}44`}`,
-                          background: isSelected ? `${altColor}20` : `${altColor}0A`,
-                          boxShadow: isSelected ? `0 0 12px ${altColor}25` : 'none',
+                          border: `1px solid ${altColor}44`,
+                          background: `${altColor}0A`,
                         }}
                       >
                         {getDisplayName(alt.name)}
@@ -435,14 +467,6 @@ const OdaraScreen = ({
                     );
                   })}
                 </div>
-                {selectedAltIndex !== null && alts[selectedAltIndex] && (
-                  <div className="w-full px-2 py-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <span className="text-[12px] text-foreground/80">{alts[selectedAltIndex].name}</span>
-                    {alts[selectedAltIndex].reason && (
-                      <p className="text-[11px] text-muted-foreground/60 mt-1 leading-relaxed">{alts[selectedAltIndex].reason}</p>
-                    )}
-                  </div>
-                )}
               </div>
             )}
 
@@ -492,7 +516,6 @@ const OdaraScreen = ({
                   }`}>
                     {fd.day}
                   </span>
-                  {/* Day dot - family colored for selected */}
                   <div
                     className="w-1 h-1 rounded-full mt-0.5 transition-all"
                     style={{
