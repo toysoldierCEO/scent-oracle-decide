@@ -646,7 +646,14 @@ const OdaraScreen = ({
             )}
 
             {/* ── TEMPORARY DEBUG CONTROLS ── */}
-            <div className="mt-3 pt-2 flex flex-col gap-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div
+              className="mt-3 pt-2 flex flex-col gap-1.5"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+              onPointerDownCapture={(e) => e.stopPropagation()}
+              onPointerMoveCapture={(e) => e.stopPropagation()}
+              onPointerUpCapture={(e) => e.stopPropagation()}
+              onClickCapture={(e) => e.stopPropagation()}
+            >
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={async (e) => {
