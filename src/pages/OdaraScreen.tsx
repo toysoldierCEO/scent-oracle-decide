@@ -207,8 +207,25 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
-  // Touch refs
-  const touchRef = useRef<{ startX: number; startY: number; locked: 'v' | 'h' | null }>({ startX: 0, startY: 0, locked: null });
+  // Gesture refs
+  const gestureRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    lastY: number;
+    locked: 'v' | 'h' | null;
+    isDragging: boolean;
+    suppressClick: boolean;
+  }>({
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    lastY: 0,
+    locked: null,
+    isDragging: false,
+    suppressClick: false,
+  });
+  const unlockTimeoutRef = useRef<number | null>(null);
 
   const familyKey = pick?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
@@ -259,68 +276,160 @@ const OdaraScreen = ({
 
   const hasHistory = history.length > 0;
 
-  /* ── Gesture handlers ── */
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const t = e.touches[0];
-    touchRef.current = { startX: t.clientX, startY: t.clientY, locked: null };
+  const pulseLock = useCallback(() => {
+    setLockPulse(true);
+    window.setTimeout(() => setLockPulse(false), 400);
   }, []);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const t = e.touches[0];
-    const dx = t.clientX - touchRef.current.startX;
-    const dy = t.clientY - touchRef.current.startY;
-
-    if (!touchRef.current.locked) {
-      if (Math.abs(dy) > DIRECTION_LOCK_THRESHOLD || Math.abs(dx) > DIRECTION_LOCK_THRESHOLD) {
-        touchRef.current.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
-      } else return;
+  const clearUnlockTimeout = useCallback(() => {
+    if (unlockTimeoutRef.current !== null) {
+      window.clearTimeout(unlockTimeoutRef.current);
+      unlockTimeoutRef.current = null;
     }
+  }, []);
 
-    if (touchRef.current.locked === 'v') {
-      // When locked, only allow downward drag (to unlock)
-      if (lockState === 'locked') {
-        const clamped = Math.max(0, Math.min(80, dy));
-        setCardTranslateY(clamped);
-      } else {
-        const clamped = Math.max(-80, Math.min(80, dy));
-        setCardTranslateY(clamped);
+  const resetGesture = useCallback(() => {
+    gestureRef.current = {
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      lastY: 0,
+      locked: null,
+      isDragging: false,
+      suppressClick: gestureRef.current.suppressClick,
+    };
+    setCardTranslateY(0);
+  }, []);
+
+  useEffect(() => {
+    return () => clearUnlockTimeout();
+  }, [clearUnlockTimeout]);
+
+  /* ── Gesture handlers ── */
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pick) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    clearUnlockTimeout();
+    gestureRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastY: 0,
+      locked: null,
+      isDragging: false,
+      suppressClick: false,
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [clearUnlockTimeout, pick]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (gesture.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - gesture.startX;
+    const dy = e.clientY - gesture.startY;
+
+    if (!gesture.locked) {
+      if (Math.abs(dy) < DIRECTION_LOCK_THRESHOLD && Math.abs(dx) < DIRECTION_LOCK_THRESHOLD) {
+        return;
+      }
+
+      gesture.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+      if (gesture.locked === 'h') {
+        resetGesture();
+        return;
       }
     }
-  }, [lockState]);
 
-  const handleTouchEnd = useCallback(async () => {
-    const dy = cardTranslateY;
+    if (gesture.locked !== 'v') return;
+
+    gesture.isDragging = true;
+    gesture.suppressClick = Math.abs(dy) > DIRECTION_LOCK_THRESHOLD;
+    gesture.lastY = dy;
+
+    const clamped = lockState === 'locked'
+      ? Math.max(0, Math.min(96, dy))
+      : Math.max(-96, Math.min(96, dy));
+
+    setCardTranslateY(clamped);
+    e.preventDefault();
+  }, [lockState, resetGesture]);
+
+  const completeGesture = useCallback(async (pointerId: number, currentTarget: HTMLDivElement | null) => {
+    const gesture = gestureRef.current;
+    if (gesture.pointerId !== pointerId) return;
+
+    if (currentTarget?.hasPointerCapture(pointerId)) {
+      currentTarget.releasePointerCapture(pointerId);
+    }
+
+    const dy = gesture.lastY;
+    const wasVertical = gesture.locked === 'v';
+    const shouldSuppressClick = gesture.suppressClick;
+
+    gestureRef.current = {
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      lastY: 0,
+      locked: null,
+      isDragging: false,
+      suppressClick: shouldSuppressClick,
+    };
     setCardTranslateY(0);
 
-    if (touchRef.current.locked !== 'v') return;
-    if (!pick) return;
+    if (!wasVertical || !pick) return;
 
     if (lockState === 'locked') {
-      // LOCKED state: swipe down = unlock only (no skip)
       if (dy > SWIPE_DISTANCE) {
+        clearUnlockTimeout();
         setLockState('neutral');
-        setLockPulse(true);
-        setTimeout(() => setLockPulse(false), 400);
+        pulseLock();
       }
-    } else {
-      // NEUTRAL state
-      if (dy < -SWIPE_DISTANCE) {
-        // Swipe UP → lock
-        setLockState('locked');
-        setLockPulse(true);
-        setTimeout(() => setLockPulse(false), 400);
-        await onAccept(pick.fragrance_id);
-      } else if (dy > SWIPE_DISTANCE) {
-        // Swipe DOWN → skip
-        setLockState('skipping');
-        pushHistory();
-        await onSkip(pick.fragrance_id);
-        // After skip animation, stay neutral — the oracle should provide new data
-        // or we show we've skipped
-        setTimeout(() => setLockState('neutral'), 600);
-      }
+      return;
     }
-  }, [cardTranslateY, lockState, pick, onAccept, onSkip, pushHistory]);
+
+    if (dy < -SWIPE_DISTANCE) {
+      clearUnlockTimeout();
+      setLockState('locked');
+      pulseLock();
+      await onAccept(pick.fragrance_id);
+      return;
+    }
+
+    if (dy > SWIPE_DISTANCE) {
+      clearUnlockTimeout();
+      setLockState('skipping');
+      pushHistory();
+      await onSkip(pick.fragrance_id);
+      unlockTimeoutRef.current = window.setTimeout(() => {
+        setLockState('neutral');
+        unlockTimeoutRef.current = null;
+      }, 600);
+    }
+  }, [clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    void completeGesture(e.pointerId, e.currentTarget);
+  }, [completeGesture]);
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    void completeGesture(e.pointerId, e.currentTarget);
+  }, [completeGesture]);
+
+  const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!gestureRef.current.suppressClick) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, [role="button"]')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    gestureRef.current.suppressClick = false;
+  }, []);
 
   const isOverridden = currentPick !== null;
 
@@ -374,10 +483,13 @@ const OdaraScreen = ({
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
               transform: `translateY(${cardTranslateY * 0.4}px)`,
+              touchAction: 'pan-x',
             }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            onPointerDownCapture={handlePointerDown}
+            onPointerMoveCapture={handlePointerMove}
+            onPointerUpCapture={handlePointerUp}
+            onPointerCancelCapture={handlePointerCancel}
+            onClickCapture={handleCardClickCapture}
           >
             {/* Glow orb */}
             <div
