@@ -661,54 +661,15 @@ const OdaraScreen = ({
                 🔒 Lock
               </button>
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (!pick) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     pulseLock();
                     return;
                   }
-                  setLockState('skipping');
-                  try {
-                    const nextOracle = await onSkip(pick.fragrance_id);
-                    const nextPick = nextOracle?.today_pick ?? null;
-                    console.log('[DEBUG SKIP]', {
-                      prevId: pick.fragrance_id,
-                      prevName: pick.name,
-                      nextId: nextPick?.fragrance_id,
-                      nextName: nextPick?.name,
-                      same: nextPick?.fragrance_id === pick.fragrance_id,
-                      gotOracle: !!nextOracle,
-                    });
-                    if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
-                      pushHistory();
-                      setActiveOracle(nextOracle);
-                      setCurrentPick(null);
-                      setSelectedMood('balance');
-                      setLayerExpanded(false);
-                    }
-                    // If backend returned same fragrance, promote first available alternate
-                    if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
-                      const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
-                      if (fallbackAlt) {
-                        console.log('[DEBUG SKIP] same pick returned, promoting alternate:', fallbackAlt.name);
-                        pushHistory();
-                        setCurrentPick({
-                          fragrance_id: fallbackAlt.fragrance_id,
-                          name: fallbackAlt.name,
-                          family: fallbackAlt.family,
-                          reason: fallbackAlt.reason,
-                          brand: fallbackAlt.brand ?? '',
-                          notes: fallbackAlt.notes ?? [],
-                          accords: fallbackAlt.accords ?? [],
-                        });
-                        setSelectedMood('balance');
-                        setLayerExpanded(false);
-                      }
-                    }
-                  } finally {
-                    setLockState('neutral');
-                  }
+                  void onSkip(pick.fragrance_id);
+                  handleSkipLocal();
                 }}
                 className="text-[9px] px-3 py-1 rounded-full"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
@@ -726,7 +687,7 @@ const OdaraScreen = ({
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
-lock=${lockState} hist=${history.length}`}
+idx=${queueIndex}/${cardQueue.length} lock=${lockState}`}
             </pre>
           </div>
         )}
