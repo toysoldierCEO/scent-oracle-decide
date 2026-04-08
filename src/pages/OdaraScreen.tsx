@@ -193,16 +193,21 @@ const OdaraScreen = ({
   const layer = activeOracle?.layer ?? null;
   const forecastDays = buildForecastDays(selectedDate);
 
-  // ── Local card queue + index ──
+  // ── Local card queue + history stack ──
   const [cardQueue, setCardQueue] = useState<OraclePick[]>(() => oracle ? buildCardQueue(oracle) : []);
   const [queueIndex, setQueueIndex] = useState(0);
+  const [viewHistory, setViewHistory] = useState<OraclePick[]>([]); // stack of previously viewed cards
+  const [skipLoading, setSkipLoading] = useState(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
-  // Reset when oracle/context/date changes
+  // Reset when oracle/context/date changes from parent
   useEffect(() => {
     setActiveOracle(oracle);
     const q = oracle ? buildCardQueue(oracle) : [];
     setCardQueue(q);
     setQueueIndex(0);
+    setViewHistory([]);
+    seenIdsRef.current = new Set(q.map(c => c.fragrance_id));
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
@@ -210,7 +215,7 @@ const OdaraScreen = ({
 
   // The active pick from the queue
   const pick = cardQueue[queueIndex] ?? null;
-  const hasHistory = queueIndex > 0;
+  const hasHistory = viewHistory.length > 0;
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
