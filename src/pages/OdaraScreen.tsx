@@ -693,7 +693,7 @@ const OdaraScreen = ({
         {!oracleLoading && !oracleError && pick && (
           <div className="mt-2 flex flex-col gap-1.5 items-center">
             <div className="flex gap-2 justify-center">
-              <button
+             <button
                 onClick={async () => {
                   if (!pick || lockState === 'locked') return;
                   setLockState('locked');
@@ -706,20 +706,20 @@ const OdaraScreen = ({
                 🔒 Lock
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!pick) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     pulseLock();
                     return;
                   }
-                  void onSkip(pick.fragrance_id);
-                  handleSkipLocal();
+                  await handleSkipLocal();
                 }}
-                className="text-[9px] px-3 py-1 rounded-full"
+                disabled={skipLoading}
+                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-40"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
               >
-                ⏭ Skip
+                {skipLoading ? '⏳ Loading…' : '⏭ Skip'}
               </button>
               <button
                 onClick={() => handleBack()}
@@ -732,7 +732,7 @@ const OdaraScreen = ({
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
-idx=${queueIndex}/${cardQueue.length} lock=${lockState}`}
+idx=${queueIndex}/${cardQueue.length} hist=${viewHistory.length} lock=${lockState}${skipLoading ? ' LOADING' : ''}`}
             </pre>
           </div>
         )}
