@@ -193,16 +193,21 @@ const OdaraScreen = ({
   const layer = activeOracle?.layer ?? null;
   const forecastDays = buildForecastDays(selectedDate);
 
-  // ── Local card queue + index ──
+  // ── Local card queue + history stack ──
   const [cardQueue, setCardQueue] = useState<OraclePick[]>(() => oracle ? buildCardQueue(oracle) : []);
   const [queueIndex, setQueueIndex] = useState(0);
+  const [viewHistory, setViewHistory] = useState<OraclePick[]>([]); // stack of previously viewed cards
+  const [skipLoading, setSkipLoading] = useState(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
-  // Reset when oracle/context/date changes
+  // Reset when oracle/context/date changes from parent
   useEffect(() => {
     setActiveOracle(oracle);
     const q = oracle ? buildCardQueue(oracle) : [];
     setCardQueue(q);
     setQueueIndex(0);
+    setViewHistory([]);
+    seenIdsRef.current = new Set(q.map(c => c.fragrance_id));
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
@@ -210,7 +215,7 @@ const OdaraScreen = ({
 
   // The active pick from the queue
   const pick = cardQueue[queueIndex] ?? null;
-  const hasHistory = queueIndex > 0;
+  const hasHistory = viewHistory.length > 0;
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -254,37 +259,77 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // ── Skip = advance queue index forward ──
-  const handleSkipLocal = useCallback(() => {
-    if (queueIndex >= cardQueue.length - 1) {
-      console.log('[QUEUE] end of queue, cannot skip further');
+  // ── Skip = advance queue, or fetch new bundle if exhausted ──
+  const handleSkipLocal = useCallback(async () => {
+    if (skipLoading) return;
+    const currentPick = cardQueue[queueIndex];
+
+    if (queueIndex < cardQueue.length - 1) {
+      // Still have cards in current queue
+      if (currentPick) setViewHistory(h => [...h, currentPick]);
+      setQueueIndex(i => i + 1);
+      setSelectedMood('balance');
+      setLayerExpanded(false);
+      setLockState('neutral');
       return;
     }
-    setQueueIndex(i => i + 1);
-    setSelectedMood('balance');
-    setLayerExpanded(false);
-    setLockState('neutral');
-  }, [queueIndex, cardQueue.length]);
+
+    // Queue exhausted — fetch new bundle
+    if (!currentPick) return;
+    setSkipLoading(true);
+    try {
+      const nextOracle = await onSkip(currentPick.fragrance_id);
+      if (nextOracle) {
+        const newQueue = buildCardQueue(nextOracle);
+        // Filter out already-seen scents, but keep at least 1
+        const unseen = newQueue.filter(c => !seenIdsRef.current.has(c.fragrance_id));
+        const finalQueue = unseen.length > 0 ? unseen : newQueue;
+        finalQueue.forEach(c => seenIdsRef.current.add(c.fragrance_id));
+
+        setViewHistory(h => [...h, currentPick]);
+        setActiveOracle(nextOracle);
+        setCardQueue(finalQueue);
+        setQueueIndex(0);
+        setSelectedMood('balance');
+        setLayerExpanded(false);
+        setLockState('neutral');
+      }
+    } finally {
+      setSkipLoading(false);
+    }
+  }, [queueIndex, cardQueue, skipLoading, onSkip]);
 
   // ── Promote alternate into the main card (jump to its queue position) ──
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
+    const currentPick = cardQueue[queueIndex];
     const idx = cardQueue.findIndex(q => q.fragrance_id === alt.fragrance_id);
-    if (idx >= 0) {
+    if (idx >= 0 && idx !== queueIndex) {
+      if (currentPick) setViewHistory(h => [...h, currentPick]);
       setQueueIndex(idx);
     }
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, cardQueue]);
+  }, [lockState, cardQueue, queueIndex]);
 
-  // ── Back button — walk backward in queue ──
+  // ── Back button — pop from view history ──
   const handleBack = useCallback(() => {
-    if (queueIndex <= 0) return;
-    setQueueIndex(i => i - 1);
+    if (viewHistory.length === 0) return;
+    const prev = viewHistory[viewHistory.length - 1];
+    // Find in current queue
+    const idx = cardQueue.findIndex(q => q.fragrance_id === prev.fragrance_id);
+    if (idx >= 0) {
+      setQueueIndex(idx);
+    } else {
+      // Card was from a previous bundle — prepend it to queue
+      setCardQueue(q => [prev, ...q]);
+      setQueueIndex(0);
+    }
+    setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [queueIndex]);
+  }, [viewHistory, cardQueue]);
 
 
   const pulseLock = useCallback(() => {
@@ -417,7 +462,7 @@ const OdaraScreen = ({
       clearUnlockTimeout();
       // Fire backend skip (fire-and-forget for logging), use local queue
       void onSkip(pick.fragrance_id);
-      handleSkipLocal();
+      void handleSkipLocal();
     }
   }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, onSkip, pick, pulseLock]);
 
@@ -648,7 +693,7 @@ const OdaraScreen = ({
         {!oracleLoading && !oracleError && pick && (
           <div className="mt-2 flex flex-col gap-1.5 items-center">
             <div className="flex gap-2 justify-center">
-              <button
+             <button
                 onClick={async () => {
                   if (!pick || lockState === 'locked') return;
                   setLockState('locked');
@@ -661,20 +706,20 @@ const OdaraScreen = ({
                 🔒 Lock
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!pick) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     pulseLock();
                     return;
                   }
-                  void onSkip(pick.fragrance_id);
-                  handleSkipLocal();
+                  await handleSkipLocal();
                 }}
-                className="text-[9px] px-3 py-1 rounded-full"
+                disabled={skipLoading}
+                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-40"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
               >
-                ⏭ Skip
+                {skipLoading ? '⏳ Loading…' : '⏭ Skip'}
               </button>
               <button
                 onClick={() => handleBack()}
@@ -687,7 +732,7 @@ const OdaraScreen = ({
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
-idx=${queueIndex}/${cardQueue.length} lock=${lockState}`}
+idx=${queueIndex}/${cardQueue.length} hist=${viewHistory.length} lock=${lockState}${skipLoading ? ' LOADING' : ''}`}
             </pre>
           </div>
         )}
