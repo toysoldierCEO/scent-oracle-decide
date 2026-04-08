@@ -155,12 +155,35 @@ const Index = () => {
               {isSignUp ? 'Sign in' : 'Sign up'}
             </span>
           </p>
-          {/* TEMPORARY: preview/testing bypass using Alexandria test profile */}
+          {/* TEMPORARY: preview/testing bypass using real Odara test account via edge function */}
           <button
-            onClick={() => {
-              setUser({ id: '330006e3-331c-4451-a321-d0e6f3ba454c', email: 'test@odara.dev' });
+            onClick={async () => {
+              setError('');
+              setLoading(true);
+              try {
+                const res = await fetch(
+                  `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/odara-test-login`,
+                  { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+                );
+                const json = await res.json();
+                if (!res.ok || json.error) {
+                  setError(json.error || 'Test login failed');
+                  return;
+                }
+                // Set real Odara session using returned tokens
+                const { error: sessionErr } = await odaraSupabase.auth.setSession({
+                  access_token: json.access_token,
+                  refresh_token: json.refresh_token,
+                });
+                if (sessionErr) setError(sessionErr.message);
+              } catch (e: any) {
+                setError(e?.message || 'Test login failed');
+              } finally {
+                setLoading(false);
+              }
             }}
-            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
+            disabled={loading}
+            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors disabled:opacity-30"
           >
             Skip for now
           </button>
