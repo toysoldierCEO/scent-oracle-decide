@@ -155,6 +155,15 @@ const Index = () => {
               {isSignUp ? 'Sign in' : 'Sign up'}
             </span>
           </p>
+          {/* TEMPORARY: preview/testing bypass using Alexandria test profile */}
+          <button
+            onClick={() => {
+              setUser({ id: '330006e3-331c-4451-a321-d0e6f3ba454c', email: 'test@odara.dev' });
+            }}
+            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
+          >
+            Skip for now
+          </button>
         </div>
       </div>
     );
