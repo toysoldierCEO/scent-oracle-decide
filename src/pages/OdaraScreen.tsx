@@ -441,12 +441,10 @@ const OdaraScreen = ({
     gestureRef.current.suppressClick = false;
   }, []);
 
-  const isOverridden = currentPick !== null;
-
-  // Remaining alternates to show (exclude the currently promoted one)
-  const visibleAlts = isOverridden
-    ? [originalPick, ...alts].filter(Boolean).filter(a => a!.fragrance_id !== pick?.fragrance_id) as OracleAlternate[]
-    : alts;
+  // Remaining alternates: all queue items except the current one
+  const visibleAlts = cardQueue
+    .filter((_, i) => i !== queueIndex)
+    .map(q => q as OracleAlternate);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
