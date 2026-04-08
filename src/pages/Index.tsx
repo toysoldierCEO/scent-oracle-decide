@@ -21,6 +21,22 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
+  const fetchOracleFor = useCallback(async (userId: string, context: string, wearDate: string) => {
+    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
+      p_user_id: userId,
+      p_temperature: 75,
+      p_context: context,
+      p_brand: 'Alexandria Fragrances',
+      p_wear_date: wearDate,
+    });
+
+    if (rpcError) {
+      throw rpcError;
+    }
+
+    return data as unknown as OracleResult;
+  }, []);
+
   useEffect(() => {
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
@@ -40,15 +56,8 @@ const Index = () => {
       setOracleLoading(true);
       setOracleError(null);
       try {
-        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
-          p_user_id: user.id,
-          p_temperature: 75,
-          p_context: selectedContext,
-          p_brand: 'Alexandria Fragrances',
-          p_wear_date: selectedDate,
-        });
-        if (rpcError) { setOracleError(rpcError.message); }
-        else { setOracle(data as unknown as OracleResult); }
+        const nextOracle = await fetchOracleFor(user.id, selectedContext, selectedDate);
+        setOracle(nextOracle);
       } catch (e: any) {
         setOracleError(e?.message || 'Unknown error');
       } finally {
@@ -56,7 +65,7 @@ const Index = () => {
       }
     };
     fetchOracle();
-  }, [user, selectedContext, selectedDate]);
+  }, [fetchOracleFor, user, selectedContext, selectedDate]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -69,13 +78,20 @@ const Index = () => {
   }, [user, selectedContext]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
-    if (!user) return;
-    await odaraSupabase.rpc('skip_today_pick_v1', {
+    if (!user) return null;
+
+    const { error: skipError } = await odaraSupabase.rpc('skip_today_pick_v1', {
       p_user: user.id,
       p_fragrance_id: fragranceId,
       p_context: selectedContext,
     });
-  }, [user, selectedContext]);
+
+    if (skipError) {
+      throw skipError;
+    }
+
+    return await fetchOracleFor(user.id, selectedContext, selectedDate);
+  }, [fetchOracleFor, user, selectedContext, selectedDate]);
 
   const handleEmailAuth = async () => {
     setError('');

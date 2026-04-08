@@ -91,7 +91,7 @@ interface OdaraScreenProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onAccept: (fragranceId: string) => Promise<void>;
-  onSkip: (fragranceId: string) => Promise<void>;
+  onSkip: (fragranceId: string) => Promise<OracleResult | null>;
 }
 
 /* ── Forecast days ── */
@@ -159,7 +159,8 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 
 /* ── History entry ── */
 interface HistoryEntry {
-  pick: OraclePick;
+  oracle: OracleResult;
+  currentPick: OraclePick | null;
   lockState: LockState;
 }
 
@@ -173,9 +174,10 @@ const OdaraScreen = ({
   selectedDate, onDateChange,
   onAccept, onSkip,
 }: OdaraScreenProps) => {
-  const originalPick = oracle?.today_pick ?? null;
-  const layer = oracle?.layer ?? null;
-  const alts = oracle?.alternates ?? [];
+  const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
+  const originalPick = activeOracle?.today_pick ?? null;
+  const layer = activeOracle?.layer ?? null;
+  const alts = activeOracle?.alternates ?? [];
   const forecastDays = buildForecastDays(selectedDate);
 
   // ── History stack scoped to day+context ──
@@ -187,6 +189,7 @@ const OdaraScreen = ({
   useEffect(() => {
     const newKey = `${selectedDate}|${selectedContext}`;
     sessionKeyRef.current = newKey;
+    setActiveOracle(oracle);
     setHistory([]);
     setCurrentPick(null);
     setLockState('neutral');
@@ -241,9 +244,9 @@ const OdaraScreen = ({
 
   // ── Push current pick to history before changing ──
   const pushHistory = useCallback(() => {
-    if (!pick) return;
-    setHistory(prev => [...prev, { pick, lockState }]);
-  }, [pick, lockState]);
+    if (!activeOracle || !pick) return;
+    setHistory(prev => [...prev, { oracle: activeOracle, currentPick, lockState }]);
+  }, [activeOracle, currentPick, lockState, pick]);
 
   // ── Promote alternate into the main card ──
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
@@ -268,11 +271,12 @@ const OdaraScreen = ({
     if (history.length === 0) return;
     const prev = history[history.length - 1];
     setHistory(h => h.slice(0, -1));
-    setCurrentPick(prev.pick === originalPick ? null : prev.pick);
+    setActiveOracle(prev.oracle);
+    setCurrentPick(prev.currentPick);
     setLockState(prev.lockState);
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [history, originalPick]);
+  }, [history]);
 
   const hasHistory = history.length > 0;
 
@@ -402,12 +406,20 @@ const OdaraScreen = ({
     if (dy > SWIPE_DISTANCE) {
       clearUnlockTimeout();
       setLockState('skipping');
-      pushHistory();
-      await onSkip(pick.fragrance_id);
-      unlockTimeoutRef.current = window.setTimeout(() => {
+      try {
+        const nextOracle = await onSkip(pick.fragrance_id);
+        const nextPick = nextOracle?.today_pick ?? null;
+
+        if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
+          pushHistory();
+          setActiveOracle(nextOracle);
+          setCurrentPick(null);
+          setSelectedMood('balance');
+          setLayerExpanded(false);
+        }
+      } finally {
         setLockState('neutral');
-        unlockTimeoutRef.current = null;
-      }, 600);
+      }
     }
   }, [clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
 
