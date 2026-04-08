@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     if (error) {
       return new Response(
-        JSON.stringify({ error: "Test login failed" }),
+        JSON.stringify({ error: "Test login failed", detail: error.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
