@@ -694,6 +694,25 @@ const OdaraScreen = ({
                       setSelectedMood('balance');
                       setLayerExpanded(false);
                     }
+                    // If backend returned same fragrance, promote first available alternate
+                    if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
+                      const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
+                      if (fallbackAlt) {
+                        console.log('[DEBUG SKIP] same pick returned, promoting alternate:', fallbackAlt.name);
+                        pushHistory();
+                        setCurrentPick({
+                          fragrance_id: fallbackAlt.fragrance_id,
+                          name: fallbackAlt.name,
+                          family: fallbackAlt.family,
+                          reason: fallbackAlt.reason,
+                          brand: fallbackAlt.brand ?? '',
+                          notes: fallbackAlt.notes ?? [],
+                          accords: fallbackAlt.accords ?? [],
+                        });
+                        setSelectedMood('balance');
+                        setLayerExpanded(false);
+                      }
+                    }
                   } finally {
                     setLockState('neutral');
                   }
