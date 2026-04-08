@@ -19,12 +19,21 @@ Deno.serve(async (req) => {
     const email = Deno.env.get("ODARA_TEST_EMAIL");
     const password = Deno.env.get("ODARA_TEST_PASSWORD");
 
+    const emailExists = !!email && email.length > 0;
+    const passwordExists = !!password && password.length > 0;
+
     if (!email || !password) {
       return new Response(
-        JSON.stringify({ error: "Test credentials not configured" }),
+        JSON.stringify({
+          error: "Test credentials not configured",
+          debug: { emailExists, passwordExists },
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Log email for debugging (email is not a secret), password length only
+    console.log(`[odara-test-login] email="${email}", passwordLen=${password.length}`);
 
     const odara = createClient(ODARA_URL, ODARA_ANON_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -34,7 +43,11 @@ Deno.serve(async (req) => {
 
     if (error) {
       return new Response(
-        JSON.stringify({ error: "Test login failed", detail: error.message }),
+        JSON.stringify({
+          error: "Test login failed",
+          detail: error.message,
+          debug: { emailUsed: email, passwordLen: password.length },
+        }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
