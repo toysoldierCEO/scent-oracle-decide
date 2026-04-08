@@ -313,6 +313,9 @@ const OdaraScreen = ({
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!pick) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Don't capture gestures on debug controls or interactive nested elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-debug-controls]')) return;
 
     clearUnlockTimeout();
     gestureRef.current = {
@@ -417,11 +420,29 @@ const OdaraScreen = ({
           setSelectedMood('balance');
           setLayerExpanded(false);
         }
+        // Fallback: if same pick returned, promote first alternate
+        if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
+          const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
+          if (fallbackAlt) {
+            pushHistory();
+            setCurrentPick({
+              fragrance_id: fallbackAlt.fragrance_id,
+              name: fallbackAlt.name,
+              family: fallbackAlt.family,
+              reason: fallbackAlt.reason,
+              brand: fallbackAlt.brand ?? '',
+              notes: fallbackAlt.notes ?? [],
+              accords: fallbackAlt.accords ?? [],
+            });
+            setSelectedMood('balance');
+            setLayerExpanded(false);
+          }
+        }
       } finally {
         setLockState('neutral');
       }
     }
-  }, [clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
+  }, [alts, clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     void completeGesture(e.pointerId, e.currentTarget);
@@ -644,8 +665,97 @@ const OdaraScreen = ({
                 </span>
               </div>
             )}
+
           </div>
         )}
+
+        {/* ── TEMPORARY DEBUG CONTROLS (outside gesture card) ── */}
+        {!oracleLoading && !oracleError && pick && (
+          <div className="mt-2 flex flex-col gap-1.5 items-center">
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={async () => {
+                  if (!pick || lockState === 'locked') return;
+                  setLockState('locked');
+                  pulseLock();
+                  await onAccept(pick.fragrance_id);
+                }}
+                className="text-[9px] px-3 py-1 rounded-full"
+                style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+              >
+                🔒 Lock
+              </button>
+              <button
+                onClick={async () => {
+                  if (!pick) return;
+                  if (lockState === 'locked') {
+                    setLockState('neutral');
+                    pulseLock();
+                    return;
+                  }
+                  setLockState('skipping');
+                  try {
+                    const nextOracle = await onSkip(pick.fragrance_id);
+                    const nextPick = nextOracle?.today_pick ?? null;
+                    console.log('[DEBUG SKIP]', {
+                      prevId: pick.fragrance_id,
+                      prevName: pick.name,
+                      nextId: nextPick?.fragrance_id,
+                      nextName: nextPick?.name,
+                      same: nextPick?.fragrance_id === pick.fragrance_id,
+                      gotOracle: !!nextOracle,
+                    });
+                    if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
+                      pushHistory();
+                      setActiveOracle(nextOracle);
+                      setCurrentPick(null);
+                      setSelectedMood('balance');
+                      setLayerExpanded(false);
+                    }
+                    // If backend returned same fragrance, promote first available alternate
+                    if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
+                      const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
+                      if (fallbackAlt) {
+                        console.log('[DEBUG SKIP] same pick returned, promoting alternate:', fallbackAlt.name);
+                        pushHistory();
+                        setCurrentPick({
+                          fragrance_id: fallbackAlt.fragrance_id,
+                          name: fallbackAlt.name,
+                          family: fallbackAlt.family,
+                          reason: fallbackAlt.reason,
+                          brand: fallbackAlt.brand ?? '',
+                          notes: fallbackAlt.notes ?? [],
+                          accords: fallbackAlt.accords ?? [],
+                        });
+                        setSelectedMood('balance');
+                        setLayerExpanded(false);
+                      }
+                    }
+                  } finally {
+                    setLockState('neutral');
+                  }
+                }}
+                className="text-[9px] px-3 py-1 rounded-full"
+                style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+              >
+                ⏭ Skip
+              </button>
+              <button
+                onClick={() => handleBack()}
+                disabled={!hasHistory}
+                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-20"
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                ← Back
+              </button>
+            </div>
+            <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
+{`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
+lock=${lockState} hist=${history.length}`}
+            </pre>
+          </div>
+        )}
+        {/* ── END DEBUG ── */}
 
         {/* ── Clickable Forecast strip ── */}
         <div
