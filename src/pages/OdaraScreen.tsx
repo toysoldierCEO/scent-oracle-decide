@@ -259,37 +259,77 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // ── Skip = advance queue index forward ──
-  const handleSkipLocal = useCallback(() => {
-    if (queueIndex >= cardQueue.length - 1) {
-      console.log('[QUEUE] end of queue, cannot skip further');
+  // ── Skip = advance queue, or fetch new bundle if exhausted ──
+  const handleSkipLocal = useCallback(async () => {
+    if (skipLoading) return;
+    const currentPick = cardQueue[queueIndex];
+
+    if (queueIndex < cardQueue.length - 1) {
+      // Still have cards in current queue
+      if (currentPick) setViewHistory(h => [...h, currentPick]);
+      setQueueIndex(i => i + 1);
+      setSelectedMood('balance');
+      setLayerExpanded(false);
+      setLockState('neutral');
       return;
     }
-    setQueueIndex(i => i + 1);
-    setSelectedMood('balance');
-    setLayerExpanded(false);
-    setLockState('neutral');
-  }, [queueIndex, cardQueue.length]);
+
+    // Queue exhausted — fetch new bundle
+    if (!currentPick) return;
+    setSkipLoading(true);
+    try {
+      const nextOracle = await onSkip(currentPick.fragrance_id);
+      if (nextOracle) {
+        const newQueue = buildCardQueue(nextOracle);
+        // Filter out already-seen scents, but keep at least 1
+        const unseen = newQueue.filter(c => !seenIdsRef.current.has(c.fragrance_id));
+        const finalQueue = unseen.length > 0 ? unseen : newQueue;
+        finalQueue.forEach(c => seenIdsRef.current.add(c.fragrance_id));
+
+        setViewHistory(h => [...h, currentPick]);
+        setActiveOracle(nextOracle);
+        setCardQueue(finalQueue);
+        setQueueIndex(0);
+        setSelectedMood('balance');
+        setLayerExpanded(false);
+        setLockState('neutral');
+      }
+    } finally {
+      setSkipLoading(false);
+    }
+  }, [queueIndex, cardQueue, skipLoading, onSkip]);
 
   // ── Promote alternate into the main card (jump to its queue position) ──
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
+    const currentPick = cardQueue[queueIndex];
     const idx = cardQueue.findIndex(q => q.fragrance_id === alt.fragrance_id);
-    if (idx >= 0) {
+    if (idx >= 0 && idx !== queueIndex) {
+      if (currentPick) setViewHistory(h => [...h, currentPick]);
       setQueueIndex(idx);
     }
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, cardQueue]);
+  }, [lockState, cardQueue, queueIndex]);
 
-  // ── Back button — walk backward in queue ──
+  // ── Back button — pop from view history ──
   const handleBack = useCallback(() => {
-    if (queueIndex <= 0) return;
-    setQueueIndex(i => i - 1);
+    if (viewHistory.length === 0) return;
+    const prev = viewHistory[viewHistory.length - 1];
+    // Find in current queue
+    const idx = cardQueue.findIndex(q => q.fragrance_id === prev.fragrance_id);
+    if (idx >= 0) {
+      setQueueIndex(idx);
+    } else {
+      // Card was from a previous bundle — prepend it to queue
+      setCardQueue(q => [prev, ...q]);
+      setQueueIndex(0);
+    }
+    setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [queueIndex]);
+  }, [viewHistory, cardQueue]);
 
 
   const pulseLock = useCallback(() => {
