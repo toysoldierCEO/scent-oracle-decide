@@ -157,6 +157,12 @@ function buildLayerModes(layer: OracleLayer): LayerModes {
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
+/* ── History entry ── */
+interface HistoryEntry {
+  pick: OraclePick;
+  lockState: LockState;
+}
+
 /* ── Gesture constants ── */
 const DIRECTION_LOCK_THRESHOLD = 12;
 const SWIPE_DISTANCE = 50;
@@ -172,15 +178,24 @@ const OdaraScreen = ({
   const alts = oracle?.alternates ?? [];
   const forecastDays = buildForecastDays(selectedDate);
 
-  // Active pick — either original or an alternate promoted to main
-  const [overridePick, setOverridePick] = useState<OraclePick | null>(null);
-  const pick = overridePick ?? originalPick;
-  const isOverridden = overridePick !== null;
+  // ── History stack scoped to day+context ──
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [currentPick, setCurrentPick] = useState<OraclePick | null>(null);
 
-  // Reset override when oracle data changes (context/date switch)
+  // Reset history + currentPick when oracle/context/date changes
+  const sessionKeyRef = useRef(`${selectedDate}|${selectedContext}`);
   useEffect(() => {
-    setOverridePick(null);
-  }, [oracle]);
+    const newKey = `${selectedDate}|${selectedContext}`;
+    sessionKeyRef.current = newKey;
+    setHistory([]);
+    setCurrentPick(null);
+    setLockState('neutral');
+    setLayerExpanded(false);
+    setSelectedMood('balance');
+  }, [oracle, selectedDate, selectedContext]);
+
+  // The active pick: currentPick override or originalPick
+  const pick = currentPick ?? originalPick;
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -201,16 +216,23 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
 
-  // Build layer modes from oracle layer + alternates (relative to current active pick)
+  // Build layer modes from oracle layer
   const layerModes = layer ? buildLayerModes(layer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // Promote alternate into the main card
+  // ── Push current pick to history before changing ──
+  const pushHistory = useCallback(() => {
+    if (!pick) return;
+    setHistory(prev => [...prev, { pick, lockState }]);
+  }, [pick, lockState]);
+
+  // ── Promote alternate into the main card ──
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
-    setOverridePick({
+    pushHistory();
+    setCurrentPick({
       fragrance_id: alt.fragrance_id,
       name: alt.name,
       family: alt.family,
@@ -221,24 +243,29 @@ const OdaraScreen = ({
     });
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [lockState]);
+    setLockState('neutral');
+  }, [lockState, pushHistory]);
 
-  // Back button — undo alternate promotion
+  // ── Back button — walk history stack ──
   const handleBack = useCallback(() => {
-    setOverridePick(null);
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setHistory(h => h.slice(0, -1));
+    setCurrentPick(prev.pick === originalPick ? null : prev.pick);
+    setLockState(prev.lockState);
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, []);
+  }, [history, originalPick]);
+
+  const hasHistory = history.length > 0;
 
   /* ── Gesture handlers ── */
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (lockState === 'locked') return;
     const t = e.touches[0];
     touchRef.current = { startX: t.clientX, startY: t.clientY, locked: null };
-  }, [lockState]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (lockState === 'locked') return;
     const t = e.touches[0];
     const dx = t.clientX - touchRef.current.startX;
     const dy = t.clientY - touchRef.current.startY;
@@ -250,39 +277,52 @@ const OdaraScreen = ({
     }
 
     if (touchRef.current.locked === 'v') {
-      const clamped = Math.max(-80, Math.min(80, dy));
-      setCardTranslateY(clamped);
+      // When locked, only allow downward drag (to unlock)
+      if (lockState === 'locked') {
+        const clamped = Math.max(0, Math.min(80, dy));
+        setCardTranslateY(clamped);
+      } else {
+        const clamped = Math.max(-80, Math.min(80, dy));
+        setCardTranslateY(clamped);
+      }
     }
   }, [lockState]);
 
   const handleTouchEnd = useCallback(async () => {
-    if (lockState === 'locked') return;
     const dy = cardTranslateY;
     setCardTranslateY(0);
 
     if (touchRef.current.locked !== 'v') return;
     if (!pick) return;
 
-    if (dy < -SWIPE_DISTANCE) {
-      // Swipe UP → lock
-      setLockState('locked');
-      setLockPulse(true);
-      setTimeout(() => setLockPulse(false), 400);
-      await onAccept(pick.fragrance_id);
-    } else if (dy > SWIPE_DISTANCE) {
-      // Swipe DOWN → skip
-      setLockState('skipping');
-      setTimeout(() => setLockState('neutral'), 600);
-      await onSkip(pick.fragrance_id);
-    }
-  }, [cardTranslateY, lockState, pick, onAccept, onSkip]);
-
-  // Unlock handler
-  const handleUnlock = useCallback(() => {
     if (lockState === 'locked') {
-      setLockState('neutral');
+      // LOCKED state: swipe down = unlock only (no skip)
+      if (dy > SWIPE_DISTANCE) {
+        setLockState('neutral');
+        setLockPulse(true);
+        setTimeout(() => setLockPulse(false), 400);
+      }
+    } else {
+      // NEUTRAL state
+      if (dy < -SWIPE_DISTANCE) {
+        // Swipe UP → lock
+        setLockState('locked');
+        setLockPulse(true);
+        setTimeout(() => setLockPulse(false), 400);
+        await onAccept(pick.fragrance_id);
+      } else if (dy > SWIPE_DISTANCE) {
+        // Swipe DOWN → skip
+        setLockState('skipping');
+        pushHistory();
+        await onSkip(pick.fragrance_id);
+        // After skip animation, stay neutral — the oracle should provide new data
+        // or we show we've skipped
+        setTimeout(() => setLockState('neutral'), 600);
+      }
     }
-  }, [lockState]);
+  }, [cardTranslateY, lockState, pick, onAccept, onSkip, pushHistory]);
+
+  const isOverridden = currentPick !== null;
 
   // Remaining alternates to show (exclude the currently promoted one)
   const visibleAlts = isOverridden
@@ -349,25 +389,33 @@ const OdaraScreen = ({
             <div className="flex items-center justify-between mb-1.5 relative z-10">
               {/* Left: back or lock */}
               <div className="flex items-center gap-2 w-[60px]">
-                {isOverridden ? (
+                {hasHistory ? (
                   <button onClick={handleBack} className="p-0.5 -ml-0.5">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/60">
                       <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                   </button>
-                ) : (
-                  <button onClick={handleUnlock} className="p-0.5 -ml-0.5">
-                    <svg
-                      width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke={lockIconColor} strokeWidth="1.5"
-                      className="transition-colors duration-300"
-                      style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
-                    >
-                      <rect x="3" y="11" width="18" height="11" rx="2" />
-                      <path d="M7 11V7a5 5 0 0110 0v4" />
-                    </svg>
-                  </button>
-                )}
+                ) : null}
+                <button onClick={() => lockState === 'locked' && setLockState('neutral')} className="p-0.5">
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke={lockIconColor} strokeWidth="1.5"
+                    className="transition-colors duration-300"
+                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                  >
+                    {lockState === 'locked' ? (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0110 0v4" />
+                      </>
+                    ) : (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                      </>
+                    )}
+                  </svg>
+                </button>
               </div>
 
               {/* Center: date */}
