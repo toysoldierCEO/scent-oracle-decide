@@ -415,41 +415,11 @@ const OdaraScreen = ({
 
     if (dy > SWIPE_DISTANCE) {
       clearUnlockTimeout();
-      setLockState('skipping');
-      try {
-        const nextOracle = await onSkip(pick.fragrance_id);
-        const nextPick = nextOracle?.today_pick ?? null;
-
-        if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
-          pushHistory();
-          setActiveOracle(nextOracle);
-          setCurrentPick(null);
-          setSelectedMood('balance');
-          setLayerExpanded(false);
-        }
-        // Fallback: if same pick returned, promote first alternate
-        if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
-          const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
-          if (fallbackAlt) {
-            pushHistory();
-            setCurrentPick({
-              fragrance_id: fallbackAlt.fragrance_id,
-              name: fallbackAlt.name,
-              family: fallbackAlt.family,
-              reason: fallbackAlt.reason,
-              brand: fallbackAlt.brand ?? '',
-              notes: fallbackAlt.notes ?? [],
-              accords: fallbackAlt.accords ?? [],
-            });
-            setSelectedMood('balance');
-            setLayerExpanded(false);
-          }
-        }
-      } finally {
-        setLockState('neutral');
-      }
+      // Fire backend skip (fire-and-forget for logging), use local queue
+      void onSkip(pick.fragrance_id);
+      handleSkipLocal();
     }
-  }, [alts, clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
+  }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, onSkip, pick, pulseLock]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     void completeGesture(e.pointerId, e.currentTarget);
