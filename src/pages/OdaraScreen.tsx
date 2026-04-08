@@ -164,8 +164,8 @@ interface HistoryEntry {
 }
 
 /* ── Gesture constants ── */
-const DIRECTION_LOCK_THRESHOLD = 12;
-const SWIPE_DISTANCE = 50;
+const DIRECTION_LOCK_THRESHOLD = 8;
+const SWIPE_DISTANCE = 28;
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
@@ -628,7 +628,7 @@ const OdaraScreen = ({
               <div className="flex justify-center mt-2">
                 <span className="text-[9px] uppercase tracking-[0.18em] px-3 py-1 rounded-full"
                   style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}>
-                  Locked · tap lock to undo
+                  Locked · swipe down to unlock
                 </span>
               </div>
             )}
