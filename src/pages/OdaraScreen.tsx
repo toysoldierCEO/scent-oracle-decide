@@ -322,6 +322,8 @@ const OdaraScreen = ({
     }
   }, [cardTranslateY, lockState, pick, onAccept, onSkip, pushHistory]);
 
+  const isOverridden = currentPick !== null;
+
   // Remaining alternates to show (exclude the currently promoted one)
   const visibleAlts = isOverridden
     ? [originalPick, ...alts].filter(Boolean).filter(a => a!.fragrance_id !== pick?.fragrance_id) as OracleAlternate[]
