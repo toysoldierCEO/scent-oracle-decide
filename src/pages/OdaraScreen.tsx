@@ -462,7 +462,7 @@ const OdaraScreen = ({
       clearUnlockTimeout();
       // Fire backend skip (fire-and-forget for logging), use local queue
       void onSkip(pick.fragrance_id);
-      handleSkipLocal();
+      void handleSkipLocal();
     }
   }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, onSkip, pick, pulseLock]);
 
