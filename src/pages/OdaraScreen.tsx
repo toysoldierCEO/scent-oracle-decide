@@ -157,16 +157,31 @@ function buildLayerModes(layer: OracleLayer): LayerModes {
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
-/* ── History entry ── */
-interface HistoryEntry {
-  oracle: OracleResult;
-  currentPick: OraclePick | null;
-  lockState: LockState;
-}
-
 /* ── Gesture constants ── */
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
+
+/** Build a deduplicated local card queue from the oracle bundle */
+function buildCardQueue(oracle: OracleResult): OraclePick[] {
+  const seen = new Set<string>();
+  const queue: OraclePick[] = [];
+  const addPick = (p: OraclePick | OracleAlternate) => {
+    if (!p.fragrance_id || seen.has(p.fragrance_id)) return;
+    seen.add(p.fragrance_id);
+    queue.push({
+      fragrance_id: p.fragrance_id,
+      name: p.name,
+      family: p.family,
+      reason: p.reason,
+      brand: p.brand ?? '',
+      notes: p.notes ?? [],
+      accords: p.accords ?? [],
+    });
+  };
+  addPick(oracle.today_pick);
+  oracle.alternates.forEach(addPick);
+  return queue;
+}
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
