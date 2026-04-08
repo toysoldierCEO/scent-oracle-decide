@@ -190,30 +190,27 @@ const OdaraScreen = ({
   onAccept, onSkip,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const originalPick = activeOracle?.today_pick ?? null;
   const layer = activeOracle?.layer ?? null;
-  const alts = activeOracle?.alternates ?? [];
   const forecastDays = buildForecastDays(selectedDate);
 
-  // ── History stack scoped to day+context ──
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [currentPick, setCurrentPick] = useState<OraclePick | null>(null);
+  // ── Local card queue + index ──
+  const [cardQueue, setCardQueue] = useState<OraclePick[]>(() => oracle ? buildCardQueue(oracle) : []);
+  const [queueIndex, setQueueIndex] = useState(0);
 
-  // Reset history + currentPick when oracle/context/date changes
-  const sessionKeyRef = useRef(`${selectedDate}|${selectedContext}`);
+  // Reset when oracle/context/date changes
   useEffect(() => {
-    const newKey = `${selectedDate}|${selectedContext}`;
-    sessionKeyRef.current = newKey;
     setActiveOracle(oracle);
-    setHistory([]);
-    setCurrentPick(null);
+    const q = oracle ? buildCardQueue(oracle) : [];
+    setCardQueue(q);
+    setQueueIndex(0);
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext]);
 
-  // The active pick: currentPick override or originalPick
-  const pick = currentPick ?? originalPick;
+  // The active pick from the queue
+  const pick = cardQueue[queueIndex] ?? null;
+  const hasHistory = queueIndex > 0;
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -256,12 +253,6 @@ const OdaraScreen = ({
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
-
-  // ── Push current pick to history before changing ──
-  const pushHistory = useCallback(() => {
-    if (!activeOracle || !pick) return;
-    setHistory(prev => [...prev, { oracle: activeOracle, currentPick, lockState }]);
-  }, [activeOracle, currentPick, lockState, pick]);
 
   // ── Promote alternate into the main card ──
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
