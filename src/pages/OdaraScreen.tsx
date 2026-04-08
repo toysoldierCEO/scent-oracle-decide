@@ -157,16 +157,31 @@ function buildLayerModes(layer: OracleLayer): LayerModes {
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
-/* ── History entry ── */
-interface HistoryEntry {
-  oracle: OracleResult;
-  currentPick: OraclePick | null;
-  lockState: LockState;
-}
-
 /* ── Gesture constants ── */
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
+
+/** Build a deduplicated local card queue from the oracle bundle */
+function buildCardQueue(oracle: OracleResult): OraclePick[] {
+  const seen = new Set<string>();
+  const queue: OraclePick[] = [];
+  const addPick = (p: OraclePick | OracleAlternate) => {
+    if (!p.fragrance_id || seen.has(p.fragrance_id)) return;
+    seen.add(p.fragrance_id);
+    queue.push({
+      fragrance_id: p.fragrance_id,
+      name: p.name,
+      family: p.family,
+      reason: p.reason,
+      brand: p.brand ?? '',
+      notes: p.notes ?? [],
+      accords: p.accords ?? [],
+    });
+  };
+  addPick(oracle.today_pick);
+  oracle.alternates.forEach(addPick);
+  return queue;
+}
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
@@ -175,30 +190,27 @@ const OdaraScreen = ({
   onAccept, onSkip,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const originalPick = activeOracle?.today_pick ?? null;
   const layer = activeOracle?.layer ?? null;
-  const alts = activeOracle?.alternates ?? [];
   const forecastDays = buildForecastDays(selectedDate);
 
-  // ── History stack scoped to day+context ──
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [currentPick, setCurrentPick] = useState<OraclePick | null>(null);
+  // ── Local card queue + index ──
+  const [cardQueue, setCardQueue] = useState<OraclePick[]>(() => oracle ? buildCardQueue(oracle) : []);
+  const [queueIndex, setQueueIndex] = useState(0);
 
-  // Reset history + currentPick when oracle/context/date changes
-  const sessionKeyRef = useRef(`${selectedDate}|${selectedContext}`);
+  // Reset when oracle/context/date changes
   useEffect(() => {
-    const newKey = `${selectedDate}|${selectedContext}`;
-    sessionKeyRef.current = newKey;
     setActiveOracle(oracle);
-    setHistory([]);
-    setCurrentPick(null);
+    const q = oracle ? buildCardQueue(oracle) : [];
+    setCardQueue(q);
+    setQueueIndex(0);
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext]);
 
-  // The active pick: currentPick override or originalPick
-  const pick = currentPick ?? originalPick;
+  // The active pick from the queue
+  const pick = cardQueue[queueIndex] ?? null;
+  const hasHistory = queueIndex > 0;
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -242,43 +254,38 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // ── Push current pick to history before changing ──
-  const pushHistory = useCallback(() => {
-    if (!activeOracle || !pick) return;
-    setHistory(prev => [...prev, { oracle: activeOracle, currentPick, lockState }]);
-  }, [activeOracle, currentPick, lockState, pick]);
-
-  // ── Promote alternate into the main card ──
-  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked') return;
-    pushHistory();
-    setCurrentPick({
-      fragrance_id: alt.fragrance_id,
-      name: alt.name,
-      family: alt.family,
-      reason: alt.reason,
-      brand: alt.brand ?? '',
-      notes: alt.notes ?? [],
-      accords: alt.accords ?? [],
-    });
+  // ── Skip = advance queue index forward ──
+  const handleSkipLocal = useCallback(() => {
+    if (queueIndex >= cardQueue.length - 1) {
+      console.log('[QUEUE] end of queue, cannot skip further');
+      return;
+    }
+    setQueueIndex(i => i + 1);
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, pushHistory]);
+  }, [queueIndex, cardQueue.length]);
 
-  // ── Back button — walk history stack ──
-  const handleBack = useCallback(() => {
-    if (history.length === 0) return;
-    const prev = history[history.length - 1];
-    setHistory(h => h.slice(0, -1));
-    setActiveOracle(prev.oracle);
-    setCurrentPick(prev.currentPick);
-    setLockState(prev.lockState);
+  // ── Promote alternate into the main card (jump to its queue position) ──
+  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
+    if (lockState === 'locked') return;
+    const idx = cardQueue.findIndex(q => q.fragrance_id === alt.fragrance_id);
+    if (idx >= 0) {
+      setQueueIndex(idx);
+    }
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [history]);
+    setLockState('neutral');
+  }, [lockState, cardQueue]);
 
-  const hasHistory = history.length > 0;
+  // ── Back button — walk backward in queue ──
+  const handleBack = useCallback(() => {
+    if (queueIndex <= 0) return;
+    setQueueIndex(i => i - 1);
+    setSelectedMood('balance');
+    setLayerExpanded(false);
+  }, [queueIndex]);
+
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
@@ -408,41 +415,11 @@ const OdaraScreen = ({
 
     if (dy > SWIPE_DISTANCE) {
       clearUnlockTimeout();
-      setLockState('skipping');
-      try {
-        const nextOracle = await onSkip(pick.fragrance_id);
-        const nextPick = nextOracle?.today_pick ?? null;
-
-        if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
-          pushHistory();
-          setActiveOracle(nextOracle);
-          setCurrentPick(null);
-          setSelectedMood('balance');
-          setLayerExpanded(false);
-        }
-        // Fallback: if same pick returned, promote first alternate
-        if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
-          const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
-          if (fallbackAlt) {
-            pushHistory();
-            setCurrentPick({
-              fragrance_id: fallbackAlt.fragrance_id,
-              name: fallbackAlt.name,
-              family: fallbackAlt.family,
-              reason: fallbackAlt.reason,
-              brand: fallbackAlt.brand ?? '',
-              notes: fallbackAlt.notes ?? [],
-              accords: fallbackAlt.accords ?? [],
-            });
-            setSelectedMood('balance');
-            setLayerExpanded(false);
-          }
-        }
-      } finally {
-        setLockState('neutral');
-      }
+      // Fire backend skip (fire-and-forget for logging), use local queue
+      void onSkip(pick.fragrance_id);
+      handleSkipLocal();
     }
-  }, [alts, clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
+  }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, onSkip, pick, pulseLock]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     void completeGesture(e.pointerId, e.currentTarget);
@@ -464,12 +441,10 @@ const OdaraScreen = ({
     gestureRef.current.suppressClick = false;
   }, []);
 
-  const isOverridden = currentPick !== null;
-
-  // Remaining alternates to show (exclude the currently promoted one)
-  const visibleAlts = isOverridden
-    ? [originalPick, ...alts].filter(Boolean).filter(a => a!.fragrance_id !== pick?.fragrance_id) as OracleAlternate[]
-    : alts;
+  // Remaining alternates: all queue items except the current one
+  const visibleAlts = cardQueue
+    .filter((_, i) => i !== queueIndex)
+    .map(q => q as OracleAlternate);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -686,54 +661,15 @@ const OdaraScreen = ({
                 🔒 Lock
               </button>
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (!pick) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     pulseLock();
                     return;
                   }
-                  setLockState('skipping');
-                  try {
-                    const nextOracle = await onSkip(pick.fragrance_id);
-                    const nextPick = nextOracle?.today_pick ?? null;
-                    console.log('[DEBUG SKIP]', {
-                      prevId: pick.fragrance_id,
-                      prevName: pick.name,
-                      nextId: nextPick?.fragrance_id,
-                      nextName: nextPick?.name,
-                      same: nextPick?.fragrance_id === pick.fragrance_id,
-                      gotOracle: !!nextOracle,
-                    });
-                    if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
-                      pushHistory();
-                      setActiveOracle(nextOracle);
-                      setCurrentPick(null);
-                      setSelectedMood('balance');
-                      setLayerExpanded(false);
-                    }
-                    // If backend returned same fragrance, promote first available alternate
-                    if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
-                      const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
-                      if (fallbackAlt) {
-                        console.log('[DEBUG SKIP] same pick returned, promoting alternate:', fallbackAlt.name);
-                        pushHistory();
-                        setCurrentPick({
-                          fragrance_id: fallbackAlt.fragrance_id,
-                          name: fallbackAlt.name,
-                          family: fallbackAlt.family,
-                          reason: fallbackAlt.reason,
-                          brand: fallbackAlt.brand ?? '',
-                          notes: fallbackAlt.notes ?? [],
-                          accords: fallbackAlt.accords ?? [],
-                        });
-                        setSelectedMood('balance');
-                        setLayerExpanded(false);
-                      }
-                    }
-                  } finally {
-                    setLockState('neutral');
-                  }
+                  void onSkip(pick.fragrance_id);
+                  handleSkipLocal();
                 }}
                 className="text-[9px] px-3 py-1 rounded-full"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
@@ -751,7 +687,7 @@ const OdaraScreen = ({
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
-lock=${lockState} hist=${history.length}`}
+idx=${queueIndex}/${cardQueue.length} lock=${lockState}`}
             </pre>
           </div>
         )}
