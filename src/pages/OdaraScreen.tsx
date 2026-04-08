@@ -389,25 +389,33 @@ const OdaraScreen = ({
             <div className="flex items-center justify-between mb-1.5 relative z-10">
               {/* Left: back or lock */}
               <div className="flex items-center gap-2 w-[60px]">
-                {isOverridden ? (
+                {hasHistory ? (
                   <button onClick={handleBack} className="p-0.5 -ml-0.5">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/60">
                       <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                   </button>
-                ) : (
-                  <button onClick={handleUnlock} className="p-0.5 -ml-0.5">
-                    <svg
-                      width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke={lockIconColor} strokeWidth="1.5"
-                      className="transition-colors duration-300"
-                      style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
-                    >
-                      <rect x="3" y="11" width="18" height="11" rx="2" />
-                      <path d="M7 11V7a5 5 0 0110 0v4" />
-                    </svg>
-                  </button>
-                )}
+                ) : null}
+                <button onClick={() => lockState === 'locked' && setLockState('neutral')} className="p-0.5">
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke={lockIconColor} strokeWidth="1.5"
+                    className="transition-colors duration-300"
+                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                  >
+                    {lockState === 'locked' ? (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0110 0v4" />
+                      </>
+                    ) : (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                      </>
+                    )}
+                  </svg>
+                </button>
               </div>
 
               {/* Center: date */}
