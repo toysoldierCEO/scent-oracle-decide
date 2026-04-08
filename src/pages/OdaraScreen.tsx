@@ -644,6 +644,78 @@ const OdaraScreen = ({
                 </span>
               </div>
             )}
+
+            {/* ── TEMPORARY DEBUG CONTROLS ── */}
+            <div className="mt-3 pt-2 flex flex-col gap-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!pick || lockState === 'locked') return;
+                    setLockState('locked');
+                    pulseLock();
+                    await onAccept(pick.fragrance_id);
+                  }}
+                  className="text-[9px] px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+                >
+                  🔒 Lock
+                </button>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!pick) return;
+                    if (lockState === 'locked') {
+                      setLockState('neutral');
+                      pulseLock();
+                      return;
+                    }
+                    setLockState('skipping');
+                    try {
+                      const nextOracle = await onSkip(pick.fragrance_id);
+                      const nextPick = nextOracle?.today_pick ?? null;
+                      console.log('[DEBUG SKIP]', {
+                        prevId: pick.fragrance_id,
+                        prevName: pick.name,
+                        nextId: nextPick?.fragrance_id,
+                        nextName: nextPick?.name,
+                        same: nextPick?.fragrance_id === pick.fragrance_id,
+                        gotOracle: !!nextOracle,
+                      });
+                      if (nextOracle && nextPick && nextPick.fragrance_id !== pick.fragrance_id) {
+                        pushHistory();
+                        setActiveOracle(nextOracle);
+                        setCurrentPick(null);
+                        setSelectedMood('balance');
+                        setLayerExpanded(false);
+                      }
+                    } finally {
+                      setLockState('neutral');
+                    }
+                  }}
+                  className="text-[9px] px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                >
+                  ⏭ Skip
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBack();
+                  }}
+                  disabled={!hasHistory}
+                  className="text-[9px] px-3 py-1 rounded-full disabled:opacity-20"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.12)' }}
+                >
+                  ← Back
+                </button>
+              </div>
+              <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
+{`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
+lock=${lockState} hist=${history.length}`}
+              </pre>
+            </div>
+            {/* ── END DEBUG ── */}
           </div>
         )}
 
