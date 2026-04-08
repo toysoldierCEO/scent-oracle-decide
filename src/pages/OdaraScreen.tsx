@@ -313,6 +313,9 @@ const OdaraScreen = ({
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!pick) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Don't capture gestures on debug controls or interactive nested elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-debug-controls]')) return;
 
     clearUnlockTimeout();
     gestureRef.current = {
