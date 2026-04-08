@@ -420,11 +420,29 @@ const OdaraScreen = ({
           setSelectedMood('balance');
           setLayerExpanded(false);
         }
+        // Fallback: if same pick returned, promote first alternate
+        if (nextOracle && nextPick && nextPick.fragrance_id === pick.fragrance_id) {
+          const fallbackAlt = alts.find(a => a.fragrance_id !== pick.fragrance_id);
+          if (fallbackAlt) {
+            pushHistory();
+            setCurrentPick({
+              fragrance_id: fallbackAlt.fragrance_id,
+              name: fallbackAlt.name,
+              family: fallbackAlt.family,
+              reason: fallbackAlt.reason,
+              brand: fallbackAlt.brand ?? '',
+              notes: fallbackAlt.notes ?? [],
+              accords: fallbackAlt.accords ?? [],
+            });
+            setSelectedMood('balance');
+            setLayerExpanded(false);
+          }
+        }
       } finally {
         setLockState('neutral');
       }
     }
-  }, [clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
+  }, [alts, clearUnlockTimeout, lockState, onAccept, onSkip, pick, pulseLock, pushHistory]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     void completeGesture(e.pointerId, e.currentTarget);
