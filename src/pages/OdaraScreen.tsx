@@ -254,37 +254,38 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // ── Promote alternate into the main card ──
-  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked') return;
-    pushHistory();
-    setCurrentPick({
-      fragrance_id: alt.fragrance_id,
-      name: alt.name,
-      family: alt.family,
-      reason: alt.reason,
-      brand: alt.brand ?? '',
-      notes: alt.notes ?? [],
-      accords: alt.accords ?? [],
-    });
+  // ── Skip = advance queue index forward ──
+  const handleSkipLocal = useCallback(() => {
+    if (queueIndex >= cardQueue.length - 1) {
+      console.log('[QUEUE] end of queue, cannot skip further');
+      return;
+    }
+    setQueueIndex(i => i + 1);
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, pushHistory]);
+  }, [queueIndex, cardQueue.length]);
 
-  // ── Back button — walk history stack ──
-  const handleBack = useCallback(() => {
-    if (history.length === 0) return;
-    const prev = history[history.length - 1];
-    setHistory(h => h.slice(0, -1));
-    setActiveOracle(prev.oracle);
-    setCurrentPick(prev.currentPick);
-    setLockState(prev.lockState);
+  // ── Promote alternate into the main card (jump to its queue position) ──
+  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
+    if (lockState === 'locked') return;
+    const idx = cardQueue.findIndex(q => q.fragrance_id === alt.fragrance_id);
+    if (idx >= 0) {
+      setQueueIndex(idx);
+    }
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [history]);
+    setLockState('neutral');
+  }, [lockState, cardQueue]);
 
-  const hasHistory = history.length > 0;
+  // ── Back button — walk backward in queue ──
+  const handleBack = useCallback(() => {
+    if (queueIndex <= 0) return;
+    setQueueIndex(i => i - 1);
+    setSelectedMood('balance');
+    setLayerExpanded(false);
+  }, [queueIndex]);
+
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
