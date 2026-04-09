@@ -808,8 +808,7 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`${visibleCard.name} | ${visibleCard.fragrance_id.slice(0,8)}…
-${visibleCard.isHero ? 'HERO' : `Q#${queuePointer}`} | queue=${queue.length} hist=${viewHistory.length} lock=${lockState}${skipLoading ? ' LOADING' : ''}`}
+{`visible=${visibleCard?.name} | qp=${queuePointer} | hist=${viewHistory.length} | last=${viewHistory[viewHistory.length - 1]?.card?.name ?? 'none'}`}
             </pre>
           </div>
         )}
