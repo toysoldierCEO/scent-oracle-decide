@@ -422,6 +422,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
     setViewHistory([]);
+    setPromotedAltId(null);
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
