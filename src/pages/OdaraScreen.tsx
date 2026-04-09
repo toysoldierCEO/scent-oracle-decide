@@ -339,12 +339,7 @@ const OdaraScreen = ({
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      // Pre-cache hero layer
-      if (oracle.layer) {
-        layerCacheRef.current.set(oracle.today_pick.fragrance_id, oracle.layer);
-        setResolvedLayer(oracle.layer);
-        setLayerDebugSource('oracle-init');
-      }
+      // Layer will be resolved by the useEffect that watches visibleCard
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
