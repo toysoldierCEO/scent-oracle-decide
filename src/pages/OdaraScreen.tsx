@@ -218,7 +218,7 @@ const OdaraScreen = ({
   onAccept, onSkip, userId,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const heroLayer = activeOracle?.layer ?? null;
+  // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
   const forecastDays = buildForecastDays(selectedDate);
 
   // ── Queue from get_home_card_queue_v1 ──
@@ -286,50 +286,51 @@ const OdaraScreen = ({
       return;
     }
 
-    // For hero card, use oracle layer
-    if (activeOracle?.today_pick?.fragrance_id === card.fragrance_id && heroLayer) {
-      layerCacheRef.current.set(card.fragrance_id, heroLayer);
-      setResolvedLayer(heroLayer);
-      setLayerDebugSource('oracle');
-      return;
-    }
-
-    // For queue cards, query fragrances table for a different-family companion
+    // Call the real backend RPC for ALL cards (hero and queue)
     try {
-      setLayerDebugSource('fetching…');
-      const { data, error } = await odaraSupabase
-        .from('fragrances')
-        .select('id, name, family_key, brand, notes, accords')
-        .neq('id', card.fragrance_id)
-        .neq('family_key', card.family || '__none__')
-        .limit(1);
+      setLayerDebugSource('rpc…');
+      const { data, error } = await odaraSupabase.rpc('get_layer_for_card_v1' as any, {
+        p_user: userId,
+        p_fragrance_id: card.fragrance_id,
+        p_context: selectedContext,
+        p_temperature: 75,
+        p_brand: 'Alexandria Fragrances',
+        p_wear_date: selectedDate,
+      });
 
-      if (error || !data || data.length === 0) {
+      if (error) {
         layerCacheRef.current.set(card.fragrance_id, null);
         setResolvedLayer(null);
-        setLayerDebugSource(error ? `err:${error.message}` : 'no-match');
+        setLayerDebugSource(`err:${error.message}`);
         return;
       }
 
-      const row = data[0];
+      const payload = data as any;
+      if (!payload || !payload.fragrance_id) {
+        layerCacheRef.current.set(card.fragrance_id, null);
+        setResolvedLayer(null);
+        setLayerDebugSource('rpc(null)');
+        return;
+      }
+
       const resolved: OracleLayer = {
-        fragrance_id: row.id,
-        name: row.name,
-        family: row.family_key ?? '',
-        brand: row.brand ?? '',
-        notes: Array.isArray(row.notes) ? row.notes : [],
-        accords: Array.isArray(row.accords) ? row.accords : [],
-        reason: 'Creates contrast without clashing.',
+        fragrance_id: payload.fragrance_id,
+        name: payload.name ?? '',
+        family: payload.family ?? payload.family_key ?? '',
+        brand: payload.brand ?? '',
+        notes: Array.isArray(payload.notes) ? payload.notes : [],
+        accords: Array.isArray(payload.accords) ? payload.accords : [],
+        reason: payload.reason ?? 'Creates contrast without clashing.',
       };
       layerCacheRef.current.set(card.fragrance_id, resolved);
       setResolvedLayer(resolved);
-      setLayerDebugSource('query');
+      setLayerDebugSource('rpc');
     } catch (e: any) {
       layerCacheRef.current.set(card.fragrance_id, null);
       setResolvedLayer(null);
       setLayerDebugSource(`err:${e?.message}`);
     }
-  }, [activeOracle, heroLayer]);
+  }, [userId, selectedContext, selectedDate]);
 
   // Initialize on oracle/context/date change
   useEffect(() => {
@@ -338,12 +339,7 @@ const OdaraScreen = ({
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      // Pre-cache hero layer
-      if (oracle.layer) {
-        layerCacheRef.current.set(oracle.today_pick.fragrance_id, oracle.layer);
-        setResolvedLayer(oracle.layer);
-        setLayerDebugSource('oracle-init');
-      }
+      // Layer will be resolved by the useEffect that watches visibleCard
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
