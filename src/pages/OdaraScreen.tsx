@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
+import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import type { LayerMood, LayerModes, InteractionType } from "@/components/ModeSelector";
 
@@ -81,6 +82,32 @@ export interface OracleResult {
   alternates: OracleAlternate[];
 }
 
+/** A card from get_home_card_queue_v1 */
+interface QueueCard {
+  queue_rank: number;
+  fragrance_id: string;
+  name: string;
+  brand: string;
+  family_key: string;
+  source: string;
+  why_this: string;
+  collection_status: string;
+  is_in_collection: boolean;
+  preview: any;
+}
+
+/** Normalized card for display — shared between hero and queue */
+interface DisplayCard {
+  fragrance_id: string;
+  name: string;
+  family: string;
+  reason: string;
+  brand: string;
+  notes: string[];
+  accords: string[];
+  isHero: boolean; // true = oracle hero, false = queue card
+}
+
 interface OdaraScreenProps {
   oracle: OracleResult | null;
   oracleLoading: boolean;
@@ -92,6 +119,7 @@ interface OdaraScreenProps {
   onDateChange: (date: string) => void;
   onAccept: (fragranceId: string) => Promise<void>;
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
+  userId: string;
 }
 
 /* ── Forecast days ── */
@@ -119,12 +147,6 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-/**
- * Build LayerModes — all four moods use the SAME real layer fragrance
- * from the oracle. Moods only change the interaction type (how you layer),
- * not which companion scent is used. The backend provides one layer; the
- * frontend must not substitute alternates as fake mood variants.
- */
 function buildLayerModes(layer: OracleLayer): LayerModes {
   const MOOD_INTERACTIONS: Record<LayerMood, InteractionType> = {
     balance: 'balance',
@@ -161,61 +183,100 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
 
-/** Build a deduplicated local card queue from the oracle bundle */
-function buildCardQueue(oracle: OracleResult): OraclePick[] {
-  const seen = new Set<string>();
-  const queue: OraclePick[] = [];
-  const addPick = (p: OraclePick | OracleAlternate) => {
-    if (!p.fragrance_id || seen.has(p.fragrance_id)) return;
-    seen.add(p.fragrance_id);
-    queue.push({
-      fragrance_id: p.fragrance_id,
-      name: p.name,
-      family: p.family,
-      reason: p.reason,
-      brand: p.brand ?? '',
-      notes: p.notes ?? [],
-      accords: p.accords ?? [],
-    });
+/** Convert a QueueCard to a DisplayCard */
+function queueCardToDisplay(qc: QueueCard): DisplayCard {
+  const preview = qc.preview ?? {};
+  return {
+    fragrance_id: qc.fragrance_id,
+    name: qc.name ?? '',
+    family: qc.family_key ?? '',
+    reason: qc.why_this ?? '',
+    brand: qc.brand ?? '',
+    notes: Array.isArray(preview.notes) ? preview.notes : [],
+    accords: Array.isArray(preview.accords) ? preview.accords : [],
+    isHero: false,
   };
-  addPick(oracle.today_pick);
-  oracle.alternates.forEach(addPick);
-  return queue;
+}
+
+/** Convert an OraclePick to a DisplayCard (hero) */
+function heroToDisplay(pick: OraclePick): DisplayCard {
+  return {
+    ...pick,
+    isHero: true,
+  };
 }
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
   selectedDate, onDateChange,
-  onAccept, onSkip,
+  onAccept, onSkip, userId,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   const layer = activeOracle?.layer ?? null;
   const forecastDays = buildForecastDays(selectedDate);
 
-  // ── Local card queue + history stack ──
-  const [cardQueue, setCardQueue] = useState<OraclePick[]>(() => oracle ? buildCardQueue(oracle) : []);
-  const [queueIndex, setQueueIndex] = useState(0);
-  const [viewHistory, setViewHistory] = useState<OraclePick[]>([]); // stack of previously viewed cards
+  // ── Queue from get_home_card_queue_v1 ──
+  const [queue, setQueue] = useState<DisplayCard[]>([]);
+  const [queuePointer, setQueuePointer] = useState(0);
+  const [viewHistory, setViewHistory] = useState<DisplayCard[]>([]);
   const [skipLoading, setSkipLoading] = useState(false);
-  const seenIdsRef = useRef<Set<string>>(new Set());
+  const [queueError, setQueueError] = useState<string | null>(null);
 
-  // Reset when oracle/context/date changes from parent
+  // The visible card: starts as oracle hero, then walks through queue
+  const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
+
+  const hasHistory = viewHistory.length > 0;
+
+  // Fetch queue from backend
+  const fetchQueue = useCallback(async (excludeId?: string) => {
+    try {
+      setQueueError(null);
+      const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
+        p_user: userId,
+        p_context: selectedContext,
+        p_temperature: 75,
+        p_brand: 'Alexandria Fragrances',
+        p_wear_date: selectedDate,
+        p_limit: 20,
+      });
+      if (error) {
+        setQueueError(error.message);
+        return [];
+      }
+      const rows = (data as unknown as QueueCard[]) ?? [];
+      // Exclude hero pick if present
+      const filtered = excludeId
+        ? rows.filter(r => r.fragrance_id !== excludeId)
+        : rows;
+      return filtered.map(queueCardToDisplay);
+    } catch (e: any) {
+      setQueueError(e?.message ?? 'Queue fetch failed');
+      return [];
+    }
+  }, [userId, selectedContext, selectedDate]);
+
+  // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
-    const q = oracle ? buildCardQueue(oracle) : [];
-    setCardQueue(q);
-    setQueueIndex(0);
+    if (oracle?.today_pick) {
+      const hero = heroToDisplay(oracle.today_pick);
+      setVisibleCard(hero);
+      // Fetch queue, excluding hero
+      fetchQueue(oracle.today_pick.fragrance_id).then(q => {
+        setQueue(q);
+        setQueuePointer(0);
+      });
+    } else {
+      setVisibleCard(null);
+      setQueue([]);
+      setQueuePointer(0);
+    }
     setViewHistory([]);
-    seenIdsRef.current = new Set(q.map(c => c.fragrance_id));
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
-  }, [oracle, selectedDate, selectedContext]);
-
-  // The active pick from the queue
-  const pick = cardQueue[queueIndex] ?? null;
-  const hasHistory = viewHistory.length > 0;
+  }, [oracle, selectedDate, selectedContext]); // fetchQueue excluded intentionally to avoid loop
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -247,90 +308,73 @@ const OdaraScreen = ({
   });
   const unlockTimeoutRef = useRef<number | null>(null);
 
-  const familyKey = pick?.family ?? '';
+  const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
-  const pickAccords = pick?.accords ? normalizeNotes(pick.accords, 4) : [];
+  const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from oracle layer
-  const layerModes = layer ? buildLayerModes(layer) : null;
+  // Build layer modes from oracle layer — only for hero card
+  const layerModes = (visibleCard?.isHero && layer) ? buildLayerModes(layer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
 
-  // ── Skip = advance queue, or fetch new bundle if exhausted ──
+  // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
-    if (skipLoading) return;
-    const currentPick = cardQueue[queueIndex];
+    if (skipLoading || !visibleCard) return;
 
-    if (queueIndex < cardQueue.length - 1) {
-      // Still have cards in current queue
-      if (currentPick) setViewHistory(h => [...h, currentPick]);
-      setQueueIndex(i => i + 1);
+    setSkipLoading(true);
+    try {
+      // Log the skip to backend (fire-and-forget)
+      void odaraSupabase.rpc('skip_today_pick_v1' as any, {
+        p_user: userId,
+        p_fragrance_id: visibleCard.fragrance_id,
+        p_context: selectedContext,
+      });
+
+      // Push current card into history
+      setViewHistory(h => [...h, visibleCard]);
+
+      if (queuePointer < queue.length) {
+        // Advance to next queue card
+        const nextCard = queue[queuePointer];
+        setVisibleCard(nextCard);
+        setQueuePointer(p => p + 1);
+      } else {
+        // Queue exhausted — fetch a new batch
+        const newQueue = await fetchQueue(visibleCard.fragrance_id);
+        if (newQueue.length > 0) {
+          setQueue(newQueue);
+          setVisibleCard(newQueue[0]);
+          setQueuePointer(1);
+        }
+        // If newQueue is empty, stay on current card (dead-end)
+      }
+
       setSelectedMood('balance');
       setLayerExpanded(false);
       setLockState('neutral');
-      return;
-    }
-
-    // Queue exhausted — fetch new bundle
-    if (!currentPick) return;
-    setSkipLoading(true);
-    try {
-      const nextOracle = await onSkip(currentPick.fragrance_id);
-      if (nextOracle) {
-        const newQueue = buildCardQueue(nextOracle);
-        // Filter out already-seen scents, but keep at least 1
-        const unseen = newQueue.filter(c => !seenIdsRef.current.has(c.fragrance_id));
-        const finalQueue = unseen.length > 0 ? unseen : newQueue;
-        finalQueue.forEach(c => seenIdsRef.current.add(c.fragrance_id));
-
-        setViewHistory(h => [...h, currentPick]);
-        setActiveOracle(nextOracle);
-        setCardQueue(finalQueue);
-        setQueueIndex(0);
-        setSelectedMood('balance');
-        setLayerExpanded(false);
-        setLockState('neutral');
-      }
     } finally {
       setSkipLoading(false);
     }
-  }, [queueIndex, cardQueue, skipLoading, onSkip]);
-
-  // ── Promote alternate into the main card (jump to its queue position) ──
-  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked') return;
-    const currentPick = cardQueue[queueIndex];
-    const idx = cardQueue.findIndex(q => q.fragrance_id === alt.fragrance_id);
-    if (idx >= 0 && idx !== queueIndex) {
-      if (currentPick) setViewHistory(h => [...h, currentPick]);
-      setQueueIndex(idx);
-    }
-    setSelectedMood('balance');
-    setLayerExpanded(false);
-    setLockState('neutral');
-  }, [lockState, cardQueue, queueIndex]);
+  }, [skipLoading, visibleCard, queue, queuePointer, fetchQueue, userId, selectedContext]);
 
   // ── Back button — pop from view history ──
   const handleBack = useCallback(() => {
     if (viewHistory.length === 0) return;
     const prev = viewHistory[viewHistory.length - 1];
-    // Find in current queue
-    const idx = cardQueue.findIndex(q => q.fragrance_id === prev.fragrance_id);
-    if (idx >= 0) {
-      setQueueIndex(idx);
-    } else {
-      // Card was from a previous bundle — prepend it to queue
-      setCardQueue(q => [prev, ...q]);
-      setQueueIndex(0);
+
+    // If going back to a queue card, restore pointer
+    if (!prev.isHero && queuePointer > 0) {
+      setQueuePointer(p => p - 1);
     }
+
+    setVisibleCard(prev);
     setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [viewHistory, cardQueue]);
-
+  }, [viewHistory, queuePointer]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
@@ -363,9 +407,8 @@ const OdaraScreen = ({
 
   /* ── Gesture handlers ── */
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!pick) return;
+    if (!visibleCard) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    // Don't capture gestures on debug controls or interactive nested elements
     const target = e.target as HTMLElement;
     if (target.closest('[data-debug-controls]')) return;
 
@@ -381,7 +424,7 @@ const OdaraScreen = ({
     };
 
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, [clearUnlockTimeout, pick]);
+  }, [clearUnlockTimeout, visibleCard]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;
@@ -394,7 +437,6 @@ const OdaraScreen = ({
       if (Math.abs(dy) < DIRECTION_LOCK_THRESHOLD && Math.abs(dx) < DIRECTION_LOCK_THRESHOLD) {
         return;
       }
-
       gesture.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
       if (gesture.locked === 'h') {
         resetGesture();
@@ -439,7 +481,7 @@ const OdaraScreen = ({
     };
     setCardTranslateY(0);
 
-    if (!wasVertical || !pick) return;
+    if (!wasVertical || !visibleCard) return;
 
     if (lockState === 'locked') {
       if (dy > SWIPE_DISTANCE) {
@@ -454,17 +496,15 @@ const OdaraScreen = ({
       clearUnlockTimeout();
       setLockState('locked');
       pulseLock();
-      await onAccept(pick.fragrance_id);
+      await onAccept(visibleCard.fragrance_id);
       return;
     }
 
     if (dy > SWIPE_DISTANCE) {
       clearUnlockTimeout();
-      // Fire backend skip (fire-and-forget for logging), use local queue
-      void onSkip(pick.fragrance_id);
       void handleSkipLocal();
     }
-  }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, onSkip, pick, pulseLock]);
+  }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, visibleCard, pulseLock]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     void completeGesture(e.pointerId, e.currentTarget);
@@ -476,20 +516,33 @@ const OdaraScreen = ({
 
   const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!gestureRef.current.suppressClick) return;
-
     const target = e.target as HTMLElement;
     if (target.closest('button, a, input, textarea, select, [role="button"]')) {
       e.preventDefault();
       e.stopPropagation();
     }
-
     gestureRef.current.suppressClick = false;
   }, []);
 
-  // Remaining alternates: all queue items except the current one
-  const visibleAlts = cardQueue
-    .filter((_, i) => i !== queueIndex)
-    .map(q => q as OracleAlternate);
+  // Alternates from oracle — only shown for hero card
+  const visibleAlts = (visibleCard?.isHero && activeOracle?.alternates)
+    ? activeOracle.alternates
+    : [];
+
+  // Promote alternate — only works for hero card
+  const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
+    if (lockState === 'locked' || !visibleCard?.isHero) return;
+    // Find in queue
+    const idx = queue.findIndex(q => q.fragrance_id === alt.fragrance_id);
+    if (idx >= 0) {
+      setViewHistory(h => [...h, visibleCard]);
+      setVisibleCard(queue[idx]);
+      // Don't change queuePointer — this is a jump, not sequential skip
+    }
+    setSelectedMood('balance');
+    setLayerExpanded(false);
+    setLockState('neutral');
+  }, [lockState, visibleCard, queue]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -526,9 +579,14 @@ const OdaraScreen = ({
             {oracleError}
           </div>
         )}
+        {queueError && (
+          <div className="rounded-xl px-4 py-2 text-[10px] mt-1" style={{ background: 'rgba(220,160,60,0.08)', border: '1px solid rgba(220,160,60,0.15)', color: '#da3' }}>
+            Queue: {queueError}
+          </div>
+        )}
 
         {/* ── Unified main card with gestures ── */}
-        {!oracleLoading && !oracleError && pick && (
+        {!oracleLoading && !oracleError && visibleCard && (
           <div
             className="rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden transition-transform duration-150"
             style={{
@@ -596,17 +654,24 @@ const OdaraScreen = ({
               </div>
             </div>
 
+            {/* Source badge for queue cards */}
+            {!visibleCard.isHero && (
+              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
+                from queue
+              </span>
+            )}
+
             {/* Fragrance name */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {getDisplayName(pick.name, pick.brand)}
+              {getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {pick.brand}
+              {visibleCard.brand}
             </span>
 
             {/* Family label */}
@@ -627,13 +692,13 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* ── Layer Card (interactive, mood-mapped) ── */}
-            {layer && layerModes && (
+            {/* ── Layer Card — only for hero card ── */}
+            {visibleCard.isHero && layer && layerModes && (
               <LayerCard
-                mainName={pick.name}
-                mainBrand={pick.brand}
-                mainNotes={pick.notes}
-                mainFamily={pick.family}
+                mainName={visibleCard.name}
+                mainBrand={visibleCard.brand}
+                mainNotes={visibleCard.notes}
+                mainFamily={visibleCard.family}
                 mainProjection={null}
                 layerModes={layerModes}
                 selectedMood={selectedMood}
@@ -647,8 +712,8 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives (tap to promote into main card) ── */}
-            {visibleAlts.length > 0 && (
+            {/* ── Alternatives — only for hero card ── */}
+            {visibleCard.isHero && visibleAlts.length > 0 && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
@@ -676,6 +741,13 @@ const OdaraScreen = ({
               </div>
             )}
 
+            {/* Reason / why_this */}
+            {visibleCard.reason && (
+              <p className="text-[11px] text-muted-foreground/50 text-center mt-2 italic">
+                {visibleCard.reason}
+              </p>
+            )}
+
             {/* Lock state indicator */}
             {lockState === 'locked' && (
               <div className="flex justify-center mt-2">
@@ -689,16 +761,16 @@ const OdaraScreen = ({
           </div>
         )}
 
-        {/* ── TEMPORARY DEBUG CONTROLS (outside gesture card) ── */}
-        {!oracleLoading && !oracleError && pick && (
-          <div className="mt-2 flex flex-col gap-1.5 items-center">
+        {/* ── TEMPORARY DEBUG CONTROLS ── */}
+        {!oracleLoading && !oracleError && visibleCard && (
+          <div className="mt-2 flex flex-col gap-1.5 items-center" data-debug-controls>
             <div className="flex gap-2 justify-center">
              <button
                 onClick={async () => {
-                  if (!pick || lockState === 'locked') return;
+                  if (!visibleCard || lockState === 'locked') return;
                   setLockState('locked');
                   pulseLock();
-                  await onAccept(pick.fragrance_id);
+                  await onAccept(visibleCard.fragrance_id);
                 }}
                 className="text-[9px] px-3 py-1 rounded-full"
                 style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
@@ -707,7 +779,7 @@ const OdaraScreen = ({
               </button>
               <button
                 onClick={async () => {
-                  if (!pick) return;
+                  if (!visibleCard) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     pulseLock();
@@ -731,8 +803,8 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`${pick.name} | ${pick.fragrance_id.slice(0,8)}…
-idx=${queueIndex}/${cardQueue.length} hist=${viewHistory.length} lock=${lockState}${skipLoading ? ' LOADING' : ''}`}
+{`${visibleCard.name} | ${visibleCard.fragrance_id.slice(0,8)}…
+${visibleCard.isHero ? 'HERO' : `Q#${queuePointer}`} | queue=${queue.length} hist=${viewHistory.length} lock=${lockState}${skipLoading ? ' LOADING' : ''}`}
             </pre>
           </div>
         )}

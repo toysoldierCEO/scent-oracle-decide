@@ -220,6 +220,7 @@ const Index = () => {
       onDateChange={setSelectedDate}
       onAccept={handleAccept}
       onSkip={handleSkip}
+      userId={user.id}
     />
   );
 };
