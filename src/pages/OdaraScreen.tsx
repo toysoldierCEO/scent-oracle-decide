@@ -703,7 +703,7 @@ const OdaraScreen = ({
     };
     setViewHistory(h => [
       ...h,
-      { card: visibleCard!, queuePointerBefore: queuePointer },
+      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
     ]);
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
