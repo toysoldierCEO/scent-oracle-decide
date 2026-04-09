@@ -528,6 +528,7 @@ const OdaraScreen = ({
 
     setVisibleCard(entry.card);
     setQueuePointer(entry.queuePointerBefore);
+    setPromotedAltId(entry.promotedAltId);
     setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
@@ -823,7 +824,7 @@ const OdaraScreen = ({
             </div>
 
             {/* Source badge for queue cards */}
-            {!isShowingHeroCard && (
+            {!isHeroStyle && (
               <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
                 from queue
               </span>
@@ -971,13 +972,10 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | type=${isShowingHeroCard ? 'HERO' : 'QUEUE'}
-layerSrc=${layerDebugSource} | payloadFound=${resolvedModesPayload ? true : false}
-layer=${resolvedModesPayload?.layer_name ?? 'none'} | selectedMood=${selectedMood}
-rpcDefaultMode=${resolvedModesPayload?.default_mode ?? 'none'}
-usingModeReason=${currentModeData?.reason ?? 'none'}
-renderGate=${!!(resolvedModesPayload && layerModes)}
-qp=${queuePointer} | hist=${viewHistory.length}`}
+{`card=${visibleCard?.name ?? 'none'} | renderType=${isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE'}
+selectedMood=${selectedMood} | usingModeReason=${currentModeData?.reason ?? 'none'}
+alternatesVisible=${visibleAlts.length > 0} | layerVisible=${!!(resolvedModesPayload && layerModes)}
+layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
         )}
