@@ -218,7 +218,7 @@ const OdaraScreen = ({
   onAccept, onSkip, userId,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const heroLayer = activeOracle?.layer ?? null;
+  // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
   const forecastDays = buildForecastDays(selectedDate);
 
   // ── Queue from get_home_card_queue_v1 ──
