@@ -510,6 +510,7 @@ const OdaraScreen = ({
         }
       }
 
+      setPromotedAltId(null);
       setSelectedMood('balance');
       setLayerExpanded(false);
       setLockState('neutral');
