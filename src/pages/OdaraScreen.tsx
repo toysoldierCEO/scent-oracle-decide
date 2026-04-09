@@ -108,6 +108,11 @@ interface DisplayCard {
   isHero: boolean; // true = oracle hero, false = queue card
 }
 
+type HistoryEntry = {
+  card: DisplayCard;
+  queuePointerBefore: number;
+};
+
 interface OdaraScreenProps {
   oracle: OracleResult | null;
   oracleLoading: boolean;
@@ -219,7 +224,7 @@ const OdaraScreen = ({
   // ── Queue from get_home_card_queue_v1 ──
   const [queue, setQueue] = useState<DisplayCard[]>([]);
   const [queuePointer, setQueuePointer] = useState(0);
-  const [viewHistory, setViewHistory] = useState<DisplayCard[]>([]);
+  const [viewHistory, setViewHistory] = useState<HistoryEntry[]>([]);
   const [skipLoading, setSkipLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
 
@@ -245,7 +250,6 @@ const OdaraScreen = ({
         return [];
       }
       const rows = (data as unknown as QueueCard[]) ?? [];
-      // Exclude hero pick if present
       const filtered = excludeId
         ? rows.filter(r => r.fragrance_id !== excludeId)
         : rows;
@@ -256,13 +260,22 @@ const OdaraScreen = ({
     }
   }, [userId, selectedContext, selectedDate]);
 
+  // Interactive state
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
+  const [selectedRatio, setSelectedRatio] = useState('1:1');
+  const [layerExpanded, setLayerExpanded] = useState(false);
+
+  // Lock & gesture state
+  const [lockState, setLockState] = useState<LockState>('neutral');
+  const [lockPulse, setLockPulse] = useState(false);
+  const [cardTranslateY, setCardTranslateY] = useState(0);
+
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      // Fetch queue, excluding hero
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
@@ -276,17 +289,7 @@ const OdaraScreen = ({
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
-  }, [oracle, selectedDate, selectedContext]); // fetchQueue excluded intentionally to avoid loop
-
-  // Interactive state
-  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
-  const [selectedRatio, setSelectedRatio] = useState('1:1');
-  const [layerExpanded, setLayerExpanded] = useState(false);
-
-  // Lock & gesture state
-  const [lockState, setLockState] = useState<LockState>('neutral');
-  const [lockPulse, setLockPulse] = useState(false);
-  const [cardTranslateY, setCardTranslateY] = useState(0);
+  }, [oracle, selectedDate, selectedContext, fetchQueue]);
 
   // Gesture refs
   const gestureRef = useRef<{
@@ -326,30 +329,31 @@ const OdaraScreen = ({
 
     setSkipLoading(true);
     try {
-      // Log the skip to backend (fire-and-forget)
       void odaraSupabase.rpc('skip_today_pick_v1' as any, {
         p_user: userId,
         p_fragrance_id: visibleCard.fragrance_id,
         p_context: selectedContext,
       });
 
-      // Push current card into history
-      setViewHistory(h => [...h, visibleCard]);
+      setViewHistory(h => [
+        ...h,
+        {
+          card: visibleCard,
+          queuePointerBefore: queuePointer,
+        },
+      ]);
 
       if (queuePointer < queue.length) {
-        // Advance to next queue card
         const nextCard = queue[queuePointer];
         setVisibleCard(nextCard);
-        setQueuePointer(p => p + 1);
+        setQueuePointer(queuePointer + 1);
       } else {
-        // Queue exhausted — fetch a new batch
         const newQueue = await fetchQueue(visibleCard.fragrance_id);
         if (newQueue.length > 0) {
           setQueue(newQueue);
           setVisibleCard(newQueue[0]);
           setQueuePointer(1);
         }
-        // If newQueue is empty, stay on current card (dead-end)
       }
 
       setSelectedMood('balance');
@@ -360,21 +364,18 @@ const OdaraScreen = ({
     }
   }, [skipLoading, visibleCard, queue, queuePointer, fetchQueue, userId, selectedContext]);
 
-  // ── Back button — pop from view history ──
+  // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
     if (viewHistory.length === 0) return;
-    const prev = viewHistory[viewHistory.length - 1];
+    const entry = viewHistory[viewHistory.length - 1];
 
-    // If going back to a queue card, restore pointer
-    if (!prev.isHero && queuePointer > 0) {
-      setQueuePointer(p => p - 1);
-    }
-
-    setVisibleCard(prev);
+    setVisibleCard(entry.card);
+    setQueuePointer(entry.queuePointerBefore);
     setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
-  }, [viewHistory, queuePointer]);
+    setLockState('neutral');
+  }, [viewHistory]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
