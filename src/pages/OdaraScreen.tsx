@@ -153,6 +153,7 @@ interface DisplayCard {
 type HistoryEntry = {
   card: DisplayCard;
   queuePointerBefore: number;
+  promotedAltId: string | null;
 };
 
 interface OdaraScreenProps {
@@ -221,6 +222,10 @@ function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
       reason: m.reason || payload.default_reason || '',
       why_it_works: m.why_it_works || payload.default_why_it_works || '',
       projection: null,
+      ratio_hint: m.ratio_hint || payload.default_ratio_hint || '',
+      application_style: m.application_style || payload.default_application_style || '',
+      placement_hint: m.placement_hint || payload.default_placement_hint || '',
+      spray_guidance: m.spray_guidance || payload.default_spray_guidance || '',
     };
   }
   return result as LayerModes;
@@ -266,8 +271,8 @@ const OdaraScreen = ({
   const [skipLoading, setSkipLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
 
-  // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
+  const [promotedAltId, setPromotedAltId] = useState<string | null>(null);
 
   // ── Per-card layer modes cache (from get_layer_card_modes_v1) ──
   const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
@@ -417,6 +422,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
     setViewHistory([]);
+    setPromotedAltId(null);
     setLockState('neutral');
     setLayerExpanded(false);
     setSelectedMood('balance');
@@ -457,6 +463,8 @@ const OdaraScreen = ({
     !!visibleCard &&
     !!oracleHeroId &&
     visibleCard.fragrance_id === oracleHeroId;
+  // Hero-style = real hero OR promoted alternate (shows alternates + layer)
+  const isHeroStyle = isShowingHeroCard || promotedAltId === visibleCard?.fragrance_id;
 
   const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
@@ -488,6 +496,7 @@ const OdaraScreen = ({
         {
           card: visibleCard,
           queuePointerBefore: queuePointer,
+          promotedAltId,
         },
       ]);
 
@@ -504,6 +513,7 @@ const OdaraScreen = ({
         }
       }
 
+      setPromotedAltId(null);
       setSelectedMood('balance');
       setLayerExpanded(false);
       setLockState('neutral');
@@ -519,6 +529,7 @@ const OdaraScreen = ({
 
     setVisibleCard(entry.card);
     setQueuePointer(entry.queuePointerBefore);
+    setPromotedAltId(entry.promotedAltId);
     setViewHistory(h => h.slice(0, -1));
     setSelectedMood('balance');
     setLayerExpanded(false);
@@ -674,28 +685,34 @@ const OdaraScreen = ({
   }, []);
 
   // Alternates from oracle — only shown for hero card
-  const visibleAlts = (isShowingHeroCard && activeOracle?.alternates)
+  const visibleAlts = (isHeroStyle && activeOracle?.alternates)
     ? activeOracle.alternates
     : [];
 
   // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked' || !isShowingHeroCard) return;
-    const idx = queue.findIndex(q => q.fragrance_id === alt.fragrance_id);
-    if (idx >= 0) {
-      setViewHistory(h => [
-        ...h,
-        {
-          card: visibleCard,
-          queuePointerBefore: queuePointer,
-        },
-      ]);
-      setVisibleCard(queue[idx]);
-    }
+    if (lockState === 'locked') return;
+    // Build a hero-style display card from the alternate
+    const promoted: DisplayCard = {
+      fragrance_id: alt.fragrance_id,
+      name: alt.name,
+      family: alt.family,
+      reason: alt.reason,
+      brand: alt.brand ?? '',
+      notes: alt.notes ?? [],
+      accords: alt.accords ?? [],
+      isHero: false, // technically from alternates, but rendered hero-style
+    };
+    setViewHistory(h => [
+      ...h,
+      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
+    ]);
+    setVisibleCard(promoted);
+    setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, visibleCard, queue, queuePointer]);
+  }, [lockState, visibleCard, queuePointer]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -808,7 +825,7 @@ const OdaraScreen = ({
             </div>
 
             {/* Source badge for queue cards */}
-            {!isShowingHeroCard && (
+            {!isHeroStyle && (
               <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
                 from queue
               </span>
@@ -956,13 +973,10 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | type=${isShowingHeroCard ? 'HERO' : 'QUEUE'}
-layerSrc=${layerDebugSource} | payloadFound=${resolvedModesPayload ? true : false}
-layer=${resolvedModesPayload?.layer_name ?? 'none'} | selectedMood=${selectedMood}
-rpcDefaultMode=${resolvedModesPayload?.default_mode ?? 'none'}
-usingModeReason=${currentModeData?.reason ?? 'none'}
-renderGate=${!!(resolvedModesPayload && layerModes)}
-qp=${queuePointer} | hist=${viewHistory.length}`}
+{`card=${visibleCard?.name ?? 'none'} | renderType=${isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE'}
+selectedMood=${selectedMood} | usingModeReason=${currentModeData?.reason ?? 'none'}
+alternatesVisible=${visibleAlts.length > 0} | layerVisible=${!!(resolvedModesPayload && layerModes)}
+layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
         )}
