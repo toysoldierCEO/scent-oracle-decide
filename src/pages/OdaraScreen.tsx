@@ -956,9 +956,9 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | cardId=${visibleCard?.fragrance_id?.slice(0,8) ?? '?'}
-type=${isShowingHeroCard ? 'HERO' : 'QUEUE'} | layerSrc=${layerDebugSource}
-layer=${resolvedModesPayload?.layer_name ?? 'NONE'} | selectedMood=${selectedMood}
+{`card=${visibleCard?.name ?? 'none'} | type=${isShowingHeroCard ? 'HERO' : 'QUEUE'}
+layerSrc=${layerDebugSource} | payloadFound=${resolvedModesPayload ? true : false}
+layer=${resolvedModesPayload?.layer_name ?? 'none'} | selectedMood=${selectedMood}
 rpcDefaultMode=${resolvedModesPayload?.default_mode ?? 'none'}
 usingModeReason=${currentModeData?.reason ?? 'none'}
 renderGate=${!!(resolvedModesPayload && layerModes)}
