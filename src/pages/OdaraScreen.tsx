@@ -276,18 +276,82 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
+  // Resolve layer for any visible card
+  const resolveLayerForCard = useCallback(async (card: DisplayCard) => {
+    // Check cache first
+    const cached = layerCacheRef.current.get(card.fragrance_id);
+    if (cached !== undefined) {
+      setResolvedLayer(cached);
+      setLayerDebugSource(cached ? 'cache' : 'cache(null)');
+      return;
+    }
+
+    // For hero card, use oracle layer
+    if (activeOracle?.today_pick?.fragrance_id === card.fragrance_id && heroLayer) {
+      layerCacheRef.current.set(card.fragrance_id, heroLayer);
+      setResolvedLayer(heroLayer);
+      setLayerDebugSource('oracle');
+      return;
+    }
+
+    // For queue cards, query fragrances table for a different-family companion
+    try {
+      setLayerDebugSource('fetching…');
+      const { data, error } = await odaraSupabase
+        .from('fragrances')
+        .select('id, name, family_key, brand, notes, accords')
+        .neq('id', card.fragrance_id)
+        .neq('family_key', card.family || '__none__')
+        .limit(1);
+
+      if (error || !data || data.length === 0) {
+        layerCacheRef.current.set(card.fragrance_id, null);
+        setResolvedLayer(null);
+        setLayerDebugSource(error ? `err:${error.message}` : 'no-match');
+        return;
+      }
+
+      const row = data[0];
+      const resolved: OracleLayer = {
+        fragrance_id: row.id,
+        name: row.name,
+        family: row.family_key ?? '',
+        brand: row.brand ?? '',
+        notes: Array.isArray(row.notes) ? row.notes : [],
+        accords: Array.isArray(row.accords) ? row.accords : [],
+        reason: 'Creates contrast without clashing.',
+      };
+      layerCacheRef.current.set(card.fragrance_id, resolved);
+      setResolvedLayer(resolved);
+      setLayerDebugSource('query');
+    } catch (e: any) {
+      layerCacheRef.current.set(card.fragrance_id, null);
+      setResolvedLayer(null);
+      setLayerDebugSource(`err:${e?.message}`);
+    }
+  }, [activeOracle, heroLayer]);
+
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
+    layerCacheRef.current.clear();
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
+      // Pre-cache hero layer
+      if (oracle.layer) {
+        layerCacheRef.current.set(oracle.today_pick.fragrance_id, oracle.layer);
+        setResolvedLayer(oracle.layer);
+        setLayerDebugSource('oracle-init');
+      }
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
       });
     } else {
       setVisibleCard(null);
+      setResolvedLayer(null);
+      setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
     }
@@ -296,6 +360,16 @@ const OdaraScreen = ({
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
+
+  // Resolve layer whenever visible card changes
+  useEffect(() => {
+    if (visibleCard) {
+      resolveLayerForCard(visibleCard);
+    } else {
+      setResolvedLayer(null);
+      setLayerDebugSource('no-card');
+    }
+  }, [visibleCard, resolveLayerForCard]);
 
   // Gesture refs
   const gestureRef = useRef<{
