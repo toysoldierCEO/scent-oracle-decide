@@ -783,8 +783,8 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* ── Layer Card — only for hero card ── */}
-            {isShowingHeroCard && layer && layerModes && (
+            {/* ── Layer Card — for ALL visible cards ── */}
+            {resolvedLayer && layerModes && (
               <LayerCard
                 mainName={visibleCard.name}
                 mainBrand={visibleCard.brand}
