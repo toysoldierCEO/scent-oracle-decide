@@ -69,7 +69,6 @@ export interface OraclePick {
 export interface OracleLayer {
   fragrance_id: string; name: string; family: string; brand: string;
   notes: string[]; accords: string[]; reason: string;
-  // Extended fields from get_layer_for_card_v1
   ratio_hint?: string;
   application_style?: string;
   placement_hint?: string;
@@ -88,6 +87,41 @@ export interface OracleResult {
   today_pick: OraclePick;
   layer: OracleLayer | null;
   alternates: OracleAlternate[];
+}
+
+/** Backend mood-mode entry from get_layer_card_modes_v1 */
+interface BackendModeEntry {
+  mode: string;
+  layer_fragrance_id: string;
+  layer_name: string;
+  layer_brand: string;
+  layer_family: string;
+  layer_notes: string[];
+  layer_accords: string[];
+  layer_score: number;
+  reason: string;
+  why_it_works: string;
+  ratio_hint: string;
+  application_style: string;
+  placement_hint: string;
+  spray_guidance: string;
+  interaction_type: string;
+}
+
+/** Full payload cached per fragrance_id */
+interface LayerModesPayload {
+  layer_name: string;
+  layer_brand: string;
+  layer_family: string;
+  layer_score: number;
+  default_mode: string;
+  default_reason: string;
+  default_ratio_hint: string;
+  default_application_style: string;
+  default_placement_hint: string;
+  default_spray_guidance: string;
+  default_why_it_works: string;
+  modes: Record<string, BackendModeEntry>;
 }
 
 /** A card from get_home_card_queue_v1 */
@@ -160,41 +194,37 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-function buildLayerModes(layer: OracleLayer): LayerModes {
-  const MOOD_INTERACTIONS: Record<LayerMood, InteractionType> = {
-    balance: 'balance',
-    bold: 'amplify',
-    smooth: 'balance',
-    wild: 'contrast',
-  };
-
-  const entry = (mood: LayerMood) => ({
-    id: layer.fragrance_id,
-    name: layer.name,
-    brand: layer.brand,
-    family_key: layer.family,
-    notes: layer.notes,
-    accords: layer.accords,
-    interactionType: MOOD_INTERACTIONS[mood],
-    reason: layer.reason || '',
-    why_it_works: '',
-    projection: null,
-  });
-
-  return {
-    balance: entry('balance'),
-    bold: entry('bold'),
-    smooth: entry('smooth'),
-    wild: entry('wild'),
-  };
-}
-
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
 /* ── Gesture constants ── */
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
+
+function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
+  const MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+  const result: Partial<LayerModes> = {};
+  for (const mood of MOODS) {
+    const m = payload.modes[mood];
+    if (!m) {
+      result[mood] = null;
+      continue;
+    }
+    result[mood] = {
+      id: m.layer_fragrance_id,
+      name: m.layer_name,
+      brand: m.layer_brand,
+      family_key: m.layer_family,
+      notes: Array.isArray(m.layer_notes) ? m.layer_notes : [],
+      accords: Array.isArray(m.layer_accords) ? m.layer_accords : [],
+      interactionType: (m.interaction_type as InteractionType) || 'balance',
+      reason: m.reason || payload.default_reason || '',
+      why_it_works: m.why_it_works || payload.default_why_it_works || '',
+      projection: null,
+    };
+  }
+  return result as LayerModes;
+}
 
 /** Convert a QueueCard to a DisplayCard */
 function queueCardToDisplay(qc: QueueCard): DisplayCard {
@@ -239,10 +269,9 @@ const OdaraScreen = ({
   // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
 
-  // ── Per-card layer resolution cache ──
-  // Key: fragrance_id, Value: resolved OracleLayer for that card
-  const layerCacheRef = useRef<Map<string, OracleLayer | null>>(new Map());
-  const [resolvedLayer, setResolvedLayer] = useState<OracleLayer | null>(null);
+  // ── Per-card layer modes cache (from get_layer_card_modes_v1) ──
+  const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
+  const [resolvedModesPayload, setResolvedModesPayload] = useState<LayerModesPayload | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
 
   const hasHistory = viewHistory.length > 0;
@@ -284,20 +313,18 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
-  // Resolve layer for any visible card
-  const resolveLayerForCard = useCallback(async (card: DisplayCard) => {
-    // Check cache first
-    const cached = layerCacheRef.current.get(card.fragrance_id);
+  // Resolve layer modes for any visible card via get_layer_card_modes_v1
+  const resolveModesForCard = useCallback(async (card: DisplayCard) => {
+    const cached = modesCacheRef.current.get(card.fragrance_id);
     if (cached !== undefined) {
-      setResolvedLayer(cached);
+      setResolvedModesPayload(cached);
       setLayerDebugSource(cached ? 'cache' : 'cache(null)');
       return;
     }
 
-    // Call the real backend RPC for ALL cards (hero and queue)
     try {
       setLayerDebugSource('rpc…');
-      const { data, error } = await odaraSupabase.rpc('get_layer_for_card_v1' as any, {
+      const { data, error } = await odaraSupabase.rpc('get_layer_card_modes_v1' as any, {
         p_user: userId,
         p_fragrance_id: card.fragrance_id,
         p_context: selectedContext,
@@ -307,43 +334,68 @@ const OdaraScreen = ({
       });
 
       if (error) {
-        layerCacheRef.current.set(card.fragrance_id, null);
-        setResolvedLayer(null);
+        modesCacheRef.current.set(card.fragrance_id, null);
+        setResolvedModesPayload(null);
         setLayerDebugSource(`err:${error.message}`);
         return;
       }
 
+      // RPC returns table rows — one row per mood
       const rows = Array.isArray(data) ? data : [];
-      const row = rows[0] as any;
-      if (!row || !row.layer_fragrance_id) {
-        layerCacheRef.current.set(card.fragrance_id, null);
-        setResolvedLayer(null);
-        setLayerDebugSource('rpc(null)');
+      if (rows.length === 0) {
+        modesCacheRef.current.set(card.fragrance_id, null);
+        setResolvedModesPayload(null);
+        setLayerDebugSource('rpc(empty)');
         return;
       }
 
-      const resolved: OracleLayer = {
-        fragrance_id: row.layer_fragrance_id,
-        name: row.layer_name ?? '',
-        family: row.layer_family ?? '',
-        brand: row.layer_brand ?? '',
-        notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
-        accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
-        reason: row.reason ?? 'Creates contrast without clashing.',
-        ratio_hint: row.ratio_hint ?? undefined,
-        application_style: row.application_style ?? undefined,
-        placement_hint: row.placement_hint ?? undefined,
-        spray_guidance: row.spray_guidance ?? undefined,
-        why_it_works: row.why_it_works ?? undefined,
-        layer_score: row.layer_score ?? undefined,
-        layer_mode: row.layer_mode ?? undefined,
+      // Build payload from rows
+      const first = rows[0] as any;
+      const modesMap: Record<string, BackendModeEntry> = {};
+      for (const r of rows) {
+        const row = r as any;
+        if (row.mode) {
+          modesMap[row.mode] = {
+            mode: row.mode,
+            layer_fragrance_id: row.layer_fragrance_id ?? '',
+            layer_name: row.layer_name ?? '',
+            layer_brand: row.layer_brand ?? '',
+            layer_family: row.layer_family ?? '',
+            layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
+            layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
+            layer_score: row.layer_score ?? 0,
+            reason: row.reason ?? '',
+            why_it_works: row.why_it_works ?? '',
+            ratio_hint: row.ratio_hint ?? '',
+            application_style: row.application_style ?? '',
+            placement_hint: row.placement_hint ?? '',
+            spray_guidance: row.spray_guidance ?? '',
+            interaction_type: row.interaction_type ?? 'balance',
+          };
+        }
+      }
+
+      const payload: LayerModesPayload = {
+        layer_name: first.layer_name ?? '',
+        layer_brand: first.layer_brand ?? '',
+        layer_family: first.layer_family ?? '',
+        layer_score: first.layer_score ?? 0,
+        default_mode: first.default_mode ?? first.mode ?? 'balance',
+        default_reason: first.default_reason ?? first.reason ?? '',
+        default_ratio_hint: first.default_ratio_hint ?? first.ratio_hint ?? '',
+        default_application_style: first.default_application_style ?? first.application_style ?? '',
+        default_placement_hint: first.default_placement_hint ?? first.placement_hint ?? '',
+        default_spray_guidance: first.default_spray_guidance ?? first.spray_guidance ?? '',
+        default_why_it_works: first.default_why_it_works ?? first.why_it_works ?? '',
+        modes: modesMap,
       };
-      layerCacheRef.current.set(card.fragrance_id, resolved);
-      setResolvedLayer(resolved);
+
+      modesCacheRef.current.set(card.fragrance_id, payload);
+      setResolvedModesPayload(payload);
       setLayerDebugSource('rpc');
     } catch (e: any) {
-      layerCacheRef.current.set(card.fragrance_id, null);
-      setResolvedLayer(null);
+      modesCacheRef.current.set(card.fragrance_id, null);
+      setResolvedModesPayload(null);
       setLayerDebugSource(`err:${e?.message}`);
     }
   }, [userId, selectedContext, selectedDate]);
@@ -351,18 +403,17 @@ const OdaraScreen = ({
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
-    layerCacheRef.current.clear();
+    modesCacheRef.current.clear();
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      // Layer will be resolved by the useEffect that watches visibleCard
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
       });
     } else {
       setVisibleCard(null);
-      setResolvedLayer(null);
+      setResolvedModesPayload(null);
       setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
@@ -373,15 +424,15 @@ const OdaraScreen = ({
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
 
-  // Resolve layer whenever visible card changes
+  // Resolve layer modes whenever visible card changes
   useEffect(() => {
     if (visibleCard) {
-      resolveLayerForCard(visibleCard);
+      resolveModesForCard(visibleCard);
     } else {
-      setResolvedLayer(null);
+      setResolvedModesPayload(null);
       setLayerDebugSource('no-card');
     }
-  }, [visibleCard, resolveLayerForCard]);
+  }, [visibleCard, resolveModesForCard]);
 
   // Gesture refs
   const gestureRef = useRef<{
@@ -415,8 +466,9 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from resolved layer — works for hero AND queue cards
-  const layerModes = resolvedLayer ? buildLayerModes(resolvedLayer) : null;
+  // Build layer modes from backend payload — works for hero AND queue cards
+  const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
+  const currentModeData = resolvedModesPayload?.modes[selectedMood] ?? null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
@@ -796,7 +848,7 @@ const OdaraScreen = ({
             )}
 
             {/* ── Layer Card — for ALL visible cards ── */}
-            {resolvedLayer && layerModes && (
+            {resolvedModesPayload && layerModes && (
               <LayerCard
                 mainName={visibleCard.name}
                 mainBrand={visibleCard.brand}
@@ -908,8 +960,10 @@ const OdaraScreen = ({
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`card=${visibleCard?.name ?? 'none'} | cardId=${visibleCard?.fragrance_id?.slice(0,8) ?? '?'}
 type=${isShowingHeroCard ? 'HERO' : 'QUEUE'} | layerSrc=${layerDebugSource}
-layer=${resolvedLayer?.name ?? 'NONE'} | layerId=${resolvedLayer?.fragrance_id?.slice(0,8) ?? '?'}
-layerFamily=${resolvedLayer?.family ?? '?'} | renderGate=${!!(resolvedLayer && layerModes)}
+layer=${resolvedModesPayload?.layer_name ?? 'NONE'} | selectedMood=${selectedMood}
+rpcDefaultMode=${resolvedModesPayload?.default_mode ?? 'none'}
+usingModeReason=${currentModeData?.reason ?? 'none'}
+renderGate=${!!(resolvedModesPayload && layerModes)}
 qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
