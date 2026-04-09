@@ -495,6 +495,7 @@ const OdaraScreen = ({
         {
           card: visibleCard,
           queuePointerBefore: queuePointer,
+          promotedAltId,
         },
       ]);
 
