@@ -194,7 +194,13 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-/** Convert backend modes payload into LayerModes for the LayerCard component */
+/* ── Lock state type ── */
+type LockState = 'neutral' | 'locked' | 'skipping';
+
+/* ── Gesture constants ── */
+const DIRECTION_LOCK_THRESHOLD = 8;
+const SWIPE_DISTANCE = 28;
+
 function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
   const MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
   const result: Partial<LayerModes> = {};
