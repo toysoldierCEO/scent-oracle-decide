@@ -362,6 +362,7 @@ interface LayerCardProps {
   mainFamily: string | null;
   mainProjection: number | null;
   layerModes: LayerModes;
+  visibleLayerMode?: NonNullable<LayerModes[LayerMood]> | null;
   selectedMood: LayerMood;
   onSelectMood: (mood: LayerMood) => void;
   selectedRatio: string;
@@ -379,6 +380,7 @@ const LayerCard = ({
   mainFamily,
   mainProjection,
   layerModes,
+  visibleLayerMode = null,
   selectedMood,
   onSelectMood,
   selectedRatio,
@@ -388,7 +390,7 @@ const LayerCard = ({
   lockPulse = false,
   locked = false,
 }: LayerCardProps) => {
-  const activeModeEntry = layerModes[selectedMood];
+  const activeModeEntry = visibleLayerMode ?? layerModes[selectedMood];
 
   // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
