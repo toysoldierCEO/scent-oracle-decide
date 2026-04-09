@@ -680,28 +680,34 @@ const OdaraScreen = ({
   }, []);
 
   // Alternates from oracle — only shown for hero card
-  const visibleAlts = (isShowingHeroCard && activeOracle?.alternates)
+  const visibleAlts = (isHeroStyle && activeOracle?.alternates)
     ? activeOracle.alternates
     : [];
 
   // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked' || !isShowingHeroCard) return;
-    const idx = queue.findIndex(q => q.fragrance_id === alt.fragrance_id);
-    if (idx >= 0) {
-      setViewHistory(h => [
-        ...h,
-        {
-          card: visibleCard,
-          queuePointerBefore: queuePointer,
-        },
-      ]);
-      setVisibleCard(queue[idx]);
-    }
+    if (lockState === 'locked') return;
+    // Build a hero-style display card from the alternate
+    const promoted: DisplayCard = {
+      fragrance_id: alt.fragrance_id,
+      name: alt.name,
+      family: alt.family,
+      reason: alt.reason,
+      brand: alt.brand ?? '',
+      notes: alt.notes ?? [],
+      accords: alt.accords ?? [],
+      isHero: false, // technically from alternates, but rendered hero-style
+    };
+    setViewHistory(h => [
+      ...h,
+      { card: visibleCard!, queuePointerBefore: queuePointer },
+    ]);
+    setVisibleCard(promoted);
+    setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, visibleCard, queue, queuePointer]);
+  }, [lockState, visibleCard, queuePointer]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
