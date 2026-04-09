@@ -69,6 +69,14 @@ export interface OraclePick {
 export interface OracleLayer {
   fragrance_id: string; name: string; family: string; brand: string;
   notes: string[]; accords: string[]; reason: string;
+  // Extended fields from get_layer_for_card_v1
+  ratio_hint?: string;
+  application_style?: string;
+  placement_hint?: string;
+  spray_guidance?: string;
+  why_it_works?: string;
+  layer_score?: number;
+  layer_mode?: string;
 }
 
 export interface OracleAlternate {
