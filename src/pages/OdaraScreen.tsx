@@ -218,7 +218,7 @@ const OdaraScreen = ({
   onAccept, onSkip, userId,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const layer = activeOracle?.layer ?? null;
+  const heroLayer = activeOracle?.layer ?? null;
   const forecastDays = buildForecastDays(selectedDate);
 
   // ── Queue from get_home_card_queue_v1 ──
@@ -230,6 +230,12 @@ const OdaraScreen = ({
 
   // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
+
+  // ── Per-card layer resolution cache ──
+  // Key: fragrance_id, Value: resolved OracleLayer for that card
+  const layerCacheRef = useRef<Map<string, OracleLayer | null>>(new Map());
+  const [resolvedLayer, setResolvedLayer] = useState<OracleLayer | null>(null);
+  const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
 
   const hasHistory = viewHistory.length > 0;
 
