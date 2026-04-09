@@ -466,8 +466,9 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from resolved layer — works for hero AND queue cards
-  const layerModes = resolvedLayer ? buildLayerModes(resolvedLayer) : null;
+  // Build layer modes from backend payload — works for hero AND queue cards
+  const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
+  const currentModeData = resolvedModesPayload?.modes[selectedMood] ?? null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
