@@ -340,58 +340,56 @@ const OdaraScreen = ({
         return;
       }
 
-      // RPC returns table rows — one row per mood
-      const rows = Array.isArray(data) ? data : [];
-      if (rows.length === 0) {
+      // RPC returns a single JSONB object (not rows)
+      const payload = Array.isArray(data) ? data[0] : data;
+      if (!payload || payload.found !== true || !payload.layer_name) {
         modesCacheRef.current.set(card.fragrance_id, null);
         setResolvedModesPayload(null);
-        setLayerDebugSource('rpc(empty)');
+        setLayerDebugSource(`rpc(empty|found=${payload?.found})`);
         return;
       }
 
-      // Build payload from rows
-      const first = rows[0] as any;
+      const modesRaw = payload.modes ?? {};
       const modesMap: Record<string, BackendModeEntry> = {};
-      for (const r of rows) {
-        const row = r as any;
-        if (row.mode) {
-          modesMap[row.mode] = {
-            mode: row.mode,
-            layer_fragrance_id: row.layer_fragrance_id ?? '',
-            layer_name: row.layer_name ?? '',
-            layer_brand: row.layer_brand ?? '',
-            layer_family: row.layer_family ?? '',
-            layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
-            layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
-            layer_score: row.layer_score ?? 0,
-            reason: row.reason ?? '',
-            why_it_works: row.why_it_works ?? '',
-            ratio_hint: row.ratio_hint ?? '',
-            application_style: row.application_style ?? '',
-            placement_hint: row.placement_hint ?? '',
-            spray_guidance: row.spray_guidance ?? '',
-            interaction_type: row.interaction_type ?? 'balance',
-          };
-        }
+      for (const key of ['balance', 'bold', 'smooth', 'wild']) {
+        const m = modesRaw[key];
+        if (!m) continue;
+        modesMap[key] = {
+          mode: key,
+          layer_fragrance_id: m.layer_fragrance_id ?? payload.layer_fragrance_id ?? '',
+          layer_name: m.layer_name ?? payload.layer_name ?? '',
+          layer_brand: m.layer_brand ?? payload.layer_brand ?? '',
+          layer_family: m.layer_family ?? payload.layer_family ?? '',
+          layer_notes: Array.isArray(m.layer_notes) ? m.layer_notes : [],
+          layer_accords: Array.isArray(m.layer_accords) ? m.layer_accords : [],
+          layer_score: m.layer_score ?? payload.layer_score ?? 0,
+          reason: m.reason ?? '',
+          why_it_works: m.why_it_works ?? '',
+          ratio_hint: m.ratio_hint ?? '',
+          application_style: m.application_style ?? '',
+          placement_hint: m.placement_hint ?? '',
+          spray_guidance: m.spray_guidance ?? '',
+          interaction_type: m.interaction_type ?? key,
+        };
       }
 
-      const payload: LayerModesPayload = {
-        layer_name: first.layer_name ?? '',
-        layer_brand: first.layer_brand ?? '',
-        layer_family: first.layer_family ?? '',
-        layer_score: first.layer_score ?? 0,
-        default_mode: first.default_mode ?? first.mode ?? 'balance',
-        default_reason: first.default_reason ?? first.reason ?? '',
-        default_ratio_hint: first.default_ratio_hint ?? first.ratio_hint ?? '',
-        default_application_style: first.default_application_style ?? first.application_style ?? '',
-        default_placement_hint: first.default_placement_hint ?? first.placement_hint ?? '',
-        default_spray_guidance: first.default_spray_guidance ?? first.spray_guidance ?? '',
-        default_why_it_works: first.default_why_it_works ?? first.why_it_works ?? '',
+      const resolved: LayerModesPayload = {
+        layer_name: payload.layer_name ?? '',
+        layer_brand: payload.layer_brand ?? '',
+        layer_family: payload.layer_family ?? '',
+        layer_score: payload.layer_score ?? 0,
+        default_mode: payload.default_mode ?? 'balance',
+        default_reason: payload.default_reason ?? '',
+        default_ratio_hint: payload.default_ratio_hint ?? '',
+        default_application_style: payload.default_application_style ?? '',
+        default_placement_hint: payload.default_placement_hint ?? '',
+        default_spray_guidance: payload.default_spray_guidance ?? '',
+        default_why_it_works: payload.default_why_it_works ?? '',
         modes: modesMap,
       };
 
-      modesCacheRef.current.set(card.fragrance_id, payload);
-      setResolvedModesPayload(payload);
+      modesCacheRef.current.set(card.fragrance_id, resolved);
+      setResolvedModesPayload(resolved);
       setLayerDebugSource('rpc');
     } catch (e: any) {
       modesCacheRef.current.set(card.fragrance_id, null);
