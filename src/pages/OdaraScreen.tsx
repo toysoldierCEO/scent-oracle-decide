@@ -403,8 +403,8 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from oracle layer — only for hero card
-  const layerModes = (isShowingHeroCard && layer) ? buildLayerModes(layer) : null;
+  // Build layer modes from resolved layer — works for hero AND queue cards
+  const layerModes = resolvedLayer ? buildLayerModes(resolvedLayer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
