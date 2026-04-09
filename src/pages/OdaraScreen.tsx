@@ -202,33 +202,75 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
 
+function isLayerMood(value: unknown): value is LayerMood {
+  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
+}
+
+function backendModeEntryToLayerMode(
+  entry: BackendModeEntry | null | undefined,
+  payload?: LayerModesPayload | null,
+): NonNullable<LayerModes[LayerMood]> | null {
+  if (!entry) return null;
+
+  return {
+    id: entry.layer_fragrance_id,
+    name: entry.layer_name || payload?.layer_name || '',
+    brand: entry.layer_brand || payload?.layer_brand || '',
+    family_key: entry.layer_family || payload?.layer_family || '',
+    notes: Array.isArray(entry.layer_notes) ? entry.layer_notes : [],
+    accords: Array.isArray(entry.layer_accords) ? entry.layer_accords : [],
+    interactionType: (entry.interaction_type as InteractionType) || 'balance',
+    reason: entry.reason || payload?.default_reason || '',
+    why_it_works: entry.why_it_works || payload?.default_why_it_works || '',
+    projection: null,
+    ratio_hint: entry.ratio_hint || payload?.default_ratio_hint || '',
+    application_style: entry.application_style || payload?.default_application_style || '',
+    placement_hint: entry.placement_hint || payload?.default_placement_hint || '',
+    spray_guidance: entry.spray_guidance || payload?.default_spray_guidance || '',
+  };
+}
+
 function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
   const MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
   const result: Partial<LayerModes> = {};
   for (const mood of MOODS) {
     const m = payload.modes[mood];
-    if (!m) {
-      result[mood] = null;
-      continue;
-    }
-    result[mood] = {
-      id: m.layer_fragrance_id,
-      name: m.layer_name,
-      brand: m.layer_brand,
-      family_key: m.layer_family,
-      notes: Array.isArray(m.layer_notes) ? m.layer_notes : [],
-      accords: Array.isArray(m.layer_accords) ? m.layer_accords : [],
-      interactionType: (m.interaction_type as InteractionType) || 'balance',
-      reason: m.reason || payload.default_reason || '',
-      why_it_works: m.why_it_works || payload.default_why_it_works || '',
-      projection: null,
-      ratio_hint: m.ratio_hint || payload.default_ratio_hint || '',
-      application_style: m.application_style || payload.default_application_style || '',
-      placement_hint: m.placement_hint || payload.default_placement_hint || '',
-      spray_guidance: m.spray_guidance || payload.default_spray_guidance || '',
-    };
+    result[mood] = backendModeEntryToLayerMode(m, payload);
   }
   return result as LayerModes;
+}
+
+function normalizeAlternateRow(row: any): OracleAlternate | null {
+  if (!row) return null;
+
+  const preview = row.preview ?? {};
+  const fragrance_id = row.fragrance_id ?? row.alternate_fragrance_id ?? row.alt_fragrance_id ?? null;
+  const name = row.name ?? row.alternate_name ?? row.alt_name ?? row.fragrance_name ?? null;
+  const family = row.family ?? row.family_key ?? row.alternate_family ?? row.alt_family ?? '';
+  const reason = row.reason ?? row.why_this ?? row.why ?? '';
+  const brand = row.brand ?? row.alternate_brand ?? row.alt_brand ?? undefined;
+  const notes = Array.isArray(row.notes)
+    ? row.notes
+    : Array.isArray(preview.notes)
+      ? preview.notes
+      : undefined;
+  const accords = Array.isArray(row.accords)
+    ? row.accords
+    : Array.isArray(preview.accords)
+      ? preview.accords
+      : undefined;
+
+  if (!fragrance_id || !name) return null;
+
+  return {
+    fragrance_id,
+    name,
+    family,
+    reason,
+    brand,
+    notes,
+    accords,
+  };
 }
 
 /** Convert a QueueCard to a DisplayCard */
@@ -278,6 +320,8 @@ const OdaraScreen = ({
   const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
   const [resolvedModesPayload, setResolvedModesPayload] = useState<LayerModesPayload | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
+  const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
+  const [currentCardAlternates, setCurrentCardAlternates] = useState<OracleAlternate[]>([]);
 
   const hasHistory = viewHistory.length > 0;
 
@@ -403,10 +447,52 @@ const OdaraScreen = ({
     }
   }, [userId, selectedContext, selectedDate]);
 
+  const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
+    const cached = alternatesCacheRef.current.get(card.fragrance_id);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    try {
+      const { data, error } = await odaraSupabase.rpc('get_alternates_for_card_v1' as any, {
+        p_user: userId,
+        p_fragrance_id: card.fragrance_id,
+        p_context: selectedContext,
+        p_temperature: 75,
+        p_brand: 'Alexandria Fragrances',
+        p_wear_date: selectedDate,
+      });
+
+      if (error) {
+        alternatesCacheRef.current.set(card.fragrance_id, []);
+        return [];
+      }
+
+      const seen = new Set<string>();
+      const rows = Array.isArray(data) ? data : [];
+      const normalized: OracleAlternate[] = [];
+
+      for (const row of rows) {
+        const alt = normalizeAlternateRow(row);
+        if (!alt || alt.fragrance_id === card.fragrance_id || seen.has(alt.fragrance_id)) continue;
+        seen.add(alt.fragrance_id);
+        normalized.push(alt);
+      }
+
+      alternatesCacheRef.current.set(card.fragrance_id, normalized);
+      return normalized;
+    } catch {
+      alternatesCacheRef.current.set(card.fragrance_id, []);
+      return [];
+    }
+  }, [userId, selectedContext, selectedDate]);
+
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
     modesCacheRef.current.clear();
+    alternatesCacheRef.current.clear();
+    setCurrentCardAlternates([]);
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
@@ -437,6 +523,26 @@ const OdaraScreen = ({
       setLayerDebugSource('no-card');
     }
   }, [visibleCard, resolveModesForCard]);
+
+  useEffect(() => {
+    if (!visibleCard) {
+      setCurrentCardAlternates([]);
+      return;
+    }
+
+    let isActive = true;
+    setCurrentCardAlternates([]);
+
+    resolveAlternatesForCard(visibleCard).then((alternates) => {
+      if (isActive) {
+        setCurrentCardAlternates(alternates);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [visibleCard, resolveAlternatesForCard]);
 
   // Gesture refs
   const gestureRef = useRef<{
@@ -475,8 +581,14 @@ const OdaraScreen = ({
 
   // Build layer modes from backend payload — works for hero AND queue cards
   const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
-  const currentModeData = resolvedModesPayload?.modes[selectedMood] ?? null;
-  const layerVisible = !!(resolvedModesPayload && layerModes);
+  const currentModeData = resolvedModesPayload?.modes?.[selectedMood] ?? null;
+  const fallbackMood: LayerMood = isLayerMood(resolvedModesPayload?.default_mode)
+    ? resolvedModesPayload.default_mode
+    : 'balance';
+  const fallbackModeData = resolvedModesPayload?.modes?.[fallbackMood] ?? null;
+  const visibleLayerEntry = currentModeData ?? fallbackModeData;
+  const visibleLayerMode = backendModeEntryToLayerMode(visibleLayerEntry, resolvedModesPayload);
+  const layerVisible = !!(resolvedModesPayload && layerModes && visibleLayerMode);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
@@ -686,16 +798,11 @@ const OdaraScreen = ({
     gestureRef.current.suppressClick = false;
   }, []);
 
-  // Alternates from oracle — only shown for hero card
-  const visibleAlts = (isHeroStyle && activeOracle?.alternates)
-    ? activeOracle.alternates
-    : [];
-  const alternatesRendered = isHeroStyle && visibleAlts.length > 0;
+  const visibleAlts = currentCardAlternates;
+  const alternatesRendered = currentCardAlternates.length > 0;
 
-  // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
-    // Build a hero-style display card from the alternate
     const promoted: DisplayCard = {
       fragrance_id: alt.fragrance_id,
       name: alt.name,
@@ -704,7 +811,7 @@ const OdaraScreen = ({
       brand: alt.brand ?? '',
       notes: alt.notes ?? [],
       accords: alt.accords ?? [],
-      isHero: false, // technically from alternates, but rendered hero-style
+      isHero: false,
     };
     setViewHistory(h => [
       ...h,
@@ -874,6 +981,7 @@ const OdaraScreen = ({
                 mainFamily={visibleCard.family}
                 mainProjection={null}
                 layerModes={layerModes}
+                visibleLayerMode={visibleLayerMode}
                 selectedMood={selectedMood}
                 onSelectMood={lockState !== 'locked' ? setSelectedMood : () => {}}
                 selectedRatio={selectedRatio}
@@ -885,7 +993,7 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives — for hero-style cards, including promoted alternates ── */}
+            {/* ── Alternatives — sourced for the current visible card ── */}
             {alternatesRendered && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
@@ -977,11 +1085,9 @@ const OdaraScreen = ({
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
 {`card=${visibleCard?.name ?? 'none'} | renderType=${renderType}
-alternatesCount=${visibleAlts.length} | alternatesRendered=${alternatesRendered}
-selectedMood=${selectedMood} | expanded=${layerExpanded}
-usingModeReason=${currentModeData?.reason ?? 'none'}
-usingPlacementHint=${currentModeData?.placement_hint ?? 'none'}
-usingSprayGuidance=${currentModeData?.spray_guidance ?? 'none'}
+alternatesAnchorId=${visibleCard?.fragrance_id ?? 'none'} | alternatesCount=${currentCardAlternates.length} | alternatesRendered=${currentCardAlternates.length > 0}
+selectedMood=${selectedMood}
+visibleLayerName=${visibleLayerEntry?.layer_name ?? 'none'} | visibleLayerBrand=${visibleLayerEntry?.layer_brand ?? 'none'} | visibleLayerFamily=${visibleLayerEntry?.layer_family ?? 'none'}
 layerVisible=${layerVisible} | layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
