@@ -69,6 +69,14 @@ export interface OraclePick {
 export interface OracleLayer {
   fragrance_id: string; name: string; family: string; brand: string;
   notes: string[]; accords: string[]; reason: string;
+  // Extended fields from get_layer_for_card_v1
+  ratio_hint?: string;
+  application_style?: string;
+  placement_hint?: string;
+  spray_guidance?: string;
+  why_it_works?: string;
+  layer_score?: number;
+  layer_mode?: string;
 }
 
 export interface OracleAlternate {
@@ -305,8 +313,9 @@ const OdaraScreen = ({
         return;
       }
 
-      const payload = data as any;
-      if (!payload || !payload.fragrance_id) {
+      const rows = Array.isArray(data) ? data : [];
+      const row = rows[0] as any;
+      if (!row || !row.layer_fragrance_id) {
         layerCacheRef.current.set(card.fragrance_id, null);
         setResolvedLayer(null);
         setLayerDebugSource('rpc(null)');
@@ -314,13 +323,20 @@ const OdaraScreen = ({
       }
 
       const resolved: OracleLayer = {
-        fragrance_id: payload.fragrance_id,
-        name: payload.name ?? '',
-        family: payload.family ?? payload.family_key ?? '',
-        brand: payload.brand ?? '',
-        notes: Array.isArray(payload.notes) ? payload.notes : [],
-        accords: Array.isArray(payload.accords) ? payload.accords : [],
-        reason: payload.reason ?? 'Creates contrast without clashing.',
+        fragrance_id: row.layer_fragrance_id,
+        name: row.layer_name ?? '',
+        family: row.layer_family ?? '',
+        brand: row.layer_brand ?? '',
+        notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
+        accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
+        reason: row.reason ?? 'Creates contrast without clashing.',
+        ratio_hint: row.ratio_hint ?? undefined,
+        application_style: row.application_style ?? undefined,
+        placement_hint: row.placement_hint ?? undefined,
+        spray_guidance: row.spray_guidance ?? undefined,
+        why_it_works: row.why_it_works ?? undefined,
+        layer_score: row.layer_score ?? undefined,
+        layer_mode: row.layer_mode ?? undefined,
       };
       layerCacheRef.current.set(card.fragrance_id, resolved);
       setResolvedLayer(resolved);
