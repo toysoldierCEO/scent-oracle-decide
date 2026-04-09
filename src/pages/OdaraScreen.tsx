@@ -69,7 +69,6 @@ export interface OraclePick {
 export interface OracleLayer {
   fragrance_id: string; name: string; family: string; brand: string;
   notes: string[]; accords: string[]; reason: string;
-  // Extended fields from get_layer_for_card_v1
   ratio_hint?: string;
   application_style?: string;
   placement_hint?: string;
@@ -88,6 +87,41 @@ export interface OracleResult {
   today_pick: OraclePick;
   layer: OracleLayer | null;
   alternates: OracleAlternate[];
+}
+
+/** Backend mood-mode entry from get_layer_card_modes_v1 */
+interface BackendModeEntry {
+  mode: string;
+  layer_fragrance_id: string;
+  layer_name: string;
+  layer_brand: string;
+  layer_family: string;
+  layer_notes: string[];
+  layer_accords: string[];
+  layer_score: number;
+  reason: string;
+  why_it_works: string;
+  ratio_hint: string;
+  application_style: string;
+  placement_hint: string;
+  spray_guidance: string;
+  interaction_type: string;
+}
+
+/** Full payload cached per fragrance_id */
+interface LayerModesPayload {
+  layer_name: string;
+  layer_brand: string;
+  layer_family: string;
+  layer_score: number;
+  default_mode: string;
+  default_reason: string;
+  default_ratio_hint: string;
+  default_application_style: string;
+  default_placement_hint: string;
+  default_spray_guidance: string;
+  default_why_it_works: string;
+  modes: Record<string, BackendModeEntry>;
 }
 
 /** A card from get_home_card_queue_v1 */
