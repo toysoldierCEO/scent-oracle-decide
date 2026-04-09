@@ -16,6 +16,10 @@ export interface LayerModeEntry {
   reason: string;
   why_it_works: string;
   projection: number | null;
+  ratio_hint?: string;
+  application_style?: string;
+  placement_hint?: string;
+  spray_guidance?: string;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;
