@@ -465,6 +465,7 @@ const OdaraScreen = ({
     visibleCard.fragrance_id === oracleHeroId;
   // Hero-style = real hero OR promoted alternate (shows alternates + layer)
   const isHeroStyle = isShowingHeroCard || promotedAltId === visibleCard?.fragrance_id;
+  const renderType = isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE';
 
   const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
@@ -475,6 +476,7 @@ const OdaraScreen = ({
   // Build layer modes from backend payload — works for hero AND queue cards
   const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
   const currentModeData = resolvedModesPayload?.modes[selectedMood] ?? null;
+  const layerVisible = !!(resolvedModesPayload && layerModes);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
@@ -688,6 +690,7 @@ const OdaraScreen = ({
   const visibleAlts = (isHeroStyle && activeOracle?.alternates)
     ? activeOracle.alternates
     : [];
+  const alternatesRendered = isHeroStyle && visibleAlts.length > 0;
 
   // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
@@ -863,7 +866,7 @@ const OdaraScreen = ({
             )}
 
             {/* ── Layer Card — for ALL visible cards ── */}
-            {resolvedModesPayload && layerModes && (
+            {layerVisible && (
               <LayerCard
                 mainName={visibleCard.name}
                 mainBrand={visibleCard.brand}
@@ -882,8 +885,8 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives — only for hero card ── */}
-            {isShowingHeroCard && visibleAlts.length > 0 && (
+            {/* ── Alternatives — for hero-style cards, including promoted alternates ── */}
+            {alternatesRendered && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
@@ -973,10 +976,13 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | renderType=${isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE'}
-selectedMood=${selectedMood} | usingModeReason=${currentModeData?.reason ?? 'none'}
-alternatesVisible=${visibleAlts.length > 0} | layerVisible=${!!(resolvedModesPayload && layerModes)}
-layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
+{`card=${visibleCard?.name ?? 'none'} | renderType=${renderType}
+alternatesCount=${visibleAlts.length} | alternatesRendered=${alternatesRendered}
+selectedMood=${selectedMood} | expanded=${layerExpanded}
+usingModeReason=${currentModeData?.reason ?? 'none'}
+usingPlacementHint=${currentModeData?.placement_hint ?? 'none'}
+usingSprayGuidance=${currentModeData?.spray_guidance ?? 'none'}
+layerVisible=${layerVisible} | layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
         )}

@@ -412,6 +412,10 @@ const LayerCard = ({
 
   // Backend-driven text — no frontend generation
   const reasonText = activeModeEntry.reason || '';
+  const ratioHintText = activeModeEntry.ratio_hint || '';
+  const applicationText = activeModeEntry.application_style || '';
+  const placementText = activeModeEntry.placement_hint || '';
+  const sprayText = activeModeEntry.spray_guidance || '';
   const whyText = activeModeEntry.why_it_works || '';
 
   return (
@@ -483,7 +487,24 @@ const LayerCard = ({
             transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
             className="w-full overflow-hidden"
           >
-            <div className="pt-3 mt-2 space-y-3 text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+            <motion.div
+              key={selectedMood}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="pt-3 mt-2 space-y-3 text-left"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
+            >
+
+              {reasonText && (
+                <div>
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Reason</span>
+                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
+                    {reasonText}
+                  </p>
+                </div>
+              )}
 
               {/* Ratio selector */}
               <div className="flex gap-1.5 justify-center" onClick={(e) => e.stopPropagation()}>
@@ -514,17 +535,28 @@ const LayerCard = ({
                 })}
               </div>
 
+              {ratioHintText && (
+                <div>
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Ratio hint</span>
+                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
+                    {ratioHintText}
+                  </p>
+                </div>
+              )}
+
               {/* Application — backend-driven guidance per mood */}
               <div>
                 <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Application</span>
-                <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
-                  {activeModeEntry.application_style || 'Even presence. Split evenly between base and top.'}
-                </p>
-                {activeModeEntry.placement_hint && (
-                  <p className="text-[11px] text-white/50 mt-1 text-center italic">{activeModeEntry.placement_hint}</p>
+                {applicationText && (
+                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
+                    {applicationText}
+                  </p>
                 )}
-                {activeModeEntry.spray_guidance && (
-                  <p className="text-[11px] text-white/50 mt-0.5 text-center">{activeModeEntry.spray_guidance}</p>
+                {placementText && (
+                  <p className="text-[11px] text-white/50 mt-1 text-center italic">{placementText}</p>
+                )}
+                {sprayText && (
+                  <p className="text-[11px] text-white/50 mt-0.5 text-center">{sprayText}</p>
                 )}
               </div>
 
@@ -548,7 +580,7 @@ const LayerCard = ({
                   </div>
                 );
               })()}
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
