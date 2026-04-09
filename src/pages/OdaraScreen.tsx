@@ -219,6 +219,24 @@ function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
   }
   return result as LayerModes;
 }
+
+/** Convert a QueueCard to a DisplayCard */
+function queueCardToDisplay(qc: QueueCard): DisplayCard {
+  const preview = qc.preview ?? {};
+  return {
+    fragrance_id: qc.fragrance_id,
+    name: qc.name ?? '',
+    family: qc.family_key ?? '',
+    reason: qc.why_this ?? '',
+    brand: qc.brand ?? '',
+    notes: Array.isArray(preview.notes) ? preview.notes : [],
+    accords: Array.isArray(preview.accords) ? preview.accords : [],
+    isHero: false,
+  };
+}
+
+/** Convert an OraclePick to a DisplayCard (hero) */
+function heroToDisplay(pick: OraclePick): DisplayCard {
   return {
     ...pick,
     isHero: true,
