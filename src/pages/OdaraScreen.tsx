@@ -894,7 +894,11 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`visible=${visibleCard?.name ?? 'none'} | visibleId=${visibleCard?.fragrance_id ?? 'none'} | oracleHero=${activeOracle?.today_pick?.name ?? 'none'} | oracleHeroId=${oracleHeroId ?? 'none'} | heroMatch=${isShowingHeroCard} | layer=${activeOracle?.layer?.name ?? 'none'}`}
+{`card=${visibleCard?.name ?? 'none'} | cardId=${visibleCard?.fragrance_id?.slice(0,8) ?? '?'}
+type=${isShowingHeroCard ? 'HERO' : 'QUEUE'} | layerSrc=${layerDebugSource}
+layer=${resolvedLayer?.name ?? 'NONE'} | layerId=${resolvedLayer?.fragrance_id?.slice(0,8) ?? '?'}
+layerFamily=${resolvedLayer?.family ?? '?'} | renderGate=${!!(resolvedLayer && layerModes)}
+qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
         )}
