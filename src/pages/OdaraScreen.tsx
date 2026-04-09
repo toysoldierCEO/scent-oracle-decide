@@ -153,6 +153,7 @@ interface DisplayCard {
 type HistoryEntry = {
   card: DisplayCard;
   queuePointerBefore: number;
+  promotedAltId: string | null;
 };
 
 interface OdaraScreenProps {
