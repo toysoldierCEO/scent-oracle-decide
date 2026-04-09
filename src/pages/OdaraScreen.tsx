@@ -269,10 +269,9 @@ const OdaraScreen = ({
   // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
 
-  // ── Per-card layer resolution cache ──
-  // Key: fragrance_id, Value: resolved OracleLayer for that card
-  const layerCacheRef = useRef<Map<string, OracleLayer | null>>(new Map());
-  const [resolvedLayer, setResolvedLayer] = useState<OracleLayer | null>(null);
+  // ── Per-card layer modes cache (from get_layer_card_modes_v1) ──
+  const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
+  const [resolvedModesPayload, setResolvedModesPayload] = useState<LayerModesPayload | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
 
   const hasHistory = viewHistory.length > 0;
