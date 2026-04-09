@@ -533,17 +533,21 @@ const OdaraScreen = ({
   // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked' || !visibleCard?.isHero) return;
-    // Find in queue
     const idx = queue.findIndex(q => q.fragrance_id === alt.fragrance_id);
     if (idx >= 0) {
-      setViewHistory(h => [...h, visibleCard]);
+      setViewHistory(h => [
+        ...h,
+        {
+          card: visibleCard,
+          queuePointerBefore: queuePointer,
+        },
+      ]);
       setVisibleCard(queue[idx]);
-      // Don't change queuePointer — this is a jump, not sequential skip
     }
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, visibleCard, queue]);
+  }, [lockState, visibleCard, queue, queuePointer]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
