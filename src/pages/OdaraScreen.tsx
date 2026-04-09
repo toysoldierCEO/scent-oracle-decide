@@ -194,59 +194,31 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
-function buildLayerModes(layer: OracleLayer): LayerModes {
-  const MOOD_INTERACTIONS: Record<LayerMood, InteractionType> = {
-    balance: 'balance',
-    bold: 'amplify',
-    smooth: 'balance',
-    wild: 'contrast',
-  };
-
-  const entry = (mood: LayerMood) => ({
-    id: layer.fragrance_id,
-    name: layer.name,
-    brand: layer.brand,
-    family_key: layer.family,
-    notes: layer.notes,
-    accords: layer.accords,
-    interactionType: MOOD_INTERACTIONS[mood],
-    reason: layer.reason || '',
-    why_it_works: '',
-    projection: null,
-  });
-
-  return {
-    balance: entry('balance'),
-    bold: entry('bold'),
-    smooth: entry('smooth'),
-    wild: entry('wild'),
-  };
+/** Convert backend modes payload into LayerModes for the LayerCard component */
+function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
+  const MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+  const result: Partial<LayerModes> = {};
+  for (const mood of MOODS) {
+    const m = payload.modes[mood];
+    if (!m) {
+      result[mood] = null;
+      continue;
+    }
+    result[mood] = {
+      id: m.layer_fragrance_id,
+      name: m.layer_name,
+      brand: m.layer_brand,
+      family_key: m.layer_family,
+      notes: Array.isArray(m.layer_notes) ? m.layer_notes : [],
+      accords: Array.isArray(m.layer_accords) ? m.layer_accords : [],
+      interactionType: (m.interaction_type as InteractionType) || 'balance',
+      reason: m.reason || payload.default_reason || '',
+      why_it_works: m.why_it_works || payload.default_why_it_works || '',
+      projection: null,
+    };
+  }
+  return result as LayerModes;
 }
-
-/* ── Lock state type ── */
-type LockState = 'neutral' | 'locked' | 'skipping';
-
-/* ── Gesture constants ── */
-const DIRECTION_LOCK_THRESHOLD = 8;
-const SWIPE_DISTANCE = 28;
-
-/** Convert a QueueCard to a DisplayCard */
-function queueCardToDisplay(qc: QueueCard): DisplayCard {
-  const preview = qc.preview ?? {};
-  return {
-    fragrance_id: qc.fragrance_id,
-    name: qc.name ?? '',
-    family: qc.family_key ?? '',
-    reason: qc.why_this ?? '',
-    brand: qc.brand ?? '',
-    notes: Array.isArray(preview.notes) ? preview.notes : [],
-    accords: Array.isArray(preview.accords) ? preview.accords : [],
-    isHero: false,
-  };
-}
-
-/** Convert an OraclePick to a DisplayCard (hero) */
-function heroToDisplay(pick: OraclePick): DisplayCard {
   return {
     ...pick,
     isHero: true,
