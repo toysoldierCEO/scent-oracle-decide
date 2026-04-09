@@ -218,7 +218,7 @@ const OdaraScreen = ({
   onAccept, onSkip, userId,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
-  const layer = activeOracle?.layer ?? null;
+  const heroLayer = activeOracle?.layer ?? null;
   const forecastDays = buildForecastDays(selectedDate);
 
   // ── Queue from get_home_card_queue_v1 ──
@@ -230,6 +230,12 @@ const OdaraScreen = ({
 
   // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
+
+  // ── Per-card layer resolution cache ──
+  // Key: fragrance_id, Value: resolved OracleLayer for that card
+  const layerCacheRef = useRef<Map<string, OracleLayer | null>>(new Map());
+  const [resolvedLayer, setResolvedLayer] = useState<OracleLayer | null>(null);
+  const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
 
   const hasHistory = viewHistory.length > 0;
 
@@ -270,18 +276,82 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
+  // Resolve layer for any visible card
+  const resolveLayerForCard = useCallback(async (card: DisplayCard) => {
+    // Check cache first
+    const cached = layerCacheRef.current.get(card.fragrance_id);
+    if (cached !== undefined) {
+      setResolvedLayer(cached);
+      setLayerDebugSource(cached ? 'cache' : 'cache(null)');
+      return;
+    }
+
+    // For hero card, use oracle layer
+    if (activeOracle?.today_pick?.fragrance_id === card.fragrance_id && heroLayer) {
+      layerCacheRef.current.set(card.fragrance_id, heroLayer);
+      setResolvedLayer(heroLayer);
+      setLayerDebugSource('oracle');
+      return;
+    }
+
+    // For queue cards, query fragrances table for a different-family companion
+    try {
+      setLayerDebugSource('fetching…');
+      const { data, error } = await odaraSupabase
+        .from('fragrances')
+        .select('id, name, family_key, brand, notes, accords')
+        .neq('id', card.fragrance_id)
+        .neq('family_key', card.family || '__none__')
+        .limit(1);
+
+      if (error || !data || data.length === 0) {
+        layerCacheRef.current.set(card.fragrance_id, null);
+        setResolvedLayer(null);
+        setLayerDebugSource(error ? `err:${error.message}` : 'no-match');
+        return;
+      }
+
+      const row = data[0];
+      const resolved: OracleLayer = {
+        fragrance_id: row.id,
+        name: row.name,
+        family: row.family_key ?? '',
+        brand: row.brand ?? '',
+        notes: Array.isArray(row.notes) ? row.notes : [],
+        accords: Array.isArray(row.accords) ? row.accords : [],
+        reason: 'Creates contrast without clashing.',
+      };
+      layerCacheRef.current.set(card.fragrance_id, resolved);
+      setResolvedLayer(resolved);
+      setLayerDebugSource('query');
+    } catch (e: any) {
+      layerCacheRef.current.set(card.fragrance_id, null);
+      setResolvedLayer(null);
+      setLayerDebugSource(`err:${e?.message}`);
+    }
+  }, [activeOracle, heroLayer]);
+
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
+    layerCacheRef.current.clear();
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
+      // Pre-cache hero layer
+      if (oracle.layer) {
+        layerCacheRef.current.set(oracle.today_pick.fragrance_id, oracle.layer);
+        setResolvedLayer(oracle.layer);
+        setLayerDebugSource('oracle-init');
+      }
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
       });
     } else {
       setVisibleCard(null);
+      setResolvedLayer(null);
+      setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
     }
@@ -290,6 +360,16 @@ const OdaraScreen = ({
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
+
+  // Resolve layer whenever visible card changes
+  useEffect(() => {
+    if (visibleCard) {
+      resolveLayerForCard(visibleCard);
+    } else {
+      setResolvedLayer(null);
+      setLayerDebugSource('no-card');
+    }
+  }, [visibleCard, resolveLayerForCard]);
 
   // Gesture refs
   const gestureRef = useRef<{
@@ -323,8 +403,8 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from oracle layer — only for hero card
-  const layerModes = (isShowingHeroCard && layer) ? buildLayerModes(layer) : null;
+  // Build layer modes from resolved layer — works for hero AND queue cards
+  const layerModes = resolvedLayer ? buildLayerModes(resolvedLayer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
@@ -703,8 +783,8 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* ── Layer Card — only for hero card ── */}
-            {isShowingHeroCard && layer && layerModes && (
+            {/* ── Layer Card — for ALL visible cards ── */}
+            {resolvedLayer && layerModes && (
               <LayerCard
                 mainName={visibleCard.name}
                 mainBrand={visibleCard.brand}
@@ -814,7 +894,11 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`visible=${visibleCard?.name ?? 'none'} | visibleId=${visibleCard?.fragrance_id ?? 'none'} | oracleHero=${activeOracle?.today_pick?.name ?? 'none'} | oracleHeroId=${oracleHeroId ?? 'none'} | heroMatch=${isShowingHeroCard} | layer=${activeOracle?.layer?.name ?? 'none'}`}
+{`card=${visibleCard?.name ?? 'none'} | cardId=${visibleCard?.fragrance_id?.slice(0,8) ?? '?'}
+type=${isShowingHeroCard ? 'HERO' : 'QUEUE'} | layerSrc=${layerDebugSource}
+layer=${resolvedLayer?.name ?? 'NONE'} | layerId=${resolvedLayer?.fragrance_id?.slice(0,8) ?? '?'}
+layerFamily=${resolvedLayer?.family ?? '?'} | renderGate=${!!(resolvedLayer && layerModes)}
+qp=${queuePointer} | hist=${viewHistory.length}`}
             </pre>
           </div>
         )}
