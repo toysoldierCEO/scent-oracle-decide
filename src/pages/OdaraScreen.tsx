@@ -313,20 +313,18 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
-  // Resolve layer for any visible card
-  const resolveLayerForCard = useCallback(async (card: DisplayCard) => {
-    // Check cache first
-    const cached = layerCacheRef.current.get(card.fragrance_id);
+  // Resolve layer modes for any visible card via get_layer_card_modes_v1
+  const resolveModesForCard = useCallback(async (card: DisplayCard) => {
+    const cached = modesCacheRef.current.get(card.fragrance_id);
     if (cached !== undefined) {
-      setResolvedLayer(cached);
+      setResolvedModesPayload(cached);
       setLayerDebugSource(cached ? 'cache' : 'cache(null)');
       return;
     }
 
-    // Call the real backend RPC for ALL cards (hero and queue)
     try {
       setLayerDebugSource('rpc…');
-      const { data, error } = await odaraSupabase.rpc('get_layer_for_card_v1' as any, {
+      const { data, error } = await odaraSupabase.rpc('get_layer_card_modes_v1' as any, {
         p_user: userId,
         p_fragrance_id: card.fragrance_id,
         p_context: selectedContext,
@@ -336,43 +334,68 @@ const OdaraScreen = ({
       });
 
       if (error) {
-        layerCacheRef.current.set(card.fragrance_id, null);
-        setResolvedLayer(null);
+        modesCacheRef.current.set(card.fragrance_id, null);
+        setResolvedModesPayload(null);
         setLayerDebugSource(`err:${error.message}`);
         return;
       }
 
+      // RPC returns table rows — one row per mood
       const rows = Array.isArray(data) ? data : [];
-      const row = rows[0] as any;
-      if (!row || !row.layer_fragrance_id) {
-        layerCacheRef.current.set(card.fragrance_id, null);
-        setResolvedLayer(null);
-        setLayerDebugSource('rpc(null)');
+      if (rows.length === 0) {
+        modesCacheRef.current.set(card.fragrance_id, null);
+        setResolvedModesPayload(null);
+        setLayerDebugSource('rpc(empty)');
         return;
       }
 
-      const resolved: OracleLayer = {
-        fragrance_id: row.layer_fragrance_id,
-        name: row.layer_name ?? '',
-        family: row.layer_family ?? '',
-        brand: row.layer_brand ?? '',
-        notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
-        accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
-        reason: row.reason ?? 'Creates contrast without clashing.',
-        ratio_hint: row.ratio_hint ?? undefined,
-        application_style: row.application_style ?? undefined,
-        placement_hint: row.placement_hint ?? undefined,
-        spray_guidance: row.spray_guidance ?? undefined,
-        why_it_works: row.why_it_works ?? undefined,
-        layer_score: row.layer_score ?? undefined,
-        layer_mode: row.layer_mode ?? undefined,
+      // Build payload from rows
+      const first = rows[0] as any;
+      const modesMap: Record<string, BackendModeEntry> = {};
+      for (const r of rows) {
+        const row = r as any;
+        if (row.mode) {
+          modesMap[row.mode] = {
+            mode: row.mode,
+            layer_fragrance_id: row.layer_fragrance_id ?? '',
+            layer_name: row.layer_name ?? '',
+            layer_brand: row.layer_brand ?? '',
+            layer_family: row.layer_family ?? '',
+            layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
+            layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
+            layer_score: row.layer_score ?? 0,
+            reason: row.reason ?? '',
+            why_it_works: row.why_it_works ?? '',
+            ratio_hint: row.ratio_hint ?? '',
+            application_style: row.application_style ?? '',
+            placement_hint: row.placement_hint ?? '',
+            spray_guidance: row.spray_guidance ?? '',
+            interaction_type: row.interaction_type ?? 'balance',
+          };
+        }
+      }
+
+      const payload: LayerModesPayload = {
+        layer_name: first.layer_name ?? '',
+        layer_brand: first.layer_brand ?? '',
+        layer_family: first.layer_family ?? '',
+        layer_score: first.layer_score ?? 0,
+        default_mode: first.default_mode ?? first.mode ?? 'balance',
+        default_reason: first.default_reason ?? first.reason ?? '',
+        default_ratio_hint: first.default_ratio_hint ?? first.ratio_hint ?? '',
+        default_application_style: first.default_application_style ?? first.application_style ?? '',
+        default_placement_hint: first.default_placement_hint ?? first.placement_hint ?? '',
+        default_spray_guidance: first.default_spray_guidance ?? first.spray_guidance ?? '',
+        default_why_it_works: first.default_why_it_works ?? first.why_it_works ?? '',
+        modes: modesMap,
       };
-      layerCacheRef.current.set(card.fragrance_id, resolved);
-      setResolvedLayer(resolved);
+
+      modesCacheRef.current.set(card.fragrance_id, payload);
+      setResolvedModesPayload(payload);
       setLayerDebugSource('rpc');
     } catch (e: any) {
-      layerCacheRef.current.set(card.fragrance_id, null);
-      setResolvedLayer(null);
+      modesCacheRef.current.set(card.fragrance_id, null);
+      setResolvedModesPayload(null);
       setLayerDebugSource(`err:${e?.message}`);
     }
   }, [userId, selectedContext, selectedDate]);
@@ -380,18 +403,17 @@ const OdaraScreen = ({
   // Initialize on oracle/context/date change
   useEffect(() => {
     setActiveOracle(oracle);
-    layerCacheRef.current.clear();
+    modesCacheRef.current.clear();
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      // Layer will be resolved by the useEffect that watches visibleCard
       fetchQueue(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
       });
     } else {
       setVisibleCard(null);
-      setResolvedLayer(null);
+      setResolvedModesPayload(null);
       setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
@@ -402,15 +424,15 @@ const OdaraScreen = ({
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
 
-  // Resolve layer whenever visible card changes
+  // Resolve layer modes whenever visible card changes
   useEffect(() => {
     if (visibleCard) {
-      resolveLayerForCard(visibleCard);
+      resolveModesForCard(visibleCard);
     } else {
-      setResolvedLayer(null);
+      setResolvedModesPayload(null);
       setLayerDebugSource('no-card');
     }
-  }, [visibleCard, resolveLayerForCard]);
+  }, [visibleCard, resolveModesForCard]);
 
   // Gesture refs
   const gestureRef = useRef<{
