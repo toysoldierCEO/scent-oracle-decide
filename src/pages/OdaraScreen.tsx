@@ -270,8 +270,8 @@ const OdaraScreen = ({
   const [skipLoading, setSkipLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
 
-  // The visible card: starts as oracle hero, then walks through queue
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
+  const [promotedAltId, setPromotedAltId] = useState<string | null>(null);
 
   // ── Per-card layer modes cache (from get_layer_card_modes_v1) ──
   const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
@@ -461,6 +461,8 @@ const OdaraScreen = ({
     !!visibleCard &&
     !!oracleHeroId &&
     visibleCard.fragrance_id === oracleHeroId;
+  // Hero-style = real hero OR promoted alternate (shows alternates + layer)
+  const isHeroStyle = isShowingHeroCard || promotedAltId === visibleCard?.fragrance_id;
 
   const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
