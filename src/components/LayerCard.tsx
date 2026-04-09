@@ -514,16 +514,18 @@ const LayerCard = ({
                 })}
               </div>
 
-              {/* Application — adaptive guidance based on ratio */}
+              {/* Application — backend-driven guidance per mood */}
               <div>
                 <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Application</span>
                 <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
-                  {selectedRatio === '2:1'
-                    ? 'Base leads. Apply more to torso, light touch on top.'
-                    : selectedRatio === '1:2'
-                    ? 'Top leads. Light base, stronger on upper / air zones.'
-                    : 'Even presence. Split evenly between base and top.'}
+                  {activeModeEntry.application_style || 'Even presence. Split evenly between base and top.'}
                 </p>
+                {activeModeEntry.placement_hint && (
+                  <p className="text-[11px] text-white/50 mt-1 text-center italic">{activeModeEntry.placement_hint}</p>
+                )}
+                {activeModeEntry.spray_guidance && (
+                  <p className="text-[11px] text-white/50 mt-0.5 text-center">{activeModeEntry.spray_guidance}</p>
+                )}
               </div>
 
               {/* Why it works — more prominent explanation */}
