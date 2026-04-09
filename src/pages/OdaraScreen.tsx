@@ -311,6 +311,12 @@ const OdaraScreen = ({
   });
   const unlockTimeoutRef = useRef<number | null>(null);
 
+  const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
+  const isShowingHeroCard =
+    !!visibleCard &&
+    !!oracleHeroId &&
+    visibleCard.fragrance_id === oracleHeroId;
+
   const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
@@ -318,7 +324,7 @@ const OdaraScreen = ({
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
   // Build layer modes from oracle layer — only for hero card
-  const layerModes = (visibleCard?.isHero && layer) ? buildLayerModes(layer) : null;
+  const layerModes = (isShowingHeroCard && layer) ? buildLayerModes(layer) : null;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
@@ -526,13 +532,13 @@ const OdaraScreen = ({
   }, []);
 
   // Alternates from oracle — only shown for hero card
-  const visibleAlts = (visibleCard?.isHero && activeOracle?.alternates)
+  const visibleAlts = (isShowingHeroCard && activeOracle?.alternates)
     ? activeOracle.alternates
     : [];
 
   // Promote alternate — only works for hero card
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
-    if (lockState === 'locked' || !visibleCard?.isHero) return;
+    if (lockState === 'locked' || !isShowingHeroCard) return;
     const idx = queue.findIndex(q => q.fragrance_id === alt.fragrance_id);
     if (idx >= 0) {
       setViewHistory(h => [
@@ -660,7 +666,7 @@ const OdaraScreen = ({
             </div>
 
             {/* Source badge for queue cards */}
-            {!visibleCard.isHero && (
+            {!isShowingHeroCard && (
               <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
                 from queue
               </span>
@@ -698,7 +704,7 @@ const OdaraScreen = ({
             )}
 
             {/* ── Layer Card — only for hero card ── */}
-            {visibleCard.isHero && layer && layerModes && (
+            {isShowingHeroCard && layer && layerModes && (
               <LayerCard
                 mainName={visibleCard.name}
                 mainBrand={visibleCard.brand}
@@ -718,7 +724,7 @@ const OdaraScreen = ({
             )}
 
             {/* ── Alternatives — only for hero card ── */}
-            {visibleCard.isHero && visibleAlts.length > 0 && (
+            {isShowingHeroCard && visibleAlts.length > 0 && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
@@ -808,7 +814,7 @@ const OdaraScreen = ({
               </button>
             </div>
             <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`visible=${visibleCard?.name} | qp=${queuePointer} | hist=${viewHistory.length} | last=${viewHistory[viewHistory.length - 1]?.card?.name ?? 'none'}`}
+{`visible=${visibleCard?.name ?? 'none'} | visibleId=${visibleCard?.fragrance_id ?? 'none'} | oracleHero=${activeOracle?.today_pick?.name ?? 'none'} | oracleHeroId=${oracleHeroId ?? 'none'} | heroMatch=${isShowingHeroCard} | layer=${activeOracle?.layer?.name ?? 'none'}`}
             </pre>
           </div>
         )}
