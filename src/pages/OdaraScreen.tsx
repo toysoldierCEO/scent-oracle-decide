@@ -725,7 +725,7 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('[data-debug-controls]')) return;
+    if (target.closest('[data-debug-controls]') || target.closest('[data-action-stack]')) return;
 
     clearUnlockTimeout();
     gestureRef.current = {
