@@ -554,7 +554,7 @@ const OdaraScreen = ({
     }
     setViewHistory([]);
     setPromotedAltId(null);
-    setLockState('neutral');
+    // Don't reset lockState — it's persisted per day+context in lockStateMap
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
