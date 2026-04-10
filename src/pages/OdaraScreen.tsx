@@ -909,15 +909,8 @@ const OdaraScreen = ({
 
             {/* Top row: lock · centered date · temp */}
             <div className="flex items-center justify-between mb-1.5 relative z-10">
-              {/* Left: back or lock */}
-              <div className="flex items-center gap-2 w-[60px]">
-                {hasHistory ? (
-                  <button onClick={handleBack} className="p-0.5 -ml-0.5">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/60">
-                      <path d="M19 12H5M12 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                ) : null}
+              {/* Left: lock on top, back below — vertical stack */}
+              <div className="flex flex-col items-center gap-1.5 w-[60px]">
                 <button
                   onClick={() => {
                     if (lockState === 'locked') {
@@ -949,36 +942,85 @@ const OdaraScreen = ({
                     )}
                   </svg>
 
-                  {/* Red Tron lock-engagement animation */}
+                  {/* GREEN Tron lock-engagement animation */}
                   {lockFlash && (
-                    <span
-                      className="absolute inset-[-6px] pointer-events-none z-[2]"
-                      style={{ overflow: 'visible' }}
-                    >
-                      {/* Trace line 1 - horizontal */}
-                      <span
-                        className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
+                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
+                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
+                        style={{
+                          width: '130%',
+                          background: 'linear-gradient(90deg, transparent 0%, #22c55e 30%, #4ade80 50%, #22c55e 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #22c55e, 0 0 12px #22c55e88',
+                          animation: 'tronTraceH 0.5s ease-out forwards',
+                        }}
+                      />
+                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
+                        style={{
+                          height: '130%',
+                          background: 'linear-gradient(180deg, transparent 0%, #22c55e 30%, #4ade80 50%, #22c55e 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #22c55e, 0 0 12px #22c55e88',
+                          animation: 'tronTraceV 0.5s ease-out forwards',
+                          animationDelay: '0.08s',
+                        }}
+                      />
+                      <span className="absolute inset-0 rounded-full"
+                        style={{
+                          background: 'radial-gradient(circle, rgba(34,197,94,0.4) 0%, transparent 70%)',
+                          animation: 'tronBurst 0.6s ease-out forwards',
+                        }}
+                      />
+                    </span>
+                  )}
+
+                  {/* YELLOW Tron unlock animation */}
+                  {unlockFlash && (
+                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
+                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
+                        style={{
+                          width: '130%',
+                          background: 'linear-gradient(90deg, transparent 0%, #eab308 30%, #facc15 50%, #eab308 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #eab308, 0 0 12px #eab30888',
+                          animation: 'tronTraceH 0.5s ease-out forwards',
+                        }}
+                      />
+                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
+                        style={{
+                          height: '130%',
+                          background: 'linear-gradient(180deg, transparent 0%, #eab308 30%, #facc15 50%, #eab308 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #eab308, 0 0 12px #eab30888',
+                          animation: 'tronTraceV 0.5s ease-out forwards',
+                          animationDelay: '0.08s',
+                        }}
+                      />
+                      <span className="absolute inset-0 rounded-full"
+                        style={{
+                          background: 'radial-gradient(circle, rgba(234,179,8,0.4) 0%, transparent 70%)',
+                          animation: 'tronBurst 0.6s ease-out forwards',
+                        }}
+                      />
+                    </span>
+                  )}
+
+                  {/* RED Tron skip animation (on lock icon too) */}
+                  {skipFlash && (
+                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
+                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
                           width: '130%',
                           background: 'linear-gradient(90deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
                           boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
-                          animation: 'tronLockH 0.5s ease-out forwards',
+                          animation: 'tronTraceH 0.5s ease-out forwards',
                         }}
                       />
-                      {/* Trace line 2 - vertical */}
-                      <span
-                        className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
+                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
                         style={{
                           height: '130%',
                           background: 'linear-gradient(180deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
                           boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
-                          animation: 'tronLockV 0.5s ease-out forwards',
+                          animation: 'tronTraceV 0.5s ease-out forwards',
                           animationDelay: '0.08s',
                         }}
                       />
-                      {/* Center burst */}
-                      <span
-                        className="absolute inset-0 rounded-full"
+                      <span className="absolute inset-0 rounded-full"
                         style={{
                           background: 'radial-gradient(circle, rgba(239,68,68,0.4) 0%, transparent 70%)',
                           animation: 'tronBurst 0.6s ease-out forwards',
@@ -986,36 +1028,16 @@ const OdaraScreen = ({
                       />
                     </span>
                   )}
-
-                  {/* Yellow unlock electron-pass animation */}
-                  {unlockFlash && (
-                    <span
-                      className="absolute inset-[-8px] pointer-events-none z-[2]"
-                      style={{ overflow: 'visible' }}
-                    >
-                      {/* Electron beam sweeping left to right */}
-                      <span
-                        className="absolute top-1/2 h-[2px] rounded-full"
-                        style={{
-                          width: '6px',
-                          left: '-8px',
-                          background: '#eab308',
-                          boxShadow: '0 0 8px #eab308, 0 0 16px #eab308, 0 0 24px #eab30866',
-                          animation: 'electronSweep 0.45s ease-in-out forwards',
-                        }}
-                      />
-                      {/* Trail glow */}
-                      <span
-                        className="absolute top-1/2 left-0 h-[1px] rounded-full"
-                        style={{
-                          width: '100%',
-                          background: 'linear-gradient(90deg, transparent, #eab30888, transparent)',
-                          animation: 'electronTrail 0.6s ease-out forwards',
-                        }}
-                      />
-                    </span>
-                  )}
                 </button>
+
+                {/* Back arrow — below lock */}
+                {hasHistory && (
+                  <button onClick={handleBack} className="p-0.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
+                      <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               {/* Center: date */}
