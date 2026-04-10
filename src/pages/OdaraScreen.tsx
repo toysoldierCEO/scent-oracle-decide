@@ -300,6 +300,28 @@ function heroToDisplay(pick: OraclePick): DisplayCard {
 type LockedLaneInfo = { mainColor: string; layerColor: string | null };
 type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
 
+/** Persisted lock state per day+context */
+type LockStateMap = Record<string, LockState>; // key = "dateStr:context"
+
+/** Persisted favorite combo per day+context */
+type FavoriteCombo = {
+  mainId: string;
+  layerId: string | null;
+  mood: LayerMood;
+  ratio: string;
+};
+type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
+
+/** Deterministic temperature for a given date (simulated weather) */
+function getTemperatureForDate(dateStr: string): number {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return 68 + (Math.abs(hash) % 25); // 68°–92° range
+}
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
