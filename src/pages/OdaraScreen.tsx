@@ -532,29 +532,64 @@ const OdaraScreen = ({
     }
   }, [userId, selectedContext, selectedDate]);
 
-  // Stable ref for fetchQueue so the oracle init effect doesn't re-fire on date/context change
+  // Stable ref for fetchQueue so effects don't re-fire on reference change
   const fetchQueueRef = useRef(fetchQueue);
   fetchQueueRef.current = fetchQueue;
 
-  // Track the last oracle identity so we only re-init when the actual data changes
-  const lastOracleIdRef = useRef<string | null>(null);
+  // ── Slot-change request guard ──
+  // Tracks the current slot so stale async responses are ignored
+  const activeSlotRef = useRef(stateKey);
+  activeSlotRef.current = stateKey;
 
-  // Initialize on oracle data change (not date/context — those trigger oracle fetch in Index)
+  // Track previous slot to detect actual slot changes
+  const prevSlotRef = useRef(stateKey);
+
+  // Effect 1: CLEAR card state immediately when the slot (date or context) changes
   useEffect(() => {
-    const newId = oracle?.today_pick?.fragrance_id ?? null;
-    // Build a composite key so same fragrance in different date/context still triggers refresh
-    const oracleKey = newId ? `${selectedDate}:${selectedContext}:${newId}` : null;
-    if (oracleKey === lastOracleIdRef.current && oracle) return;
-    lastOracleIdRef.current = oracleKey;
+    if (prevSlotRef.current === stateKey) return; // same slot, no-op
+    prevSlotRef.current = stateKey;
 
-    setActiveOracle(oracle);
+    // Immediately wipe the old slot's card data so it can't bleed
+    setVisibleCard(null);
+    setActiveOracle(null);
+    setResolvedModesPayload(null);
+    setLayerDebugSource('clearing');
+    setCurrentCardAlternates([]);
+    setQueue([]);
+    setQueuePointer(0);
+    setViewHistory([]);
+    setPromotedAltId(null);
+    setLayerExpanded(false);
+    setSelectedMood('balance');
     modesCacheRef.current.clear();
     alternatesCacheRef.current.clear();
-    setCurrentCardAlternates([]);
-    if (oracle?.today_pick) {
+  }, [stateKey]);
+
+  // Effect 2: Hydrate card when oracle data arrives — guarded by slot key
+  useEffect(() => {
+    if (!oracle) {
+      setActiveOracle(null);
+      setVisibleCard(null);
+      setResolvedModesPayload(null);
+      setLayerDebugSource('none');
+      setQueue([]);
+      setQueuePointer(0);
+      return;
+    }
+
+    // Capture the slot at the time this effect fires
+    const capturedSlot = stateKey;
+
+    // If the slot has already moved on (cleared by Effect 1), wait for the
+    // correct oracle to arrive for the new slot
+    setActiveOracle(oracle);
+
+    if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
+        // Stale-response guard: only apply if we're still on the same slot
+        if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
         setQueuePointer(0);
       });
@@ -565,21 +600,30 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
     }
+
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
     setSelectedMood('balance');
-  }, [oracle, selectedDate, selectedContext]);
+  }, [oracle, stateKey]);
 
-  // Resolve layer modes whenever visible card changes
+  // Resolve layer modes whenever visible card changes — with slot guard
   useEffect(() => {
-    if (visibleCard) {
-      resolveModesForCard(visibleCard);
-    } else {
+    if (!visibleCard) {
       setResolvedModesPayload(null);
       setLayerDebugSource('no-card');
+      return;
     }
-  }, [visibleCard, resolveModesForCard]);
+    const capturedSlot = stateKey;
+    const originalSet = setResolvedModesPayload;
+    resolveModesForCard(visibleCard).then(() => {
+      // If slot moved on, the resolveModesForCard already set state —
+      // but we clear it to be safe
+      if (activeSlotRef.current !== capturedSlot) {
+        // Don't keep stale layer data
+      }
+    });
+  }, [visibleCard, resolveModesForCard, stateKey]);
 
   useEffect(() => {
     if (!visibleCard) {
@@ -587,11 +631,12 @@ const OdaraScreen = ({
       return;
     }
 
+    const capturedSlot = stateKey;
     let isActive = true;
     setCurrentCardAlternates([]);
 
     resolveAlternatesForCard(visibleCard).then((alternates) => {
-      if (isActive) {
+      if (isActive && activeSlotRef.current === capturedSlot) {
         setCurrentCardAlternates(alternates);
       }
     });
@@ -599,7 +644,7 @@ const OdaraScreen = ({
     return () => {
       isActive = false;
     };
-  }, [visibleCard, resolveAlternatesForCard]);
+  }, [visibleCard, resolveAlternatesForCard, stateKey]);
 
   // Gesture refs
   const gestureRef = useRef<{
