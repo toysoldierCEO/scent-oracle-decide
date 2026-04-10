@@ -1150,7 +1150,7 @@ const OdaraScreen = ({
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     setUnlockFlash(true);
-                    window.setTimeout(() => setUnlockFlash(false), 600);
+                    window.setTimeout(() => setUnlockFlash(false), 700);
                     pulseLock();
                     return;
                   }
