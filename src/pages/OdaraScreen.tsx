@@ -296,6 +296,10 @@ function heroToDisplay(pick: OraclePick): DisplayCard {
   };
 }
 
+/** Tracks locked scent colors per day+context for weekly lane rendering */
+type LockedLaneInfo = { mainColor: string; layerColor: string | null };
+type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
