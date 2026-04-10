@@ -725,7 +725,7 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('[data-debug-controls]')) return;
+    if (target.closest('[data-debug-controls]') || target.closest('[data-action-stack]')) return;
 
     clearUnlockTimeout();
     gestureRef.current = {
@@ -837,12 +837,14 @@ const OdaraScreen = ({
 
   const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!gestureRef.current.suppressClick) return;
+    gestureRef.current.suppressClick = false;
     const target = e.target as HTMLElement;
+    // Never suppress clicks on the action-stack buttons (lock, star, back)
+    if (target.closest('[data-action-stack]')) return;
     if (target.closest('button, a, input, textarea, select, [role="button"]')) {
       e.preventDefault();
       e.stopPropagation();
     }
-    gestureRef.current.suppressClick = false;
   }, []);
 
   const visibleAlts = currentCardAlternates;
@@ -951,7 +953,7 @@ const OdaraScreen = ({
               </span>
 
               {/* Right: lock → star → back vertical stack */}
-              <div className="flex flex-col items-center gap-2 w-[60px]">
+              <div className="flex flex-col items-center gap-2 w-[60px]" data-action-stack>
                 {/* Lock button */}
                 <button
                   onClick={() => {
