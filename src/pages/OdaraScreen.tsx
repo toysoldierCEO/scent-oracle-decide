@@ -595,20 +595,30 @@ const OdaraScreen = ({
   const layerVisible = !!(resolvedModesPayload && layerModes && visibleLayerMode);
 
   // Lock icon color
-  const lockIconColor = lockState === 'locked' ? '#22c55e' : lockState === 'skipping' ? '#ef4444' : 'currentColor';
+  const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
 
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
     if (skipLoading || !visibleCard || lockState === 'locked') return;
 
     setSkipLoading(true);
-    try {
-      void odaraSupabase.rpc('skip_today_pick_v1' as any, {
-        p_user: userId,
-        p_fragrance_id: visibleCard.fragrance_id,
-        p_context: selectedContext,
-      });
+    // Play red Tron flash on skip
+    setSkipFlash(true);
+    window.setTimeout(() => setSkipFlash(false), 700);
 
+    // Fire-and-forget backend skip
+    void odaraSupabase.rpc('skip_today_pick_v1' as any, {
+      p_user: userId,
+      p_fragrance_id: visibleCard.fragrance_id,
+      p_context: selectedContext,
+    });
+
+    // Slide the card down
+    setSkipAnimating(true);
+    await new Promise(r => window.setTimeout(r, 350));
+    setSkipAnimating(false);
+
+    try {
       setViewHistory(h => [
         ...h,
         {
