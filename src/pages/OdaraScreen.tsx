@@ -953,7 +953,7 @@ const OdaraScreen = ({
               </span>
 
               {/* Right: lock → star → back vertical stack */}
-              <div className="flex flex-col items-center gap-2 w-[60px]">
+              <div className="flex flex-col items-center gap-2 w-[60px]" data-action-stack>
                 {/* Lock button */}
                 <button
                   onClick={() => {
