@@ -383,8 +383,14 @@ const OdaraScreen = ({
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
-  // Lock & gesture state
-  const [lockState, setLockState] = useState<LockState>('neutral');
+  // Lock & gesture state — persisted per day+context
+  const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
+  const stateKey = `${selectedDate}:${selectedContext}`;
+  const lockState: LockState = lockStateMap[stateKey] ?? 'neutral';
+  const setLockState = useCallback((ls: LockState) => {
+    setLockStateMap(prev => ({ ...prev, [stateKey]: ls }));
+  }, [stateKey]);
+
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
@@ -394,6 +400,12 @@ const OdaraScreen = ({
   // Locked selections for weekly lanes
   const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
   const [cardTranslateY, setCardTranslateY] = useState(0);
+
+  // Favorite state — persisted per day+context
+  const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
+  const currentFavorite = favoriteMap[stateKey] ?? null;
+  const isFavorited = !!(currentFavorite && visibleCard &&
+    currentFavorite.mainId === visibleCard.fragrance_id);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
   const resolveModesForCard = useCallback(async (card: DisplayCard) => {
