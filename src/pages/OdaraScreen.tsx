@@ -975,9 +975,9 @@ const OdaraScreen = ({
             {/* Top row: temp left · centered date · action stack right */}
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature */}
-              <div className="w-[60px] flex justify-start pt-0.5">
+              <div className="flex flex-col items-start pt-1 min-w-[52px]">
                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  83°
+                  {getTemperatureForDate(selectedDate)}°
                 </span>
               </div>
 
