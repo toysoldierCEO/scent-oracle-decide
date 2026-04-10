@@ -886,13 +886,14 @@ const OdaraScreen = ({
         {/* ── Unified main card with gestures ── */}
         {!oracleLoading && !oracleError && visibleCard && (
           <div
-            className="rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden transition-transform duration-150"
+            className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
             style={{
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
               transform: `translateY(${cardTranslateY * 0.4}px)`,
               touchAction: 'pan-x',
+              ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
             onPointerDownCapture={handlePointerDown}
             onPointerMoveCapture={handlePointerMove}
