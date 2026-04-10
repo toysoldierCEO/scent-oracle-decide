@@ -368,6 +368,9 @@ const OdaraScreen = ({
   const [lockFlash, setLockFlash] = useState(false);
   const [skipFlash, setSkipFlash] = useState(false);
   const [skipAnimating, setSkipAnimating] = useState(false);
+
+  // Locked selections for weekly lanes
+  const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
