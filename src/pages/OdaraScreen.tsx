@@ -361,6 +361,7 @@ const OdaraScreen = ({
   const [lockState, setLockState] = useState<LockState>('neutral');
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
+  const [lockFlash, setLockFlash] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
