@@ -532,8 +532,21 @@ const OdaraScreen = ({
     }
   }, [userId, selectedContext, selectedDate]);
 
-  // Initialize on oracle/context/date change
+  // Stable ref for fetchQueue so the oracle init effect doesn't re-fire on date/context change
+  const fetchQueueRef = useRef(fetchQueue);
+  fetchQueueRef.current = fetchQueue;
+
+  // Track the last oracle identity so we only re-init when the actual data changes
+  const lastOracleIdRef = useRef<string | null>(null);
+
+  // Initialize on oracle data change (not date/context — those trigger oracle fetch in Index)
   useEffect(() => {
+    const newId = oracle?.today_pick?.fragrance_id ?? null;
+    // Build a composite key so same fragrance in different date/context still triggers refresh
+    const oracleKey = newId ? `${selectedDate}:${selectedContext}:${newId}` : null;
+    if (oracleKey === lastOracleIdRef.current && oracle) return;
+    lastOracleIdRef.current = oracleKey;
+
     setActiveOracle(oracle);
     modesCacheRef.current.clear();
     alternatesCacheRef.current.clear();
@@ -541,7 +554,7 @@ const OdaraScreen = ({
     if (oracle?.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      fetchQueue(oracle.today_pick.fragrance_id).then(q => {
+      fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
         setQueue(q);
         setQueuePointer(0);
       });
@@ -554,10 +567,9 @@ const OdaraScreen = ({
     }
     setViewHistory([]);
     setPromotedAltId(null);
-    // Don't reset lockState — it's persisted per day+context in lockStateMap
     setLayerExpanded(false);
     setSelectedMood('balance');
-  }, [oracle, selectedDate, selectedContext, fetchQueue]);
+  }, [oracle, selectedDate, selectedContext]);
 
   // Resolve layer modes whenever visible card changes
   useEffect(() => {
