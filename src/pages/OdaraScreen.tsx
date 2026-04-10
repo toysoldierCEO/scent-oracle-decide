@@ -1090,10 +1090,12 @@ const OdaraScreen = ({
             <div className="flex gap-2 justify-center">
              <button
                 onClick={async () => {
-                  if (!visibleCard || lockState === 'locked') return;
-                  setLockState('locked');
-                  pulseLock();
-                  await onAccept(visibleCard.fragrance_id);
+                   if (!visibleCard || lockState === 'locked') return;
+                   setLockState('locked');
+                   setLockFlash(true);
+                   window.setTimeout(() => setLockFlash(false), 700);
+                   pulseLock();
+                   await onAccept(visibleCard.fragrance_id);
                 }}
                 className="text-[9px] px-3 py-1 rounded-full"
                 style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
