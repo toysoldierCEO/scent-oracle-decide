@@ -982,12 +982,12 @@ const OdaraScreen = ({
               </div>
 
               {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-0.5" style={{ fontFamily: "'Geist Mono', monospace" }}>
+              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-1" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 {getDateLabel(selectedDate)}
               </span>
 
               {/* Right: lock → star → back vertical stack */}
-              <div className="flex flex-col items-center gap-2 w-[60px]" data-action-stack>
+              <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
                 <button
                   onClick={() => {
