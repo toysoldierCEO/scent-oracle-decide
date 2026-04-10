@@ -361,6 +361,7 @@ const OdaraScreen = ({
   const [lockState, setLockState] = useState<LockState>('neutral');
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
+  const [lockFlash, setLockFlash] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
@@ -763,7 +764,7 @@ const OdaraScreen = ({
         clearUnlockTimeout();
         setLockState('neutral');
         setUnlockFlash(true);
-        window.setTimeout(() => setUnlockFlash(false), 600);
+        window.setTimeout(() => setUnlockFlash(false), 700);
         pulseLock();
       }
       return;
@@ -772,6 +773,8 @@ const OdaraScreen = ({
     if (dy < -SWIPE_DISTANCE) {
       clearUnlockTimeout();
       setLockState('locked');
+      setLockFlash(true);
+      window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
       await onAccept(visibleCard.fragrance_id);
       return;
@@ -907,16 +910,17 @@ const OdaraScreen = ({
                     if (lockState === 'locked') {
                       setLockState('neutral');
                       setUnlockFlash(true);
-                      window.setTimeout(() => setUnlockFlash(false), 600);
+                      window.setTimeout(() => setUnlockFlash(false), 700);
                       pulseLock();
                     }
                   }}
-                  className="p-0.5"
+                  className="p-0.5 relative"
                 >
+                  {/* Lock SVG icon */}
                   <svg
                     width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke={lockIconColor} strokeWidth="1.5"
-                    className="transition-colors duration-300"
+                    className="transition-colors duration-300 relative z-[1]"
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
                   >
                     {lockState === 'locked' ? (
@@ -930,33 +934,74 @@ const OdaraScreen = ({
                         <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                       </>
                     )}
-                    {/* Yellow unlock electron pass */}
-                    {unlockFlash && (
-                      <line
-                        x1="3" y1="16" x2="21" y2="16"
-                        stroke="#eab308"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        style={{
-                          filter: 'drop-shadow(0 0 4px #eab308) drop-shadow(0 0 8px #eab30888)',
-                        }}
-                      >
-                        <animate
-                          attributeName="x1" from="-5" to="26"
-                          dur="0.4s" fill="freeze"
-                        />
-                        <animate
-                          attributeName="x2" from="-2" to="29"
-                          dur="0.4s" fill="freeze"
-                        />
-                        <animate
-                          attributeName="opacity" values="0;1;1;0"
-                          keyTimes="0;0.1;0.7;1"
-                          dur="0.5s" fill="freeze"
-                        />
-                      </line>
-                    )}
                   </svg>
+
+                  {/* Red Tron lock-engagement animation */}
+                  {lockFlash && (
+                    <span
+                      className="absolute inset-[-6px] pointer-events-none z-[2]"
+                      style={{ overflow: 'visible' }}
+                    >
+                      {/* Trace line 1 - horizontal */}
+                      <span
+                        className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
+                        style={{
+                          width: '130%',
+                          background: 'linear-gradient(90deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
+                          animation: 'tronLockH 0.5s ease-out forwards',
+                        }}
+                      />
+                      {/* Trace line 2 - vertical */}
+                      <span
+                        className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
+                        style={{
+                          height: '130%',
+                          background: 'linear-gradient(180deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
+                          boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
+                          animation: 'tronLockV 0.5s ease-out forwards',
+                          animationDelay: '0.08s',
+                        }}
+                      />
+                      {/* Center burst */}
+                      <span
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          background: 'radial-gradient(circle, rgba(239,68,68,0.4) 0%, transparent 70%)',
+                          animation: 'tronBurst 0.6s ease-out forwards',
+                        }}
+                      />
+                    </span>
+                  )}
+
+                  {/* Yellow unlock electron-pass animation */}
+                  {unlockFlash && (
+                    <span
+                      className="absolute inset-[-8px] pointer-events-none z-[2]"
+                      style={{ overflow: 'visible' }}
+                    >
+                      {/* Electron beam sweeping left to right */}
+                      <span
+                        className="absolute top-1/2 h-[2px] rounded-full"
+                        style={{
+                          width: '6px',
+                          left: '-8px',
+                          background: '#eab308',
+                          boxShadow: '0 0 8px #eab308, 0 0 16px #eab308, 0 0 24px #eab30866',
+                          animation: 'electronSweep 0.45s ease-in-out forwards',
+                        }}
+                      />
+                      {/* Trail glow */}
+                      <span
+                        className="absolute top-1/2 left-0 h-[1px] rounded-full"
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(90deg, transparent, #eab30888, transparent)',
+                          animation: 'electronTrail 0.6s ease-out forwards',
+                        }}
+                      />
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -1087,10 +1132,12 @@ const OdaraScreen = ({
             <div className="flex gap-2 justify-center">
              <button
                 onClick={async () => {
-                  if (!visibleCard || lockState === 'locked') return;
-                  setLockState('locked');
-                  pulseLock();
-                  await onAccept(visibleCard.fragrance_id);
+                   if (!visibleCard || lockState === 'locked') return;
+                   setLockState('locked');
+                   setLockFlash(true);
+                   window.setTimeout(() => setLockFlash(false), 700);
+                   pulseLock();
+                   await onAccept(visibleCard.fragrance_id);
                 }}
                 className="text-[9px] px-3 py-1 rounded-full"
                 style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
@@ -1103,7 +1150,7 @@ const OdaraScreen = ({
                   if (lockState === 'locked') {
                     setLockState('neutral');
                     setUnlockFlash(true);
-                    window.setTimeout(() => setUnlockFlash(false), 600);
+                    window.setTimeout(() => setUnlockFlash(false), 700);
                     pulseLock();
                     return;
                   }
