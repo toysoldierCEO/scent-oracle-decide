@@ -1148,15 +1148,6 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* Lock state indicator */}
-            {lockState === 'locked' && (
-              <div className="flex justify-center mt-2">
-                <span className="text-[9px] uppercase tracking-[0.18em] px-3 py-1 rounded-full"
-                  style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}>
-                  Locked · swipe down to unlock
-                </span>
-              </div>
-            )}
 
           </div>
         )}
