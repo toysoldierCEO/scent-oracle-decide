@@ -1108,22 +1108,36 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Favorite star — saves current combo */}
+                {/* Favorite star — saves current combo, persisted per day+context */}
                 <button
                   onClick={() => {
                     if (!visibleCard) return;
-                    console.log('[Odara] Favorite combo:', {
-                      main: visibleCard.fragrance_id,
-                      layer: visibleLayerEntry?.layer_fragrance_id ?? null,
+                    const combo: FavoriteCombo = {
+                      mainId: visibleCard.fragrance_id,
+                      layerId: visibleLayerEntry?.layer_fragrance_id ?? null,
                       mood: selectedMood,
                       ratio: selectedRatio,
-                      context: selectedContext,
-                      date: selectedDate,
-                    });
+                    };
+                    if (isFavorited) {
+                      // Toggle off
+                      setFavoriteMap(prev => {
+                        const next = { ...prev };
+                        delete next[stateKey];
+                        return next;
+                      });
+                    } else {
+                      setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
+                    }
                   }}
-                  className="p-0.5"
+                  className="p-0.5 relative"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40 hover:text-foreground/70 transition-colors">
+                  <svg
+                    width="13" height="13" viewBox="0 0 24 24"
+                    fill={isFavorited ? '#eab308' : 'none'}
+                    stroke={isFavorited ? '#eab308' : 'currentColor'}
+                    strokeWidth="1.5"
+                    className={`transition-all duration-300 ${isFavorited ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]' : 'text-foreground/40 hover:text-foreground/70'}`}
+                  >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 </button>
