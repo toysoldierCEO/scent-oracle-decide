@@ -1174,47 +1174,63 @@ const OdaraScreen = ({
 
           </div>
         )}
-        {/* ── Clickable Forecast strip ── */}
+        {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-5 py-3 mt-2.5 flex flex-col items-center gap-2"
+          className="rounded-[16px] px-4 py-3 mt-2.5"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
-            Forecast
-          </span>
           <div className="flex w-full justify-between">
             {forecastDays.map((fd, i) => {
-              const dayColor = fd.isSelected ? familyColor : undefined;
+              const LANE_CONTEXTS = ['daily', 'work', 'hangout', 'date'] as const;
+              const dayLanes = LANE_CONTEXTS.map(ctx => {
+                const key = `${fd.dateStr}:${ctx}`;
+                return lockedSelections[key] ?? null;
+              });
+              const hasAnyLane = dayLanes.some(Boolean);
+
               return (
                 <button
                   key={i}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg transition-all duration-200"
+                  className="flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
-                    background: `${dayColor}15`,
-                    boxShadow: `0 0 8px ${dayColor}20`,
+                    background: 'rgba(255,255,255,0.08)',
                   } : undefined}
                 >
-                  <span className={`text-[11px] transition-colors ${
+                  <span className={`text-[10px] tracking-[0.04em] transition-colors ${
                     fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
                   }`}>
                     {fd.label}
                   </span>
-                  <span className={`text-[13px] font-medium transition-colors ${
+                  <span className={`text-[14px] font-medium transition-colors ${
                     fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
                   }`}>
                     {fd.day}
                   </span>
-                  <div
-                    className="w-1 h-1 rounded-full mt-0.5 transition-all"
-                    style={{
-                      background: fd.isSelected ? dayColor : fd.isToday ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)',
-                      boxShadow: fd.isSelected ? `0 0 4px ${dayColor}` : 'none',
-                    }}
-                  />
+
+                  {/* 4 fixed occasion lane slots */}
+                  <div className="flex flex-col gap-[3px] mt-1 w-full items-center" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    {dayLanes.map((lane, li) => {
+                      if (!lane) return null;
+                      return (
+                        <div
+                          key={li}
+                          className="rounded-full"
+                          style={{
+                            width: '18px',
+                            height: '3px',
+                            background: lane.mainColor,
+                            boxShadow: lane.layerColor
+                              ? `0 0 4px ${lane.layerColor}, 0 0 8px ${lane.layerColor}44`
+                              : `0 0 3px ${lane.mainColor}66`,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 </button>
               );
             })}
