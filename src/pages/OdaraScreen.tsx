@@ -764,7 +764,7 @@ const OdaraScreen = ({
         clearUnlockTimeout();
         setLockState('neutral');
         setUnlockFlash(true);
-        window.setTimeout(() => setUnlockFlash(false), 600);
+        window.setTimeout(() => setUnlockFlash(false), 700);
         pulseLock();
       }
       return;
@@ -773,6 +773,8 @@ const OdaraScreen = ({
     if (dy < -SWIPE_DISTANCE) {
       clearUnlockTimeout();
       setLockState('locked');
+      setLockFlash(true);
+      window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
       await onAccept(visibleCard.fragrance_id);
       return;
