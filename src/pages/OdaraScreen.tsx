@@ -944,6 +944,7 @@ const OdaraScreen = ({
                   onClick={() => {
                     if (lockState === 'locked') {
                       setLockState('neutral');
+                      clearLockedSelection();
                       setUnlockFlash(true);
                       window.setTimeout(() => setUnlockFlash(false), 700);
                       pulseLock();
