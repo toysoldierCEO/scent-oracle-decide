@@ -813,6 +813,7 @@ const OdaraScreen = ({
     if (dy < -SWIPE_DISTANCE) {
       clearUnlockTimeout();
       setLockState('locked');
+      recordLockedSelection();
       setLockFlash(true);
       window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
