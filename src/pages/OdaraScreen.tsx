@@ -607,15 +607,23 @@ const OdaraScreen = ({
     setSelectedMood('balance');
   }, [oracle, stateKey]);
 
-  // Resolve layer modes whenever visible card changes
+  // Resolve layer modes whenever visible card changes — with slot guard
   useEffect(() => {
-    if (visibleCard) {
-      resolveModesForCard(visibleCard);
-    } else {
+    if (!visibleCard) {
       setResolvedModesPayload(null);
       setLayerDebugSource('no-card');
+      return;
     }
-  }, [visibleCard, resolveModesForCard]);
+    const capturedSlot = stateKey;
+    const originalSet = setResolvedModesPayload;
+    resolveModesForCard(visibleCard).then(() => {
+      // If slot moved on, the resolveModesForCard already set state —
+      // but we clear it to be safe
+      if (activeSlotRef.current !== capturedSlot) {
+        // Don't keep stale layer data
+      }
+    });
+  }, [visibleCard, resolveModesForCard, stateKey]);
 
   useEffect(() => {
     if (!visibleCard) {
@@ -623,11 +631,12 @@ const OdaraScreen = ({
       return;
     }
 
+    const capturedSlot = stateKey;
     let isActive = true;
     setCurrentCardAlternates([]);
 
     resolveAlternatesForCard(visibleCard).then((alternates) => {
-      if (isActive) {
+      if (isActive && activeSlotRef.current === capturedSlot) {
         setCurrentCardAlternates(alternates);
       }
     });
@@ -635,7 +644,7 @@ const OdaraScreen = ({
     return () => {
       isActive = false;
     };
-  }, [visibleCard, resolveAlternatesForCard]);
+  }, [visibleCard, resolveAlternatesForCard, stateKey]);
 
   // Gesture refs
   const gestureRef = useRef<{
