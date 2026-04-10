@@ -1102,6 +1102,8 @@ const OdaraScreen = ({
                   if (!visibleCard) return;
                   if (lockState === 'locked') {
                     setLockState('neutral');
+                    setUnlockFlash(true);
+                    window.setTimeout(() => setUnlockFlash(false), 600);
                     pulseLock();
                     return;
                   }
