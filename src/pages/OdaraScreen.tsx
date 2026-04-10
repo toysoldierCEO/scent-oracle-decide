@@ -300,6 +300,28 @@ function heroToDisplay(pick: OraclePick): DisplayCard {
 type LockedLaneInfo = { mainColor: string; layerColor: string | null };
 type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
 
+/** Persisted lock state per day+context */
+type LockStateMap = Record<string, LockState>; // key = "dateStr:context"
+
+/** Persisted favorite combo per day+context */
+type FavoriteCombo = {
+  mainId: string;
+  layerId: string | null;
+  mood: LayerMood;
+  ratio: string;
+};
+type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
+
+/** Deterministic temperature for a given date (simulated weather) */
+function getTemperatureForDate(dateStr: string): number {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return 68 + (Math.abs(hash) % 25); // 68°–92° range
+}
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
@@ -361,8 +383,14 @@ const OdaraScreen = ({
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
-  // Lock & gesture state
-  const [lockState, setLockState] = useState<LockState>('neutral');
+  // Lock & gesture state — persisted per day+context
+  const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
+  const stateKey = `${selectedDate}:${selectedContext}`;
+  const lockState: LockState = lockStateMap[stateKey] ?? 'neutral';
+  const setLockState = useCallback((ls: LockState) => {
+    setLockStateMap(prev => ({ ...prev, [stateKey]: ls }));
+  }, [stateKey]);
+
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
@@ -372,6 +400,12 @@ const OdaraScreen = ({
   // Locked selections for weekly lanes
   const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
   const [cardTranslateY, setCardTranslateY] = useState(0);
+
+  // Favorite state — persisted per day+context
+  const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
+  const currentFavorite = favoriteMap[stateKey] ?? null;
+  const isFavorited = !!(currentFavorite && visibleCard &&
+    currentFavorite.mainId === visibleCard.fragrance_id);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
   const resolveModesForCard = useCallback(async (card: DisplayCard) => {
@@ -520,7 +554,7 @@ const OdaraScreen = ({
     }
     setViewHistory([]);
     setPromotedAltId(null);
-    setLockState('neutral');
+    // Don't reset lockState — it's persisted per day+context in lockStateMap
     setLayerExpanded(false);
     setSelectedMood('balance');
   }, [oracle, selectedDate, selectedContext, fetchQueue]);
@@ -941,19 +975,19 @@ const OdaraScreen = ({
             {/* Top row: temp left · centered date · action stack right */}
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature */}
-              <div className="w-[60px] flex justify-start pt-0.5">
+              <div className="flex flex-col items-start pt-1 min-w-[52px]">
                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  83°
+                  {getTemperatureForDate(selectedDate)}°
                 </span>
               </div>
 
               {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-0.5" style={{ fontFamily: "'Geist Mono', monospace" }}>
+              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-1" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 {getDateLabel(selectedDate)}
               </span>
 
               {/* Right: lock → star → back vertical stack */}
-              <div className="flex flex-col items-center gap-2 w-[60px]" data-action-stack>
+              <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
                 <button
                   onClick={() => {
@@ -1074,22 +1108,36 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Favorite star — saves current combo */}
+                {/* Favorite star — saves current combo, persisted per day+context */}
                 <button
                   onClick={() => {
                     if (!visibleCard) return;
-                    console.log('[Odara] Favorite combo:', {
-                      main: visibleCard.fragrance_id,
-                      layer: visibleLayerEntry?.layer_fragrance_id ?? null,
+                    const combo: FavoriteCombo = {
+                      mainId: visibleCard.fragrance_id,
+                      layerId: visibleLayerEntry?.layer_fragrance_id ?? null,
                       mood: selectedMood,
                       ratio: selectedRatio,
-                      context: selectedContext,
-                      date: selectedDate,
-                    });
+                    };
+                    if (isFavorited) {
+                      // Toggle off
+                      setFavoriteMap(prev => {
+                        const next = { ...prev };
+                        delete next[stateKey];
+                        return next;
+                      });
+                    } else {
+                      setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
+                    }
                   }}
-                  className="p-0.5"
+                  className="p-0.5 relative"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40 hover:text-foreground/70 transition-colors">
+                  <svg
+                    width="13" height="13" viewBox="0 0 24 24"
+                    fill={isFavorited ? '#eab308' : 'none'}
+                    stroke={isFavorited ? '#eab308' : 'currentColor'}
+                    strokeWidth="1.5"
+                    className={`transition-all duration-300 ${isFavorited ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]' : 'text-foreground/40 hover:text-foreground/70'}`}
+                  >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 </button>
