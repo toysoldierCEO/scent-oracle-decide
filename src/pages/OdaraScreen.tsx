@@ -296,6 +296,10 @@ function heroToDisplay(pick: OraclePick): DisplayCard {
   };
 }
 
+/** Tracks locked scent colors per day+context for weekly lane rendering */
+type LockedLaneInfo = { mainColor: string; layerColor: string | null };
+type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
@@ -364,6 +368,9 @@ const OdaraScreen = ({
   const [lockFlash, setLockFlash] = useState(false);
   const [skipFlash, setSkipFlash] = useState(false);
   const [skipAnimating, setSkipAnimating] = useState(false);
+
+  // Locked selections for weekly lanes
+  const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
@@ -597,6 +604,26 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
 
+  // Helper: record/clear locked selection for weekly lanes
+  const recordLockedSelection = useCallback(() => {
+    if (!visibleCard) return;
+    const key = `${selectedDate}:${selectedContext}`;
+    const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
+    const layerColor = visibleLayerEntry?.layer_family
+      ? FAMILY_COLORS[visibleLayerEntry.layer_family] ?? null
+      : null;
+    setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
+  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry]);
+
+  const clearLockedSelection = useCallback(() => {
+    const key = `${selectedDate}:${selectedContext}`;
+    setLockedSelections(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, [selectedDate, selectedContext]);
+
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
     if (skipLoading || !visibleCard || lockState === 'locked') return;
@@ -775,6 +802,7 @@ const OdaraScreen = ({
       if (dy > SWIPE_DISTANCE) {
         clearUnlockTimeout();
         setLockState('neutral');
+        clearLockedSelection();
         setUnlockFlash(true);
         window.setTimeout(() => setUnlockFlash(false), 700);
         pulseLock();
@@ -785,6 +813,7 @@ const OdaraScreen = ({
     if (dy < -SWIPE_DISTANCE) {
       clearUnlockTimeout();
       setLockState('locked');
+      recordLockedSelection();
       setLockFlash(true);
       window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
@@ -915,6 +944,7 @@ const OdaraScreen = ({
                   onClick={() => {
                     if (lockState === 'locked') {
                       setLockState('neutral');
+                      clearLockedSelection();
                       setUnlockFlash(true);
                       window.setTimeout(() => setUnlockFlash(false), 700);
                       pulseLock();
@@ -1141,114 +1171,66 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* Reason / why_this */}
-            {visibleCard.reason && (
-              <p className="text-[11px] text-muted-foreground/50 text-center mt-2 italic">
-                {visibleCard.reason}
-              </p>
-            )}
-
 
           </div>
         )}
-
-        {/* ── TEMPORARY DEBUG CONTROLS ── */}
-        {!oracleLoading && !oracleError && visibleCard && (
-          <div className="mt-2 flex flex-col gap-1.5 items-center" data-debug-controls>
-            <div className="flex gap-2 justify-center">
-             <button
-                onClick={async () => {
-                   if (!visibleCard || lockState === 'locked') return;
-                   setLockState('locked');
-                   setLockFlash(true);
-                   window.setTimeout(() => setLockFlash(false), 700);
-                   pulseLock();
-                   await onAccept(visibleCard.fragrance_id);
-                }}
-                className="text-[9px] px-3 py-1 rounded-full"
-                style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
-              >
-                🔒 Lock
-              </button>
-              <button
-                onClick={async () => {
-                  if (!visibleCard) return;
-                  if (lockState === 'locked') {
-                    setLockState('neutral');
-                    setUnlockFlash(true);
-                    window.setTimeout(() => setUnlockFlash(false), 700);
-                    pulseLock();
-                    return;
-                  }
-                  await handleSkipLocal();
-                }}
-                disabled={skipLoading}
-                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-40"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
-              >
-                {skipLoading ? '⏳ Loading…' : '⏭ Skip'}
-              </button>
-              <button
-                onClick={() => handleBack()}
-                disabled={!hasHistory}
-                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-20"
-                style={{ background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.12)' }}
-              >
-                ← Back
-              </button>
-            </div>
-            <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | renderType=${renderType}
-alternatesAnchorId=${visibleCard?.fragrance_id ?? 'none'} | alternatesCount=${currentCardAlternates.length} | alternatesRendered=${currentCardAlternates.length > 0}
-selectedMood=${selectedMood}
-visibleLayerName=${visibleLayerEntry?.layer_name ?? 'none'} | visibleLayerBrand=${visibleLayerEntry?.layer_brand ?? 'none'} | visibleLayerFamily=${visibleLayerEntry?.layer_family ?? 'none'}
-layerVisible=${layerVisible} | layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
-            </pre>
-          </div>
-        )}
-        {/* ── END DEBUG ── */}
-
-        {/* ── Clickable Forecast strip ── */}
+        {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-5 py-3 mt-2.5 flex flex-col items-center gap-2"
+          className="rounded-[16px] px-4 py-3 mt-2.5"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
-            Forecast
-          </span>
           <div className="flex w-full justify-between">
             {forecastDays.map((fd, i) => {
-              const dayColor = fd.isSelected ? familyColor : undefined;
+              const LANE_CONTEXTS = ['daily', 'work', 'hangout', 'date'] as const;
+              const dayLanes = LANE_CONTEXTS.map(ctx => {
+                const key = `${fd.dateStr}:${ctx}`;
+                return lockedSelections[key] ?? null;
+              });
+              const hasAnyLane = dayLanes.some(Boolean);
+
               return (
                 <button
                   key={i}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg transition-all duration-200"
+                  className="flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
-                    background: `${dayColor}15`,
-                    boxShadow: `0 0 8px ${dayColor}20`,
+                    background: 'rgba(255,255,255,0.08)',
                   } : undefined}
                 >
-                  <span className={`text-[11px] transition-colors ${
+                  <span className={`text-[10px] tracking-[0.04em] transition-colors ${
                     fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
                   }`}>
                     {fd.label}
                   </span>
-                  <span className={`text-[13px] font-medium transition-colors ${
+                  <span className={`text-[14px] font-medium transition-colors ${
                     fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
                   }`}>
                     {fd.day}
                   </span>
-                  <div
-                    className="w-1 h-1 rounded-full mt-0.5 transition-all"
-                    style={{
-                      background: fd.isSelected ? dayColor : fd.isToday ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)',
-                      boxShadow: fd.isSelected ? `0 0 4px ${dayColor}` : 'none',
-                    }}
-                  />
+
+                  {/* 4 fixed occasion lane slots */}
+                  <div className="flex flex-col gap-[3px] mt-1 w-full items-center" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    {dayLanes.map((lane, li) => {
+                      if (!lane) return null;
+                      return (
+                        <div
+                          key={li}
+                          className="rounded-full"
+                          style={{
+                            width: '18px',
+                            height: '3px',
+                            background: lane.mainColor,
+                            boxShadow: lane.layerColor
+                              ? `0 0 4px ${lane.layerColor}, 0 0 8px ${lane.layerColor}44`
+                              : `0 0 3px ${lane.mainColor}66`,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 </button>
               );
             })}
