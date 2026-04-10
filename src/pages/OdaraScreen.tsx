@@ -837,12 +837,14 @@ const OdaraScreen = ({
 
   const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!gestureRef.current.suppressClick) return;
+    gestureRef.current.suppressClick = false;
     const target = e.target as HTMLElement;
+    // Never suppress clicks on the action-stack buttons (lock, star, back)
+    if (target.closest('[data-action-stack]')) return;
     if (target.closest('button, a, input, textarea, select, [role="button"]')) {
       e.preventDefault();
       e.stopPropagation();
     }
-    gestureRef.current.suppressClick = false;
   }, []);
 
   const visibleAlts = currentCardAlternates;
