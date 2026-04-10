@@ -360,6 +360,7 @@ const OdaraScreen = ({
   // Lock & gesture state
   const [lockState, setLockState] = useState<LockState>('neutral');
   const [lockPulse, setLockPulse] = useState(false);
+  const [unlockFlash, setUnlockFlash] = useState(false);
   const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Resolve layer modes for any visible card via get_layer_card_modes_v1
@@ -595,7 +596,7 @@ const OdaraScreen = ({
 
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
-    if (skipLoading || !visibleCard) return;
+    if (skipLoading || !visibleCard || lockState === 'locked') return;
 
     setSkipLoading(true);
     try {
@@ -638,7 +639,7 @@ const OdaraScreen = ({
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
-    if (viewHistory.length === 0) return;
+    if (viewHistory.length === 0 || lockState === 'locked') return;
     const entry = viewHistory[viewHistory.length - 1];
 
     setVisibleCard(entry.card);
@@ -761,6 +762,8 @@ const OdaraScreen = ({
       if (dy > SWIPE_DISTANCE) {
         clearUnlockTimeout();
         setLockState('neutral');
+        setUnlockFlash(true);
+        window.setTimeout(() => setUnlockFlash(false), 600);
         pulseLock();
       }
       return;
@@ -899,7 +902,17 @@ const OdaraScreen = ({
                     </svg>
                   </button>
                 ) : null}
-                <button onClick={() => lockState === 'locked' && setLockState('neutral')} className="p-0.5">
+                <button
+                  onClick={() => {
+                    if (lockState === 'locked') {
+                      setLockState('neutral');
+                      setUnlockFlash(true);
+                      window.setTimeout(() => setUnlockFlash(false), 600);
+                      pulseLock();
+                    }
+                  }}
+                  className="p-0.5"
+                >
                   <svg
                     width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke={lockIconColor} strokeWidth="1.5"
@@ -916,6 +929,32 @@ const OdaraScreen = ({
                         <rect x="3" y="11" width="18" height="11" rx="2" />
                         <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                       </>
+                    )}
+                    {/* Yellow unlock electron pass */}
+                    {unlockFlash && (
+                      <line
+                        x1="3" y1="16" x2="21" y2="16"
+                        stroke="#eab308"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        style={{
+                          filter: 'drop-shadow(0 0 4px #eab308) drop-shadow(0 0 8px #eab30888)',
+                        }}
+                      >
+                        <animate
+                          attributeName="x1" from="-5" to="26"
+                          dur="0.4s" fill="freeze"
+                        />
+                        <animate
+                          attributeName="x2" from="-2" to="29"
+                          dur="0.4s" fill="freeze"
+                        />
+                        <animate
+                          attributeName="opacity" values="0;1;1;0"
+                          keyTimes="0;0.1;0.7;1"
+                          dur="0.5s" fill="freeze"
+                        />
+                      </line>
                     )}
                   </svg>
                 </button>
