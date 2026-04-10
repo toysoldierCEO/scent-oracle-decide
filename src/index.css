@@ -76,31 +76,24 @@
   100% { transform: rotate(360deg); }
 }
 
-/* Red Tron lock-engagement animations */
-@keyframes tronLockH {
-  0% { transform: translateY(-50%) scaleX(0); opacity: 0; }
-  20% { opacity: 1; }
+/* Unified Tron trace animations — color is set via inline style */
+@keyframes tronTraceH {
+  0%   { transform: translateY(-50%) scaleX(0); opacity: 0; }
+  20%  { opacity: 1; }
   100% { transform: translateY(-50%) scaleX(1); opacity: 0; }
 }
-@keyframes tronLockV {
-  0% { transform: translateX(-50%) scaleY(0); opacity: 0; }
-  20% { opacity: 1; }
+@keyframes tronTraceV {
+  0%   { transform: translateX(-50%) scaleY(0); opacity: 0; }
+  20%  { opacity: 1; }
   100% { transform: translateX(-50%) scaleY(1); opacity: 0; }
 }
 @keyframes tronBurst {
-  0% { transform: scale(0.3); opacity: 0.8; }
+  0%   { transform: scale(0.3); opacity: 0.8; }
   100% { transform: scale(2); opacity: 0; }
 }
 
-/* Yellow unlock electron-pass animations */
-@keyframes electronSweep {
-  0% { left: -8px; opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { left: calc(100% + 8px); opacity: 0; }
-}
-@keyframes electronTrail {
-  0% { opacity: 0; }
-  30% { opacity: 0.7; }
-  100% { opacity: 0; }
+/* Card skip slide-down exit */
+@keyframes cardSlideDown {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(120px); opacity: 0; }
 }
