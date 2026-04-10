@@ -604,6 +604,26 @@ const OdaraScreen = ({
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
 
+  // Helper: record/clear locked selection for weekly lanes
+  const recordLockedSelection = useCallback(() => {
+    if (!visibleCard) return;
+    const key = `${selectedDate}:${selectedContext}`;
+    const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
+    const layerColor = visibleLayerEntry?.layer_family
+      ? FAMILY_COLORS[visibleLayerEntry.layer_family] ?? null
+      : null;
+    setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
+  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry]);
+
+  const clearLockedSelection = useCallback(() => {
+    const key = `${selectedDate}:${selectedContext}`;
+    setLockedSelections(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, [selectedDate, selectedContext]);
+
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
     if (skipLoading || !visibleCard || lockState === 'locked') return;
