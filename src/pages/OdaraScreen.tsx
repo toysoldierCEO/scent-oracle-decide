@@ -1231,10 +1231,15 @@ const OdaraScreen = ({
                     {fd.day}
                   </span>
 
-                  {/* 4 fixed occasion lane slots */}
+                  {/* 4 fixed occasion lane slots — always render all 4 positions */}
                   <div className="flex flex-col gap-[3px] mt-1 w-full items-center" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                     {dayLanes.map((lane, li) => {
-                      if (!lane) return null;
+                      if (!lane) {
+                        // Empty lane: invisible but preserves positional space only when siblings exist
+                        return hasAnyLane ? (
+                          <div key={li} style={{ width: '18px', height: '3px' }} />
+                        ) : null;
+                      }
                       return (
                         <div
                           key={li}
