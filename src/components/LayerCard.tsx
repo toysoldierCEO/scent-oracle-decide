@@ -147,7 +147,8 @@ function buildEffectText(
     return `${layerAddition.charAt(0).toUpperCase() + layerAddition.slice(1)} pushes forward — ${mainStrength} anchors underneath without competing.`;
   }
   // 1:1 balanced — use interaction-type templates
-  const templates = INTERACTION_EFFECT_TEMPLATES[interactionType](mainStrength, layerAddition);
+  const templateFn = INTERACTION_EFFECT_TEMPLATES[interactionType] ?? INTERACTION_EFFECT_TEMPLATES.balance;
+  const templates = templateFn(mainStrength, layerAddition);
   const idx = (baseName.length + layerName.length) % templates.length;
   return templates[idx];
 }
