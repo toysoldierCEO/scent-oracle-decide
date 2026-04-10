@@ -936,10 +936,23 @@ const OdaraScreen = ({
               style={{ background: tint.glow, opacity: 0.35 }}
             />
 
-            {/* Top row: lock · centered date · temp */}
-            <div className="flex items-center justify-between mb-1.5 relative z-10">
-              {/* Left: lock on top, back below — vertical stack */}
-              <div className="flex flex-col items-center gap-1.5 w-[60px]">
+            {/* Top row: temp left · centered date · action stack right */}
+            <div className="flex items-start justify-between mb-1.5 relative z-10">
+              {/* Left: temperature */}
+              <div className="w-[60px] flex justify-start pt-0.5">
+                <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
+                  83°
+                </span>
+              </div>
+
+              {/* Center: date */}
+              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-0.5" style={{ fontFamily: "'Geist Mono', monospace" }}>
+                {getDateLabel(selectedDate)}
+              </span>
+
+              {/* Right: lock → star → back vertical stack */}
+              <div className="flex flex-col items-center gap-2 w-[60px]">
+                {/* Lock button */}
                 <button
                   onClick={() => {
                     if (lockState === 'locked') {
@@ -952,7 +965,6 @@ const OdaraScreen = ({
                   }}
                   className="p-0.5 relative"
                 >
-                  {/* Lock SVG icon */}
                   <svg
                     width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke={lockIconColor} strokeWidth="1.5"
@@ -1030,7 +1042,7 @@ const OdaraScreen = ({
                     </span>
                   )}
 
-                  {/* RED Tron skip animation (on lock icon too) */}
+                  {/* RED Tron skip animation */}
                   {skipFlash && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
@@ -1060,7 +1072,27 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Back arrow — below lock */}
+                {/* Favorite star — saves current combo */}
+                <button
+                  onClick={() => {
+                    if (!visibleCard) return;
+                    console.log('[Odara] Favorite combo:', {
+                      main: visibleCard.fragrance_id,
+                      layer: visibleLayerEntry?.layer_fragrance_id ?? null,
+                      mood: selectedMood,
+                      ratio: selectedRatio,
+                      context: selectedContext,
+                      date: selectedDate,
+                    });
+                  }}
+                  className="p-0.5"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40 hover:text-foreground/70 transition-colors">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </button>
+
+                {/* Back arrow — below star */}
                 {hasHistory && (
                   <button onClick={handleBack} className="p-0.5">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
@@ -1068,18 +1100,6 @@ const OdaraScreen = ({
                     </svg>
                   </button>
                 )}
-              </div>
-
-              {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                {getDateLabel(selectedDate)}
-              </span>
-
-              {/* Right: temp */}
-              <div className="w-[60px] flex justify-end">
-                <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  83°
-                </span>
               </div>
             </div>
 
