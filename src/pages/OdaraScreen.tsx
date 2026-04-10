@@ -1171,73 +1171,9 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* Reason / why_this */}
-            {visibleCard.reason && (
-              <p className="text-[11px] text-muted-foreground/50 text-center mt-2 italic">
-                {visibleCard.reason}
-              </p>
-            )}
-
 
           </div>
         )}
-
-        {/* ── TEMPORARY DEBUG CONTROLS ── */}
-        {!oracleLoading && !oracleError && visibleCard && (
-          <div className="mt-2 flex flex-col gap-1.5 items-center" data-debug-controls>
-            <div className="flex gap-2 justify-center">
-             <button
-                onClick={async () => {
-                   if (!visibleCard || lockState === 'locked') return;
-                   setLockState('locked');
-                   setLockFlash(true);
-                   window.setTimeout(() => setLockFlash(false), 700);
-                   pulseLock();
-                   await onAccept(visibleCard.fragrance_id);
-                }}
-                className="text-[9px] px-3 py-1 rounded-full"
-                style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
-              >
-                🔒 Lock
-              </button>
-              <button
-                onClick={async () => {
-                  if (!visibleCard) return;
-                  if (lockState === 'locked') {
-                    setLockState('neutral');
-                    setUnlockFlash(true);
-                    window.setTimeout(() => setUnlockFlash(false), 700);
-                    pulseLock();
-                    return;
-                  }
-                  await handleSkipLocal();
-                }}
-                disabled={skipLoading}
-                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-40"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
-              >
-                {skipLoading ? '⏳ Loading…' : '⏭ Skip'}
-              </button>
-              <button
-                onClick={() => handleBack()}
-                disabled={!hasHistory}
-                className="text-[9px] px-3 py-1 rounded-full disabled:opacity-20"
-                style={{ background: 'rgba(255,255,255,0.08)', color: '#aaa', border: '1px solid rgba(255,255,255,0.12)' }}
-              >
-                ← Back
-              </button>
-            </div>
-            <pre className="text-[8px] text-muted-foreground/40 text-center leading-relaxed whitespace-pre-wrap">
-{`card=${visibleCard?.name ?? 'none'} | renderType=${renderType}
-alternatesAnchorId=${visibleCard?.fragrance_id ?? 'none'} | alternatesCount=${currentCardAlternates.length} | alternatesRendered=${currentCardAlternates.length > 0}
-selectedMood=${selectedMood}
-visibleLayerName=${visibleLayerEntry?.layer_name ?? 'none'} | visibleLayerBrand=${visibleLayerEntry?.layer_brand ?? 'none'} | visibleLayerFamily=${visibleLayerEntry?.layer_family ?? 'none'}
-layerVisible=${layerVisible} | layerSrc=${layerDebugSource} | qp=${queuePointer} | hist=${viewHistory.length}`}
-            </pre>
-          </div>
-        )}
-        {/* ── END DEBUG ── */}
-
         {/* ── Clickable Forecast strip ── */}
         <div
           className="rounded-[16px] px-5 py-3 mt-2.5 flex flex-col items-center gap-2"
