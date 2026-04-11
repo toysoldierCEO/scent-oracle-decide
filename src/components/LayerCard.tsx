@@ -413,12 +413,7 @@ const LayerCard = ({
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
 
-  // Backend-driven text — no frontend generation
-  const reasonText = activeModeEntry.reason || '';
-  const ratioHintText = activeModeEntry.ratio_hint || '';
-  const applicationText = activeModeEntry.application_style || '';
-  const placementText = activeModeEntry.placement_hint || '';
-  const sprayText = activeModeEntry.spray_guidance || '';
+  // Backend-driven text
   const whyText = activeModeEntry.why_it_works || '';
 
   return (
