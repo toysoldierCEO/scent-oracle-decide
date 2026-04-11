@@ -413,12 +413,7 @@ const LayerCard = ({
 
   const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
 
-  // Backend-driven text — no frontend generation
-  const reasonText = activeModeEntry.reason || '';
-  const ratioHintText = activeModeEntry.ratio_hint || '';
-  const applicationText = activeModeEntry.application_style || '';
-  const placementText = activeModeEntry.placement_hint || '';
-  const sprayText = activeModeEntry.spray_guidance || '';
+  // Backend-driven text
   const whyText = activeModeEntry.why_it_works || '';
 
   return (
@@ -496,93 +491,16 @@ const LayerCard = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="pt-3 mt-2 space-y-3 text-left"
+              className="pt-3 mt-2 text-left"
               style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
             >
-
-              {reasonText && (
-                <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Reason</span>
-                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
-                    {reasonText}
-                  </p>
-                </div>
-              )}
-
-              {/* Ratio selector */}
-              <div className="flex gap-1.5 justify-center" onClick={(e) => e.stopPropagation()}>
-                {RATIO_OPTIONS.map((opt) => {
-                  const isSelected = selectedRatio === opt.ratio;
-                  const isRecommended = recommendedRatio === opt.ratio;
-                  return (
-                    <button
-                      key={opt.ratio}
-                      onClick={() => { if (!locked) onSelectRatio(opt.ratio); }}
-                      className={`text-[9px] uppercase tracking-[0.08em] px-2 py-[3px] rounded-full transition-all duration-200 flex items-center gap-1 ${
-                        locked && !isSelected ? 'opacity-30 cursor-default' : ''
-                      } ${
-                        isSelected
-                          ? "text-white"
-                          : "text-white/35 hover:text-white/60"
-                      }`}
-                      style={isSelected ? {
-                        background: `${layerColor}30`,
-                        boxShadow: `inset 0 0 0 1px ${layerColor}55`,
-                        animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
-                      } : undefined}
-                    >
-                      <span>{opt.ratio}</span>
-                      <span className="text-[8px] normal-case tracking-normal">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {ratioHintText && (
-                <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Ratio hint</span>
-                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
-                    {ratioHintText}
-                  </p>
-                </div>
-              )}
-
-              {/* Application — backend-driven guidance per mood */}
-              <div>
-                <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Application</span>
-                {applicationText && (
-                  <p className="text-sm text-white/80 leading-relaxed mt-1 text-center">
-                    {applicationText}
-                  </p>
-                )}
-                {placementText && (
-                  <p className="text-[11px] text-white/50 mt-1 text-center italic">{placementText}</p>
-                )}
-                {sprayText && (
-                  <p className="text-[11px] text-white/50 mt-0.5 text-center">{sprayText}</p>
-                )}
-              </div>
-
-              {/* Why it works — more prominent explanation */}
+              {/* Why it works — sole expanded explanatory section */}
               {whyText && (
                 <div>
                   <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
                   <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
                 </div>
               )}
-
-              {/* Effect — outcome of the layering */}
-              {(() => {
-                const baseNotes = normalizeNotes(mainNotes ?? [], 4);
-                const layerNotes = normalizeNotes(activeModeEntry.notes ?? [], 4);
-                const effectSentence = buildEffectText(selectedMood, mainName, activeModeEntry.name, baseNotes, layerNotes, activeModeEntry.interactionType, selectedRatio as RatioOption);
-                return (
-                  <div>
-                    <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Effect</span>
-                    <p className="text-sm text-white/80 leading-relaxed mt-1">{effectSentence}</p>
-                  </div>
-                );
-              })()}
             </motion.div>
           </motion.div>
         )}
