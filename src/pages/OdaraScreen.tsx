@@ -1190,7 +1190,7 @@ const OdaraScreen = ({
                     if (!visibleCard) return;
                     const combo: FavoriteCombo = {
                       mainId: visibleCard.fragrance_id,
-                      layerId: visibleLayerEntry?.layer_fragrance_id ?? null,
+                      layerId: visibleLayerEntry?.layer_fragrance_id ?? effectiveLayerMode?.id ?? null,
                       mood: selectedMood,
                       ratio: selectedRatio,
                     };
