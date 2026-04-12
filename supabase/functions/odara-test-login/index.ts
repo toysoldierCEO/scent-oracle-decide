@@ -19,33 +19,47 @@ Deno.serve(async (req) => {
     const email = Deno.env.get("ODARA_TEST_EMAIL");
     const password = Deno.env.get("ODARA_TEST_PASSWORD");
 
-    const emailExists = !!email && email.length > 0;
-    const passwordExists = !!password && password.length > 0;
-
     if (!email || !password) {
       return new Response(
-        JSON.stringify({
-          error: "Test credentials not configured",
-          debug: { emailExists, passwordExists },
-        }),
+        JSON.stringify({ error: "Test credentials not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Log email for debugging (email is not a secret), password length only
     console.log(`[odara-test-login] email="${email}", passwordLen=${password.length}`);
 
-    const odara = createClient(ODARA_URL, ODARA_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
+    // Try raw fetch first to avoid HTML parse errors from the SDK
+    const authRes = await fetch(`${ODARA_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": ODARA_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password }),
     });
 
-    const { data, error } = await odara.auth.signInWithPassword({ email, password });
+    const contentType = authRes.headers.get("content-type") || "";
 
-    if (error) {
+    // If response isn't JSON, the Odara project may be down/paused
+    if (!contentType.includes("application/json")) {
+      const text = await authRes.text();
+      console.error(`[odara-test-login] Non-JSON response (${authRes.status}):`, text.slice(0, 200));
+      return new Response(
+        JSON.stringify({
+          error: "Odara auth service unavailable",
+          detail: `Received ${contentType || "unknown content-type"} (status ${authRes.status})`,
+        }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const json = await authRes.json();
+
+    if (!authRes.ok || json.error) {
       return new Response(
         JSON.stringify({
           error: "Test login failed",
-          detail: error.message,
+          detail: json.error_description || json.msg || json.error || "Unknown auth error",
           debug: { emailUsed: email, passwordLen: password.length },
         }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -54,16 +68,17 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_in: data.session.expires_in,
-        user: { id: data.user.id, email: data.user.email },
+        access_token: json.access_token,
+        refresh_token: json.refresh_token,
+        expires_in: json.expires_in,
+        user: { id: json.user?.id, email: json.user?.email },
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
+    console.error("[odara-test-login] Unexpected:", e);
     return new Response(
-      JSON.stringify({ error: "Internal error" }),
+      JSON.stringify({ error: "Internal error", detail: String(e) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
