@@ -720,11 +720,10 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     const key = `${selectedDate}:${selectedContext}`;
     const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
-    const layerColor = visibleLayerEntry?.layer_family
-      ? FAMILY_COLORS[visibleLayerEntry.layer_family] ?? null
-      : null;
+    const layerFamily = visibleLayerEntry?.layer_family ?? oracleLayer?.family ?? null;
+    const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
-  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry]);
+  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry, oracleLayer]);
 
   const clearLockedSelection = useCallback(() => {
     const key = `${selectedDate}:${selectedContext}`;
@@ -1276,16 +1275,16 @@ const OdaraScreen = ({
                 mainNotes={visibleCard.notes}
                 mainFamily={visibleCard.family}
                 mainProjection={null}
-                layerModes={layerModes}
-                visibleLayerMode={visibleLayerMode}
+                layerModes={effectiveLayerModes}
+                visibleLayerMode={effectiveLayerMode}
                 selectedMood={selectedMood}
-                onSelectMood={lockState !== 'locked' ? setSelectedMood : () => {}}
+                onSelectMood={lockState !== 'locked' && !isFallbackLayer ? setSelectedMood : () => {}}
                 selectedRatio={selectedRatio}
                 onSelectRatio={setSelectedRatio}
                 isExpanded={layerExpanded}
                 onToggleExpand={() => setLayerExpanded(!layerExpanded)}
                 lockPulse={lockPulse}
-                locked={lockState === 'locked'}
+                locked={lockState === 'locked' || isFallbackLayer}
               />
             )}
 
