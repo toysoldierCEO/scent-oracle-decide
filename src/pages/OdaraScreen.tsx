@@ -312,15 +312,9 @@ type FavoriteCombo = {
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 
-/** Deterministic temperature for a given date (simulated weather) */
-function getTemperatureForDate(dateStr: string): number {
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
-    hash |= 0;
-  }
-  return 68 + (Math.abs(hash) % 25); // 68°–92° range
-}
+/** Single shared temperature used across all RPCs and UI display.
+ *  Replace this constant with real weather data when available. */
+const SHARED_TEMPERATURE = 75;
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
@@ -682,6 +676,7 @@ const OdaraScreen = ({
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
   // Build layer modes from backend payload — works for hero AND queue cards
+  // Build layer modes from backend payload — with fallback from oracle.layer
   const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
   const currentModeData = resolvedModesPayload?.modes?.[selectedMood] ?? null;
   const fallbackMood: LayerMood = isLayerMood(resolvedModesPayload?.default_mode)
@@ -690,7 +685,32 @@ const OdaraScreen = ({
   const fallbackModeData = resolvedModesPayload?.modes?.[fallbackMood] ?? null;
   const visibleLayerEntry = currentModeData ?? fallbackModeData;
   const visibleLayerMode = backendModeEntryToLayerMode(visibleLayerEntry, resolvedModesPayload);
-  const layerVisible = !!(resolvedModesPayload && layerModes && visibleLayerMode);
+
+  // Fallback layer from oracle.layer when modes RPC failed/unavailable
+  const oracleLayer = activeOracle?.layer ?? null;
+  const fallbackLayerMode: NonNullable<LayerModes[LayerMood]> | null = (!visibleLayerMode && oracleLayer) ? {
+    id: oracleLayer.fragrance_id,
+    name: oracleLayer.name,
+    brand: oracleLayer.brand,
+    family_key: oracleLayer.family,
+    notes: oracleLayer.notes ?? [],
+    accords: oracleLayer.accords ?? [],
+    interactionType: 'balance' as InteractionType,
+    reason: oracleLayer.reason ?? '',
+    why_it_works: oracleLayer.why_it_works ?? '',
+    projection: null,
+    ratio_hint: oracleLayer.ratio_hint ?? '',
+    application_style: oracleLayer.application_style ?? '',
+    placement_hint: oracleLayer.placement_hint ?? '',
+    spray_guidance: oracleLayer.spray_guidance ?? '',
+  } : null;
+
+  const effectiveLayerMode = visibleLayerMode ?? fallbackLayerMode;
+  const effectiveLayerModes: LayerModes = layerModes ?? {
+    balance: fallbackLayerMode, bold: null, smooth: null, wild: null,
+  };
+  const isFallbackLayer = !visibleLayerMode && !!fallbackLayerMode;
+  const layerVisible = !!effectiveLayerMode;
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
@@ -700,11 +720,10 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     const key = `${selectedDate}:${selectedContext}`;
     const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
-    const layerColor = visibleLayerEntry?.layer_family
-      ? FAMILY_COLORS[visibleLayerEntry.layer_family] ?? null
-      : null;
+    const layerFamily = visibleLayerEntry?.layer_family ?? oracleLayer?.family ?? null;
+    const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
-  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry]);
+  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry, oracleLayer]);
 
   const clearLockedSelection = useCallback(() => {
     const key = `${selectedDate}:${selectedContext}`;
@@ -1033,9 +1052,9 @@ const OdaraScreen = ({
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature */}
               <div className="flex flex-col items-start pt-1 min-w-[52px]">
-                <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {getTemperatureForDate(selectedDate)}°
-                </span>
+                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
+                  {SHARED_TEMPERATURE}°
+                 </span>
               </div>
 
               {/* Center: date */}
@@ -1171,7 +1190,7 @@ const OdaraScreen = ({
                     if (!visibleCard) return;
                     const combo: FavoriteCombo = {
                       mainId: visibleCard.fragrance_id,
-                      layerId: visibleLayerEntry?.layer_fragrance_id ?? null,
+                      layerId: visibleLayerEntry?.layer_fragrance_id ?? effectiveLayerMode?.id ?? null,
                       mood: selectedMood,
                       ratio: selectedRatio,
                     };
@@ -1256,16 +1275,16 @@ const OdaraScreen = ({
                 mainNotes={visibleCard.notes}
                 mainFamily={visibleCard.family}
                 mainProjection={null}
-                layerModes={layerModes}
-                visibleLayerMode={visibleLayerMode}
+                layerModes={effectiveLayerModes}
+                visibleLayerMode={effectiveLayerMode}
                 selectedMood={selectedMood}
-                onSelectMood={lockState !== 'locked' ? setSelectedMood : () => {}}
+                onSelectMood={lockState !== 'locked' && !isFallbackLayer ? setSelectedMood : () => {}}
                 selectedRatio={selectedRatio}
                 onSelectRatio={setSelectedRatio}
                 isExpanded={layerExpanded}
                 onToggleExpand={() => setLayerExpanded(!layerExpanded)}
                 lockPulse={lockPulse}
-                locked={lockState === 'locked'}
+                locked={lockState === 'locked' || isFallbackLayer}
               />
             )}
 
