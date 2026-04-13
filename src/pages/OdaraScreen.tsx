@@ -701,10 +701,10 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     const key = `${selectedDate}:${selectedContext}`;
     const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
-    const layerFamily = visibleLayerEntry?.layer_family ?? oracleLayer?.family ?? null;
+    const layerFamily = effectiveLayerMode?.family_key ?? oracleLayer?.family ?? null;
     const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
-  }, [visibleCard, selectedDate, selectedContext, visibleLayerEntry, oracleLayer]);
+  }, [visibleCard, selectedDate, selectedContext, effectiveLayerMode, oracleLayer]);
 
   const clearLockedSelection = useCallback(() => {
     const key = `${selectedDate}:${selectedContext}`;
@@ -1171,7 +1171,7 @@ const OdaraScreen = ({
                     if (!visibleCard) return;
                     const combo: FavoriteCombo = {
                       mainId: visibleCard.fragrance_id,
-                      layerId: visibleLayerEntry?.layer_fragrance_id ?? effectiveLayerMode?.id ?? null,
+                      layerId: effectiveLayerMode?.id ?? null,
                       mood: selectedMood,
                       ratio: selectedRatio,
                     };
