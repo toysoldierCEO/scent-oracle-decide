@@ -309,11 +309,12 @@ const OdaraScreen = ({
   const [visibleCard, setVisibleCard] = useState<DisplayCard | null>(null);
   const [promotedAltId, setPromotedAltId] = useState<string | null>(null);
 
-  // ── Per-card layer modes cache (from get_layer_card_modes_v1) ──
-  const modesCacheRef = useRef<Map<string, LayerModesPayload | null>>(new Map());
-  const [resolvedModesPayload, setResolvedModesPayload] = useState<LayerModesPayload | null>(null);
+  // ── Per-fragrance+mood layer cache (lazy, from get_layer_for_card_mode_v1) ──
+  // Key: `${fragranceId}:${mood}` → BackendModeEntry | null
+  const moodCacheRef = useRef<Map<string, BackendModeEntry | null>>(new Map());
+  const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
+  const [loadingMood, setLoadingMood] = useState<LayerMood | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
-  const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
   const [currentCardAlternates, setCurrentCardAlternates] = useState<OracleAlternate[]>([]);
 
   const hasHistory = viewHistory.length > 0;
