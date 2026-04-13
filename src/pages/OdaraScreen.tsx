@@ -534,7 +534,9 @@ const OdaraScreen = ({
     alternatesCacheRef.current.clear();
   }, [stateKey]);
 
-  // Effect 2: Hydrate card when oracle data arrives — guarded by slot key
+  // Effect 2: Hydrate card when oracle data arrives — hero-first contract
+  // Full-screen loader disappears as soon as oracle resolves.
+  // Queue is fetched in the BACKGROUND after hero is set.
   useEffect(() => {
     if (!oracle) {
       setActiveOracle(null);
@@ -545,18 +547,22 @@ const OdaraScreen = ({
       return;
     }
 
-    // Capture the slot at the time this effect fires
     const capturedSlot = stateKey;
 
-    // If the slot has already moved on (cleared by Effect 1), wait for the
-    // correct oracle to arrive for the new slot
+    // 1) Set oracle + hero card IMMEDIATELY
     setActiveOracle(oracle);
+    setViewHistory([]);
+    setPromotedAltId(null);
+    setLayerExpanded(false);
+    setSelectedMood('balance');
 
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
+      console.log('[Odara] visible hero card set', oracle.today_pick.fragrance_id);
+
+      // 2) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
-        // Stale-response guard: only apply if we're still on the same slot
         if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
         setQueuePointer(0);
@@ -567,11 +573,6 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
     }
-
-    setViewHistory([]);
-    setPromotedAltId(null);
-    setLayerExpanded(false);
-    setSelectedMood('balance');
   }, [oracle, stateKey]);
 
   // No eager modes fetch — moods load lazily on user tap
