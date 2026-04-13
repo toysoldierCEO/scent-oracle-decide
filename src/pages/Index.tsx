@@ -5,6 +5,7 @@ import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
+const FALLBACK_TEMPERATURE = 75;
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
@@ -22,12 +23,14 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Weather — single source of truth for temperature
-  const { weatherByDate, weatherLoading, weatherError, getTemperature } = useWeather();
-  const resolvedTemperature = getTemperature(selectedDate);
+  // Weather — non-blocking, uses fallback until loaded
+  const { getTemperature, weatherLoading } = useWeather();
+  // Resolve temperature: use weather if available, otherwise fallback
+  const resolvedTemperature = weatherLoading ? FALLBACK_TEMPERATURE : getTemperature(selectedDate);
 
   const fetchOracleFor = useCallback(async (userId: string, context: string, wearDate: string) => {
-    const temp = getTemperature(wearDate);
+    console.log('[Odara] oracle fetch start', { context, wearDate });
+    const temp = weatherLoading ? FALLBACK_TEMPERATURE : getTemperature(wearDate);
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
       p_user_id: userId,
       p_temperature: temp,
@@ -37,11 +40,13 @@ const Index = () => {
     });
 
     if (rpcError) {
+      console.error('[Odara] oracle fetch fail', rpcError.message);
       throw rpcError;
     }
 
+    console.log('[Odara] oracle fetch success');
     return data as unknown as OracleResult;
-  }, [getTemperature]);
+  }, [getTemperature, weatherLoading]);
 
   useEffect(() => {
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
@@ -55,10 +60,9 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch oracle when user, context, date, or weather changes
+  // Fetch oracle immediately when user/context/date changes — DO NOT wait for weather
   useEffect(() => {
     if (!user) { setOracle(null); return; }
-    if (weatherLoading) return; // wait for weather before first oracle fetch
     const fetchOracle = async () => {
       setOracleLoading(true);
       setOracleError(null);
@@ -69,10 +73,11 @@ const Index = () => {
         setOracleError(e?.message || 'Unknown error');
       } finally {
         setOracleLoading(false);
+        console.log('[Odara] oracleLoading set to false');
       }
     };
     fetchOracle();
-  }, [fetchOracleFor, user, selectedContext, selectedDate, weatherLoading]);
+  }, [fetchOracleFor, user, selectedContext, selectedDate]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -218,7 +223,7 @@ const Index = () => {
   return (
     <OdaraScreen
       oracle={oracle}
-      oracleLoading={oracleLoading || weatherLoading}
+      oracleLoading={oracleLoading}
       oracleError={oracleError}
       onSignOut={handleSignOut}
       selectedContext={selectedContext}

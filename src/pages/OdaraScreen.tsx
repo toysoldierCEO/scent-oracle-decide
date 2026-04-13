@@ -322,8 +322,9 @@ const OdaraScreen = ({
 
   const hasHistory = viewHistory.length > 0;
 
-  // Fetch queue from backend
+  // Fetch queue from backend — background only, never blocks hero
   const fetchQueue = useCallback(async (excludeId?: string) => {
+    console.log('[Odara] queue fetch start');
     try {
       setQueueError(null);
       const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
@@ -332,9 +333,10 @@ const OdaraScreen = ({
         p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
-        p_limit: 20,
+        p_limit: 12,
       });
       if (error) {
+        console.error('[Odara] queue fetch fail', error.message);
         setQueueError(error.message);
         return [];
       }
@@ -342,8 +344,10 @@ const OdaraScreen = ({
       const filtered = excludeId
         ? rows.filter(r => r.fragrance_id !== excludeId)
         : rows;
+      console.log('[Odara] queue fetch success', filtered.length, 'cards');
       return filtered.map(queueCardToDisplay);
     } catch (e: any) {
+      console.error('[Odara] queue fetch fail', e?.message);
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
