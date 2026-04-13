@@ -1001,8 +1001,12 @@ const OdaraScreen = ({
           </div>
         )}
         {oracleError && (
-          <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(220,60,60,0.08)', border: '1px solid rgba(220,60,60,0.15)', color: '#e55' }}>
-            {oracleError}
+          <div className="rounded-xl px-4 py-4 text-xs flex flex-col gap-1.5" style={{ background: 'rgba(220,60,60,0.08)', border: '1px solid rgba(220,60,60,0.15)', color: '#e55' }}>
+            <span className="font-semibold text-sm">Oracle request failed</span>
+            <span>error: {oracleError}</span>
+            <span>userId: {userId ?? 'null'}</span>
+            <span>origin: {typeof window !== 'undefined' ? window.location.origin : '?'}</span>
+            <span>oracleKey: {`${userId}|${selectedContext}|${selectedDate}|${resolvedTemperature}`}</span>
           </div>
         )}
         {queueError && (

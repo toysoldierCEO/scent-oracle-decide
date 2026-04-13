@@ -118,6 +118,26 @@ const Index = () => {
     setOracleError(null);
 
     (async () => {
+      // Verify session exists before launching protected RPC
+      const { data: sessionData } = await odaraSupabase.auth.getSession();
+      const session = sessionData?.session;
+      console.log('[Odara] pre-oracle session check', {
+        hasSession: !!session,
+        sessionUserId: session?.user?.id ?? null,
+        rpc: 'get_todays_oracle_v3',
+        oracleKey,
+        requestId,
+      });
+      if (!session) {
+        if (requestId !== oracleRequestIdRef.current) return;
+        const msg = 'No active session — cannot call oracle RPC';
+        console.error('[Odara] oracle blocked: no session', { requestId });
+        setOracleError(msg);
+        setOracleLoading(false);
+        oracleInFlightKeyRef.current = null;
+        return;
+      }
+
       try {
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
           p_user_id: user!.id,
@@ -127,7 +147,15 @@ const Index = () => {
           p_wear_date: selectedDate,
         });
         if (requestId !== oracleRequestIdRef.current) return;
-        if (rpcError) throw rpcError;
+        if (rpcError) {
+          console.error('[Odara] oracle RPC error detail', {
+            status: (rpcError as any)?.code,
+            message: rpcError.message,
+            details: (rpcError as any)?.details,
+            hint: (rpcError as any)?.hint,
+          });
+          throw rpcError;
+        }
 
         console.log('[Odara] oracle success', { requestId, oracleKey });
         setOracle(data as unknown as OracleResult);
@@ -137,11 +165,18 @@ const Index = () => {
         oracleInFlightKeyRef.current = null;
       } catch (e: any) {
         if (requestId !== oracleRequestIdRef.current) return;
-        console.error('[Odara] oracle fail', { requestId, oracleKey, msg: e?.message || e });
+        const isNetworkError = !e?.code && !e?.message?.includes('row-level');
+        console.error('[Odara] oracle fail', {
+          requestId, oracleKey,
+          type: isNetworkError ? 'network/preflight failure' : 'rpc error',
+          msg: e?.message || e,
+          code: e?.code,
+          details: e?.details,
+          hint: e?.hint,
+        });
         setOracleError(e?.message || 'Unknown error');
         setOracleLoading(false);
         oracleInFlightKeyRef.current = null;
-        // Do NOT set oracleSuccessKeyRef — allows retry
       }
     })();
   }, [authReady, oracleKey]);
