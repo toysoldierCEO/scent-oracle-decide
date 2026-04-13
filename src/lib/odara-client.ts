@@ -14,3 +14,8 @@ export const odaraSupabase = createClient(ODARA_SUPABASE_URL, ODARA_SUPABASE_ANO
     autoRefreshToken: true,
   },
 });
+
+// Boot diagnostics — runs once at module load
+console.log('[Odara] supabase url:', ODARA_SUPABASE_URL);
+console.log('[Odara] anon key present:', !!ODARA_SUPABASE_ANON_KEY, '| prefix:', ODARA_SUPABASE_ANON_KEY.slice(0, 6));
+console.log('[Odara] current origin:', typeof window !== 'undefined' ? window.location.origin : 'ssr');
