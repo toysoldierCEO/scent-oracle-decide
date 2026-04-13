@@ -545,6 +545,7 @@ const OdaraScreen = ({
     if (prevSlotRef.current === stateKey) return; // same slot, no-op
     prevSlotRef.current = stateKey;
 
+    console.log('[Odara] slot change -> clearing layer state', prevSlotRef.current, '→', stateKey);
     // Immediately wipe the old slot's card data so it can't bleed
     setVisibleCard(null);
     setActiveOracle(null);
