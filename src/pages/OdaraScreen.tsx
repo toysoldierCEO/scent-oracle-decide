@@ -153,7 +153,6 @@ interface OdaraScreenProps {
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
   userId: string;
   resolvedTemperature: number;
-  getTemperature: (dateStr: string) => number;
 }
 
 /* ── Forecast days ── */
@@ -287,15 +286,12 @@ type FavoriteCombo = {
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 
-/** Fallback temperature if weather hook fails */
-const FALLBACK_TEMPERATURE = 75;
-
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
   selectedDate, onDateChange,
   onAccept, onSkip, userId,
-  resolvedTemperature, getTemperature,
+  resolvedTemperature,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
