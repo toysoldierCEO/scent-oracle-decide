@@ -322,8 +322,9 @@ const OdaraScreen = ({
 
   const hasHistory = viewHistory.length > 0;
 
-  // Fetch queue from backend
+  // Fetch queue from backend — background only, never blocks hero
   const fetchQueue = useCallback(async (excludeId?: string) => {
+    console.log('[Odara] queue fetch start');
     try {
       setQueueError(null);
       const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
@@ -332,9 +333,10 @@ const OdaraScreen = ({
         p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
-        p_limit: 20,
+        p_limit: 12,
       });
       if (error) {
+        console.error('[Odara] queue fetch fail', error.message);
         setQueueError(error.message);
         return [];
       }
@@ -342,8 +344,10 @@ const OdaraScreen = ({
       const filtered = excludeId
         ? rows.filter(r => r.fragrance_id !== excludeId)
         : rows;
+      console.log('[Odara] queue fetch success', filtered.length, 'cards');
       return filtered.map(queueCardToDisplay);
     } catch (e: any) {
+      console.error('[Odara] queue fetch fail', e?.message);
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
@@ -395,6 +399,7 @@ const OdaraScreen = ({
     if (ol?.fragrance_id) excludeIds.push(ol.fragrance_id);
 
     try {
+      console.log('[Odara] lazy mood fetch start', mood, fragranceId);
       setLoadingMood(mood);
       setLayerDebugSource(`rpc:${mood}…`);
       const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
@@ -409,6 +414,7 @@ const OdaraScreen = ({
       });
 
       if (error) {
+        console.error('[Odara] lazy mood fetch fail', mood, error.message);
         moodCacheRef.current.set(cacheKey, null);
         setLayerDebugSource(`err:${error.message}`);
         setLoadingMood(null);
@@ -444,6 +450,7 @@ const OdaraScreen = ({
       };
 
       moodCacheRef.current.set(cacheKey, entry);
+      console.log('[Odara] lazy mood fetch success', mood, entry.layer_name);
       setLayerDebugSource(`rpc:${mood}`);
       setLoadingMood(null);
       setMoodCacheVersion(v => v + 1);
@@ -530,7 +537,9 @@ const OdaraScreen = ({
     alternatesCacheRef.current.clear();
   }, [stateKey]);
 
-  // Effect 2: Hydrate card when oracle data arrives — guarded by slot key
+  // Effect 2: Hydrate card when oracle data arrives — hero-first contract
+  // Full-screen loader disappears as soon as oracle resolves.
+  // Queue is fetched in the BACKGROUND after hero is set.
   useEffect(() => {
     if (!oracle) {
       setActiveOracle(null);
@@ -541,18 +550,22 @@ const OdaraScreen = ({
       return;
     }
 
-    // Capture the slot at the time this effect fires
     const capturedSlot = stateKey;
 
-    // If the slot has already moved on (cleared by Effect 1), wait for the
-    // correct oracle to arrive for the new slot
+    // 1) Set oracle + hero card IMMEDIATELY
     setActiveOracle(oracle);
+    setViewHistory([]);
+    setPromotedAltId(null);
+    setLayerExpanded(false);
+    setSelectedMood('balance');
 
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
+      console.log('[Odara] visible hero card set', oracle.today_pick.fragrance_id);
+
+      // 2) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
-        // Stale-response guard: only apply if we're still on the same slot
         if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
         setQueuePointer(0);
@@ -563,11 +576,6 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
     }
-
-    setViewHistory([]);
-    setPromotedAltId(null);
-    setLayerExpanded(false);
-    setSelectedMood('balance');
   }, [oracle, stateKey]);
 
   // No eager modes fetch — moods load lazily on user tap
