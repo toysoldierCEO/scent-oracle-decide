@@ -149,7 +149,7 @@ interface OdaraScreenProps {
   onContextChange: (ctx: string) => void;
   selectedDate: string;
   onDateChange: (date: string) => void;
-  onAccept: (fragranceId: string) => Promise<void>;
+  onAccept: (fragranceId: string, layerFragranceId: string | null) => Promise<void>;
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
   userId: string;
   resolvedTemperature: number;
@@ -762,12 +762,16 @@ const OdaraScreen = ({
     setSkipFlash(true);
     window.setTimeout(() => setSkipFlash(false), 700);
 
-    // Fire-and-forget backend skip
-    void odaraSupabase.rpc('skip_today_pick_v1' as any, {
+    // Fire-and-forget backend skip via canonical RPC
+    void odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
       p_user: userId,
       p_fragrance_id: visibleCard.fragrance_id,
       p_context: selectedContext,
-    });
+      p_skip_date: selectedDate,
+    }).then(
+      () => console.log('[Odara] skip rpc success (fire-forget)', { userId, fragranceId: visibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' }),
+      (err: any) => console.error('[Odara] skip rpc fail (fire-forget)', { userId, fragranceId: visibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: err?.message })
+    );
 
     // Slide the card down
     setSkipAnimating(true);
@@ -946,7 +950,11 @@ const OdaraScreen = ({
       setLockFlash(true);
       window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
-      await onAccept(visibleCard.fragrance_id);
+      // Resolve visible layer fragrance id
+      const visibleLayerId = effectiveLayerMode?.id
+        ?? oracleLayer?.fragrance_id
+        ?? null;
+      await onAccept(visibleCard.fragrance_id, visibleLayerId);
       return;
     }
 
