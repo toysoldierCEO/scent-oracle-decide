@@ -718,17 +718,17 @@ const OdaraScreen = ({
 
   const layerVisible = !!effectiveLayerMode;
 
-  // Mood tap handler — lazy loads if not cached
+  // Mood tap handler — lazy loads if not cached (slot-scoped)
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
-    const cacheKey = `${visibleCard.fragrance_id}:${mood}`;
-    const cached = moodCacheRef.current.get(cacheKey);
+    const moodKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${mood}`;
+    const cached = moodCacheRef.current.get(moodKey);
     setSelectedMood(mood);
     if (cached !== undefined) return; // already cached (including null = failed)
     // Lazy fetch
     void fetchMoodForCard(visibleCard.fragrance_id, mood);
-  }, [lockState, visibleCard, fetchMoodForCard]);
+  }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
