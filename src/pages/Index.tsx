@@ -6,8 +6,17 @@ import type { OracleResult } from './OdaraScreen';
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 const RPC_TEMPERATURE = 75;
 
+// --- Auth helpers ---
+function normalizeUser(sessionUser: any): { id: string; email?: string } | null {
+  return sessionUser ? { id: sessionUser.id, email: sessionUser.email ?? undefined } : null;
+}
+
+function sameUser(a: { id: string; email?: string } | null, b: { id: string; email?: string } | null): boolean {
+  return (a?.id ?? null) === (b?.id ?? null) && (a?.email ?? null) === (b?.email ?? null);
+}
+
 const Index = () => {
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -22,72 +31,120 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Request-id guard to prevent stale responses from flipping state
+  // Oracle dedupe refs
   const oracleRequestIdRef = useRef(0);
+  const oracleInFlightKeyRef = useRef<string | null>(null);
+  const oracleSuccessKeyRef = useRef<string | null>(null);
+
+  // Compute oracle key — only valid when auth is ready and user exists
+  const oracleKey =
+    authReady && user?.id
+      ? `${user.id}|${selectedContext}|${selectedDate}|${RPC_TEMPERATURE}`
+      : null;
 
   // Debug render log
-  console.log('[Odara] render', {
+  console.log('[Odara] render summary', {
+    authReady,
+    userId: user?.id ?? null,
+    oracleKey,
     oracleLoading,
     hasOracle: !!oracle,
     oracleError,
-    resolvedTemperature: RPC_TEMPERATURE,
   });
 
+  // --- Auth bootstrap ---
   useEffect(() => {
+    const applySession = (session: any, source: string) => {
+      const nextUser = normalizeUser(session?.user);
+      setUser(prev => {
+        if (sameUser(prev, nextUser)) {
+          console.log(`[Odara] auth session skipped duplicate (${source})`);
+          return prev;
+        }
+        console.log(`[Odara] auth session applied (${source})`, { userId: nextUser?.id ?? null });
+        return nextUser;
+      });
+    };
+
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
-      setAuthLoading(false);
+      applySession(session, 'onAuthStateChange');
+      // authReady may already be true; this is fine
+      setAuthReady(true);
     });
+
     odaraSupabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ? { id: session.user.id, email: session.user.email ?? undefined } : null);
-      setAuthLoading(false);
+      applySession(session, 'getSession');
+      setAuthReady(true);
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
-  // Oracle effect — depends ONLY on primitives, no function identity
+  // --- Oracle effect: keyed state machine ---
   useEffect(() => {
-    if (!user) {
+    if (!authReady) return;
+
+    if (!oracleKey) {
       setOracle(null);
       setOracleLoading(false);
       setOracleError(null);
+      oracleInFlightKeyRef.current = null;
+      oracleSuccessKeyRef.current = null;
       return;
     }
+
+    // Dedupe: already in flight for this key
+    if (oracleInFlightKeyRef.current === oracleKey) {
+      console.log('[Odara] oracle launch skipped in-flight', { oracleKey });
+      return;
+    }
+
+    // Dedupe: already satisfied for this key
+    if (oracleSuccessKeyRef.current === oracleKey && oracle && !oracleError) {
+      console.log('[Odara] oracle launch skipped satisfied', { oracleKey });
+      return;
+    }
+
+    // Launch
     const requestId = ++oracleRequestIdRef.current;
-    const temp = RPC_TEMPERATURE;
-    console.log('[Odara] oracle fetch start', {
-      userId: user.id,
-      context: selectedContext,
-      wearDate: selectedDate,
-      temp,
+    oracleInFlightKeyRef.current = oracleKey;
+
+    console.log('[Odara] oracle launch', {
+      oracleKey,
       requestId,
     });
+
     setOracleLoading(true);
     setOracleError(null);
+
     (async () => {
       try {
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
-          p_user_id: user.id,
-          p_temperature: temp,
+          p_user_id: user!.id,
+          p_temperature: RPC_TEMPERATURE,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
           p_wear_date: selectedDate,
         });
         if (requestId !== oracleRequestIdRef.current) return;
         if (rpcError) throw rpcError;
-        console.log('[Odara] oracle fetch success', { requestId });
+
+        console.log('[Odara] oracle success', { requestId, oracleKey });
         setOracle(data as unknown as OracleResult);
+        setOracleError(null);
+        setOracleLoading(false);
+        oracleSuccessKeyRef.current = oracleKey;
+        oracleInFlightKeyRef.current = null;
       } catch (e: any) {
         if (requestId !== oracleRequestIdRef.current) return;
-        console.error('[Odara] oracle fetch fail', e?.message || e);
+        console.error('[Odara] oracle fail', { requestId, oracleKey, msg: e?.message || e });
         setOracleError(e?.message || 'Unknown error');
-      } finally {
-        if (requestId !== oracleRequestIdRef.current) return;
-        console.log('[Odara] oracleLoading set false', { requestId });
         setOracleLoading(false);
+        oracleInFlightKeyRef.current = null;
+        // Do NOT set oracleSuccessKeyRef — allows retry
       }
     })();
-  }, [user?.id, selectedContext, selectedDate]);
+  }, [authReady, oracleKey]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -112,7 +169,9 @@ const Index = () => {
       throw skipError;
     }
 
-    // Re-fetch oracle inline (no unstable callback dependency)
+    // Re-fetch oracle inline — also invalidate success key so effect can re-run if needed
+    oracleSuccessKeyRef.current = null;
+
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
       p_user_id: user.id,
       p_temperature: RPC_TEMPERATURE,
@@ -159,7 +218,7 @@ const Index = () => {
 
   const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
 
-  if (authLoading) {
+  if (!authReady) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <span className="text-sm text-muted-foreground">Checking authentication…</span>
@@ -202,7 +261,7 @@ const Index = () => {
               {isSignUp ? 'Sign in' : 'Sign up'}
             </span>
           </p>
-          {/* TEMPORARY: preview/testing bypass using real Odara test account via edge function */}
+          {/* TEMPORARY: preview/testing bypass */}
           <button
             onClick={async () => {
               setError('');
@@ -217,7 +276,6 @@ const Index = () => {
                   setError(json.error || 'Test login failed');
                   return;
                 }
-                // Set real Odara session using returned tokens
                 const { error: sessionErr } = await odaraSupabase.auth.setSession({
                   access_token: json.access_token,
                   refresh_token: json.refresh_token,
