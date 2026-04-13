@@ -315,6 +315,7 @@ const OdaraScreen = ({
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [loadingMood, setLoadingMood] = useState<LayerMood | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
+  const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
   const [currentCardAlternates, setCurrentCardAlternates] = useState<OracleAlternate[]>([]);
 
   const hasHistory = viewHistory.length > 0;
