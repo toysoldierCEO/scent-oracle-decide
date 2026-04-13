@@ -89,7 +89,7 @@ export interface OracleResult {
   alternates: OracleAlternate[];
 }
 
-/** Backend mood-mode entry from get_layer_card_modes_v1 */
+/** Backend mood-mode entry from get_layer_for_card_mode_v1 */
 interface BackendModeEntry {
   mode: string;
   layer_fragrance_id: string;
@@ -106,22 +106,6 @@ interface BackendModeEntry {
   placement_hint: string;
   spray_guidance: string;
   interaction_type: string;
-}
-
-/** Full payload cached per fragrance_id */
-interface LayerModesPayload {
-  layer_name: string;
-  layer_brand: string;
-  layer_family: string;
-  layer_score: number;
-  default_mode: string;
-  default_reason: string;
-  default_ratio_hint: string;
-  default_application_style: string;
-  default_placement_hint: string;
-  default_spray_guidance: string;
-  default_why_it_works: string;
-  modes: Record<string, BackendModeEntry>;
 }
 
 /** A card from get_home_card_queue_v1 */
