@@ -660,14 +660,17 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from per-mood cache — lazy loaded
+  // Build layer modes from slot-scoped mood cache — lazy loaded
   // moodCacheVersion is used to trigger re-renders when cache updates
   void moodCacheVersion; // consumed for reactivity
   const cardId = visibleCard?.fragrance_id ?? '';
+  const slotPrefix = `${selectedDate}|${selectedContext}`;
+  const visibleSlotKey = `${slotPrefix}|${cardId || 'none'}`;
+  console.log('[Odara] visibleSlotKey', visibleSlotKey);
   const cachedMoods: Partial<LayerModes> = {};
   let hasCachedMood = false;
   for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
-    const entry = moodCacheRef.current.get(`${cardId}:${m}`);
+    const entry = moodCacheRef.current.get(`${slotPrefix}|${cardId}|${m}`);
     const converted = backendModeEntryToLayerMode(entry);
     cachedMoods[m] = converted;
     if (converted) hasCachedMood = true;
