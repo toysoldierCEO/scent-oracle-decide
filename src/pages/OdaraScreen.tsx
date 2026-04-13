@@ -1036,7 +1036,7 @@ const OdaraScreen = ({
               {/* Left: temperature */}
               <div className="flex flex-col items-start pt-1 min-w-[52px]">
                  <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {SHARED_TEMPERATURE}°
+                  {resolvedTemperature}°
                  </span>
               </div>
 
