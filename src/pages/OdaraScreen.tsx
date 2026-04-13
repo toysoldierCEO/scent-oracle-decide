@@ -587,7 +587,7 @@ const OdaraScreen = ({
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      console.log('[Odara] visible hero card set', oracle.today_pick.fragrance_id);
+      console.log('[Odara] applying oracle layer for slot', capturedSlot, oracle.layer?.fragrance_id ?? 'none');
 
       // 2) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
