@@ -376,90 +376,84 @@ const OdaraScreen = ({
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
 
-  // Resolve layer modes for any visible card via get_layer_card_modes_v1
-  const resolveModesForCard = useCallback(async (card: DisplayCard) => {
-    const cached = modesCacheRef.current.get(card.fragrance_id);
-    if (cached !== undefined) {
-      setResolvedModesPayload(cached);
-      setLayerDebugSource(cached ? 'cache' : 'cache(null)');
-      return;
+  // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 ──
+  const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood) => {
+    const cacheKey = `${fragranceId}:${mood}`;
+    const cached = moodCacheRef.current.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    // Gather already-loaded layer fragrance ids for exclusion
+    const excludeIds: string[] = [];
+    for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
+      const existing = moodCacheRef.current.get(`${fragranceId}:${m}`);
+      if (existing?.layer_fragrance_id) excludeIds.push(existing.layer_fragrance_id);
     }
+    // Also include oracle.layer id if present
+    const ol = activeOracle?.layer;
+    if (ol?.fragrance_id) excludeIds.push(ol.fragrance_id);
 
     try {
-      setLayerDebugSource('rpc…');
-      const { data, error } = await odaraSupabase.rpc('get_layer_card_modes_v1' as any, {
+      setLoadingMood(mood);
+      setLayerDebugSource(`rpc:${mood}…`);
+      const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
         p_user: userId,
-        p_fragrance_id: card.fragrance_id,
+        p_fragrance_id: fragranceId,
         p_context: selectedContext,
-        p_temperature: 75,
+        p_temperature: SHARED_TEMPERATURE,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
+        p_mode: mood,
+        p_exclude_fragrance_ids: excludeIds.length > 0 ? excludeIds : undefined,
       });
 
       if (error) {
-        modesCacheRef.current.set(card.fragrance_id, null);
-        setResolvedModesPayload(null);
+        moodCacheRef.current.set(cacheKey, null);
         setLayerDebugSource(`err:${error.message}`);
-        return;
+        setLoadingMood(null);
+        setMoodCacheVersion(v => v + 1);
+        return null;
       }
 
-      // RPC returns a single JSONB object (not rows)
-      const payload = Array.isArray(data) ? data[0] : data;
-      if (!payload || payload.found !== true || !payload.layer_name) {
-        modesCacheRef.current.set(card.fragrance_id, null);
-        setResolvedModesPayload(null);
-        setLayerDebugSource(`rpc(empty|found=${payload?.found})`);
-        return;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.layer_fragrance_id) {
+        moodCacheRef.current.set(cacheKey, null);
+        setLayerDebugSource(`rpc:${mood}(empty)`);
+        setLoadingMood(null);
+        setMoodCacheVersion(v => v + 1);
+        return null;
       }
 
-      const modesRaw = payload.modes ?? {};
-      const modesMap: Record<string, BackendModeEntry> = {};
-      for (const key of ['balance', 'bold', 'smooth', 'wild']) {
-        const m = modesRaw[key];
-        if (!m) continue;
-        modesMap[key] = {
-          mode: key,
-          layer_fragrance_id: m.layer_fragrance_id ?? payload.layer_fragrance_id ?? '',
-          layer_name: m.layer_name ?? payload.layer_name ?? '',
-          layer_brand: m.layer_brand ?? payload.layer_brand ?? '',
-          layer_family: m.layer_family ?? payload.layer_family ?? '',
-          layer_notes: Array.isArray(m.layer_notes) ? m.layer_notes : [],
-          layer_accords: Array.isArray(m.layer_accords) ? m.layer_accords : [],
-          layer_score: m.layer_score ?? payload.layer_score ?? 0,
-          reason: m.reason ?? '',
-          why_it_works: m.why_it_works ?? '',
-          ratio_hint: m.ratio_hint ?? '',
-          application_style: m.application_style ?? '',
-          placement_hint: m.placement_hint ?? '',
-          spray_guidance: m.spray_guidance ?? '',
-          interaction_type: m.interaction_type ?? key,
-        };
-      }
-
-      const resolved: LayerModesPayload = {
-        layer_name: payload.layer_name ?? '',
-        layer_brand: payload.layer_brand ?? '',
-        layer_family: payload.layer_family ?? '',
-        layer_score: payload.layer_score ?? 0,
-        default_mode: payload.default_mode ?? 'balance',
-        default_reason: payload.default_reason ?? '',
-        default_ratio_hint: payload.default_ratio_hint ?? '',
-        default_application_style: payload.default_application_style ?? '',
-        default_placement_hint: payload.default_placement_hint ?? '',
-        default_spray_guidance: payload.default_spray_guidance ?? '',
-        default_why_it_works: payload.default_why_it_works ?? '',
-        modes: modesMap,
+      const entry: BackendModeEntry = {
+        mode: mood,
+        layer_fragrance_id: row.layer_fragrance_id ?? '',
+        layer_name: row.layer_name ?? '',
+        layer_brand: row.layer_brand ?? '',
+        layer_family: row.layer_family ?? '',
+        layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
+        layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
+        layer_score: row.layer_score ?? 0,
+        reason: row.reason ?? '',
+        why_it_works: row.why_it_works ?? '',
+        ratio_hint: row.ratio_hint ?? '',
+        application_style: row.application_style ?? '',
+        placement_hint: row.placement_hint ?? '',
+        spray_guidance: row.spray_guidance ?? '',
+        interaction_type: row.interaction_type ?? mood,
       };
 
-      modesCacheRef.current.set(card.fragrance_id, resolved);
-      setResolvedModesPayload(resolved);
-      setLayerDebugSource('rpc');
+      moodCacheRef.current.set(cacheKey, entry);
+      setLayerDebugSource(`rpc:${mood}`);
+      setLoadingMood(null);
+      setMoodCacheVersion(v => v + 1);
+      return entry;
     } catch (e: any) {
-      modesCacheRef.current.set(card.fragrance_id, null);
-      setResolvedModesPayload(null);
+      moodCacheRef.current.set(cacheKey, null);
       setLayerDebugSource(`err:${e?.message}`);
+      setLoadingMood(null);
+      setMoodCacheVersion(v => v + 1);
+      return null;
     }
-  }, [userId, selectedContext, selectedDate]);
+  }, [userId, selectedContext, selectedDate, activeOracle]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
     const cached = alternatesCacheRef.current.get(card.fragrance_id);
