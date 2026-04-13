@@ -414,6 +414,7 @@ const OdaraScreen = ({
       });
 
       if (error) {
+        console.error('[Odara] lazy mood fetch fail', mood, error.message);
         moodCacheRef.current.set(cacheKey, null);
         setLayerDebugSource(`err:${error.message}`);
         setLoadingMood(null);
@@ -449,6 +450,7 @@ const OdaraScreen = ({
       };
 
       moodCacheRef.current.set(cacheKey, entry);
+      console.log('[Odara] lazy mood fetch success', mood, entry.layer_name);
       setLayerDebugSource(`rpc:${mood}`);
       setLoadingMood(null);
       setMoodCacheVersion(v => v + 1);
