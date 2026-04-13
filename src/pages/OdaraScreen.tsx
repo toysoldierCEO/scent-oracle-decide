@@ -626,20 +626,22 @@ const OdaraScreen = ({
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
-  // Build layer modes from backend payload — works for hero AND queue cards
-  // Build layer modes from backend payload — with fallback from oracle.layer
-  const layerModes = resolvedModesPayload ? backendModesToLayerModes(resolvedModesPayload) : null;
-  const currentModeData = resolvedModesPayload?.modes?.[selectedMood] ?? null;
-  const fallbackMood: LayerMood = isLayerMood(resolvedModesPayload?.default_mode)
-    ? resolvedModesPayload.default_mode
-    : 'balance';
-  const fallbackModeData = resolvedModesPayload?.modes?.[fallbackMood] ?? null;
-  const visibleLayerEntry = currentModeData ?? fallbackModeData;
-  const visibleLayerMode = backendModeEntryToLayerMode(visibleLayerEntry, resolvedModesPayload);
+  // Build layer modes from per-mood cache — lazy loaded
+  // moodCacheVersion is used to trigger re-renders when cache updates
+  void moodCacheVersion; // consumed for reactivity
+  const cardId = visibleCard?.fragrance_id ?? '';
+  const cachedMoods: Partial<LayerModes> = {};
+  let hasCachedMood = false;
+  for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
+    const entry = moodCacheRef.current.get(`${cardId}:${m}`);
+    const converted = backendModeEntryToLayerMode(entry);
+    cachedMoods[m] = converted;
+    if (converted) hasCachedMood = true;
+  }
 
-  // Fallback layer from oracle.layer when modes RPC failed/unavailable
+  // Fallback layer from oracle.layer — always available as baseline
   const oracleLayer = activeOracle?.layer ?? null;
-  const fallbackLayerMode: NonNullable<LayerModes[LayerMood]> | null = (!visibleLayerMode && oracleLayer) ? {
+  const oracleLayerMode: NonNullable<LayerModes[LayerMood]> | null = oracleLayer ? {
     id: oracleLayer.fragrance_id,
     name: oracleLayer.name,
     brand: oracleLayer.brand,
@@ -656,12 +658,40 @@ const OdaraScreen = ({
     spray_guidance: oracleLayer.spray_guidance ?? '',
   } : null;
 
-  const effectiveLayerMode = visibleLayerMode ?? fallbackLayerMode;
-  const effectiveLayerModes: LayerModes = layerModes ?? {
-    balance: fallbackLayerMode, bold: null, smooth: null, wild: null,
+  // Effective layer mode for the selected mood
+  const cachedSelectedMode = cachedMoods[selectedMood] ?? null;
+  const effectiveLayerMode = cachedSelectedMode ?? oracleLayerMode;
+  const isFallbackLayer = !cachedSelectedMode && !!oracleLayerMode;
+
+  // Build effective LayerModes for ModeSelector — show cached moods + fallback at balance
+  const effectiveLayerModes: LayerModes = {
+    balance: cachedMoods.balance ?? oracleLayerMode,
+    bold: cachedMoods.bold ?? null,
+    smooth: cachedMoods.smooth ?? null,
+    wild: cachedMoods.wild ?? null,
   };
-  const isFallbackLayer = !visibleLayerMode && !!fallbackLayerMode;
+  // If no moods cached yet, still show all 4 mood buttons (they'll lazy-load on tap)
+  // We do this by putting a placeholder for uncached moods so ModeSelector renders them
+  if (oracleLayerMode && !hasCachedMood) {
+    // All mood buttons visible but point to fallback until loaded
+    effectiveLayerModes.bold = oracleLayerMode;
+    effectiveLayerModes.smooth = oracleLayerMode;
+    effectiveLayerModes.wild = oracleLayerMode;
+  }
+
   const layerVisible = !!effectiveLayerMode;
+
+  // Mood tap handler — lazy loads if not cached
+  const handleMoodSelect = useCallback((mood: LayerMood) => {
+    if (lockState === 'locked') return;
+    if (!visibleCard) return;
+    const cacheKey = `${visibleCard.fragrance_id}:${mood}`;
+    const cached = moodCacheRef.current.get(cacheKey);
+    setSelectedMood(mood);
+    if (cached !== undefined) return; // already cached (including null = failed)
+    // Lazy fetch
+    void fetchMoodForCard(visibleCard.fragrance_id, mood);
+  }, [lockState, visibleCard, fetchMoodForCard]);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
