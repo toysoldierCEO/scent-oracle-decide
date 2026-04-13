@@ -181,30 +181,42 @@ const Index = () => {
     })();
   }, [authReady, oracleKey]);
 
-  // Accept / Skip RPCs
-  const handleAccept = useCallback(async (fragranceId: string) => {
+  // Accept / Skip RPCs — canonical surface only
+  const handleAccept = useCallback(async (fragranceId: string, layerFragranceId: string | null = null) => {
     if (!user) return;
-    await odaraSupabase.rpc('accept_today_pick_v1', {
+    console.log('[Odara] accept rpc start', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
+    const { error: err } = await odaraSupabase.rpc('accept_oracle_selection_v1' as any, {
       p_user: user.id,
       p_fragrance_id: fragranceId,
+      p_layer_fragrance_id: layerFragranceId,
       p_context: selectedContext,
+      p_wear_date: selectedDate,
     });
-  }, [user, selectedContext]);
+    if (err) {
+      console.error('[Odara] accept rpc fail', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1', error: err.message });
+    } else {
+      console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
+    }
+  }, [user, selectedContext, selectedDate]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
     if (!user) return null;
 
-    const { error: skipError } = await odaraSupabase.rpc('skip_today_pick_v1', {
+    console.log('[Odara] skip rpc start', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
+    const { error: skipError } = await odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
       p_user: user.id,
       p_fragrance_id: fragranceId,
       p_context: selectedContext,
+      p_skip_date: selectedDate,
     });
 
     if (skipError) {
+      console.error('[Odara] skip rpc fail', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: skipError.message });
       throw skipError;
     }
+    console.log('[Odara] skip rpc success', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
 
-    // Re-fetch oracle inline — also invalidate success key so effect can re-run if needed
+    // Re-fetch oracle inline
     oracleSuccessKeyRef.current = null;
 
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
