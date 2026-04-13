@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
-import { useWeather } from '@/hooks/useWeather';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
-const FALLBACK_TEMPERATURE = 75;
+const RPC_TEMPERATURE = 75;
 
 const Index = () => {
   const [authLoading, setAuthLoading] = useState(true);
@@ -23,13 +22,6 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Weather — non-blocking, uses fallback until loaded
-  const { getTemperature, weatherLoading } = useWeather();
-  const resolvedTemperature = weatherLoading ? FALLBACK_TEMPERATURE : getTemperature(selectedDate);
-
-  // Single primitive temperature for RPC — stable dependency
-  const rpcTemperature = resolvedTemperature ?? FALLBACK_TEMPERATURE;
-
   // Request-id guard to prevent stale responses from flipping state
   const oracleRequestIdRef = useRef(0);
 
@@ -38,7 +30,7 @@ const Index = () => {
     oracleLoading,
     hasOracle: !!oracle,
     oracleError,
-    resolvedTemperature: rpcTemperature,
+    resolvedTemperature: RPC_TEMPERATURE,
   });
 
   useEffect(() => {
@@ -62,7 +54,7 @@ const Index = () => {
       return;
     }
     const requestId = ++oracleRequestIdRef.current;
-    const temp = rpcTemperature;
+    const temp = RPC_TEMPERATURE;
     console.log('[Odara] oracle fetch start', {
       userId: user.id,
       context: selectedContext,
@@ -95,7 +87,7 @@ const Index = () => {
         setOracleLoading(false);
       }
     })();
-  }, [user?.id, selectedContext, selectedDate, rpcTemperature]);
+  }, [user?.id, selectedContext, selectedDate]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -123,14 +115,14 @@ const Index = () => {
     // Re-fetch oracle inline (no unstable callback dependency)
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
       p_user_id: user.id,
-      p_temperature: rpcTemperature,
+      p_temperature: RPC_TEMPERATURE,
       p_context: selectedContext,
       p_brand: 'Alexandria Fragrances',
       p_wear_date: selectedDate,
     });
     if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, selectedContext, selectedDate, rpcTemperature]);
+  }, [user, selectedContext, selectedDate]);
 
   const handleEmailAuth = async () => {
     setError('');
@@ -260,8 +252,7 @@ const Index = () => {
       onAccept={handleAccept}
       onSkip={handleSkip}
       userId={user.id}
-      resolvedTemperature={resolvedTemperature}
-      getTemperature={getTemperature}
+      resolvedTemperature={RPC_TEMPERATURE}
     />
   );
 };
