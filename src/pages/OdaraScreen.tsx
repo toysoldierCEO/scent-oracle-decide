@@ -951,7 +951,7 @@ const OdaraScreen = ({
       window.setTimeout(() => setLockFlash(false), 700);
       pulseLock();
       // Resolve visible layer fragrance id
-      const visibleLayerId = effectiveLayerMode?.layer_fragrance_id
+      const visibleLayerId = effectiveLayerMode?.id
         ?? oracleLayer?.fragrance_id
         ?? null;
       await onAccept(visibleCard.fragrance_id, visibleLayerId);
