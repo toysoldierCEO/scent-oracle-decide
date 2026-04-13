@@ -515,7 +515,6 @@ const OdaraScreen = ({
     // Immediately wipe the old slot's card data so it can't bleed
     setVisibleCard(null);
     setActiveOracle(null);
-    setResolvedModesPayload(null);
     setLayerDebugSource('clearing');
     setCurrentCardAlternates([]);
     setQueue([]);
@@ -524,7 +523,8 @@ const OdaraScreen = ({
     setPromotedAltId(null);
     setLayerExpanded(false);
     setSelectedMood('balance');
-    modesCacheRef.current.clear();
+    setLoadingMood(null);
+    moodCacheRef.current.clear();
     alternatesCacheRef.current.clear();
   }, [stateKey]);
 
@@ -533,7 +533,6 @@ const OdaraScreen = ({
     if (!oracle) {
       setActiveOracle(null);
       setVisibleCard(null);
-      setResolvedModesPayload(null);
       setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
@@ -558,7 +557,6 @@ const OdaraScreen = ({
       });
     } else {
       setVisibleCard(null);
-      setResolvedModesPayload(null);
       setLayerDebugSource('none');
       setQueue([]);
       setQueuePointer(0);
@@ -570,23 +568,7 @@ const OdaraScreen = ({
     setSelectedMood('balance');
   }, [oracle, stateKey]);
 
-  // Resolve layer modes whenever visible card changes — with slot guard
-  useEffect(() => {
-    if (!visibleCard) {
-      setResolvedModesPayload(null);
-      setLayerDebugSource('no-card');
-      return;
-    }
-    const capturedSlot = stateKey;
-    const originalSet = setResolvedModesPayload;
-    resolveModesForCard(visibleCard).then(() => {
-      // If slot moved on, the resolveModesForCard already set state —
-      // but we clear it to be safe
-      if (activeSlotRef.current !== capturedSlot) {
-        // Don't keep stale layer data
-      }
-    });
-  }, [visibleCard, resolveModesForCard, stateKey]);
+  // No eager modes fetch — moods load lazily on user tap
 
   useEffect(() => {
     if (!visibleCard) {
