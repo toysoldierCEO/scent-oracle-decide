@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
+import { useWeather } from '@/hooks/useWeather';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -21,10 +22,15 @@ const Index = () => {
   const [selectedContext, setSelectedContext] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
+  // Weather — single source of truth for temperature
+  const { weatherByDate, weatherLoading, weatherError, getTemperature } = useWeather();
+  const resolvedTemperature = getTemperature(selectedDate);
+
   const fetchOracleFor = useCallback(async (userId: string, context: string, wearDate: string) => {
+    const temp = getTemperature(wearDate);
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
       p_user_id: userId,
-      p_temperature: 75,
+      p_temperature: temp,
       p_context: context,
       p_brand: 'Alexandria Fragrances',
       p_wear_date: wearDate,
@@ -35,7 +41,7 @@ const Index = () => {
     }
 
     return data as unknown as OracleResult;
-  }, []);
+  }, [getTemperature]);
 
   useEffect(() => {
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
@@ -49,9 +55,10 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch oracle when user, context, or date changes
+  // Fetch oracle when user, context, date, or weather changes
   useEffect(() => {
     if (!user) { setOracle(null); return; }
+    if (weatherLoading) return; // wait for weather before first oracle fetch
     const fetchOracle = async () => {
       setOracleLoading(true);
       setOracleError(null);
@@ -65,7 +72,7 @@ const Index = () => {
       }
     };
     fetchOracle();
-  }, [fetchOracleFor, user, selectedContext, selectedDate]);
+  }, [fetchOracleFor, user, selectedContext, selectedDate, weatherLoading]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -211,7 +218,7 @@ const Index = () => {
   return (
     <OdaraScreen
       oracle={oracle}
-      oracleLoading={oracleLoading}
+      oracleLoading={oracleLoading || weatherLoading}
       oracleError={oracleError}
       onSignOut={handleSignOut}
       selectedContext={selectedContext}
@@ -221,6 +228,8 @@ const Index = () => {
       onAccept={handleAccept}
       onSkip={handleSkip}
       userId={user.id}
+      resolvedTemperature={resolvedTemperature}
+      getTemperature={getTemperature}
     />
   );
 };

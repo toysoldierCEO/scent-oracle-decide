@@ -152,6 +152,8 @@ interface OdaraScreenProps {
   onAccept: (fragranceId: string) => Promise<void>;
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
   userId: string;
+  resolvedTemperature: number;
+  getTemperature: (dateStr: string) => number;
 }
 
 /* ── Forecast days ── */
@@ -285,15 +287,15 @@ type FavoriteCombo = {
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 
-/** Single shared temperature used across all RPCs and UI display.
- *  Replace this constant with real weather data when available. */
-const SHARED_TEMPERATURE = 75;
+/** Fallback temperature if weather hook fails */
+const FALLBACK_TEMPERATURE = 75;
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
   selectedDate, onDateChange,
   onAccept, onSkip, userId,
+  resolvedTemperature, getTemperature,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
@@ -327,7 +329,7 @@ const OdaraScreen = ({
       const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
         p_user: userId,
         p_context: selectedContext,
-        p_temperature: 75,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
         p_limit: 20,
@@ -399,7 +401,7 @@ const OdaraScreen = ({
         p_user: userId,
         p_fragrance_id: fragranceId,
         p_context: selectedContext,
-        p_temperature: SHARED_TEMPERATURE,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
         p_mode: mood,
@@ -466,7 +468,7 @@ const OdaraScreen = ({
         p_user: userId,
         p_fragrance_id: card.fragrance_id,
         p_context: selectedContext,
-        p_temperature: 75,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
       });
@@ -1034,7 +1036,7 @@ const OdaraScreen = ({
               {/* Left: temperature */}
               <div className="flex flex-col items-start pt-1 min-w-[52px]">
                  <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {SHARED_TEMPERATURE}°
+                  {resolvedTemperature}°
                  </span>
               </div>
 
