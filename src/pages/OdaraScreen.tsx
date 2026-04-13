@@ -1259,13 +1259,14 @@ const OdaraScreen = ({
                 layerModes={effectiveLayerModes}
                 visibleLayerMode={effectiveLayerMode}
                 selectedMood={selectedMood}
-                onSelectMood={lockState !== 'locked' && !isFallbackLayer ? setSelectedMood : () => {}}
+                onSelectMood={handleMoodSelect}
                 selectedRatio={selectedRatio}
                 onSelectRatio={setSelectedRatio}
                 isExpanded={layerExpanded}
                 onToggleExpand={() => setLayerExpanded(!layerExpanded)}
                 lockPulse={lockPulse}
-                locked={lockState === 'locked' || isFallbackLayer}
+                locked={lockState === 'locked'}
+                loadingMood={loadingMood}
               />
             )}
 
