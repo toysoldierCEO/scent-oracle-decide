@@ -329,7 +329,7 @@ const OdaraScreen = ({
       const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
         p_user: userId,
         p_context: selectedContext,
-        p_temperature: 75,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
         p_limit: 20,
@@ -401,7 +401,7 @@ const OdaraScreen = ({
         p_user: userId,
         p_fragrance_id: fragranceId,
         p_context: selectedContext,
-        p_temperature: SHARED_TEMPERATURE,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
         p_mode: mood,
@@ -468,7 +468,7 @@ const OdaraScreen = ({
         p_user: userId,
         p_fragrance_id: card.fragrance_id,
         p_context: selectedContext,
-        p_temperature: 75,
+        p_temperature: resolvedTemperature,
         p_brand: 'Alexandria Fragrances',
         p_wear_date: selectedDate,
       });
