@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
@@ -25,28 +25,21 @@ const Index = () => {
 
   // Weather — non-blocking, uses fallback until loaded
   const { getTemperature, weatherLoading } = useWeather();
-  // Resolve temperature: use weather if available, otherwise fallback
   const resolvedTemperature = weatherLoading ? FALLBACK_TEMPERATURE : getTemperature(selectedDate);
 
-  const fetchOracleFor = useCallback(async (userId: string, context: string, wearDate: string) => {
-    console.log('[Odara] oracle fetch start', { context, wearDate });
-    const temp = weatherLoading ? FALLBACK_TEMPERATURE : getTemperature(wearDate);
-    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
-      p_user_id: userId,
-      p_temperature: temp,
-      p_context: context,
-      p_brand: 'Alexandria Fragrances',
-      p_wear_date: wearDate,
-    });
+  // Single primitive temperature for RPC — stable dependency
+  const rpcTemperature = resolvedTemperature ?? FALLBACK_TEMPERATURE;
 
-    if (rpcError) {
-      console.error('[Odara] oracle fetch fail', rpcError.message);
-      throw rpcError;
-    }
+  // Request-id guard to prevent stale responses from flipping state
+  const oracleRequestIdRef = useRef(0);
 
-    console.log('[Odara] oracle fetch success');
-    return data as unknown as OracleResult;
-  }, [getTemperature, weatherLoading]);
+  // Debug render log
+  console.log('[Odara] render', {
+    oracleLoading,
+    hasOracle: !!oracle,
+    oracleError,
+    resolvedTemperature: rpcTemperature,
+  });
 
   useEffect(() => {
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
@@ -60,24 +53,49 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch oracle immediately when user/context/date changes — DO NOT wait for weather
+  // Oracle effect — depends ONLY on primitives, no function identity
   useEffect(() => {
-    if (!user) { setOracle(null); return; }
-    const fetchOracle = async () => {
-      setOracleLoading(true);
+    if (!user) {
+      setOracle(null);
+      setOracleLoading(false);
       setOracleError(null);
+      return;
+    }
+    const requestId = ++oracleRequestIdRef.current;
+    const temp = rpcTemperature;
+    console.log('[Odara] oracle fetch start', {
+      userId: user.id,
+      context: selectedContext,
+      wearDate: selectedDate,
+      temp,
+      requestId,
+    });
+    setOracleLoading(true);
+    setOracleError(null);
+    (async () => {
       try {
-        const nextOracle = await fetchOracleFor(user.id, selectedContext, selectedDate);
-        setOracle(nextOracle);
+        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
+          p_user_id: user.id,
+          p_temperature: temp,
+          p_context: selectedContext,
+          p_brand: 'Alexandria Fragrances',
+          p_wear_date: selectedDate,
+        });
+        if (requestId !== oracleRequestIdRef.current) return;
+        if (rpcError) throw rpcError;
+        console.log('[Odara] oracle fetch success', { requestId });
+        setOracle(data as unknown as OracleResult);
       } catch (e: any) {
+        if (requestId !== oracleRequestIdRef.current) return;
+        console.error('[Odara] oracle fetch fail', e?.message || e);
         setOracleError(e?.message || 'Unknown error');
       } finally {
+        if (requestId !== oracleRequestIdRef.current) return;
+        console.log('[Odara] oracleLoading set false', { requestId });
         setOracleLoading(false);
-        console.log('[Odara] oracleLoading set to false');
       }
-    };
-    fetchOracle();
-  }, [fetchOracleFor, user, selectedContext, selectedDate]);
+    })();
+  }, [user?.id, selectedContext, selectedDate, rpcTemperature]);
 
   // Accept / Skip RPCs
   const handleAccept = useCallback(async (fragranceId: string) => {
@@ -102,8 +120,17 @@ const Index = () => {
       throw skipError;
     }
 
-    return await fetchOracleFor(user.id, selectedContext, selectedDate);
-  }, [fetchOracleFor, user, selectedContext, selectedDate]);
+    // Re-fetch oracle inline (no unstable callback dependency)
+    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
+      p_user_id: user.id,
+      p_temperature: rpcTemperature,
+      p_context: selectedContext,
+      p_brand: 'Alexandria Fragrances',
+      p_wear_date: selectedDate,
+    });
+    if (rpcError) throw rpcError;
+    return data as unknown as OracleResult;
+  }, [user, selectedContext, selectedDate, rpcTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
