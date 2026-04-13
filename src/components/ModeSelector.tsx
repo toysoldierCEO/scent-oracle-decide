@@ -31,6 +31,7 @@ interface ModeSelectorProps {
   familyColors: Record<string, string>;
   lockPulse?: boolean;
   locked?: boolean;
+  loadingMood?: LayerMood | null;
 }
 
 /**
@@ -38,7 +39,7 @@ interface ModeSelectorProps {
  * It does NOT own card color, family token text, or fragrance name.
  * It ONLY changes which layer fragrance is active via onSelectMood.
  */
-const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false, locked = false }: ModeSelectorProps) => {
+const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false, locked = false, loadingMood = null }: ModeSelectorProps) => {
   return (
     <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
       {LAYER_MOODS.map((mood) => {
@@ -64,7 +65,9 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
               } : undefined),
             }}
           >
-            {mood}
+            {loadingMood === mood ? (
+              <span className="inline-block w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
+            ) : mood}
           </button>
         );
       })}

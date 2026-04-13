@@ -372,6 +372,7 @@ interface LayerCardProps {
   onToggleExpand: () => void;
   lockPulse?: boolean;
   locked?: boolean;
+  loadingMood?: LayerMood | null;
 }
 
 const LayerCard = ({
@@ -390,6 +391,7 @@ const LayerCard = ({
   onToggleExpand,
   lockPulse = false,
   locked = false,
+  loadingMood = null,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode ?? layerModes[selectedMood];
 
@@ -472,6 +474,7 @@ const LayerCard = ({
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
           locked={locked}
+          loadingMood={loadingMood}
         />
       </div>
 
