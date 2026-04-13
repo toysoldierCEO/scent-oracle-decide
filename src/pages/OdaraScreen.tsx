@@ -399,6 +399,7 @@ const OdaraScreen = ({
     if (ol?.fragrance_id) excludeIds.push(ol.fragrance_id);
 
     try {
+      console.log('[Odara] lazy mood fetch start', mood, fragranceId);
       setLoadingMood(mood);
       setLayerDebugSource(`rpc:${mood}…`);
       const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
