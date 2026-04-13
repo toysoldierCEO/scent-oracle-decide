@@ -192,36 +192,25 @@ function isLayerMood(value: unknown): value is LayerMood {
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
-  payload?: LayerModesPayload | null,
 ): NonNullable<LayerModes[LayerMood]> | null {
   if (!entry) return null;
 
   return {
     id: entry.layer_fragrance_id,
-    name: entry.layer_name || payload?.layer_name || '',
-    brand: entry.layer_brand || payload?.layer_brand || '',
-    family_key: entry.layer_family || payload?.layer_family || '',
+    name: entry.layer_name || '',
+    brand: entry.layer_brand || '',
+    family_key: entry.layer_family || '',
     notes: Array.isArray(entry.layer_notes) ? entry.layer_notes : [],
     accords: Array.isArray(entry.layer_accords) ? entry.layer_accords : [],
     interactionType: (entry.interaction_type as InteractionType) || 'balance',
-    reason: entry.reason || payload?.default_reason || '',
-    why_it_works: entry.why_it_works || payload?.default_why_it_works || '',
+    reason: entry.reason || '',
+    why_it_works: entry.why_it_works || '',
     projection: null,
-    ratio_hint: entry.ratio_hint || payload?.default_ratio_hint || '',
-    application_style: entry.application_style || payload?.default_application_style || '',
-    placement_hint: entry.placement_hint || payload?.default_placement_hint || '',
-    spray_guidance: entry.spray_guidance || payload?.default_spray_guidance || '',
+    ratio_hint: entry.ratio_hint || '',
+    application_style: entry.application_style || '',
+    placement_hint: entry.placement_hint || '',
+    spray_guidance: entry.spray_guidance || '',
   };
-}
-
-function backendModesToLayerModes(payload: LayerModesPayload): LayerModes {
-  const MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
-  const result: Partial<LayerModes> = {};
-  for (const mood of MOODS) {
-    const m = payload.modes[mood];
-    result[mood] = backendModeEntryToLayerMode(m, payload);
-  }
-  return result as LayerModes;
 }
 
 function normalizeAlternateRow(row: any): OracleAlternate | null {
