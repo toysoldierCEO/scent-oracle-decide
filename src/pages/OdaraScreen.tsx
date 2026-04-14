@@ -716,13 +716,9 @@ const OdaraScreen = ({
     smooth: cachedMoods.smooth ?? (oracleFallbackMood === 'smooth' ? oracleLayerMode : null),
     wild: cachedMoods.wild ?? (oracleFallbackMood === 'wild' ? oracleLayerMode : null),
   };
-  // If no moods cached yet, still show all 4 mood buttons — they'll lazy-load on tap
-  // Put oracleLayerMode in all slots so ModeSelector shows them as available
-  if (oracleLayerMode && !hasCachedMood) {
-    for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
-      if (!effectiveLayerModes[m]) effectiveLayerModes[m] = oracleLayerMode;
-    }
-  }
+  // Oracle fallback is already placed in its correct slot above (lines 713-718).
+  // Empty slots remain null — ModeSelector renders them as muted/disabled chips.
+  // They lazy-load on tap via fetchMoodForCard.
 
   const layerVisible = !!effectiveLayerMode;
 
