@@ -1,7 +1,11 @@
-import { motion } from "framer-motion";
-
 export type LayerMood = 'balance' | 'bold' | 'smooth' | 'wild';
-export const LAYER_MOODS: LayerMood[] = ['balance', 'bold', 'smooth', 'wild'];
+
+/**
+ * Fixed constant — the rail ALWAYS renders exactly these 4 chips in this order.
+ * Never derive rendered chips from payload keys or loaded state.
+ */
+export const LAYER_MODE_ORDER = ['balance', 'bold', 'smooth', 'wild'] as const;
+export const LAYER_MOODS: LayerMood[] = [...LAYER_MODE_ORDER];
 
 export type InteractionType = 'amplify' | 'balance' | 'contrast';
 
@@ -36,36 +40,46 @@ interface ModeSelectorProps {
 
 /**
  * ModeSelector — a pure selector row.
- * It does NOT own card color, family token text, or fragrance name.
- * It ONLY changes which layer fragrance is active via onSelectMood.
+ * HARD INVARIANT: always renders exactly 4 chips in fixed order.
+ * Chips are never removed, filtered, or reordered.
  */
 const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false, locked = false, loadingMood = null }: ModeSelectorProps) => {
   return (
-    <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-      {LAYER_MOODS.map((mood) => {
+    <div
+      className="grid grid-cols-4 gap-1.5 w-full"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {LAYER_MODE_ORDER.map((mood) => {
         const mEntry = layerModes[mood];
-        if (!mEntry) return null;
-        const mColor = familyColors[mEntry.family_key] ?? '#888';
+        const isSelected = selectedMood === mood;
+        const isLoading = loadingMood === mood;
+        const hasData = !!mEntry;
+
+        // Color: use entry color if available, fallback for unloaded
+        const mColor = hasData ? (familyColors[mEntry.family_key] ?? '#888') : '#888';
+
         return (
           <button
             key={mood}
             onClick={() => { if (!locked) onSelectMood(mood); }}
-            className={`text-[9px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full transition-all duration-200 ${
-              locked && selectedMood !== mood ? 'opacity-30 cursor-default' : ''
+            className={`text-[9px] uppercase tracking-[0.12em] py-1 rounded-full transition-all duration-200 text-center ${
+              locked && !isSelected ? 'opacity-30 cursor-default' : ''
             } ${
-              selectedMood === mood
+              !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
+            } ${
+              isSelected
                 ? "text-white"
                 : "text-white/40 hover:text-white/70"
             }`}
             style={{
-              ...(selectedMood === mood ? {
+              ...(isSelected ? {
                 background: `${mColor}33`,
                 boxShadow: `inset 0 0 0 1px ${mColor}66`,
                 animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
               } : undefined),
             }}
           >
-            {loadingMood === mood ? (
+            {isLoading ? (
               <span className="inline-block w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
             ) : mood}
           </button>
