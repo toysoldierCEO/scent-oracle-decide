@@ -412,10 +412,12 @@ const LayerCard = ({
 
   const mn = getDisplayName(mainName, mainBrand);
 
-  const cfg = buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key);
+  const cfg = activeModeEntry
+    ? buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key)
+    : null;
 
   // Backend-driven text
-  const whyText = activeModeEntry.why_it_works || '';
+  const whyText = activeModeEntry?.why_it_works || '';
 
   return (
     <div
