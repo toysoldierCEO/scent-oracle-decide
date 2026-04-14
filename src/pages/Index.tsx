@@ -124,7 +124,7 @@ const Index = () => {
       console.log('[Odara] pre-oracle session check', {
         hasSession: !!session,
         sessionUserId: session?.user?.id ?? null,
-        rpc: 'get_todays_oracle_v3',
+        rpc: 'get_todays_oracle_home_v1',
         oracleKey,
         requestId,
       });
