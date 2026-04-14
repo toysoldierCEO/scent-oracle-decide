@@ -83,10 +83,18 @@ export interface OracleAlternate {
   brand?: string; notes?: string[]; accords?: string[];
 }
 
+/** Home hero payload shape from get_todays_oracle_home_v1 */
 export interface OracleResult {
   today_pick: OraclePick;
   layer: OracleLayer | null;
   alternates: OracleAlternate[];
+  ui_default_mode?: string;
+  layer_modes?: {
+    balance?: any;
+    bold?: any;
+    smooth?: any;
+    wild?: any;
+  };
 }
 
 /** Backend mood-mode entry from get_layer_for_card_mode_v1 */
