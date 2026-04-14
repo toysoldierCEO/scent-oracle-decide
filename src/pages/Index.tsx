@@ -124,7 +124,7 @@ const Index = () => {
       console.log('[Odara] pre-oracle session check', {
         hasSession: !!session,
         sessionUserId: session?.user?.id ?? null,
-        rpc: 'get_todays_oracle_v3',
+        rpc: 'get_todays_oracle_home_v1',
         oracleKey,
         requestId,
       });
@@ -139,8 +139,8 @@ const Index = () => {
       }
 
       try {
-        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
-          p_user_id: user!.id,
+        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
+          p_user: user!.id,
           p_temperature: RPC_TEMPERATURE,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
@@ -220,8 +220,8 @@ const Index = () => {
     // Re-fetch oracle inline
     oracleSuccessKeyRef.current = null;
 
-    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_v3', {
-      p_user_id: user.id,
+    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
+      p_user: user.id,
       p_temperature: RPC_TEMPERATURE,
       p_context: selectedContext,
       p_brand: 'Alexandria Fragrances',
