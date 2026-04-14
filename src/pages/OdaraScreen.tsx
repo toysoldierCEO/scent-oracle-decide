@@ -562,7 +562,7 @@ const OdaraScreen = ({
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
-    setSelectedMood('balance');
+    setSelectedMood(resolveInitialMood(oracle?.layer));
     setLoadingMood(null);
     moodCacheRef.current.clear();
     alternatesCacheRef.current.clear();
@@ -588,7 +588,7 @@ const OdaraScreen = ({
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
-    setSelectedMood('balance');
+    setSelectedMood(resolveInitialMood(oracle.layer));
 
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
@@ -702,25 +702,26 @@ const OdaraScreen = ({
     spray_guidance: oracleLayer.spray_guidance ?? '',
   } : null;
 
-  // Effective layer mode for the selected mood
-  const cachedSelectedMode = cachedMoods[selectedMood] ?? null;
-  const effectiveLayerMode = cachedSelectedMode ?? oracleLayerMode;
-  const isFallbackLayer = !cachedSelectedMode && !!oracleLayerMode;
+  // Determine which mood slot the oracle fallback layer belongs to
+  const oracleFallbackMood: LayerMood = resolveInitialMood(oracleLayer);
 
-  // Build effective LayerModes for ModeSelector — show cached moods + fallback at balance
+  // Effective layer mode for the selected mood — only use oracle fallback if selectedMood matches its actual mode
+  const cachedSelectedMode = cachedMoods[selectedMood] ?? null;
+  const effectiveLayerMode = cachedSelectedMode ?? (selectedMood === oracleFallbackMood ? oracleLayerMode : null);
+
+  // Build effective LayerModes for ModeSelector — place oracle fallback only in its correct slot
   const effectiveLayerModes: LayerModes = {
-    balance: cachedMoods.balance ?? oracleLayerMode,
-    bold: cachedMoods.bold ?? null,
-    smooth: cachedMoods.smooth ?? null,
-    wild: cachedMoods.wild ?? null,
+    balance: cachedMoods.balance ?? (oracleFallbackMood === 'balance' ? oracleLayerMode : null),
+    bold: cachedMoods.bold ?? (oracleFallbackMood === 'bold' ? oracleLayerMode : null),
+    smooth: cachedMoods.smooth ?? (oracleFallbackMood === 'smooth' ? oracleLayerMode : null),
+    wild: cachedMoods.wild ?? (oracleFallbackMood === 'wild' ? oracleLayerMode : null),
   };
-  // If no moods cached yet, still show all 4 mood buttons (they'll lazy-load on tap)
-  // We do this by putting a placeholder for uncached moods so ModeSelector renders them
+  // If no moods cached yet, still show all 4 mood buttons — they'll lazy-load on tap
+  // Put oracleLayerMode in all slots so ModeSelector shows them as available
   if (oracleLayerMode && !hasCachedMood) {
-    // All mood buttons visible but point to fallback until loaded
-    effectiveLayerModes.bold = oracleLayerMode;
-    effectiveLayerModes.smooth = oracleLayerMode;
-    effectiveLayerModes.wild = oracleLayerMode;
+    for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
+      if (!effectiveLayerModes[m]) effectiveLayerModes[m] = oracleLayerMode;
+    }
   }
 
   const layerVisible = !!effectiveLayerMode;
