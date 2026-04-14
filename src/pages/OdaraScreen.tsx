@@ -723,33 +723,13 @@ const OdaraScreen = ({
     if (converted) hasCachedMood = true;
   }
 
-  // Hero fallback layer — always seeds BALANCE for the hero card baseline
-  const oracleLayer = isShowingHeroCard ? activeOracle?.layer ?? null : null;
-  const oracleLayerMode: NonNullable<LayerModes[LayerMood]> | null = oracleLayer ? {
-    id: oracleLayer.fragrance_id,
-    name: oracleLayer.name,
-    brand: oracleLayer.brand,
-    family_key: oracleLayer.family,
-    notes: oracleLayer.notes ?? [],
-    accords: oracleLayer.accords ?? [],
-    interactionType: 'balance' as InteractionType,
-    reason: oracleLayer.reason ?? '',
-    why_it_works: oracleLayer.why_it_works ?? '',
-    projection: null,
-    ratio_hint: oracleLayer.ratio_hint ?? '',
-    application_style: oracleLayer.application_style ?? '',
-    placement_hint: oracleLayer.placement_hint ?? '',
-    spray_guidance: oracleLayer.spray_guidance ?? '',
-  } : null;
-
-  // Mode results for the rail — hero oracle layer seeds BALANCE only
+  // Mode results for the rail — built entirely from cache (pre-seeded by layer_modes on hero load)
   const modeResults: LayerModes = {
-    balance: cachedMoods.balance ?? oracleLayerMode,
+    balance: cachedMoods.balance ?? null,
     bold: cachedMoods.bold ?? null,
     smooth: cachedMoods.smooth ?? null,
     wild: cachedMoods.wild ?? null,
   };
-  const resolvedInitialMode = resolveInitialMode(modeResults);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
   // Mood tap handler — lazy loads if not cached (slot-scoped)
@@ -763,13 +743,6 @@ const OdaraScreen = ({
     // Lazy fetch
     void fetchMoodForCard(visibleCard.fragrance_id, mood);
   }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
-
-  useLayoutEffect(() => {
-    if (selectedMood !== null || !visibleCard) return;
-
-    const initialMood = isShowingHeroCard ? 'balance' : (resolvedInitialMode ?? 'balance');
-    handleMoodSelect(initialMood);
-  }, [selectedMood, visibleCard, isShowingHeroCard, resolvedInitialMode, handleMoodSelect, visibleSlotKey]);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
