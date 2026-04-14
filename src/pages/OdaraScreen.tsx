@@ -218,6 +218,41 @@ function backendModeEntryToLayerMode(
   };
 }
 
+function oracleModeEntryToLayerMode(
+  entry: (Partial<OracleLayer> & Partial<BackendModeEntry>) | null | undefined,
+  fallbackMood: LayerMood,
+): NonNullable<LayerModes[LayerMood]> | null {
+  if (!entry) return null;
+
+  const id = entry.fragrance_id ?? entry.layer_fragrance_id ?? null;
+  if (!id) return null;
+
+  return {
+    id,
+    name: entry.name ?? entry.layer_name ?? '',
+    brand: entry.brand ?? entry.layer_brand ?? '',
+    family_key: entry.family ?? entry.layer_family ?? '',
+    notes: Array.isArray(entry.notes)
+      ? entry.notes
+      : Array.isArray(entry.layer_notes)
+        ? entry.layer_notes
+        : [],
+    accords: Array.isArray(entry.accords)
+      ? entry.accords
+      : Array.isArray(entry.layer_accords)
+        ? entry.layer_accords
+        : [],
+    interactionType: ((entry.interaction_type ?? entry.layer_mode ?? fallbackMood) as InteractionType) || 'balance',
+    reason: entry.reason ?? '',
+    why_it_works: entry.why_it_works ?? '',
+    projection: null,
+    ratio_hint: entry.ratio_hint ?? '',
+    application_style: entry.application_style ?? '',
+    placement_hint: entry.placement_hint ?? '',
+    spray_guidance: entry.spray_guidance ?? '',
+  };
+}
+
 function normalizeAlternateRow(row: any): OracleAlternate | null {
   if (!row) return null;
 
@@ -355,7 +390,7 @@ const OdaraScreen = ({
   }, [userId, selectedContext, selectedDate]);
 
   // Interactive state
-  const [selectedMood, setSelectedMood] = useState<LayerMood | null>(null);
+  const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
@@ -587,39 +622,8 @@ const OdaraScreen = ({
     setPromotedAltId(null);
     setLayerExpanded(false);
 
-    // Pre-seed mood cache from backend layer_modes if present
-    if (oracle.today_pick && oracle.layer_modes) {
-      const heroId = oracle.today_pick.fragrance_id;
-      const prefix = `${selectedDate}|${selectedContext}`;
-      for (const mood of LAYER_MODE_ORDER) {
-        const raw = oracle.layer_modes[mood as keyof typeof oracle.layer_modes];
-        if (raw && raw.layer_fragrance_id) {
-          const entry: BackendModeEntry = {
-            mode: mood,
-            layer_fragrance_id: raw.layer_fragrance_id ?? '',
-            layer_name: raw.layer_name ?? '',
-            layer_brand: raw.layer_brand ?? '',
-            layer_family: raw.layer_family ?? '',
-            layer_notes: Array.isArray(raw.layer_notes) ? raw.layer_notes : [],
-            layer_accords: Array.isArray(raw.layer_accords) ? raw.layer_accords : [],
-            layer_score: raw.layer_score ?? 0,
-            reason: raw.reason ?? '',
-            why_it_works: raw.why_it_works ?? '',
-            ratio_hint: raw.ratio_hint ?? '',
-            application_style: raw.application_style ?? '',
-            placement_hint: raw.placement_hint ?? '',
-            spray_guidance: raw.spray_guidance ?? '',
-            interaction_type: raw.interaction_type ?? mood,
-          };
-          moodCacheRef.current.set(`${prefix}|${heroId}|${mood}`, entry);
-          console.log('[Odara] pre-seeded mood from layer_modes', mood, entry.layer_name);
-        }
-      }
-      setMoodCacheVersion(v => v + 1);
-    }
-
     // Set initial mood from backend ui_default_mode
-    const initialMood = (oracle.ui_default_mode as LayerMood) || 'balance';
+    const initialMood = (oracle.ui_default_mode as LayerMood) ?? 'balance';
     setSelectedMood(initialMood);
 
     if (oracle.today_pick) {
@@ -716,13 +720,35 @@ const OdaraScreen = ({
   }
 
   // Mode results for the rail — built entirely from cache (pre-seeded by layer_modes on hero load)
+  const heroLayerModes: LayerModes | null = isShowingHeroCard
+    ? {
+        balance: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.balance ?? null, 'balance'),
+        bold: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.bold ?? null, 'bold'),
+        smooth: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.smooth ?? null, 'smooth'),
+        wild: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.wild ?? null, 'wild'),
+      }
+    : null;
+
   const modeResults: LayerModes = {
-    balance: cachedMoods.balance ?? null,
-    bold: cachedMoods.bold ?? null,
-    smooth: cachedMoods.smooth ?? null,
-    wild: cachedMoods.wild ?? null,
+    balance: cachedMoods.balance ?? heroLayerModes?.balance ?? null,
+    bold: cachedMoods.bold ?? heroLayerModes?.bold ?? null,
+    smooth: cachedMoods.smooth ?? heroLayerModes?.smooth ?? null,
+    wild: cachedMoods.wild ?? heroLayerModes?.wild ?? null,
   };
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
+
+  useEffect(() => {
+    if (!isShowingHeroCard || !activeOracle) return;
+
+    console.log('[Odara] hero first-paint debug', {
+      'activeOracle?.ui_default_mode': activeOracle?.ui_default_mode ?? null,
+      'activeOracle?.layer_modes': activeOracle?.layer_modes ?? null,
+      'activeOracle?.layer_modes?.balance': activeOracle?.layer_modes?.balance ?? null,
+      selectedMood,
+      'modeResults.balance': modeResults.balance ?? null,
+      visibleModeEntry: visibleModeEntry ?? null,
+    });
+  }, [isShowingHeroCard, activeOracle, selectedMood, modeResults.balance, visibleModeEntry]);
 
   // Mood tap handler — lazy loads if not cached (slot-scoped)
   const handleMoodSelect = useCallback((mood: LayerMood) => {
@@ -807,7 +833,7 @@ const OdaraScreen = ({
       }
 
       setPromotedAltId(null);
-      setSelectedMood(null);
+        setSelectedMood('balance');
       setLayerExpanded(false);
       setLockState('neutral');
     } finally {
@@ -824,7 +850,7 @@ const OdaraScreen = ({
     setQueuePointer(entry.queuePointerBefore);
     setPromotedAltId(entry.promotedAltId);
     setViewHistory(h => h.slice(0, -1));
-    setSelectedMood(null);
+    setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
   }, [viewHistory]);
@@ -1008,7 +1034,7 @@ const OdaraScreen = ({
     ]);
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
-    setSelectedMood(null);
+    setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
   }, [lockState, visibleCard, queuePointer]);
@@ -1310,7 +1336,7 @@ const OdaraScreen = ({
               mainProjection={null}
               layerModes={modeResults}
               visibleLayerMode={visibleModeEntry}
-              selectedMood={selectedMood ?? 'balance'}
+              selectedMood={selectedMood}
               onSelectMood={handleMoodSelect}
               selectedRatio={selectedRatio}
               onSelectRatio={setSelectedRatio}
