@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
@@ -194,14 +194,6 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 /* ── Gesture constants ── */
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
-
-/** Resolve initial mood from loaded mode results using fixed rail priority */
-function resolveInitialMode(modeResults: Partial<Record<LayerMood, LayerModes[LayerMood]>>): LayerMood | null {
-  for (const mood of LAYER_MODE_ORDER) {
-    if (modeResults[mood]) return mood;
-  }
-  return null;
-}
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
