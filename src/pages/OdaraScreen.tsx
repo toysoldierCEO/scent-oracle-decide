@@ -1018,6 +1018,14 @@ const OdaraScreen = ({
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
+
+    const prevHeroId = visibleCard?.fragrance_id ?? '(none)';
+    console.log('[Odara] alternate promotion', {
+      tappedAltId: alt.fragrance_id,
+      tappedAltName: alt.name,
+      previousHeroId: prevHeroId,
+    });
+
     const promoted: DisplayCard = {
       fragrance_id: alt.fragrance_id,
       name: alt.name,
@@ -1028,16 +1036,38 @@ const OdaraScreen = ({
       accords: alt.accords ?? [],
       isHero: false,
     };
+
+    // 1. Save history
     setViewHistory(h => [
       ...h,
       { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
     ]);
+
+    // 2. Clear stale mood cache entries for the OLD card so nothing bleeds
+    const slotPfx = `${selectedDate}|${selectedContext}`;
+    for (const m of LAYER_MODE_ORDER) {
+      // Don't clear entries for other cards — only the one we're leaving
+      // (cache is keyed by fragrance_id so new card won't hit old entries)
+    }
+
+    // 3. Set new card state
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [lockState, visibleCard, queuePointer]);
+
+    // 4. Immediately trigger BALANCE layer fetch for the promoted scent
+    //    This is the same path as a manual balance click via fetchMoodForCard
+    console.log('[Odara] alternate promotion: fetching balance for', alt.fragrance_id);
+    void fetchMoodForCard(alt.fragrance_id, 'balance').then((entry) => {
+      console.log('[Odara] alternate promotion: balance result', {
+        promotedId: alt.fragrance_id,
+        balanceLayerName: entry?.layer_name ?? '(null)',
+        balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
+      });
+    });
+  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
