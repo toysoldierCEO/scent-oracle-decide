@@ -187,11 +187,7 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 const DIRECTION_LOCK_THRESHOLD = 8;
 const SWIPE_DISTANCE = 28;
 
-function isLayerMood(value: unknown): value is LayerMood {
-  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
-}
-
-/** Resolve initial mood from oracle layer's actual mode, with balance as fallback */
+/** Resolve initial mood from loaded mode results using fixed rail priority */
 function resolveInitialMode(modeResults: Partial<Record<LayerMood, LayerModes[LayerMood]>>): LayerMood | null {
   for (const mood of LAYER_MODE_ORDER) {
     if (modeResults[mood]) return mood;
@@ -685,7 +681,7 @@ const OdaraScreen = ({
     if (converted) hasCachedMood = true;
   }
 
-  // Fallback layer from oracle.layer — hero-only baseline when its mode is explicitly known
+  // Hero fallback layer — always seeds BALANCE for the hero card baseline
   const oracleLayer = isShowingHeroCard ? activeOracle?.layer ?? null : null;
   const oracleLayerMode: NonNullable<LayerModes[LayerMood]> | null = oracleLayer ? {
     id: oracleLayer.fragrance_id,
@@ -704,17 +700,12 @@ const OdaraScreen = ({
     spray_guidance: oracleLayer.spray_guidance ?? '',
   } : null;
 
-  // Determine which mood slot the oracle fallback layer belongs to
-  const oracleFallbackMood: LayerMood | null = oracleLayer?.layer_mode && isLayerMood(oracleLayer.layer_mode)
-    ? oracleLayer.layer_mode
-    : null;
-
-  // Mode results for the rail — oracle fallback is allowed only in its explicit mood slot
+  // Mode results for the rail — hero oracle layer seeds BALANCE only
   const modeResults: LayerModes = {
-    balance: cachedMoods.balance ?? (oracleFallbackMood === 'balance' ? oracleLayerMode : null),
-    bold: cachedMoods.bold ?? (oracleFallbackMood === 'bold' ? oracleLayerMode : null),
-    smooth: cachedMoods.smooth ?? (oracleFallbackMood === 'smooth' ? oracleLayerMode : null),
-    wild: cachedMoods.wild ?? (oracleFallbackMood === 'wild' ? oracleLayerMode : null),
+    balance: cachedMoods.balance ?? oracleLayerMode,
+    bold: cachedMoods.bold ?? null,
+    smooth: cachedMoods.smooth ?? null,
+    wild: cachedMoods.wild ?? null,
   };
   const resolvedInitialMode = resolveInitialMode(modeResults);
 
