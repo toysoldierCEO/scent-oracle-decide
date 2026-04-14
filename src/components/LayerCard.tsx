@@ -393,7 +393,8 @@ const LayerCard = ({
   locked = false,
   loadingMood = null,
 }: LayerCardProps) => {
-  const activeModeEntry = visibleLayerMode ?? layerModes[selectedMood];
+  const activeModeEntry = visibleLayerMode;
+  const isLoadingSelectedMood = loadingMood === selectedMood;
 
   // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
@@ -405,11 +406,9 @@ const LayerCard = ({
     onSelectRatio(recommendedRatio);
   }, [recommendedRatio, selectedMood]);
 
-  if (!activeModeEntry) return null;
-
   // COLOR: derived solely from the selected layer fragrance's family_key
-  const layerColor = FAMILY_COLORS[activeModeEntry.family_key] ?? '#888';
-  const layerTint = FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT;
+  const layerColor = activeModeEntry ? (FAMILY_COLORS[activeModeEntry.family_key] ?? '#888') : '#888';
+  const layerTint = activeModeEntry ? (FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT) : DEFAULT_TINT;
 
   const mn = getDisplayName(mainName, mainBrand);
 
@@ -433,37 +432,49 @@ const LayerCard = ({
         pointerEvents: 'auto',
       }}
     >
-      <p className="text-lg font-serif tracking-wide text-white leading-tight">
-        {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
-      </p>
-      {activeModeEntry.brand && (
-        <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
-      )}
-      <span
-        className="text-[9px] uppercase tracking-[0.25em] mt-[4px] px-3 py-[2px] rounded-full text-white/70 text-center w-auto"
-        style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
-      >
-        {activeModeEntry.family_key?.toUpperCase() ?? ''}
-      </span>
+      {activeModeEntry ? (
+        <>
+          <p className="text-lg font-serif tracking-wide text-white leading-tight">
+            {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
+          </p>
+          {activeModeEntry.brand && (
+            <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
+          )}
+          <span
+            className="text-[9px] uppercase tracking-[0.25em] mt-[4px] px-3 py-[2px] rounded-full text-white/70 text-center w-auto"
+            style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
+          >
+            {activeModeEntry.family_key?.toUpperCase() ?? ''}
+          </span>
 
-      {/* Always-visible notes & accords summary */}
-      {(() => {
-        const layerNotes = activeModeEntry.notes ?? [];
-        const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
-        const displayNotes = normalizeNotes(layerNotes, 3);
-        const displayAccords = layerAccords.slice(0, 4);
-        const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
-        if (!hasAny) return null;
-        return (
-          <div className="w-full mt-[6px] px-1 space-y-[2px]">
-            {displayAccords.length > 0 && (
-              <p className="text-[11px] text-white/80 text-center lowercase" style={{ letterSpacing: '0.06em' }}>
-                <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
-              </p>
-            )}
-          </div>
-        );
-      })()}
+          {(() => {
+            const layerNotes = activeModeEntry.notes ?? [];
+            const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
+            const displayNotes = normalizeNotes(layerNotes, 3);
+            const displayAccords = layerAccords.slice(0, 4);
+            const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+            if (!hasAny) return null;
+            return (
+              <div className="w-full mt-[6px] px-1 space-y-[2px]">
+                {displayAccords.length > 0 && (
+                  <p className="text-[11px] text-white/80 text-center lowercase" style={{ letterSpacing: '0.06em' }}>
+                    <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+        </>
+      ) : (
+        <div className="w-full flex flex-col items-center gap-2">
+          <p className="text-lg font-serif tracking-wide text-white/75 leading-tight text-center">
+            {isLoadingSelectedMood ? 'Loading selected mode…' : 'No layer loaded for this mode'}
+          </p>
+          <p className="text-[11px] text-white/45 text-center max-w-[18rem]">
+            {isLoadingSelectedMood ? 'Fetching the layer result for the selected mood.' : 'Pick a mode to load its layer without showing the wrong scent.'}
+          </p>
+        </div>
+      )}
 
       {/* Mode selector */}
       <div className="mt-[8px]">
@@ -498,7 +509,7 @@ const LayerCard = ({
               style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
             >
               {/* Why it works — sole expanded explanatory section */}
-              {whyText && (
+              {activeModeEntry && whyText && (
                 <div>
                   <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
                   <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
