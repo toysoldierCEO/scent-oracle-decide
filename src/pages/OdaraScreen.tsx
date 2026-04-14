@@ -708,13 +708,6 @@ const OdaraScreen = ({
     wild: cachedMoods.wild ?? null,
   };
   const resolvedInitialMode = resolveInitialMode(modeResults);
-
-  useLayoutEffect(() => {
-    if (selectedMood === null) {
-      setSelectedMood(resolvedInitialMode ?? 'balance');
-    }
-  }, [selectedMood, resolvedInitialMode, visibleSlotKey]);
-
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
   // Mood tap handler — lazy loads if not cached (slot-scoped)
@@ -728,6 +721,13 @@ const OdaraScreen = ({
     // Lazy fetch
     void fetchMoodForCard(visibleCard.fragrance_id, mood);
   }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
+
+  useLayoutEffect(() => {
+    if (selectedMood !== null || !visibleCard) return;
+
+    const initialMood = isShowingHeroCard ? 'balance' : (resolvedInitialMode ?? 'balance');
+    handleMoodSelect(initialMood);
+  }, [selectedMood, visibleCard, isShowingHeroCard, resolvedInitialMode, handleMoodSelect, visibleSlotKey]);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
