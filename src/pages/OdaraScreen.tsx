@@ -191,6 +191,12 @@ function isLayerMood(value: unknown): value is LayerMood {
   return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
 }
 
+/** Resolve initial mood from oracle layer's actual mode, with balance as fallback */
+function resolveInitialMood(layer: OracleLayer | null | undefined): LayerMood {
+  if (layer?.layer_mode && isLayerMood(layer.layer_mode)) return layer.layer_mode;
+  return 'balance';
+}
+
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
 ): NonNullable<LayerModes[LayerMood]> | null {
