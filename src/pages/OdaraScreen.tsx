@@ -320,6 +320,7 @@ const OdaraScreen = ({
   // ── Slot-scoped layer caches (lazy, from get_layer_for_card_mode_v1) ──
   // Key: `${date}|${context}|${fragranceId}|${mood}` → BackendModeEntry | null
   const moodCacheRef = useRef<Map<string, BackendModeEntry | null>>(new Map());
+  const moodInFlightRef = useRef<Map<string, Promise<BackendModeEntry | null>>>(new Map());
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [loadingMood, setLoadingMood] = useState<LayerMood | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
@@ -398,6 +399,14 @@ const OdaraScreen = ({
       console.log('[Odara] mood cache hit', moodKey);
       return cached;
     }
+
+    // In-flight dedupe: reuse pending promise for same key
+    const inFlight = moodInFlightRef.current.get(moodKey);
+    if (inFlight) {
+      console.log('[Odara] mood in-flight reuse', moodKey);
+      return inFlight;
+    }
+
     console.log('[Odara] mood cache miss', moodKey);
 
     // Capture slot at launch for stale guard
@@ -827,7 +836,7 @@ const OdaraScreen = ({
 
     try {
       const currentMoodKey = selectedMood ?? 'balance';
-      const currentCacheKey = `${selectedDate}:${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
+      const currentCacheKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
       const currentResolvedEntry = moodCacheRef.current.get(currentCacheKey) ?? null;
       console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
@@ -879,7 +888,7 @@ const OdaraScreen = ({
 
     // Seed the mood cache with the saved resolved entry so visibleModeEntry is immediately correct
     if (entry.resolvedVisibleModeEntry) {
-      const restoreCacheKey = `${selectedDate}:${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
+      const restoreCacheKey = `${selectedDate}|${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
       moodCacheRef.current.set(restoreCacheKey, entry.resolvedVisibleModeEntry);
     }
 
@@ -1076,7 +1085,7 @@ const OdaraScreen = ({
 
     // 1. Save history
     const currentMoodKey2 = selectedMood ?? 'balance';
-    const currentCacheKey2 = `${selectedDate}:${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
+    const currentCacheKey2 = `${selectedDate}|${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
     const currentResolvedEntry2 = moodCacheRef.current.get(currentCacheKey2) ?? null;
     console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
