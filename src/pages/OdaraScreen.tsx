@@ -758,51 +758,31 @@ const OdaraScreen = ({
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
   // Build layer modes from slot-scoped mood cache — lazy loaded
+  // Cache is pre-seeded from oracle.layer_modes on hero load (Effect 2)
   // moodCacheVersion is used to trigger re-renders when cache updates
   void moodCacheVersion; // consumed for reactivity
   const cardId = visibleCard?.fragrance_id ?? '';
   const slotPrefix = `${selectedDate}|${selectedContext}`;
-  const visibleSlotKey = `${slotPrefix}|${cardId || 'none'}`;
-  console.log('[Odara] visibleSlotKey', visibleSlotKey);
-  const cachedMoods: Partial<LayerModes> = {};
-  let hasCachedMood = false;
-  for (const m of LAYER_MODE_ORDER) {
-    const entry = moodCacheRef.current.get(`${slotPrefix}|${cardId}|${m}`);
-    const converted = backendModeEntryToLayerMode(entry);
-    cachedMoods[m] = converted;
-    if (converted) hasCachedMood = true;
-  }
 
-  // Mode results for the rail — built entirely from cache (pre-seeded by layer_modes on hero load)
-  const heroLayerModes: LayerModes | null = isShowingHeroCard
-    ? {
-        balance: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.balance ?? null, 'balance'),
-        bold: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.bold ?? null, 'bold'),
-        smooth: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.smooth ?? null, 'smooth'),
-        wild: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.wild ?? null, 'wild'),
-      }
-    : null;
-
+  // Mode results — single source: mood cache (pre-seeded for hero, lazy-fetched for promoted/queue)
   const modeResults: LayerModes = {
-    balance: cachedMoods.balance ?? heroLayerModes?.balance ?? null,
-    bold: cachedMoods.bold ?? heroLayerModes?.bold ?? null,
-    smooth: cachedMoods.smooth ?? heroLayerModes?.smooth ?? null,
-    wild: cachedMoods.wild ?? heroLayerModes?.wild ?? null,
+    balance: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|balance`)) ?? null,
+    bold: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|bold`)) ?? null,
+    smooth: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|smooth`)) ?? null,
+    wild: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|wild`)) ?? null,
   };
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
   useEffect(() => {
-    if (!isShowingHeroCard || !activeOracle) return;
-
-    console.log('[Odara] hero first-paint debug', {
-      'activeOracle?.ui_default_mode': activeOracle?.ui_default_mode ?? null,
-      'activeOracle?.layer_modes': activeOracle?.layer_modes ?? null,
-      'activeOracle?.layer_modes?.balance': activeOracle?.layer_modes?.balance ?? null,
+    console.log('[Odara] mode-results debug', {
+      cardId,
       selectedMood,
-      'modeResults.balance': modeResults.balance ?? null,
-      visibleModeEntry: visibleModeEntry ?? null,
+      'modeResults.balance': modeResults.balance ? { id: modeResults.balance.id, name: modeResults.balance.name } : null,
+      'modeResults.bold': modeResults.bold ? { id: modeResults.bold.id, name: modeResults.bold.name } : null,
+      visibleModeEntry: visibleModeEntry ? { id: visibleModeEntry.id, name: visibleModeEntry.name } : null,
+      cacheSize: moodCacheRef.current.size,
     });
-  }, [isShowingHeroCard, activeOracle, selectedMood, modeResults.balance, visibleModeEntry]);
+  }, [cardId, selectedMood, modeResults.balance, modeResults.bold, visibleModeEntry]);
 
   // Mood tap handler — lazy loads if not cached (slot-scoped)
   const handleMoodSelect = useCallback((mood: LayerMood) => {
