@@ -829,7 +829,7 @@ const OdaraScreen = ({
       const currentMoodKey = selectedMood ?? 'balance';
       const currentCacheKey = `${selectedDate}:${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
       const currentResolvedEntry = moodCacheRef.current.get(currentCacheKey) ?? null;
-      console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_id, name: currentResolvedEntry.layer_name } : null });
+      console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
         ...h.slice(-(MAX_SESSION_HISTORY - 1)),
         {
@@ -873,7 +873,7 @@ const OdaraScreen = ({
       restoredId: entry.card.fragrance_id,
       restoredMood,
       restoredPromotedAltId: entry.promotedAltId,
-      resolvedEntry: entry.resolvedVisibleModeEntry ? { id: entry.resolvedVisibleModeEntry.layer_id, name: entry.resolvedVisibleModeEntry.layer_name } : null,
+      resolvedEntry: entry.resolvedVisibleModeEntry ? { id: entry.resolvedVisibleModeEntry.layer_fragrance_id, name: entry.resolvedVisibleModeEntry.layer_name } : null,
       historyDepth: viewHistory.length,
     });
 
@@ -1078,7 +1078,7 @@ const OdaraScreen = ({
     const currentMoodKey2 = selectedMood ?? 'balance';
     const currentCacheKey2 = `${selectedDate}:${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
     const currentResolvedEntry2 = moodCacheRef.current.get(currentCacheKey2) ?? null;
-    console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_id, name: currentResolvedEntry2.layer_name } : null });
+    console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
       ...h.slice(-(MAX_SESSION_HISTORY - 1)),
       { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood, resolvedVisibleModeEntry: currentResolvedEntry2 },
