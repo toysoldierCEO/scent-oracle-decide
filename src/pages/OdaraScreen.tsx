@@ -639,10 +639,12 @@ const OdaraScreen = ({
       setVisibleCard(hero);
       console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
 
-      // 4) Pre-seed mood cache from oracle.layer_modes for hero card
+      // 4) Pre-seed mood cache from oracle.layer_modes + oracle.layer for hero card
+      const slotPfx = `${selectedDate}|${selectedContext}`;
+      const heroId = oracle.today_pick.fragrance_id;
+      let balanceSeeded = false;
+
       if (oracle.layer_modes) {
-        const slotPfx = `${selectedDate}|${selectedContext}`;
-        const heroId = oracle.today_pick.fragrance_id;
         for (const mood of LAYER_MODE_ORDER) {
           const modeData = (oracle.layer_modes as any)?.[mood];
           if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
@@ -665,10 +667,36 @@ const OdaraScreen = ({
             };
             moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
             console.log('[Odara] pre-seeded mood cache from oracle.layer_modes', mood, entry.layer_name);
+            if (mood === 'balance') balanceSeeded = true;
           }
         }
-        setMoodCacheVersion(v => v + 1);
       }
+
+      // Fallback: seed balance from oracle.layer if layer_modes.balance was absent
+      if (!balanceSeeded && oracle.layer && oracle.layer.fragrance_id) {
+        const ol = oracle.layer;
+        const balanceEntry: BackendModeEntry = {
+          mode: 'balance',
+          layer_fragrance_id: ol.fragrance_id,
+          layer_name: ol.name ?? '',
+          layer_brand: ol.brand ?? '',
+          layer_family: ol.family ?? '',
+          layer_notes: Array.isArray(ol.notes) ? ol.notes : [],
+          layer_accords: Array.isArray(ol.accords) ? ol.accords : [],
+          layer_score: ol.layer_score ?? 0,
+          reason: ol.reason ?? '',
+          why_it_works: ol.why_it_works ?? '',
+          ratio_hint: ol.ratio_hint ?? '',
+          application_style: ol.application_style ?? '',
+          placement_hint: ol.placement_hint ?? '',
+          spray_guidance: ol.spray_guidance ?? '',
+          interaction_type: ol.layer_mode ?? 'balance',
+        };
+        moodCacheRef.current.set(`${slotPfx}|${heroId}|balance`, balanceEntry);
+        console.log('[Odara] pre-seeded balance from oracle.layer fallback', balanceEntry.layer_name);
+      }
+
+      setMoodCacheVersion(v => v + 1);
 
       // 5) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
