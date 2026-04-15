@@ -320,6 +320,7 @@ const OdaraScreen = ({
   // ── Slot-scoped layer caches (lazy, from get_layer_for_card_mode_v1) ──
   // Key: `${date}|${context}|${fragranceId}|${mood}` → BackendModeEntry | null
   const moodCacheRef = useRef<Map<string, BackendModeEntry | null>>(new Map());
+  const moodInFlightRef = useRef<Map<string, Promise<BackendModeEntry | null>>>(new Map());
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [loadingMood, setLoadingMood] = useState<LayerMood | null>(null);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
@@ -398,6 +399,14 @@ const OdaraScreen = ({
       console.log('[Odara] mood cache hit', moodKey);
       return cached;
     }
+
+    // In-flight dedupe: reuse pending promise for same key
+    const inFlight = moodInFlightRef.current.get(moodKey);
+    if (inFlight) {
+      console.log('[Odara] mood in-flight reuse', moodKey);
+      return inFlight;
+    }
+
     console.log('[Odara] mood cache miss', moodKey);
 
     // Capture slot at launch for stale guard
@@ -413,80 +422,86 @@ const OdaraScreen = ({
     const ol = activeOracle?.layer;
     if (ol?.fragrance_id) excludeIds.push(ol.fragrance_id);
 
-    try {
-      console.log('[Odara] lazy mood fetch start', mood, fragranceId, 'slot', capturedSlot);
-      setLoadingMood(mood);
-      setLayerDebugSource(`rpc:${mood}…`);
-      const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
-        p_user: userId,
-        p_fragrance_id: fragranceId,
-        p_context: selectedContext,
-        p_temperature: resolvedTemperature,
-        p_brand: 'Alexandria Fragrances',
-        p_wear_date: selectedDate,
-        p_mode: mood,
-        p_exclude_fragrance_ids: excludeIds.length > 0 ? excludeIds : undefined,
-      });
+    const fetchPromise = (async (): Promise<BackendModeEntry | null> => {
+      try {
+        console.log('[Odara] lazy mood fetch start', mood, fragranceId, 'slot', capturedSlot);
+        setLoadingMood(mood);
+        setLayerDebugSource(`rpc:${mood}…`);
+        const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
+          p_user: userId,
+          p_fragrance_id: fragranceId,
+          p_context: selectedContext,
+          p_temperature: resolvedTemperature,
+          p_brand: 'Alexandria Fragrances',
+          p_wear_date: selectedDate,
+          p_mode: mood,
+          p_exclude_fragrance_ids: excludeIds.length > 0 ? excludeIds : undefined,
+        });
 
-      // Stale-slot guard: ignore if user navigated away
-      if (activeSlotRef.current !== capturedSlot) {
-        console.log('[Odara] ignoring stale mood result for old slot', capturedSlot, '→ current', activeSlotRef.current);
-        return null;
-      }
+        if (activeSlotRef.current !== capturedSlot) {
+          console.log('[Odara] ignoring stale mood result for old slot', capturedSlot, '→ current', activeSlotRef.current);
+          return null;
+        }
 
-      if (error) {
-        console.error('[Odara] lazy mood fetch fail', mood, error.message);
+        if (error) {
+          console.error('[Odara] lazy mood fetch fail', mood, error.message);
+          moodCacheRef.current.set(moodKey, null);
+          setLayerDebugSource(`err:${error.message}`);
+          setLoadingMood(null);
+          setMoodCacheVersion(v => v + 1);
+          return null;
+        }
+
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || !row.layer_fragrance_id) {
+          moodCacheRef.current.set(moodKey, null);
+          setLayerDebugSource(`rpc:${mood}(empty)`);
+          setLoadingMood(null);
+          setMoodCacheVersion(v => v + 1);
+          return null;
+        }
+
+        const entry: BackendModeEntry = {
+          mode: mood,
+          layer_fragrance_id: row.layer_fragrance_id ?? '',
+          layer_name: row.layer_name ?? '',
+          layer_brand: row.layer_brand ?? '',
+          layer_family: row.layer_family ?? '',
+          layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
+          layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
+          layer_score: row.layer_score ?? 0,
+          reason: row.reason ?? '',
+          why_it_works: row.why_it_works ?? '',
+          ratio_hint: row.ratio_hint ?? '',
+          application_style: row.application_style ?? '',
+          placement_hint: row.placement_hint ?? '',
+          spray_guidance: row.spray_guidance ?? '',
+          interaction_type: row.interaction_type ?? mood,
+        };
+
+        moodCacheRef.current.set(moodKey, entry);
+        console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
+        setLayerDebugSource(`rpc:${mood}`);
+        setLoadingMood(null);
+        setMoodCacheVersion(v => v + 1);
+        return entry;
+      } catch (e: any) {
+        if (activeSlotRef.current !== capturedSlot) {
+          console.log('[Odara] ignoring stale mood error for old slot', capturedSlot);
+          return null;
+        }
         moodCacheRef.current.set(moodKey, null);
-        setLayerDebugSource(`err:${error.message}`);
+        setLayerDebugSource(`err:${e?.message}`);
         setLoadingMood(null);
         setMoodCacheVersion(v => v + 1);
         return null;
+      } finally {
+        moodInFlightRef.current.delete(moodKey);
       }
+    })();
 
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row || !row.layer_fragrance_id) {
-        moodCacheRef.current.set(moodKey, null);
-        setLayerDebugSource(`rpc:${mood}(empty)`);
-        setLoadingMood(null);
-        setMoodCacheVersion(v => v + 1);
-        return null;
-      }
-
-      const entry: BackendModeEntry = {
-        mode: mood,
-        layer_fragrance_id: row.layer_fragrance_id ?? '',
-        layer_name: row.layer_name ?? '',
-        layer_brand: row.layer_brand ?? '',
-        layer_family: row.layer_family ?? '',
-        layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
-        layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
-        layer_score: row.layer_score ?? 0,
-        reason: row.reason ?? '',
-        why_it_works: row.why_it_works ?? '',
-        ratio_hint: row.ratio_hint ?? '',
-        application_style: row.application_style ?? '',
-        placement_hint: row.placement_hint ?? '',
-        spray_guidance: row.spray_guidance ?? '',
-        interaction_type: row.interaction_type ?? mood,
-      };
-
-      moodCacheRef.current.set(moodKey, entry);
-      console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
-      setLayerDebugSource(`rpc:${mood}`);
-      setLoadingMood(null);
-      setMoodCacheVersion(v => v + 1);
-      return entry;
-    } catch (e: any) {
-      if (activeSlotRef.current !== capturedSlot) {
-        console.log('[Odara] ignoring stale mood error for old slot', capturedSlot);
-        return null;
-      }
-      moodCacheRef.current.set(moodKey, null);
-      setLayerDebugSource(`err:${e?.message}`);
-      setLoadingMood(null);
-      setMoodCacheVersion(v => v + 1);
-      return null;
-    }
+    moodInFlightRef.current.set(moodKey, fetchPromise);
+    return fetchPromise;
   }, [userId, selectedContext, selectedDate, activeOracle, stateKey]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
@@ -570,6 +585,7 @@ const OdaraScreen = ({
     setSelectedMood(null);
     setLoadingMood(null);
     moodCacheRef.current.clear();
+    moodInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
   }, [stateKey]);
 
@@ -624,10 +640,12 @@ const OdaraScreen = ({
       setVisibleCard(hero);
       console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
 
-      // 4) Pre-seed mood cache from oracle.layer_modes for hero card
+      // 4) Pre-seed mood cache from oracle.layer_modes + oracle.layer for hero card
+      const slotPfx = `${selectedDate}|${selectedContext}`;
+      const heroId = oracle.today_pick.fragrance_id;
+      let balanceSeeded = false;
+
       if (oracle.layer_modes) {
-        const slotPfx = `${selectedDate}|${selectedContext}`;
-        const heroId = oracle.today_pick.fragrance_id;
         for (const mood of LAYER_MODE_ORDER) {
           const modeData = (oracle.layer_modes as any)?.[mood];
           if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
@@ -650,10 +668,36 @@ const OdaraScreen = ({
             };
             moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
             console.log('[Odara] pre-seeded mood cache from oracle.layer_modes', mood, entry.layer_name);
+            if (mood === 'balance') balanceSeeded = true;
           }
         }
-        setMoodCacheVersion(v => v + 1);
       }
+
+      // Fallback: seed balance from oracle.layer if layer_modes.balance was absent
+      if (!balanceSeeded && oracle.layer && oracle.layer.fragrance_id) {
+        const ol = oracle.layer;
+        const balanceEntry: BackendModeEntry = {
+          mode: 'balance',
+          layer_fragrance_id: ol.fragrance_id,
+          layer_name: ol.name ?? '',
+          layer_brand: ol.brand ?? '',
+          layer_family: ol.family ?? '',
+          layer_notes: Array.isArray(ol.notes) ? ol.notes : [],
+          layer_accords: Array.isArray(ol.accords) ? ol.accords : [],
+          layer_score: ol.layer_score ?? 0,
+          reason: ol.reason ?? '',
+          why_it_works: ol.why_it_works ?? '',
+          ratio_hint: ol.ratio_hint ?? '',
+          application_style: ol.application_style ?? '',
+          placement_hint: ol.placement_hint ?? '',
+          spray_guidance: ol.spray_guidance ?? '',
+          interaction_type: ol.layer_mode ?? 'balance',
+        };
+        moodCacheRef.current.set(`${slotPfx}|${heroId}|balance`, balanceEntry);
+        console.log('[Odara] pre-seeded balance from oracle.layer fallback', balanceEntry.layer_name);
+      }
+
+      setMoodCacheVersion(v => v + 1);
 
       // 5) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
@@ -827,7 +871,7 @@ const OdaraScreen = ({
 
     try {
       const currentMoodKey = selectedMood ?? 'balance';
-      const currentCacheKey = `${selectedDate}:${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
+      const currentCacheKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
       const currentResolvedEntry = moodCacheRef.current.get(currentCacheKey) ?? null;
       console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
@@ -879,7 +923,7 @@ const OdaraScreen = ({
 
     // Seed the mood cache with the saved resolved entry so visibleModeEntry is immediately correct
     if (entry.resolvedVisibleModeEntry) {
-      const restoreCacheKey = `${selectedDate}:${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
+      const restoreCacheKey = `${selectedDate}|${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
       moodCacheRef.current.set(restoreCacheKey, entry.resolvedVisibleModeEntry);
     }
 
@@ -1076,7 +1120,7 @@ const OdaraScreen = ({
 
     // 1. Save history
     const currentMoodKey2 = selectedMood ?? 'balance';
-    const currentCacheKey2 = `${selectedDate}:${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
+    const currentCacheKey2 = `${selectedDate}|${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
     const currentResolvedEntry2 = moodCacheRef.current.get(currentCacheKey2) ?? null;
     console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
