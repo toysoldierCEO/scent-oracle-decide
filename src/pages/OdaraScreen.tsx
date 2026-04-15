@@ -218,40 +218,7 @@ function backendModeEntryToLayerMode(
   };
 }
 
-function oracleModeEntryToLayerMode(
-  entry: (Partial<OracleLayer> & Partial<BackendModeEntry>) | null | undefined,
-  fallbackMood: LayerMood,
-): NonNullable<LayerModes[LayerMood]> | null {
-  if (!entry) return null;
-
-  const id = entry.fragrance_id ?? entry.layer_fragrance_id ?? null;
-  if (!id) return null;
-
-  return {
-    id,
-    name: entry.name ?? entry.layer_name ?? '',
-    brand: entry.brand ?? entry.layer_brand ?? '',
-    family_key: entry.family ?? entry.layer_family ?? '',
-    notes: Array.isArray(entry.notes)
-      ? entry.notes
-      : Array.isArray(entry.layer_notes)
-        ? entry.layer_notes
-        : [],
-    accords: Array.isArray(entry.accords)
-      ? entry.accords
-      : Array.isArray(entry.layer_accords)
-        ? entry.layer_accords
-        : [],
-    interactionType: ((entry.interaction_type ?? entry.layer_mode ?? fallbackMood) as InteractionType) || 'balance',
-    reason: entry.reason ?? '',
-    why_it_works: entry.why_it_works ?? '',
-    projection: null,
-    ratio_hint: entry.ratio_hint ?? '',
-    application_style: entry.application_style ?? '',
-    placement_hint: entry.placement_hint ?? '',
-    spray_guidance: entry.spray_guidance ?? '',
-  };
-}
+// (oracleModeEntryToLayerMode removed — Effect 2 now pre-seeds cache directly)
 
 function normalizeAlternateRow(row: any): OracleAlternate | null {
   if (!row) return null;
@@ -582,9 +549,10 @@ const OdaraScreen = ({
   // Effect 1: CLEAR card state immediately when the slot (date or context) changes
   useEffect(() => {
     if (prevSlotRef.current === stateKey) return; // same slot, no-op
+    const oldSlot = prevSlotRef.current;
     prevSlotRef.current = stateKey;
 
-    console.log('[Odara] slot change -> clearing layer state', prevSlotRef.current, '→', stateKey);
+    console.log('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
     // Immediately wipe the old slot's card data so it can't bleed
     setVisibleCard(null);
     setActiveOracle(null);
@@ -616,22 +584,74 @@ const OdaraScreen = ({
 
     const capturedSlot = stateKey;
 
-    // 1) Set oracle + hero card IMMEDIATELY
-    setActiveOracle(oracle);
+    // ── FULL STATE RESET before applying new oracle payload ──
+    const prevVisibleId = visibleCard?.fragrance_id ?? '(none)';
+    const prevPromotedId = promotedAltId ?? '(none)';
+
+    console.log('[Odara] oracle apply', {
+      selectedDate,
+      selectedContext,
+      backendHeroId: oracle.today_pick?.fragrance_id ?? '(none)',
+      previousVisibleId: prevVisibleId,
+      promotedAltIdBeforeReset: prevPromotedId,
+    });
+
+    // 1) Clear ALL stale state first
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
+    setLoadingMood(null);
 
-    // Set initial mood from backend ui_default_mode
+    // 2) Set oracle
+    setActiveOracle(oracle);
+
+    // 3) Set initial mood from backend ui_default_mode
     const initialMood = (oracle.ui_default_mode as LayerMood) ?? 'balance';
     setSelectedMood(initialMood);
+
+    console.log('[Odara] oracle apply complete', {
+      newVisibleId: oracle.today_pick?.fragrance_id ?? '(none)',
+      promotedAltIdAfterReset: '(null)',
+      initialMood,
+    });
 
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      console.log('[Odara] applying oracle home for slot', capturedSlot, oracle.layer?.fragrance_id ?? 'none');
+      console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
 
-      // 2) Queue fetch is BACKGROUND — never blocks hero render
+      // 4) Pre-seed mood cache from oracle.layer_modes for hero card
+      if (oracle.layer_modes) {
+        const slotPfx = `${selectedDate}|${selectedContext}`;
+        const heroId = oracle.today_pick.fragrance_id;
+        for (const mood of LAYER_MODE_ORDER) {
+          const modeData = (oracle.layer_modes as any)?.[mood];
+          if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
+            const entry: BackendModeEntry = {
+              mode: mood,
+              layer_fragrance_id: modeData.layer_fragrance_id ?? modeData.fragrance_id ?? '',
+              layer_name: modeData.layer_name ?? modeData.name ?? '',
+              layer_brand: modeData.layer_brand ?? modeData.brand ?? '',
+              layer_family: modeData.layer_family ?? modeData.family ?? '',
+              layer_notes: Array.isArray(modeData.layer_notes) ? modeData.layer_notes : Array.isArray(modeData.notes) ? modeData.notes : [],
+              layer_accords: Array.isArray(modeData.layer_accords) ? modeData.layer_accords : Array.isArray(modeData.accords) ? modeData.accords : [],
+              layer_score: modeData.layer_score ?? 0,
+              reason: modeData.reason ?? '',
+              why_it_works: modeData.why_it_works ?? '',
+              ratio_hint: modeData.ratio_hint ?? '',
+              application_style: modeData.application_style ?? '',
+              placement_hint: modeData.placement_hint ?? '',
+              spray_guidance: modeData.spray_guidance ?? '',
+              interaction_type: modeData.interaction_type ?? modeData.layer_mode ?? mood,
+            };
+            moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
+            console.log('[Odara] pre-seeded mood cache from oracle.layer_modes', mood, entry.layer_name);
+          }
+        }
+        setMoodCacheVersion(v => v + 1);
+      }
+
+      // 5) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
         if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
@@ -643,6 +663,7 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracle, stateKey]);
 
   // No eager modes fetch — moods load lazily on user tap
@@ -704,62 +725,53 @@ const OdaraScreen = ({
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
 
   // Build layer modes from slot-scoped mood cache — lazy loaded
+  // Cache is pre-seeded from oracle.layer_modes on hero load (Effect 2)
   // moodCacheVersion is used to trigger re-renders when cache updates
   void moodCacheVersion; // consumed for reactivity
   const cardId = visibleCard?.fragrance_id ?? '';
   const slotPrefix = `${selectedDate}|${selectedContext}`;
-  const visibleSlotKey = `${slotPrefix}|${cardId || 'none'}`;
-  console.log('[Odara] visibleSlotKey', visibleSlotKey);
-  const cachedMoods: Partial<LayerModes> = {};
-  let hasCachedMood = false;
-  for (const m of LAYER_MODE_ORDER) {
-    const entry = moodCacheRef.current.get(`${slotPrefix}|${cardId}|${m}`);
-    const converted = backendModeEntryToLayerMode(entry);
-    cachedMoods[m] = converted;
-    if (converted) hasCachedMood = true;
-  }
 
-  // Mode results for the rail — built entirely from cache (pre-seeded by layer_modes on hero load)
-  const heroLayerModes: LayerModes | null = isShowingHeroCard
-    ? {
-        balance: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.balance ?? null, 'balance'),
-        bold: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.bold ?? null, 'bold'),
-        smooth: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.smooth ?? null, 'smooth'),
-        wild: oracleModeEntryToLayerMode(activeOracle?.layer_modes?.wild ?? null, 'wild'),
-      }
-    : null;
-
+  // Mode results — single source: mood cache (pre-seeded for hero, lazy-fetched for promoted/queue)
   const modeResults: LayerModes = {
-    balance: cachedMoods.balance ?? heroLayerModes?.balance ?? null,
-    bold: cachedMoods.bold ?? heroLayerModes?.bold ?? null,
-    smooth: cachedMoods.smooth ?? heroLayerModes?.smooth ?? null,
-    wild: cachedMoods.wild ?? heroLayerModes?.wild ?? null,
+    balance: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|balance`)) ?? null,
+    bold: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|bold`)) ?? null,
+    smooth: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|smooth`)) ?? null,
+    wild: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|wild`)) ?? null,
   };
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
   useEffect(() => {
-    if (!isShowingHeroCard || !activeOracle) return;
-
-    console.log('[Odara] hero first-paint debug', {
-      'activeOracle?.ui_default_mode': activeOracle?.ui_default_mode ?? null,
-      'activeOracle?.layer_modes': activeOracle?.layer_modes ?? null,
-      'activeOracle?.layer_modes?.balance': activeOracle?.layer_modes?.balance ?? null,
+    console.log('[Odara] mode-results debug', {
+      cardId,
       selectedMood,
-      'modeResults.balance': modeResults.balance ?? null,
-      visibleModeEntry: visibleModeEntry ?? null,
+      'modeResults.balance': modeResults.balance ? { id: modeResults.balance.id, name: modeResults.balance.name } : null,
+      'modeResults.bold': modeResults.bold ? { id: modeResults.bold.id, name: modeResults.bold.name } : null,
+      visibleModeEntry: visibleModeEntry ? { id: visibleModeEntry.id, name: visibleModeEntry.name } : null,
+      cacheSize: moodCacheRef.current.size,
     });
-  }, [isShowingHeroCard, activeOracle, selectedMood, modeResults.balance, visibleModeEntry]);
+  }, [cardId, selectedMood, modeResults.balance, modeResults.bold, visibleModeEntry]);
 
   // Mood tap handler — lazy loads if not cached (slot-scoped)
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
-    const moodKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${mood}`;
+    const currentCardId = visibleCard.fragrance_id;
+    const moodKey = `${selectedDate}|${selectedContext}|${currentCardId}|${mood}`;
     const cached = moodCacheRef.current.get(moodKey);
     setSelectedMood(mood);
+
+    console.log('[Odara] mood click', { mood, currentCardId, hasCached: cached !== undefined });
+
     if (cached !== undefined) return; // already cached (including null = failed)
-    // Lazy fetch
-    void fetchMoodForCard(visibleCard.fragrance_id, mood);
+    // Lazy fetch — with stale-card guard on result
+    void fetchMoodForCard(currentCardId, mood).then((entry) => {
+      // Stale-card guard: only apply if visibleCard hasn't changed
+      console.log('[Odara] mood click result', {
+        mood,
+        fetchedForCard: currentCardId,
+        layerName: entry?.layer_name ?? '(null)',
+      });
+    });
   }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
 
   // Lock icon color
@@ -1043,26 +1055,22 @@ const OdaraScreen = ({
       { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
     ]);
 
-    // 2. Clear stale mood cache entries for the OLD card so nothing bleeds
-    const slotPfx = `${selectedDate}|${selectedContext}`;
-    for (const m of LAYER_MODE_ORDER) {
-      // Don't clear entries for other cards — only the one we're leaving
-      // (cache is keyed by fragrance_id so new card won't hit old entries)
-    }
+    // 2. Clear stale state completely
+    setLayerExpanded(false);
+    setLockState('neutral');
+    setLoadingMood(null);
 
-    // 3. Set new card state
+    // 3. Set new card state BEFORE fetch
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
-    setLayerExpanded(false);
-    setLockState('neutral');
 
     // 4. Immediately trigger BALANCE layer fetch for the promoted scent
-    //    This is the same path as a manual balance click via fetchMoodForCard
-    console.log('[Odara] alternate promotion: fetching balance for', alt.fragrance_id);
-    void fetchMoodForCard(alt.fragrance_id, 'balance').then((entry) => {
+    const capturedAltId = alt.fragrance_id;
+    console.log('[Odara] alternate promotion: fetching balance for', capturedAltId);
+    void fetchMoodForCard(capturedAltId, 'balance').then((entry) => {
       console.log('[Odara] alternate promotion: balance result', {
-        promotedId: alt.fragrance_id,
+        promotedId: capturedAltId,
         balanceLayerName: entry?.layer_name ?? '(null)',
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
       });
