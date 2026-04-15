@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
+import { useWeather } from '@/hooks/useWeather';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
-const RPC_TEMPERATURE = 75;
 
 // --- Auth helpers ---
 function normalizeUser(sessionUser: any): { id: string; email?: string } | null {
