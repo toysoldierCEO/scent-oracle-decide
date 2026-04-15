@@ -1088,26 +1088,22 @@ const OdaraScreen = ({
       { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
     ]);
 
-    // 2. Clear stale mood cache entries for the OLD card so nothing bleeds
-    const slotPfx = `${selectedDate}|${selectedContext}`;
-    for (const m of LAYER_MODE_ORDER) {
-      // Don't clear entries for other cards — only the one we're leaving
-      // (cache is keyed by fragrance_id so new card won't hit old entries)
-    }
+    // 2. Clear stale state completely
+    setLayerExpanded(false);
+    setLockState('neutral');
+    setLoadingMood(null);
 
-    // 3. Set new card state
+    // 3. Set new card state BEFORE fetch
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
-    setLayerExpanded(false);
-    setLockState('neutral');
 
     // 4. Immediately trigger BALANCE layer fetch for the promoted scent
-    //    This is the same path as a manual balance click via fetchMoodForCard
-    console.log('[Odara] alternate promotion: fetching balance for', alt.fragrance_id);
-    void fetchMoodForCard(alt.fragrance_id, 'balance').then((entry) => {
+    const capturedAltId = alt.fragrance_id;
+    console.log('[Odara] alternate promotion: fetching balance for', capturedAltId);
+    void fetchMoodForCard(capturedAltId, 'balance').then((entry) => {
       console.log('[Odara] alternate promotion: balance result', {
-        promotedId: alt.fragrance_id,
+        promotedId: capturedAltId,
         balanceLayerName: entry?.layer_name ?? '(null)',
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
       });
