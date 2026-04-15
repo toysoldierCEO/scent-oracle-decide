@@ -585,6 +585,7 @@ const OdaraScreen = ({
     setSelectedMood(null);
     setLoadingMood(null);
     moodCacheRef.current.clear();
+    moodInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
   }, [stateKey]);
 
