@@ -149,6 +149,7 @@ type HistoryEntry = {
   queuePointerBefore: number;
   promotedAltId: string | null;
   selectedMood: LayerMood | null;
+  resolvedVisibleModeEntry: BackendModeEntry | null;
 };
 
 interface OdaraScreenProps {
@@ -825,6 +826,10 @@ const OdaraScreen = ({
     setSkipAnimating(false);
 
     try {
+      const currentMoodKey = selectedMood ?? 'balance';
+      const currentCacheKey = `${selectedDate}:${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
+      const currentResolvedEntry = moodCacheRef.current.get(currentCacheKey) ?? null;
+      console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
         ...h.slice(-(MAX_SESSION_HISTORY - 1)),
         {
@@ -832,6 +837,7 @@ const OdaraScreen = ({
           queuePointerBefore: queuePointer,
           promotedAltId,
           selectedMood,
+          resolvedVisibleModeEntry: currentResolvedEntry,
         },
       ]);
 
@@ -862,17 +868,25 @@ const OdaraScreen = ({
     if (viewHistory.length === 0 || lockState === 'locked') return;
     const entry = viewHistory[viewHistory.length - 1];
 
+    const restoredMood = entry.selectedMood ?? 'balance';
     console.log('[Odara] back restore', {
       restoredId: entry.card.fragrance_id,
-      restoredMood: entry.selectedMood,
+      restoredMood,
       restoredPromotedAltId: entry.promotedAltId,
+      resolvedEntry: entry.resolvedVisibleModeEntry ? { id: entry.resolvedVisibleModeEntry.layer_fragrance_id, name: entry.resolvedVisibleModeEntry.layer_name } : null,
       historyDepth: viewHistory.length,
     });
+
+    // Seed the mood cache with the saved resolved entry so visibleModeEntry is immediately correct
+    if (entry.resolvedVisibleModeEntry) {
+      const restoreCacheKey = `${selectedDate}:${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
+      moodCacheRef.current.set(restoreCacheKey, entry.resolvedVisibleModeEntry);
+    }
 
     setVisibleCard(entry.card);
     setQueuePointer(entry.queuePointerBefore);
     setPromotedAltId(entry.promotedAltId);
-    setSelectedMood(entry.selectedMood ?? 'balance');
+    setSelectedMood(restoredMood);
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
@@ -1061,9 +1075,13 @@ const OdaraScreen = ({
     };
 
     // 1. Save history
+    const currentMoodKey2 = selectedMood ?? 'balance';
+    const currentCacheKey2 = `${selectedDate}:${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
+    const currentResolvedEntry2 = moodCacheRef.current.get(currentCacheKey2) ?? null;
+    console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
       ...h.slice(-(MAX_SESSION_HISTORY - 1)),
-      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood },
+      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood, resolvedVisibleModeEntry: currentResolvedEntry2 },
     ]);
 
     // 2. Clear stale state completely
