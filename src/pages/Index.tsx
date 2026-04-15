@@ -37,10 +37,13 @@ const Index = () => {
   const oracleInFlightKeyRef = useRef<string | null>(null);
   const oracleSuccessKeyRef = useRef<string | null>(null);
 
+  // Live temperature from weather hook — used for both UI and RPC
+  const liveTemperature = getTemperature(selectedDate);
+
   // Compute oracle key — only valid when auth is ready and user exists
   const oracleKey =
     authReady && user?.id
-      ? `${user.id}|${selectedContext}|${selectedDate}|${RPC_TEMPERATURE}`
+      ? `${user.id}|${selectedContext}|${selectedDate}|${liveTemperature}`
       : null;
 
   // Debug render log
