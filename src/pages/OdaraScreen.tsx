@@ -218,40 +218,7 @@ function backendModeEntryToLayerMode(
   };
 }
 
-function oracleModeEntryToLayerMode(
-  entry: (Partial<OracleLayer> & Partial<BackendModeEntry>) | null | undefined,
-  fallbackMood: LayerMood,
-): NonNullable<LayerModes[LayerMood]> | null {
-  if (!entry) return null;
-
-  const id = entry.fragrance_id ?? entry.layer_fragrance_id ?? null;
-  if (!id) return null;
-
-  return {
-    id,
-    name: entry.name ?? entry.layer_name ?? '',
-    brand: entry.brand ?? entry.layer_brand ?? '',
-    family_key: entry.family ?? entry.layer_family ?? '',
-    notes: Array.isArray(entry.notes)
-      ? entry.notes
-      : Array.isArray(entry.layer_notes)
-        ? entry.layer_notes
-        : [],
-    accords: Array.isArray(entry.accords)
-      ? entry.accords
-      : Array.isArray(entry.layer_accords)
-        ? entry.layer_accords
-        : [],
-    interactionType: ((entry.interaction_type ?? entry.layer_mode ?? fallbackMood) as InteractionType) || 'balance',
-    reason: entry.reason ?? '',
-    why_it_works: entry.why_it_works ?? '',
-    projection: null,
-    ratio_hint: entry.ratio_hint ?? '',
-    application_style: entry.application_style ?? '',
-    placement_hint: entry.placement_hint ?? '',
-    spray_guidance: entry.spray_guidance ?? '',
-  };
-}
+// (oracleModeEntryToLayerMode removed — Effect 2 now pre-seeds cache directly)
 
 function normalizeAlternateRow(row: any): OracleAlternate | null {
   if (!row) return null;
