@@ -142,10 +142,13 @@ interface DisplayCard {
   isHero: boolean; // true = oracle hero, false = queue card
 }
 
+const MAX_SESSION_HISTORY = 30;
+
 type HistoryEntry = {
   card: DisplayCard;
   queuePointerBefore: number;
   promotedAltId: string | null;
+  selectedMood: LayerMood | null;
 };
 
 interface OdaraScreenProps {
