@@ -202,7 +202,7 @@ const Index = () => {
     } else {
       console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     }
-  }, [user, selectedContext, selectedDate]);
+  }, [user, selectedContext, selectedDate, liveTemperature]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
     if (!user) return null;
@@ -233,7 +233,7 @@ const Index = () => {
     });
     if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, selectedContext, selectedDate]);
+  }, [user, selectedContext, selectedDate, liveTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
