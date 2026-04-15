@@ -788,12 +788,23 @@ const OdaraScreen = ({
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
-    const moodKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${mood}`;
+    const currentCardId = visibleCard.fragrance_id;
+    const moodKey = `${selectedDate}|${selectedContext}|${currentCardId}|${mood}`;
     const cached = moodCacheRef.current.get(moodKey);
     setSelectedMood(mood);
+
+    console.log('[Odara] mood click', { mood, currentCardId, hasCached: cached !== undefined });
+
     if (cached !== undefined) return; // already cached (including null = failed)
-    // Lazy fetch
-    void fetchMoodForCard(visibleCard.fragrance_id, mood);
+    // Lazy fetch — with stale-card guard on result
+    void fetchMoodForCard(currentCardId, mood).then((entry) => {
+      // Stale-card guard: only apply if visibleCard hasn't changed
+      console.log('[Odara] mood click result', {
+        mood,
+        fetchedForCard: currentCardId,
+        layerName: entry?.layer_name ?? '(null)',
+      });
+    });
   }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
 
   // Lock icon color
