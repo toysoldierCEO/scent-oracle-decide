@@ -142,10 +142,13 @@ interface DisplayCard {
   isHero: boolean; // true = oracle hero, false = queue card
 }
 
+const MAX_SESSION_HISTORY = 30;
+
 type HistoryEntry = {
   card: DisplayCard;
   queuePointerBefore: number;
   promotedAltId: string | null;
+  selectedMood: LayerMood | null;
 };
 
 interface OdaraScreenProps {
@@ -597,7 +600,7 @@ const OdaraScreen = ({
     });
 
     // 1) Clear ALL stale state first
-    setViewHistory([]);
+    // viewHistory is NOT cleared here — slot changes clear it in Effect 1 above
     setPromotedAltId(null);
     setLayerExpanded(false);
     setLoadingMood(null);
@@ -823,11 +826,12 @@ const OdaraScreen = ({
 
     try {
       setViewHistory(h => [
-        ...h,
+        ...h.slice(-(MAX_SESSION_HISTORY - 1)),
         {
           card: visibleCard,
           queuePointerBefore: queuePointer,
           promotedAltId,
+          selectedMood,
         },
       ]);
 
@@ -858,11 +862,18 @@ const OdaraScreen = ({
     if (viewHistory.length === 0 || lockState === 'locked') return;
     const entry = viewHistory[viewHistory.length - 1];
 
+    console.log('[Odara] back restore', {
+      restoredId: entry.card.fragrance_id,
+      restoredMood: entry.selectedMood,
+      restoredPromotedAltId: entry.promotedAltId,
+      historyDepth: viewHistory.length,
+    });
+
     setVisibleCard(entry.card);
     setQueuePointer(entry.queuePointerBefore);
     setPromotedAltId(entry.promotedAltId);
+    setSelectedMood(entry.selectedMood ?? 'balance');
     setViewHistory(h => h.slice(0, -1));
-    setSelectedMood('balance');
     setLayerExpanded(false);
     setLockState('neutral');
   }, [viewHistory]);
@@ -1051,8 +1062,8 @@ const OdaraScreen = ({
 
     // 1. Save history
     setViewHistory(h => [
-      ...h,
-      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId },
+      ...h.slice(-(MAX_SESSION_HISTORY - 1)),
+      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood },
     ]);
 
     // 2. Clear stale state completely
