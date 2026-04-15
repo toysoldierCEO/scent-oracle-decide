@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
+import { useWeather } from '@/hooks/useWeather';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
-const RPC_TEMPERATURE = 75;
 
 // --- Auth helpers ---
 function normalizeUser(sessionUser: any): { id: string; email?: string } | null {
@@ -16,6 +16,7 @@ function sameUser(a: { id: string; email?: string } | null, b: { id: string; ema
 }
 
 const Index = () => {
+  const { weather, getTemperature } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -36,10 +37,13 @@ const Index = () => {
   const oracleInFlightKeyRef = useRef<string | null>(null);
   const oracleSuccessKeyRef = useRef<string | null>(null);
 
+  // Live temperature from weather hook — used for both UI and RPC
+  const liveTemperature = getTemperature(selectedDate);
+
   // Compute oracle key — only valid when auth is ready and user exists
   const oracleKey =
     authReady && user?.id
-      ? `${user.id}|${selectedContext}|${selectedDate}|${RPC_TEMPERATURE}`
+      ? `${user.id}|${selectedContext}|${selectedDate}|${liveTemperature}`
       : null;
 
   // Debug render log
@@ -141,7 +145,7 @@ const Index = () => {
       try {
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
           p_user_id: user!.id,
-          p_temperature: RPC_TEMPERATURE,
+          p_temperature: liveTemperature,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
           p_wear_date: selectedDate,
@@ -198,7 +202,7 @@ const Index = () => {
     } else {
       console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     }
-  }, [user, selectedContext, selectedDate]);
+  }, [user, selectedContext, selectedDate, liveTemperature]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
     if (!user) return null;
@@ -222,14 +226,14 @@ const Index = () => {
 
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
       p_user_id: user.id,
-      p_temperature: RPC_TEMPERATURE,
+      p_temperature: liveTemperature,
       p_context: selectedContext,
       p_brand: 'Alexandria Fragrances',
       p_wear_date: selectedDate,
     });
     if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, selectedContext, selectedDate]);
+  }, [user, selectedContext, selectedDate, liveTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
@@ -358,7 +362,7 @@ const Index = () => {
       onAccept={handleAccept}
       onSkip={handleSkip}
       userId={user.id}
-      resolvedTemperature={RPC_TEMPERATURE}
+      resolvedTemperature={liveTemperature}
     />
   );
 };
