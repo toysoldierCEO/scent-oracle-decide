@@ -145,7 +145,7 @@ const Index = () => {
       try {
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
           p_user_id: user!.id,
-          p_temperature: RPC_TEMPERATURE,
+          p_temperature: liveTemperature,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
           p_wear_date: selectedDate,
@@ -226,7 +226,7 @@ const Index = () => {
 
     const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
       p_user_id: user.id,
-      p_temperature: RPC_TEMPERATURE,
+      p_temperature: liveTemperature,
       p_context: selectedContext,
       p_brand: 'Alexandria Fragrances',
       p_wear_date: selectedDate,
@@ -362,7 +362,7 @@ const Index = () => {
       onAccept={handleAccept}
       onSkip={handleSkip}
       userId={user.id}
-      resolvedTemperature={RPC_TEMPERATURE}
+      resolvedTemperature={liveTemperature}
     />
   );
 };
