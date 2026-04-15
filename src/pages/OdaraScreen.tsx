@@ -582,9 +582,10 @@ const OdaraScreen = ({
   // Effect 1: CLEAR card state immediately when the slot (date or context) changes
   useEffect(() => {
     if (prevSlotRef.current === stateKey) return; // same slot, no-op
+    const oldSlot = prevSlotRef.current;
     prevSlotRef.current = stateKey;
 
-    console.log('[Odara] slot change -> clearing layer state', prevSlotRef.current, '→', stateKey);
+    console.log('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
     // Immediately wipe the old slot's card data so it can't bleed
     setVisibleCard(null);
     setActiveOracle(null);
@@ -616,22 +617,74 @@ const OdaraScreen = ({
 
     const capturedSlot = stateKey;
 
-    // 1) Set oracle + hero card IMMEDIATELY
-    setActiveOracle(oracle);
+    // ── FULL STATE RESET before applying new oracle payload ──
+    const prevVisibleId = visibleCard?.fragrance_id ?? '(none)';
+    const prevPromotedId = promotedAltId ?? '(none)';
+
+    console.log('[Odara] oracle apply', {
+      selectedDate,
+      selectedContext,
+      backendHeroId: oracle.today_pick?.fragrance_id ?? '(none)',
+      previousVisibleId: prevVisibleId,
+      promotedAltIdBeforeReset: prevPromotedId,
+    });
+
+    // 1) Clear ALL stale state first
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
+    setLoadingMood(null);
 
-    // Set initial mood from backend ui_default_mode
+    // 2) Set oracle
+    setActiveOracle(oracle);
+
+    // 3) Set initial mood from backend ui_default_mode
     const initialMood = (oracle.ui_default_mode as LayerMood) ?? 'balance';
     setSelectedMood(initialMood);
+
+    console.log('[Odara] oracle apply complete', {
+      newVisibleId: oracle.today_pick?.fragrance_id ?? '(none)',
+      promotedAltIdAfterReset: '(null)',
+      initialMood,
+    });
 
     if (oracle.today_pick) {
       const hero = heroToDisplay(oracle.today_pick);
       setVisibleCard(hero);
-      console.log('[Odara] applying oracle home for slot', capturedSlot, oracle.layer?.fragrance_id ?? 'none');
+      console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
 
-      // 2) Queue fetch is BACKGROUND — never blocks hero render
+      // 4) Pre-seed mood cache from oracle.layer_modes for hero card
+      if (oracle.layer_modes) {
+        const slotPfx = `${selectedDate}|${selectedContext}`;
+        const heroId = oracle.today_pick.fragrance_id;
+        for (const mood of LAYER_MODE_ORDER) {
+          const modeData = (oracle.layer_modes as any)?.[mood];
+          if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
+            const entry: BackendModeEntry = {
+              mode: mood,
+              layer_fragrance_id: modeData.layer_fragrance_id ?? modeData.fragrance_id ?? '',
+              layer_name: modeData.layer_name ?? modeData.name ?? '',
+              layer_brand: modeData.layer_brand ?? modeData.brand ?? '',
+              layer_family: modeData.layer_family ?? modeData.family ?? '',
+              layer_notes: Array.isArray(modeData.layer_notes) ? modeData.layer_notes : Array.isArray(modeData.notes) ? modeData.notes : [],
+              layer_accords: Array.isArray(modeData.layer_accords) ? modeData.layer_accords : Array.isArray(modeData.accords) ? modeData.accords : [],
+              layer_score: modeData.layer_score ?? 0,
+              reason: modeData.reason ?? '',
+              why_it_works: modeData.why_it_works ?? '',
+              ratio_hint: modeData.ratio_hint ?? '',
+              application_style: modeData.application_style ?? '',
+              placement_hint: modeData.placement_hint ?? '',
+              spray_guidance: modeData.spray_guidance ?? '',
+              interaction_type: modeData.interaction_type ?? modeData.layer_mode ?? mood,
+            };
+            moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
+            console.log('[Odara] pre-seeded mood cache from oracle.layer_modes', mood, entry.layer_name);
+          }
+        }
+        setMoodCacheVersion(v => v + 1);
+      }
+
+      // 5) Queue fetch is BACKGROUND — never blocks hero render
       fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
         if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
@@ -643,6 +696,7 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracle, stateKey]);
 
   // No eager modes fetch — moods load lazily on user tap
