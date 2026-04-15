@@ -1,54 +1,42 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const DEV_FALLBACK_TEMPERATURE = 75;
-const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-const REFETCH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const STALE_MS = 10 * 60 * 1000; // 10 minutes
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 
 export type WeatherByDate = Record<string, number>; // "YYYY-MM-DD" → °F
 
-export interface WeatherState {
-  temperature_f: number | null;
-  fetchedAt: number | null;     // Date.now() of last successful fetch
-  source: 'live' | 'fallback' | null;
-  stale: boolean;
-  loading: boolean;
-  error: string | null;
-}
-
 interface UseWeatherResult {
   weatherByDate: WeatherByDate;
-  weather: WeatherState;
-  /** Resolved temperature for a specific date. Returns null only if no data at all. */
+  /** timestamp of last successful fetch, or null */
+  fetchedAt: number | null;
+  weatherLoading: boolean;
+  weatherError: string | null;
+  /** Resolved temperature for a date. Falls back to nearest date, then DEV_FALLBACK. */
   getTemperature: (dateStr: string) => number;
-  /** Force-refresh weather now */
-  refresh: () => void;
+  /** True when data exists but is older than STALE_MS */
+  isStale: boolean;
 }
 
 /**
- * Fetches 7-day weather forecast with auto-refresh and freshness tracking.
- * - Fetches on mount
- * - Refreshes every 10 minutes
- * - Refreshes on window focus (if stale)
- * - Uses browser geolocation, falls back to NYC
+ * Lightweight weather hook — single fetch on mount, re-fetch on visibility
+ * return when stale. No polling interval. Minimal state.
  */
 export function useWeather(): UseWeatherResult {
   const [weatherByDate, setWeatherByDate] = useState<WeatherByDate>({});
-  const [weather, setWeather] = useState<WeatherState>({
-    temperature_f: null,
-    fetchedAt: null,
-    source: null,
-    stale: false,
-    loading: true,
-    error: null,
-  });
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
 
+  const fetchedAtRef = useRef<number | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const coordsRef = useRef<{ lat: number; lon: number } | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchingRef = useRef(false);
 
   const fetchForecast = useCallback(async (lat: number, lon: number) => {
-    setWeather(prev => ({ ...prev, loading: true, error: null }));
+    if (fetchingRef.current) return; // prevent concurrent fetches
+    fetchingRef.current = true;
+    setWeatherLoading(true);
 
     try {
       const params = new URLSearchParams({
@@ -69,113 +57,78 @@ export function useWeather(): UseWeatherResult {
 
       const map: WeatherByDate = {};
       for (let i = 0; i < dates.length; i++) {
-        if (dates[i] && temps[i] != null) {
-          map[dates[i]] = Math.round(temps[i]);
-        }
+        if (dates[i] && temps[i] != null) map[dates[i]] = Math.round(temps[i]);
       }
 
-      // Today's temperature
-      const today = new Date().toISOString().split('T')[0];
-      const todayTemp = map[today] ?? (temps.length > 0 ? Math.round(temps[0]) : null);
-
       const now = Date.now();
-      console.log('[Odara Weather] fetch success', { lat, lon, todayTemp, dates: dates.length, fetchedAt: now });
-
+      fetchedAtRef.current = now;
+      setFetchedAt(now);
       setWeatherByDate(map);
-      setWeather({
-        temperature_f: todayTemp,
-        fetchedAt: now,
-        source: 'live',
-        stale: false,
-        loading: false,
-        error: null,
-      });
+      setWeatherError(null);
+      console.log('[Odara Weather] OK', { lat, lon, days: dates.length, fetchedAt: now });
     } catch (e: any) {
-      console.warn('[Odara Weather] fetch failed:', e?.message);
-      setWeather(prev => ({
-        ...prev,
-        loading: false,
-        error: e?.message ?? 'Weather fetch failed',
-        stale: prev.fetchedAt != null, // mark stale if we had old data
-        source: prev.source, // keep existing source designation
-      }));
+      console.warn('[Odara Weather] fail:', e?.message);
+      setWeatherError(e?.message ?? 'Weather fetch failed');
+    } finally {
+      setWeatherLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 
   const doRefresh = useCallback(() => {
-    const coords = coordsRef.current;
-    if (coords) {
-      fetchForecast(coords.lat, coords.lon);
+    const c = coordsRef.current;
+    if (c) {
+      fetchForecast(c.lat, c.lon);
+      return;
+    }
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          coordsRef.current = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          fetchForecast(pos.coords.latitude, pos.coords.longitude);
+        },
+        () => {
+          coordsRef.current = { lat: 40.7128, lon: -74.006 };
+          fetchForecast(40.7128, -74.006);
+        },
+        { timeout: 5000 },
+      );
     } else {
-      // Try geolocation again, fall back to NYC
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            coordsRef.current = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-            fetchForecast(pos.coords.latitude, pos.coords.longitude);
-          },
-          () => {
-            coordsRef.current = { lat: 40.7128, lon: -74.006 };
-            fetchForecast(40.7128, -74.006);
-          },
-          { timeout: 5000 }
-        );
-      } else {
-        coordsRef.current = { lat: 40.7128, lon: -74.006 };
-        fetchForecast(40.7128, -74.006);
-      }
+      coordsRef.current = { lat: 40.7128, lon: -74.006 };
+      fetchForecast(40.7128, -74.006);
     }
   }, [fetchForecast]);
 
-  // Initial fetch
+  // Fetch once on mount
   useEffect(() => {
     doRefresh();
   }, [doRefresh]);
 
-  // Auto-refresh interval
+  // Re-fetch on visibility return when stale — no interval, no polling
   useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      console.log('[Odara Weather] auto-refresh triggered');
-      doRefresh();
-    }, REFETCH_INTERVAL_MS);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [doRefresh]);
-
-  // Refresh on window focus if stale
-  useEffect(() => {
-    const handleFocus = () => {
-      const { fetchedAt } = weather;
-      if (!fetchedAt || (Date.now() - fetchedAt > STALE_THRESHOLD_MS)) {
-        console.log('[Odara Weather] focus refresh (stale)');
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const age = fetchedAtRef.current ? Date.now() - fetchedAtRef.current : Infinity;
+      if (age > STALE_MS) {
+        console.log('[Odara Weather] visibility refresh (stale)');
         doRefresh();
       }
     };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [doRefresh]);
 
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') handleFocus();
-    });
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [weather.fetchedAt, doRefresh]);
+  const isStale = fetchedAt != null && Date.now() - fetchedAt > STALE_MS;
 
   const getTemperature = useCallback((dateStr: string): number => {
     if (weatherByDate[dateStr] != null) return weatherByDate[dateStr];
-
-    const dates = Object.keys(weatherByDate);
-    if (dates.length === 0) return DEV_FALLBACK_TEMPERATURE;
-
-    const sorted = dates.sort();
+    const keys = Object.keys(weatherByDate);
+    if (keys.length === 0) return DEV_FALLBACK_TEMPERATURE;
+    const sorted = keys.sort();
     if (dateStr < sorted[0]) return weatherByDate[sorted[0]];
     if (dateStr > sorted[sorted.length - 1]) return weatherByDate[sorted[sorted.length - 1]];
-
     return DEV_FALLBACK_TEMPERATURE;
   }, [weatherByDate]);
 
-  return { weatherByDate, weather, getTemperature, refresh: doRefresh };
+  return { weatherByDate, fetchedAt, weatherLoading, weatherError, getTemperature, isStale };
 }

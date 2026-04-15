@@ -16,7 +16,7 @@ function sameUser(a: { id: string; email?: string } | null, b: { id: string; ema
 }
 
 const Index = () => {
-  const { weather, getTemperature } = useWeather();
+  const { getTemperature } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
