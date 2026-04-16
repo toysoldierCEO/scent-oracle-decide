@@ -373,6 +373,9 @@ interface LayerCardProps {
   lockPulse?: boolean;
   locked?: boolean;
   loadingMood?: LayerMood | null;
+  modeLoading?: Record<LayerMood, boolean>;
+  modeErrors?: Record<LayerMood, string | null>;
+  onRetryMood?: (mood: LayerMood) => void;
 }
 
 const LayerCard = ({
@@ -392,9 +395,13 @@ const LayerCard = ({
   lockPulse = false,
   locked = false,
   loadingMood = null,
+  modeLoading,
+  modeErrors,
+  onRetryMood,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
-  const isLoadingSelectedMood = loadingMood === selectedMood;
+  const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
+  const moodError = modeErrors?.[selectedMood] ?? null;
 
   // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
