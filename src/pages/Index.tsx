@@ -230,19 +230,18 @@ const Index = () => {
     }
     console.log('[Odara] skip rpc success', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
 
-    // Re-fetch oracle inline
+    // Re-fetch oracle inline via normalized access layer
     oracleSuccessKeyRef.current = null;
 
-    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
-      p_user_id: user.id,
-      p_temperature: liveTemperature,
-      p_context: selectedContext,
-      p_brand: 'Alexandria Fragrances',
-      p_wear_date: selectedDate,
+    const { data } = await fetchHomeOracle({
+      access,
+      temperature: liveTemperature,
+      context: selectedContext,
+      brand: 'Alexandria Fragrances',
+      wearDate: selectedDate,
     });
-    if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, access.canWrite, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access, selectedContext, selectedDate, liveTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
