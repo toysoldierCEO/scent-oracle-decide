@@ -373,6 +373,9 @@ interface LayerCardProps {
   lockPulse?: boolean;
   locked?: boolean;
   loadingMood?: LayerMood | null;
+  modeLoading?: Record<LayerMood, boolean>;
+  modeErrors?: Record<LayerMood, string | null>;
+  onRetryMood?: (mood: LayerMood) => void;
 }
 
 const LayerCard = ({
@@ -392,9 +395,13 @@ const LayerCard = ({
   lockPulse = false,
   locked = false,
   loadingMood = null,
+  modeLoading,
+  modeErrors,
+  onRetryMood,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
-  const isLoadingSelectedMood = loadingMood === selectedMood;
+  const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
+  const moodError = modeErrors?.[selectedMood] ?? null;
 
   // Ratio system — recommended ratio for visual hint
   const recommendedRatio = computeRecommendedRatio(
@@ -469,12 +476,37 @@ const LayerCard = ({
         </>
       ) : (
         <div className="w-full flex flex-col items-center gap-2">
-          <p className="text-lg font-serif tracking-wide text-white/75 leading-tight text-center">
-            {isLoadingSelectedMood ? 'Loading selected mode…' : 'No layer loaded for this mode'}
-          </p>
-          <p className="text-[11px] text-white/45 text-center max-w-[18rem]">
-            {isLoadingSelectedMood ? 'Fetching the layer result for the selected mood.' : 'Pick a mode to load its layer without showing the wrong scent.'}
-          </p>
+          {isLoadingSelectedMood ? (
+            <>
+              <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+              <p className="text-[11px] text-white/45 text-center">
+                Loading {selectedMood} layer…
+              </p>
+            </>
+          ) : moodError ? (
+            <>
+              <p className="text-sm font-serif tracking-wide text-white/60 leading-tight text-center">
+                Couldn't load {selectedMood} layer
+              </p>
+              {onRetryMood && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRetryMood(selectedMood); }}
+                  className="text-[11px] text-white/60 underline hover:text-white/80 transition-colors"
+                >
+                  Tap to retry
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-serif tracking-wide text-white/75 leading-tight text-center">
+                No layer loaded for this mode
+              </p>
+              <p className="text-[11px] text-white/45 text-center max-w-[18rem]">
+                Pick a mode to load its layer without showing the wrong scent.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -487,7 +519,7 @@ const LayerCard = ({
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
           locked={locked}
-          loadingMood={loadingMood}
+          loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
         />
       </div>
 
