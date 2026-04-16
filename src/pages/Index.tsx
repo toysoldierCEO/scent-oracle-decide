@@ -279,23 +279,21 @@ const Index = () => {
     );
   }
 
-  // Guest mode: render OdaraScreen with no user session, read-only demo
+  // Guest mode: no authenticated shell — show graceful message
   if (guestMode && !user) {
     return (
-      <OdaraScreen
-        oracle={null}
-        oracleLoading={false}
-        oracleError={null}
-        onSignOut={() => setGuestMode(false)}
-        selectedContext={selectedContext}
-        onContextChange={setSelectedContext}
-        selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
-        onAccept={async () => {}}
-        onSkip={async () => null}
-        userId="guest"
-        resolvedTemperature={liveTemperature}
-      />
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
+        <h1 className="text-xl tracking-[0.4em] font-bold uppercase mb-4">ODARA</h1>
+        <p className="text-sm text-muted-foreground text-center mb-8 max-w-xs">
+          Guest preview is temporarily unavailable. Please sign in to continue.
+        </p>
+        <button
+          onClick={() => setGuestMode(false)}
+          className="bg-foreground text-background rounded-lg px-6 py-2.5 text-sm font-semibold hover:bg-foreground/90 transition-all"
+        >
+          Back to Sign In
+        </button>
+      </div>
     );
   }
 
