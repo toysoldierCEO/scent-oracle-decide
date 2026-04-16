@@ -392,23 +392,23 @@ const OdaraScreen = ({
     currentFavorite.mainId === visibleCard.fragrance_id);
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
-  const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood) => {
+  const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = `${slotPrefix}|${fragranceId}|${mood}`;
     const cached = moodCacheRef.current.get(moodKey);
-    if (cached !== undefined) {
+    if (cached !== undefined && !isRetry) {
       console.log('[Odara] mood cache hit', moodKey);
       return cached;
     }
 
     // In-flight dedupe: reuse pending promise for same key
     const inFlight = moodInFlightRef.current.get(moodKey);
-    if (inFlight) {
+    if (inFlight && !isRetry) {
       console.log('[Odara] mood in-flight reuse', moodKey);
       return inFlight;
     }
 
-    console.log('[Odara] mood cache miss', moodKey);
+    console.log('[Odara] mood cache miss', moodKey, isRetry ? '(retry)' : '');
 
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
@@ -426,7 +426,8 @@ const OdaraScreen = ({
     const fetchPromise = (async (): Promise<BackendModeEntry | null> => {
       try {
         console.log('[Odara] lazy mood fetch start', mood, fragranceId, 'slot', capturedSlot);
-        setLoadingMood(mood);
+        setModeLoading(prev => ({ ...prev, [mood]: true }));
+        setModeErrors(prev => ({ ...prev, [mood]: null }));
         setLayerDebugSource(`rpc:${mood}…`);
         const { data, error } = await odaraSupabase.rpc('get_layer_for_card_mode_v1' as any, {
           p_user: userId,
@@ -446,18 +447,18 @@ const OdaraScreen = ({
 
         if (error) {
           console.error('[Odara] lazy mood fetch fail', mood, error.message);
-          moodCacheRef.current.set(moodKey, null);
+          setModeErrors(prev => ({ ...prev, [mood]: error.message }));
           setLayerDebugSource(`err:${error.message}`);
-          setLoadingMood(null);
+          setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
           return null;
         }
 
         const row = Array.isArray(data) ? data[0] : data;
         if (!row || !row.layer_fragrance_id) {
-          moodCacheRef.current.set(moodKey, null);
+          // Empty result — no layer available for this mode. Not an error, just empty.
           setLayerDebugSource(`rpc:${mood}(empty)`);
-          setLoadingMood(null);
+          setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
           return null;
         }
@@ -483,7 +484,7 @@ const OdaraScreen = ({
         moodCacheRef.current.set(moodKey, entry);
         console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
         setLayerDebugSource(`rpc:${mood}`);
-        setLoadingMood(null);
+        setModeLoading(prev => ({ ...prev, [mood]: false }));
         setMoodCacheVersion(v => v + 1);
         return entry;
       } catch (e: any) {
@@ -491,9 +492,9 @@ const OdaraScreen = ({
           console.log('[Odara] ignoring stale mood error for old slot', capturedSlot);
           return null;
         }
-        moodCacheRef.current.set(moodKey, null);
+        setModeErrors(prev => ({ ...prev, [mood]: e?.message ?? 'Fetch failed' }));
         setLayerDebugSource(`err:${e?.message}`);
-        setLoadingMood(null);
+        setModeLoading(prev => ({ ...prev, [mood]: false }));
         setMoodCacheVersion(v => v + 1);
         return null;
       } finally {
