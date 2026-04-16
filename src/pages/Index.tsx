@@ -155,25 +155,16 @@ const Index = () => {
       }
 
       try {
-        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
-          p_user_id: access.resolvedUserId,
-          p_temperature: liveTemperature,
-          p_context: selectedContext,
-          p_brand: 'Alexandria Fragrances',
-          p_wear_date: selectedDate,
+        const { data, rpcUsed } = await fetchHomeOracle({
+          access,
+          temperature: liveTemperature,
+          context: selectedContext,
+          brand: 'Alexandria Fragrances',
+          wearDate: selectedDate,
         });
         if (requestId !== oracleRequestIdRef.current) return;
-        if (rpcError) {
-          console.error('[Odara] oracle RPC error detail', {
-            status: (rpcError as any)?.code,
-            message: rpcError.message,
-            details: (rpcError as any)?.details,
-            hint: (rpcError as any)?.hint,
-          });
-          throw rpcError;
-        }
 
-        console.log('[Odara] oracle success', { requestId, oracleKey });
+        console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
         setOracle(data as unknown as OracleResult);
         setOracleError(null);
         setOracleLoading(false);
