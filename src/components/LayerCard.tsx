@@ -519,7 +519,7 @@ const LayerCard = ({
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
           locked={locked}
-          loadingMood={loadingMood}
+          loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
         />
       </div>
 
