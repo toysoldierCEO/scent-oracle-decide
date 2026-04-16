@@ -24,6 +24,7 @@ const Index = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [guestMode, setGuestMode] = useState(false);
 
   // Oracle state
   const [oracle, setOracle] = useState<OracleResult | null>(null);
@@ -278,6 +279,26 @@ const Index = () => {
     );
   }
 
+  // Guest mode: render OdaraScreen with no user session, read-only demo
+  if (guestMode && !user) {
+    return (
+      <OdaraScreen
+        oracle={null}
+        oracleLoading={false}
+        oracleError={null}
+        onSignOut={() => setGuestMode(false)}
+        selectedContext={selectedContext}
+        onContextChange={setSelectedContext}
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        onAccept={async () => {}}
+        onSkip={async () => null}
+        userId="guest"
+        resolvedTemperature={liveTemperature}
+      />
+    );
+  }
+
   if (!user) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -313,39 +334,9 @@ const Index = () => {
               {isSignUp ? 'Sign in' : 'Sign up'}
             </span>
           </p>
-          {/* TEMPORARY: preview/testing bypass */}
           <button
-            onClick={async () => {
-              setError('');
-              setLoading(true);
-              try {
-                const res = await fetch(
-                  `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/odara-test-login`,
-                  { method: 'POST', headers: { 'Content-Type': 'application/json' } }
-                );
-                const ct = res.headers.get('content-type') || '';
-                if (!ct.includes('application/json')) {
-                  setError('Backend temporarily unavailable — please try again later.');
-                  return;
-                }
-                const json = await res.json();
-                if (!res.ok || json.error) {
-                  setError(json.fallback ? 'Backend temporarily unavailable — please try again later.' : (json.detail || json.error || 'Test login failed'));
-                  return;
-                }
-                const { error: sessionErr } = await odaraSupabase.auth.setSession({
-                  access_token: json.access_token,
-                  refresh_token: json.refresh_token,
-                });
-                if (sessionErr) setError(sessionErr.message);
-              } catch (e: any) {
-                setError('Could not reach login service — check your connection and try again.');
-              } finally {
-                setLoading(false);
-              }
-            }}
-            disabled={loading}
-            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors disabled:opacity-30"
+            onClick={() => setGuestMode(true)}
+            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
           >
             Skip for now
           </button>
