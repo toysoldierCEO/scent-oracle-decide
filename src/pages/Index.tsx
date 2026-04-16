@@ -323,9 +323,14 @@ const Index = () => {
                   `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/odara-test-login`,
                   { method: 'POST', headers: { 'Content-Type': 'application/json' } }
                 );
+                const ct = res.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                  setError('Backend temporarily unavailable — please try again later.');
+                  return;
+                }
                 const json = await res.json();
                 if (!res.ok || json.error) {
-                  setError(json.error || 'Test login failed');
+                  setError(json.fallback ? 'Backend temporarily unavailable — please try again later.' : (json.detail || json.error || 'Test login failed'));
                   return;
                 }
                 const { error: sessionErr } = await odaraSupabase.auth.setSession({
@@ -334,7 +339,7 @@ const Index = () => {
                 });
                 if (sessionErr) setError(sessionErr.message);
               } catch (e: any) {
-                setError(e?.message || 'Test login failed');
+                setError('Could not reach login service — check your connection and try again.');
               } finally {
                 setLoading(false);
               }
