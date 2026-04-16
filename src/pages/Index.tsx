@@ -4,6 +4,7 @@ import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
 import { resolveAccessMode } from '@/lib/access-mode';
+import { fetchHomeOracle } from '@/lib/oracle-access';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -154,25 +155,16 @@ const Index = () => {
       }
 
       try {
-        const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
-          p_user_id: access.resolvedUserId,
-          p_temperature: liveTemperature,
-          p_context: selectedContext,
-          p_brand: 'Alexandria Fragrances',
-          p_wear_date: selectedDate,
+        const { data, rpcUsed } = await fetchHomeOracle({
+          access,
+          temperature: liveTemperature,
+          context: selectedContext,
+          brand: 'Alexandria Fragrances',
+          wearDate: selectedDate,
         });
         if (requestId !== oracleRequestIdRef.current) return;
-        if (rpcError) {
-          console.error('[Odara] oracle RPC error detail', {
-            status: (rpcError as any)?.code,
-            message: rpcError.message,
-            details: (rpcError as any)?.details,
-            hint: (rpcError as any)?.hint,
-          });
-          throw rpcError;
-        }
 
-        console.log('[Odara] oracle success', { requestId, oracleKey });
+        console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
         setOracle(data as unknown as OracleResult);
         setOracleError(null);
         setOracleLoading(false);
@@ -238,19 +230,18 @@ const Index = () => {
     }
     console.log('[Odara] skip rpc success', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
 
-    // Re-fetch oracle inline
+    // Re-fetch oracle inline via normalized access layer
     oracleSuccessKeyRef.current = null;
 
-    const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
-      p_user_id: user.id,
-      p_temperature: liveTemperature,
-      p_context: selectedContext,
-      p_brand: 'Alexandria Fragrances',
-      p_wear_date: selectedDate,
+    const { data } = await fetchHomeOracle({
+      access,
+      temperature: liveTemperature,
+      context: selectedContext,
+      brand: 'Alexandria Fragrances',
+      wearDate: selectedDate,
     });
-    if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, access.canWrite, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access, selectedContext, selectedDate, liveTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
