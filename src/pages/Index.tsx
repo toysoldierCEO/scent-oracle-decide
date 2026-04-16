@@ -3,6 +3,7 @@ import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
+import { resolveAccessMode } from '@/lib/access-mode';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -41,16 +42,22 @@ const Index = () => {
   // Live temperature from weather hook — used for both UI and RPC
   const liveTemperature = getTemperature(selectedDate);
 
-  // Compute oracle key — only valid when auth is ready and user exists
+  // ── Normalized access mode — single source of truth ──
+  const access = resolveAccessMode(user, guestMode);
+
+  // Compute oracle key — valid when we have a resolvedUserId (signed-in OR guest)
   const oracleKey =
-    authReady && user?.id
-      ? `${user.id}|${selectedContext}|${selectedDate}|${liveTemperature}`
+    (authReady || access.isGuestMode) && access.resolvedUserId
+      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}`
       : null;
 
   // Debug render log
   console.log('[Odara] render summary', {
     authReady,
     userId: user?.id ?? null,
+    isGuestMode: access.isGuestMode,
+    resolvedUserId: access.resolvedUserId,
+    canWrite: access.canWrite,
     oracleKey,
     oracleLoading,
     hasOracle: !!oracle,
@@ -73,7 +80,6 @@ const Index = () => {
 
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
       applySession(session, 'onAuthStateChange');
-      // authReady may already be true; this is fine
       setAuthReady(true);
     });
 
@@ -87,7 +93,8 @@ const Index = () => {
 
   // --- Oracle effect: keyed state machine ---
   useEffect(() => {
-    if (!authReady) return;
+    // For signed-in users, wait for authReady. For guests, proceed immediately.
+    if (!access.isGuestMode && !authReady) return;
 
     if (!oracleKey) {
       setOracle(null);
@@ -117,35 +124,38 @@ const Index = () => {
     console.log('[Odara] oracle launch', {
       oracleKey,
       requestId,
+      isGuestMode: access.isGuestMode,
     });
 
     setOracleLoading(true);
     setOracleError(null);
 
     (async () => {
-      // Verify session exists before launching protected RPC
-      const { data: sessionData } = await odaraSupabase.auth.getSession();
-      const session = sessionData?.session;
-      console.log('[Odara] pre-oracle session check', {
-        hasSession: !!session,
-        sessionUserId: session?.user?.id ?? null,
-        rpc: 'get_todays_oracle_home_v1',
-        oracleKey,
-        requestId,
-      });
-      if (!session) {
-        if (requestId !== oracleRequestIdRef.current) return;
-        const msg = 'No active session — cannot call oracle RPC';
-        console.error('[Odara] oracle blocked: no session', { requestId });
-        setOracleError(msg);
-        setOracleLoading(false);
-        oracleInFlightKeyRef.current = null;
-        return;
+      // For signed-in users, verify session before RPC
+      if (!access.isGuestMode) {
+        const { data: sessionData } = await odaraSupabase.auth.getSession();
+        const session = sessionData?.session;
+        console.log('[Odara] pre-oracle session check', {
+          hasSession: !!session,
+          sessionUserId: session?.user?.id ?? null,
+          rpc: 'get_todays_oracle_home_v1',
+          oracleKey,
+          requestId,
+        });
+        if (!session) {
+          if (requestId !== oracleRequestIdRef.current) return;
+          const msg = 'No active session — cannot call oracle RPC';
+          console.error('[Odara] oracle blocked: no session', { requestId });
+          setOracleError(msg);
+          setOracleLoading(false);
+          oracleInFlightKeyRef.current = null;
+          return;
+        }
       }
 
       try {
         const { data, error: rpcError } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
-          p_user_id: user!.id,
+          p_user_id: access.resolvedUserId,
           p_temperature: liveTemperature,
           p_context: selectedContext,
           p_brand: 'Alexandria Fragrances',
@@ -184,11 +194,14 @@ const Index = () => {
         oracleInFlightKeyRef.current = null;
       }
     })();
-  }, [authReady, oracleKey]);
+  }, [authReady, oracleKey, access.isGuestMode]);
 
-  // Accept / Skip RPCs — canonical surface only
+  // Accept / Skip RPCs — guarded by canWrite
   const handleAccept = useCallback(async (fragranceId: string, layerFragranceId: string | null = null) => {
-    if (!user) return;
+    if (!access.canWrite || !user) {
+      console.log('[Odara] accept blocked — guest mode or no user');
+      return;
+    }
     console.log('[Odara] accept rpc start', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     const { error: err } = await odaraSupabase.rpc('accept_oracle_selection_v1' as any, {
       p_user: user.id,
@@ -203,10 +216,13 @@ const Index = () => {
     } else {
       console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     }
-  }, [user, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access.canWrite, selectedContext, selectedDate, liveTemperature]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
-    if (!user) return null;
+    if (!access.canWrite || !user) {
+      console.log('[Odara] skip blocked — guest mode or no user');
+      return null;
+    }
 
     console.log('[Odara] skip rpc start', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
     const { error: skipError } = await odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
@@ -234,7 +250,7 @@ const Index = () => {
     });
     if (rpcError) throw rpcError;
     return data as unknown as OracleResult;
-  }, [user, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access.canWrite, selectedContext, selectedDate, liveTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
@@ -269,9 +285,21 @@ const Index = () => {
     } finally { setLoading(false); }
   };
 
-  const handleSignOut = async () => { await odaraSupabase.auth.signOut(); };
+  const handleSignOut = async () => {
+    if (access.isGuestMode) {
+      // Guest sign-out: just return to auth screen
+      setGuestMode(false);
+      setOracle(null);
+      setOracleError(null);
+      oracleSuccessKeyRef.current = null;
+      oracleInFlightKeyRef.current = null;
+      return;
+    }
+    await odaraSupabase.auth.signOut();
+  };
 
-  if (!authReady) {
+  // Wait for auth bootstrap (but NOT when in guest mode — guest skips auth entirely)
+  if (!authReady && !guestMode) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <span className="text-sm text-muted-foreground">Checking authentication…</span>
@@ -279,25 +307,8 @@ const Index = () => {
     );
   }
 
-  // Guest mode: no authenticated shell — show graceful message
-  if (guestMode && !user) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-        <h1 className="text-xl tracking-[0.4em] font-bold uppercase mb-4">ODARA</h1>
-        <p className="text-sm text-muted-foreground text-center mb-8 max-w-xs">
-          Guest preview is temporarily unavailable. Please sign in to continue.
-        </p>
-        <button
-          onClick={() => setGuestMode(false)}
-          className="bg-foreground text-background rounded-lg px-6 py-2.5 text-sm font-semibold hover:bg-foreground/90 transition-all"
-        >
-          Back to Sign In
-        </button>
-      </div>
-    );
-  }
-
-  if (!user) {
+  // Show auth screen only when not signed in AND not in guest mode
+  if (!access.isSignedIn && !access.isGuestMode) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
         <span className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/50 mb-4">{ODARA_DEBUG_BUILD}</span>
@@ -343,6 +354,7 @@ const Index = () => {
     );
   }
 
+  // ── App shell — both signed-in and guest reach here ──
   return (
     <OdaraScreen
       oracle={oracle}
@@ -355,7 +367,7 @@ const Index = () => {
       onDateChange={setSelectedDate}
       onAccept={handleAccept}
       onSkip={handleSkip}
-      userId={user.id}
+      userId={access.resolvedUserId!}
       resolvedTemperature={liveTemperature}
     />
   );
