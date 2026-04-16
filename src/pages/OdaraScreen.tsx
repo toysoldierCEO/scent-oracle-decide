@@ -584,8 +584,9 @@ const OdaraScreen = ({
     setViewHistory([]);
     setPromotedAltId(null);
     setLayerExpanded(false);
-    setSelectedMood(null);
-    setLoadingMood(null);
+    setSelectedMood('balance');
+    setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
+    setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
     moodCacheRef.current.clear();
     moodInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
@@ -622,7 +623,8 @@ const OdaraScreen = ({
     // viewHistory is NOT cleared here — slot changes clear it in Effect 1 above
     setPromotedAltId(null);
     setLayerExpanded(false);
-    setLoadingMood(null);
+    setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
+    setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
 
     // 2) Set oracle
     setActiveOracle(oracle);
@@ -1133,7 +1135,8 @@ const OdaraScreen = ({
     // 2. Clear stale state completely
     setLayerExpanded(false);
     setLockState('neutral');
-    setLoadingMood(null);
+    setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
+    setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
 
     // 3. Set new card state BEFORE fetch
     setVisibleCard(promoted);
@@ -1457,7 +1460,12 @@ const OdaraScreen = ({
               onToggleExpand={() => setLayerExpanded(!layerExpanded)}
               lockPulse={lockPulse}
               locked={lockState === 'locked'}
-              loadingMood={loadingMood}
+              modeLoading={modeLoading}
+              modeErrors={modeErrors}
+              onRetryMood={(mood) => {
+                if (!visibleCard) return;
+                void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
+              }}
             />
 
             {/* ── Alternatives — sourced for the current visible card ── */}
