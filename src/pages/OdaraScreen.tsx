@@ -318,11 +318,12 @@ const OdaraScreen = ({
   const [promotedAltId, setPromotedAltId] = useState<string | null>(null);
 
   // ── Slot-scoped layer caches (lazy, from get_layer_for_card_mode_v1) ──
-  // Key: `${date}|${context}|${fragranceId}|${mood}` → BackendModeEntry | null
-  const moodCacheRef = useRef<Map<string, BackendModeEntry | null>>(new Map());
+  // Key: `${date}|${context}|${fragranceId}|${mood}` → BackendModeEntry (never null — failures go to modeErrors)
+  const moodCacheRef = useRef<Map<string, BackendModeEntry>>(new Map());
   const moodInFlightRef = useRef<Map<string, Promise<BackendModeEntry | null>>>(new Map());
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
-  const [loadingMood, setLoadingMood] = useState<LayerMood | null>(null);
+  const [modeLoading, setModeLoading] = useState<Record<LayerMood, boolean>>({ balance: false, bold: false, smooth: false, wild: false });
+  const [modeErrors, setModeErrors] = useState<Record<LayerMood, string | null>>({ balance: null, bold: null, smooth: null, wild: null });
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
   // Key: `${date}|${context}|${fragranceId}` → OracleAlternate[]
   const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
