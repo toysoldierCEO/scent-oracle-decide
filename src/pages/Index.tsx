@@ -4,6 +4,7 @@ import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
 import { resolveAccessMode } from '@/lib/access-mode';
+import { fetchHomeOracle } from '@/lib/oracle-access';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
