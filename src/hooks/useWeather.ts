@@ -5,15 +5,32 @@ const STALE_MS = 10 * 60 * 1000; // 10 minutes
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 
-export type WeatherByDate = Record<string, number>; // "YYYY-MM-DD" → °F
+export type WeatherByDate = Record<string, number>; // "YYYY-MM-DD" → °F (daily max)
+
+/** Local YYYY-MM-DD (matches selectedDate format produced via toISOString().split('T')[0] callers,
+ *  but we also expose a local-tz variant since Open-Meteo `daily.time` is in the requested timezone). */
+function todayLocalKey(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 interface UseWeatherResult {
   weatherByDate: WeatherByDate;
+  /** Live current temperature (°F) — apparent_temperature preferred, falls back to temperature_2m. */
+  currentTemperature: number | null;
   /** timestamp of last successful fetch, or null */
   fetchedAt: number | null;
   weatherLoading: boolean;
   weatherError: string | null;
-  /** Resolved temperature for a date. Falls back to nearest date, then DEV_FALLBACK. */
+  /**
+   * Resolved temperature for a date.
+   * - Today (local) → live `currentTemperature` (NOT daily max).
+   * - Other dates → daily max for that date.
+   * - Falls back to nearest date, then DEV_FALLBACK.
+   */
   getTemperature: (dateStr: string) => number;
   /** True when data exists but is older than STALE_MS */
   isStale: boolean;
