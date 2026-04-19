@@ -20,7 +20,7 @@ export interface FetchHomeOracleParams {
 
 export interface FetchHomeOracleResult {
   data: unknown;
-  rpcUsed: 'get_todays_oracle_home_v1' | 'get_guest_oracle_home_v1';
+  rpcUsed: 'get_todays_oracle_v3' | 'get_guest_oracle_home_v1';
 }
 
 export async function fetchHomeOracle(
@@ -44,8 +44,8 @@ export async function fetchHomeOracle(
     throw new Error('Cannot fetch oracle: no access mode resolved');
   }
 
-  console.log('[Odara] oracle access: SIGNED-IN → get_todays_oracle_home_v1');
-  const { data, error } = await odaraSupabase.rpc('get_todays_oracle_home_v1' as any, {
+  console.log('[Odara] oracle access: SIGNED-IN → get_todays_oracle_v3');
+  const { data, error } = await odaraSupabase.rpc('get_todays_oracle_v3' as any, {
     p_user_id: access.resolvedUserId,
     p_temperature: temperature,
     p_context: context,
@@ -53,5 +53,5 @@ export async function fetchHomeOracle(
     p_wear_date: wearDate,
   });
   if (error) throw error;
-  return { data, rpcUsed: 'get_todays_oracle_home_v1' };
+  return { data, rpcUsed: 'get_todays_oracle_v3' };
 }
