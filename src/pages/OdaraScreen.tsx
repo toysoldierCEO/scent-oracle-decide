@@ -84,12 +84,19 @@ export interface OracleAlternate {
   brand?: string; notes?: string[]; accords?: string[];
 }
 
-/** Home hero payload shape from get_todays_oracle_home_v1 */
+/** Home hero payload shape from get_todays_oracle_home_v1 / get_guest_oracle_home_v1.
+ *  Backend contract v3 sends the hero balance layer in multiple redundant shapes —
+ *  see normalizeOracleHomePayload for the canonical resolution order. */
 export interface OracleResult {
   today_pick: OraclePick;
   layer: OracleLayer | null;
+  /** v3 mirror of `layer` — must agree with payload.layer */
+  oracle_layer?: OracleLayer | null;
+  /** v3 explicit balance-mode block — must agree with layer_modes.balance */
+  seeded_balance_mode?: any;
   alternates: OracleAlternate[];
   ui_default_mode?: string;
+  layer_mode_contract?: string;
   layer_modes?: {
     balance?: any;
     bold?: any;
