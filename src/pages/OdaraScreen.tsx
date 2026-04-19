@@ -3,6 +3,7 @@ import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
+import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -83,12 +84,19 @@ export interface OracleAlternate {
   brand?: string; notes?: string[]; accords?: string[];
 }
 
-/** Home hero payload shape from get_todays_oracle_home_v1 */
+/** Home hero payload shape from get_todays_oracle_home_v1 / get_guest_oracle_home_v1.
+ *  Backend contract v3 sends the hero balance layer in multiple redundant shapes —
+ *  see normalizeOracleHomePayload for the canonical resolution order. */
 export interface OracleResult {
   today_pick: OraclePick;
   layer: OracleLayer | null;
+  /** v3 mirror of `layer` — must agree with payload.layer */
+  oracle_layer?: OracleLayer | null;
+  /** v3 explicit balance-mode block — must agree with layer_modes.balance */
+  seeded_balance_mode?: any;
   alternates: OracleAlternate[];
   ui_default_mode?: string;
+  layer_mode_contract?: string;
   layer_modes?: {
     balance?: any;
     bold?: any;
@@ -611,12 +619,18 @@ const OdaraScreen = ({
     const prevVisibleId = visibleCard?.fragrance_id ?? '(none)';
     const prevPromotedId = promotedAltId ?? '(none)';
 
+    // ── Normalize raw payload ONCE — single source of truth ──
+    const normalized = normalizeOracleHomePayload(oracle);
+
     console.log('[Odara] oracle apply', {
       selectedDate,
       selectedContext,
       backendHeroId: oracle.today_pick?.fragrance_id ?? '(none)',
       previousVisibleId: prevVisibleId,
       promotedAltIdBeforeReset: prevPromotedId,
+      contract: normalized.rawModeContract,
+      seededBalanceLayerName: normalized.seededBalanceLayer?.name ?? '(null)',
+      seededBalanceLayerId: normalized.seededBalanceLayer?.fragranceId ?? '(null)',
     });
 
     // 1) Clear ALL stale state first
@@ -629,8 +643,8 @@ const OdaraScreen = ({
     // 2) Set oracle
     setActiveOracle(oracle);
 
-    // 3) Set initial mood from backend ui_default_mode
-    const initialMood = (oracle.ui_default_mode as LayerMood) ?? 'balance';
+    // 3) PRODUCT LAW: Home always opens on `balance`. Ignore server-suggested mode.
+    const initialMood: LayerMood = normalized.defaultMode;
     setSelectedMood(initialMood);
 
     console.log('[Odara] oracle apply complete', {
@@ -644,14 +658,14 @@ const OdaraScreen = ({
       setVisibleCard(hero);
       console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
 
-      // 4) Pre-seed mood cache from oracle.layer_modes + oracle.layer for hero card
+      // 4) Pre-seed mood cache from normalized payload for hero card
       const slotPfx = `${selectedDate}|${selectedContext}`;
       const heroId = oracle.today_pick.fragrance_id;
-      let balanceSeeded = false;
 
-      if (oracle.layer_modes) {
+      // 4a) Seed every mode block from layer_modes when present
+      if (normalized.layerModesRaw) {
         for (const mood of LAYER_MODE_ORDER) {
-          const modeData = (oracle.layer_modes as any)?.[mood];
+          const modeData = (normalized.layerModesRaw as any)?.[mood];
           if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
             const entry: BackendModeEntry = {
               mode: mood,
@@ -671,35 +685,42 @@ const OdaraScreen = ({
               interaction_type: modeData.interaction_type ?? modeData.layer_mode ?? mood,
             };
             moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
-            console.log('[Odara] pre-seeded mood cache from oracle.layer_modes', mood, entry.layer_name);
-            if (mood === 'balance') balanceSeeded = true;
+            console.log('[Odara] pre-seeded mood cache from layer_modes', mood, entry.layer_name);
           }
         }
       }
 
-      // Fallback: seed balance from oracle.layer if layer_modes.balance was absent
-      if (!balanceSeeded && oracle.layer && oracle.layer.fragrance_id) {
-        const ol = oracle.layer;
+      // 4b) GUARANTEE balance is seeded — fall back to normalized.seededBalanceLayer
+      // (which already prefers payload.layer → oracle_layer → seeded_balance_mode → layer_modes.balance)
+      const balanceCacheKey = `${slotPfx}|${heroId}|balance`;
+      if (!moodCacheRef.current.has(balanceCacheKey) && normalized.seededBalanceLayer?.fragranceId) {
+        const sb = normalized.seededBalanceLayer;
         const balanceEntry: BackendModeEntry = {
           mode: 'balance',
-          layer_fragrance_id: ol.fragrance_id,
-          layer_name: ol.name ?? '',
-          layer_brand: ol.brand ?? '',
-          layer_family: ol.family ?? '',
-          layer_notes: Array.isArray(ol.notes) ? ol.notes : [],
-          layer_accords: Array.isArray(ol.accords) ? ol.accords : [],
-          layer_score: ol.layer_score ?? 0,
-          reason: ol.reason ?? '',
-          why_it_works: ol.why_it_works ?? '',
-          ratio_hint: ol.ratio_hint ?? '',
-          application_style: ol.application_style ?? '',
-          placement_hint: ol.placement_hint ?? '',
-          spray_guidance: ol.spray_guidance ?? '',
-          interaction_type: ol.layer_mode ?? 'balance',
+          layer_fragrance_id: sb.fragranceId!,
+          layer_name: sb.name ?? '',
+          layer_brand: sb.brand ?? '',
+          layer_family: sb.family ?? '',
+          layer_notes: sb.notes,
+          layer_accords: sb.accords,
+          layer_score: sb.layerScore ?? 0,
+          reason: sb.reason ?? '',
+          why_it_works: sb.whyItWorks ?? '',
+          ratio_hint: sb.ratioHint ?? '',
+          application_style: sb.applicationStyle ?? '',
+          placement_hint: sb.placementHint ?? '',
+          spray_guidance: sb.sprayGuidance ?? '',
+          interaction_type: sb.interactionType ?? 'balance',
         };
-        moodCacheRef.current.set(`${slotPfx}|${heroId}|balance`, balanceEntry);
-        console.log('[Odara] pre-seeded balance from oracle.layer fallback', balanceEntry.layer_name);
+        moodCacheRef.current.set(balanceCacheKey, balanceEntry);
+        console.log('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
       }
+
+      console.log('[Odara] mode cache after init', {
+        heroId,
+        keys: Array.from(moodCacheRef.current.keys()).filter(k => k.includes(heroId)),
+        balanceLoaded: moodCacheRef.current.has(balanceCacheKey),
+      });
 
       setMoodCacheVersion(v => v + 1);
 
