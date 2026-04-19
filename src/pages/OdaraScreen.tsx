@@ -3,6 +3,7 @@ import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
+import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
