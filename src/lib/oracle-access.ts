@@ -20,7 +20,7 @@ export interface FetchHomeOracleParams {
 
 export interface FetchHomeOracleResult {
   data: unknown;
-  rpcUsed: 'get_todays_oracle_home_v1' | 'get_guest_oracle_home_v1';
+  rpcUsed: 'get_todays_oracle_v3' | 'get_guest_oracle_home_v1';
 }
 
 export async function fetchHomeOracle(
