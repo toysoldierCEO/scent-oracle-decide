@@ -1554,15 +1554,36 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Accords */}
-            {pickAccords.length > 0 && (
+            {/* Accords (signed-in) / Hero tokens (guest) — tokens carry the meaning in guest mode */}
+            {isGuestMode ? (() => {
+              const o: any = activeOracle ?? oracle ?? {};
+              const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              if (tokens.length === 0) return null;
+              return (
+                <div className="flex flex-wrap justify-center gap-1.5 px-1 mb-3">
+                  {tokens.map((t, i) => (
+                    <span
+                      key={`hero-tok-${t.token_key ?? 'tok'}-${i}`}
+                      className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                      style={{
+                        color: t.color_hex || '#aaa',
+                        border: `1px solid ${(t.color_hex || '#888')}55`,
+                        background: `${(t.color_hex || '#888')}10`,
+                      }}
+                    >
+                      {t.token_label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })() : (pickAccords.length > 0 && (
               <p className="text-[13px] text-center mb-3" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
                 <span className="text-foreground/50">accords: </span>
                 <span className="text-foreground/85 font-medium lowercase">
                   {pickAccords.join(', ')}
                 </span>
               </p>
-            )}
+            ))}
 
             {/* ── Guest mode: minimal collapsed face. Tokens carry the meaning. ── */}
             {isGuestMode ? (() => {
