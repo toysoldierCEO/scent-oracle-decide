@@ -1561,7 +1561,7 @@ const OdaraScreen = ({
               if (tokens.length === 0) return null;
               return (
                 <div
-                  className="flex flex-nowrap items-center gap-1.5 px-1 mb-3 overflow-x-auto justify-start sm:justify-center"
+                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-3 overflow-x-auto justify-start sm:justify-center w-full"
                   style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                 >
                   {tokens.map((t, i) => (
