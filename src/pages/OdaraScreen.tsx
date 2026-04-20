@@ -422,9 +422,9 @@ const OdaraScreen = ({
   // ── Guest-mode-only state: curated visual sampler ──
   // Tracks which curated alternate the guest tapped (swaps the hero name+brand).
   // null = show backend payload hero (today_pick).
-  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestScent | null>(null);
+  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestBottle | null>(null);
   const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
-  const [guestSelectedMood, setGuestSelectedMood] = useState<GuestLayerMood>('balance');
+  const [guestSelectedMood, setGuestSelectedMood] = useState<GuestModeKey>('balance');
   // Reset guest swap state whenever the slot (date/context) or backend style changes.
   useEffect(() => {
     setGuestHeroOverride(null);
