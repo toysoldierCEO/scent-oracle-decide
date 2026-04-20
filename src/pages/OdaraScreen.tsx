@@ -409,6 +409,10 @@ const OdaraScreen = ({
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
   const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
+    if (isGuestMode) {
+      console.log('[Odara][Guest] mood fetch skipped (read-only)', { mood, fragranceId });
+      return null;
+    }
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = `${slotPrefix}|${fragranceId}|${mood}`;
     const cached = moodCacheRef.current.get(moodKey);
