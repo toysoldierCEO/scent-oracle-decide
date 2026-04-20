@@ -360,6 +360,7 @@ const Index = () => {
       onSkip={handleSkip}
       userId={access.resolvedUserId!}
       resolvedTemperature={liveTemperature}
+      isGuestMode={access.isGuestMode}
     />
   );
 };
