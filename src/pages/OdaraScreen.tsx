@@ -342,8 +342,13 @@ const OdaraScreen = ({
 
   const hasHistory = viewHistory.length > 0;
 
-  // Fetch queue from backend — background only, never blocks hero
+  // Fetch queue from backend — background only, never blocks hero.
+  // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
+    if (isGuestMode) {
+      console.log('[Odara][Guest] queue fetch skipped (read-only)');
+      return [];
+    }
     console.log('[Odara] queue fetch start');
     try {
       setQueueError(null);
@@ -371,7 +376,7 @@ const OdaraScreen = ({
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
-  }, [userId, selectedContext, selectedDate]);
+  }, [userId, selectedContext, selectedDate, isGuestMode]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
