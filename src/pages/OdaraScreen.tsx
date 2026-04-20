@@ -1561,7 +1561,7 @@ const OdaraScreen = ({
               if (tokens.length === 0) return null;
               return (
                 <div
-                  className="flex flex-nowrap items-center gap-1.5 px-1 mb-3 overflow-x-auto justify-start sm:justify-center"
+                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-3 overflow-x-auto justify-start sm:justify-center w-full"
                   style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                 >
                   {tokens.map((t, i) => (
@@ -1602,100 +1602,115 @@ const OdaraScreen = ({
                 : layerScent;
               return (
                 <div className="flex flex-col gap-3 mt-1">
-                  {/* Centered visual layer preview — minimal on collapsed face */}
-                  <button
-                    type="button"
-                    onClick={() => setGuestLayerExpanded(v => !v)}
-                    aria-expanded={guestLayerExpanded}
-                    className="rounded-[16px] px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
+                  {/* ONE layer container — collapsed + expanded live in the SAME card,
+                      mirroring regular Odara LayerCard structure. */}
+                  <div
+                    className="rounded-[16px] overflow-hidden"
                     style={{
                       background: 'rgba(255,255,255,0.03)',
                       border: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
-                      Layer with
-                    </span>
-                    <span
-                      className="text-[20px] leading-tight text-foreground"
-                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                    {/* Collapsed face (always visible header of the layer card) */}
+                    <button
+                      type="button"
+                      onClick={() => setGuestLayerExpanded(v => !v)}
+                      aria-expanded={guestLayerExpanded}
+                      className="w-full px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
                     >
-                      {getDisplayName(layerScent.name, layerScent.brand)}
-                    </span>
-                    {layerScent.brand && (
-                      <span className="text-[12px] text-muted-foreground/60">
-                        {layerScent.brand}
+                      <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
+                        Layer with
                       </span>
-                    )}
-
-                    {/* Token row under layer preview — single-line horizontal rail */}
-                    {tokens.length > 0 && (
-                      <div
-                        className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto justify-start sm:justify-center"
-                        style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                        onClick={(e) => e.stopPropagation()}
+                      <span
+                        className="text-[20px] leading-tight text-foreground"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       >
-                        {tokens.map((t, i) => (
+                        {getDisplayName(layerScent.name, layerScent.brand)}
+                      </span>
+                      {layerScent.brand && (
+                        <span className="text-[12px] text-muted-foreground/60">
+                          {layerScent.brand}
+                        </span>
+                      )}
+
+                      {/* Layer token rail — single-line, fully contained */}
+                      {tokens.length > 0 && (
+                        <div
+                          className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
+                          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {tokens.map((t, i) => (
+                            <span
+                              key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
+                              className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
+                              style={{
+                                color: t.color_hex || '#aaa',
+                                border: `1px solid ${(t.color_hex || '#888')}44`,
+                                background: `${(t.color_hex || '#888')}0A`,
+                              }}
+                            >
+                              {t.token_label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Expanded section — opens INSIDE the same container.
+                        Mirrors regular Odara LayerCard expanded area. */}
+                    {guestLayerExpanded && styleEntry && (
+                      <div
+                        className="px-4 pb-3 pt-3 flex flex-col gap-3"
+                        style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        {/* Mode chips — Balance / Bold / Smooth / Wild */}
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {GUEST_LAYER_MOODS.map(m => {
+                            const active = guestSelectedMood === m;
+                            return (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setGuestSelectedMood(m)}
+                                className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
+                                  active
+                                    ? 'bg-foreground/10 text-foreground border border-foreground/25'
+                                    : 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Selected mode scent */}
+                        <div className="flex flex-col items-center text-center gap-0.5">
                           <span
-                            key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
-                            className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
-                            style={{
-                              color: t.color_hex || '#aaa',
-                              border: `1px solid ${(t.color_hex || '#888')}44`,
-                              background: `${(t.color_hex || '#888')}0A`,
-                            }}
+                            className="text-[18px] leading-tight text-foreground"
+                            style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                           >
-                            {t.token_label}
+                            {getDisplayName(modeScent.name, modeScent.brand)}
                           </span>
-                        ))}
+                          <span className="text-[12px] text-muted-foreground/60">
+                            {modeScent.brand}
+                          </span>
+                        </div>
+
+                        {/* Why it works — same placement/treatment as regular Odara LayerCard.
+                            No generic filler prose: render the section header so the structure
+                            matches signed-in mode, and only render body copy when real
+                            guest-approved why-it-works text exists. */}
+                        <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                          <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
+                            Why it works
+                          </span>
+                          {/* Intentionally no body copy: no fake prose. */}
+                        </div>
                       </div>
                     )}
-                  </button>
-
-                  {/* Expanded layer view — modes + deeper explanation live ONLY here */}
-                  {guestLayerExpanded && styleEntry && (
-                    <div
-                      className="rounded-[16px] px-4 py-3 flex flex-col gap-3"
-                      style={{
-                        background: 'rgba(255,255,255,0.025)',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                      }}
-                    >
-                      {/* Mode chips */}
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {GUEST_LAYER_MOODS.map(m => {
-                          const active = guestSelectedMood === m;
-                          return (
-                            <button
-                              key={m}
-                              type="button"
-                              onClick={() => setGuestSelectedMood(m)}
-                              className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
-                                active
-                                  ? 'bg-foreground/10 text-foreground border border-foreground/25'
-                                  : 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
-                              }`}
-                            >
-                              {m}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Selected mode scent — uses the same Odara layer area placement; no filler prose */}
-                      <div className="flex flex-col items-center text-center gap-0.5">
-                        <span
-                          className="text-[18px] leading-tight text-foreground"
-                          style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                        >
-                          {getDisplayName(modeScent.name, modeScent.brand)}
-                        </span>
-                        <span className="text-[12px] text-muted-foreground/60">
-                          {modeScent.brand}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               );
             })() : (
@@ -1738,7 +1753,7 @@ const OdaraScreen = ({
                     Alternatives
                   </span>
                   <div
-                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-1 justify-start sm:justify-center"
+                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
                     {alts.map((alt, i) => {
