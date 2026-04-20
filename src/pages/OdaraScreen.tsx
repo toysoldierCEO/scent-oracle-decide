@@ -1504,8 +1504,22 @@ const OdaraScreen = ({
                 )}
               </div>
               )}
-              {/* Guest mode: keep right column reserved to preserve symmetric header layout */}
-              {isGuestMode && <div className="min-w-[52px]" />}
+              {/* Guest mode: visible-but-disabled lock to preserve card chrome */}
+              {isGuestMode && (
+                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="Lock (sign in to use)"
+                    className="p-0.5 cursor-default opacity-50"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40">
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Source badge for queue cards */}
