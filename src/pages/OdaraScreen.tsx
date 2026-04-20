@@ -1615,9 +1615,6 @@ const OdaraScreen = ({
               const heroTokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
                 ? o.hero_tokens
                 : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
-              const layerTokens: Array<any> = Array.isArray(o.layer_tokens) && o.layer_tokens.length > 0
-                ? o.layer_tokens
-                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
               const layerModesRaw: Record<string, any> = (o.layer_modes && typeof o.layer_modes === 'object') ? o.layer_modes : {};
               const modeOrder: GuestModeKey[] = (Array.isArray(o.layer_mode_order) && o.layer_mode_order.length > 0
                 ? o.layer_mode_order
@@ -1626,6 +1623,16 @@ const OdaraScreen = ({
                 m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
               );
               const selectedModeRaw: any = layerModesRaw[guestSelectedMood] ?? null;
+              // Layer token rail: FIRST CHOICE is the selected mode's own tokens,
+              // so the rail updates together with the scent/brand/why-it-works.
+              const layerTokens: Array<any> =
+                (Array.isArray(selectedModeRaw?.tokens) && selectedModeRaw.tokens.length > 0)
+                  ? selectedModeRaw.tokens
+                  : (Array.isArray(o.layer?.tokens) && o.layer.tokens.length > 0)
+                    ? o.layer.tokens
+                    : (Array.isArray(o.layer_tokens) && o.layer_tokens.length > 0)
+                      ? o.layer_tokens
+                      : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
               // SINGLE source of truth for the layer scent block:
               //   - prefer payload.layer_modes[selectedMood]
               //   - fallback to payload.layer (which == layer_modes.balance per backend contract)
