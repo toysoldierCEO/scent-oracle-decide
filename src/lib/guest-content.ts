@@ -1,12 +1,10 @@
 /**
- * Curated Guest Content Matrix — Guest Mode ONLY.
- *
- * Locked product decision: guest mode is a curated visual sampler.
- * This matrix is NOT the signed-in recommendation engine. Do NOT generalize
- * this into signed-in code paths. Backend provides the daily style world
- * (style_key) via get_guest_oracle_home_v1; this map provides the curated
- * UI content (alternates + 4 mode scents + default collapsed layer) for
- * each style world.
+ * @deprecated DO NOT USE — Guest mode now renders strictly from the backend
+ * payload returned by get_guest_oracle_home_v1 (today_pick, layer, alternates,
+ * layer_modes, layer_mode_order, ui_default_mode, hero_tokens, layer_tokens,
+ * accord_tokens). This file is retained only to avoid breaking historical
+ * imports during cleanup; nothing in the guest render path consumes it
+ * anymore. Do NOT reintroduce frontend curation of guest content.
  */
 
 export type GuestStyleKey =
