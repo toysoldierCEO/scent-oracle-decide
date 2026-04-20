@@ -1753,7 +1753,7 @@ const OdaraScreen = ({
                     Alternatives
                   </span>
                   <div
-                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-1 justify-start sm:justify-center"
+                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
                     {alts.map((alt, i) => {
