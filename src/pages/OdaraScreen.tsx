@@ -4,6 +4,7 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
+import { getGuestStyleEntry, GUEST_LAYER_MOODS, GUEST_MODE_REASON, type GuestLayerMood, type GuestScent } from "@/lib/guest-content";
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
