@@ -103,6 +103,22 @@ export interface OracleResult {
     smooth?: any;
     wild?: any;
   };
+  // ── Guest-mode fields (from get_guest_oracle_home_v1) ──
+  style_key?: string;
+  style_name?: string;
+  style_descriptor?: string;
+  style_blurb?: string;
+  context_key?: string;
+  context_note?: string | null;
+  weekday_slot?: string | null;
+  guest_mode_contract?: string | null;
+  accord_tokens?: Array<{
+    token_rank: number;
+    token_key: string;
+    token_label: string;
+    color_hex: string;
+    phase_hint?: string;
+  }>;
 }
 
 /** Backend mood-mode entry from get_layer_for_card_mode_v1 */
@@ -1518,30 +1534,110 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* ── Layer Card — for ALL visible cards ── */}
-            <LayerCard
-              mainName={visibleCard.name}
-              mainBrand={visibleCard.brand}
-              mainNotes={visibleCard.notes}
-              mainFamily={visibleCard.family}
-              mainProjection={null}
-              layerModes={modeResults}
-              visibleLayerMode={visibleModeEntry}
-              selectedMood={selectedMood}
-              onSelectMood={handleMoodSelect}
-              selectedRatio={selectedRatio}
-              onSelectRatio={setSelectedRatio}
-              isExpanded={layerExpanded}
-              onToggleExpand={() => setLayerExpanded(!layerExpanded)}
-              lockPulse={lockPulse}
-              locked={lockState === 'locked'}
-              modeLoading={modeLoading}
-              modeErrors={modeErrors}
-              onRetryMood={(mood) => {
-                if (!visibleCard) return;
-                void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
-              }}
-            />
+            {/* ── Guest mode: render style copy + layer + accord tokens directly from backend payload ── */}
+            {isGuestMode ? (() => {
+              const o: any = activeOracle ?? oracle ?? {};
+              const guestLayer = o.layer ?? null;
+              const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              return (
+                <div className="flex flex-col gap-3 mt-1">
+                  {/* Style copy */}
+                  {(o.style_name || o.style_descriptor || o.style_blurb || o.context_note) && (
+                    <div className="flex flex-col items-center gap-1 text-center">
+                      {o.style_name && (
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-foreground/60">
+                          {o.style_name}
+                        </span>
+                      )}
+                      {o.style_descriptor && (
+                        <p className="text-[13px] text-foreground/80 leading-snug px-2">
+                          {o.style_descriptor}
+                        </p>
+                      )}
+                      {(o.context_note || o.style_blurb) && (
+                        <p className="text-[11px] text-muted-foreground/60 leading-snug px-2">
+                          {o.context_note ?? o.style_blurb}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Accord tokens — backend order, backend label, backend color */}
+                  {tokens.length > 0 && (
+                    <div className="flex flex-wrap justify-center gap-1.5 px-1">
+                      {tokens.map((t, i) => (
+                        <span
+                          key={`${t.token_key ?? 'tok'}-${i}`}
+                          className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                          style={{
+                            color: t.color_hex || '#aaa',
+                            border: `1px solid ${(t.color_hex || '#888')}55`,
+                            background: `${(t.color_hex || '#888')}10`,
+                          }}
+                        >
+                          {t.token_label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Guest layer — direct from payload.layer */}
+                  {guestLayer ? (
+                    <div
+                      className="rounded-[16px] px-4 py-3 flex flex-col gap-1"
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                      }}
+                    >
+                      <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
+                        Layer with
+                      </span>
+                      <span
+                        className="text-[18px] leading-tight text-foreground"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                      >
+                        {guestLayer.name}
+                      </span>
+                      {guestLayer.brand && (
+                        <span className="text-[12px] text-muted-foreground/60">
+                          {guestLayer.brand}
+                        </span>
+                      )}
+                      {guestLayer.reason && (
+                        <p className="text-[12px] text-foreground/70 leading-snug mt-1">
+                          {guestLayer.reason}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })() : (
+              <LayerCard
+                mainName={visibleCard.name}
+                mainBrand={visibleCard.brand}
+                mainNotes={visibleCard.notes}
+                mainFamily={visibleCard.family}
+                mainProjection={null}
+                layerModes={modeResults}
+                visibleLayerMode={visibleModeEntry}
+                selectedMood={selectedMood}
+                onSelectMood={handleMoodSelect}
+                selectedRatio={selectedRatio}
+                onSelectRatio={setSelectedRatio}
+                isExpanded={layerExpanded}
+                onToggleExpand={() => setLayerExpanded(!layerExpanded)}
+                lockPulse={lockPulse}
+                locked={lockState === 'locked'}
+                modeLoading={modeLoading}
+                modeErrors={modeErrors}
+                onRetryMood={(mood) => {
+                  if (!visibleCard) return;
+                  void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
+                }}
+              />
+            )}
 
             {/* ── Alternatives — sourced for the current visible card ── */}
             {alternatesRendered && (
