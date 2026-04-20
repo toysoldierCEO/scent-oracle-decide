@@ -1625,16 +1625,12 @@ const OdaraScreen = ({
               ).filter((m: any): m is GuestModeKey =>
                 m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
               );
-              const collapsedLayer: GuestBottle | null = o.layer
-                ? {
-                    fragrance_id: o.layer.fragrance_id ?? null,
-                    name: o.layer.name ?? '—',
-                    brand: o.layer.brand ?? '',
-                    bind_status: o.layer.bind_status ?? null,
-                  }
-                : null;
               const selectedModeRaw: any = layerModesRaw[guestSelectedMood] ?? null;
-              const selectedModeBottle: GuestBottle | null = selectedModeRaw
+              // SINGLE source of truth for the layer scent block:
+              //   - prefer payload.layer_modes[selectedMood]
+              //   - fallback to payload.layer (which == layer_modes.balance per backend contract)
+              const fallbackLayer = o.layer ?? null;
+              const activeBottle: GuestBottle | null = selectedModeRaw
                 ? {
                     fragrance_id: selectedModeRaw.fragrance_id ?? null,
                     name: selectedModeRaw.name ?? '—',
@@ -1642,16 +1638,24 @@ const OdaraScreen = ({
                     bind_status: selectedModeRaw.bind_status ?? null,
                     why_it_works: selectedModeRaw.why_it_works ?? null,
                   }
-                : null;
+                : fallbackLayer
+                  ? {
+                      fragrance_id: fallbackLayer.fragrance_id ?? null,
+                      name: fallbackLayer.name ?? '—',
+                      brand: fallbackLayer.brand ?? '',
+                      bind_status: fallbackLayer.bind_status ?? null,
+                      why_it_works: fallbackLayer.why_it_works ?? null,
+                    }
+                  : null;
               console.log('[Odara][Guest] render summary', {
                 selected_mode: guestSelectedMood,
-                selected_mode_scent: selectedModeBottle?.name ?? null,
-                why_it_works_present: !!selectedModeBottle?.why_it_works,
+                selected_mode_scent: activeBottle?.name ?? null,
+                why_it_works_present: !!activeBottle?.why_it_works,
                 hero_token_count: heroTokens.length,
                 layer_token_count: layerTokens.length,
                 alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
               });
-              if (!collapsedLayer) return null;
+              if (!activeBottle) return null;
               return (
                 <div className="flex flex-col gap-3 mt-1">
                   <div
@@ -1661,28 +1665,31 @@ const OdaraScreen = ({
                       border: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    {/* Collapsed face */}
+                    {/* Collapsed face — single scent block (updates in-place when mode changes) */}
                     <button
                       type="button"
                       onClick={() => setGuestLayerExpanded(v => !v)}
                       aria-expanded={guestLayerExpanded}
                       className="w-full px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
                     >
+                      {/* 1. "Layer with" */}
                       <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
                         Layer with
                       </span>
+                      {/* 2. selected layer scent name */}
                       <span
                         className="text-[20px] leading-tight text-foreground"
                         style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       >
-                        {getDisplayName(collapsedLayer.name, collapsedLayer.brand)}
+                        {getDisplayName(activeBottle.name, activeBottle.brand)}
                       </span>
-                      {collapsedLayer.brand && (
+                      {/* 3. selected layer brand */}
+                      {activeBottle.brand && (
                         <span className="text-[12px] text-muted-foreground/60">
-                          {collapsedLayer.brand}
+                          {activeBottle.brand}
                         </span>
                       )}
-
+                      {/* 4. selected layer token rail */}
                       {layerTokens.length > 0 && (
                         <div
                           className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
@@ -1706,12 +1713,14 @@ const OdaraScreen = ({
                       )}
                     </button>
 
-                    {/* Expanded section — backend layer_modes drives chips + why_it_works */}
+                    {/* Expanded section — mode row + Why It Works ONLY.
+                        No second scent title block — collapsed face already updates in-place. */}
                     {guestLayerExpanded && modeOrder.length > 0 && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
+                        {/* 5. mode row */}
                         <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
                           {modeOrder.map(m => {
                             const active = guestSelectedMood === m;
@@ -1736,28 +1745,14 @@ const OdaraScreen = ({
                           })}
                         </div>
 
-                        {selectedModeBottle && (
-                          <div className="flex flex-col items-center text-center gap-0.5">
-                            <span
-                              className="text-[18px] leading-tight text-foreground"
-                              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                            >
-                              {getDisplayName(selectedModeBottle.name, selectedModeBottle.brand)}
-                            </span>
-                            <span className="text-[12px] text-muted-foreground/60">
-                              {selectedModeBottle.brand}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Why it works — backend-supplied copy only. No fake fallback. */}
+                        {/* 6 + 7. Why it works heading + body — backend-supplied copy only */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
                             Why it works
                           </span>
-                          {selectedModeBottle?.why_it_works && (
+                          {activeBottle.why_it_works && (
                             <p className="text-[12px] text-foreground/75 text-center mt-2 leading-relaxed">
-                              {selectedModeBottle.why_it_works}
+                              {activeBottle.why_it_works}
                             </p>
                           )}
                         </div>
