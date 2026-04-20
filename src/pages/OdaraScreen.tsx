@@ -1560,11 +1560,14 @@ const OdaraScreen = ({
               const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
               if (tokens.length === 0) return null;
               return (
-                <div className="flex flex-wrap justify-center gap-1.5 px-1 mb-3">
+                <div
+                  className="flex flex-nowrap items-center gap-1.5 px-1 mb-3 overflow-x-auto justify-start sm:justify-center"
+                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                >
                   {tokens.map((t, i) => (
                     <span
                       key={`hero-tok-${t.token_key ?? 'tok'}-${i}`}
-                      className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                      className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
                       style={{
                         color: t.color_hex || '#aaa',
                         border: `1px solid ${(t.color_hex || '#888')}55`,
@@ -1625,13 +1628,17 @@ const OdaraScreen = ({
                       </span>
                     )}
 
-                    {/* Token row under layer preview — same explanatory system as hero */}
+                    {/* Token row under layer preview — single-line horizontal rail */}
                     {tokens.length > 0 && (
-                      <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
+                      <div
+                        className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto justify-start sm:justify-center"
+                        style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {tokens.map((t, i) => (
                           <span
                             key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
-                            className="text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
+                            className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
                             style={{
                               color: t.color_hex || '#aaa',
                               border: `1px solid ${(t.color_hex || '#888')}44`,
@@ -1675,7 +1682,7 @@ const OdaraScreen = ({
                         })}
                       </div>
 
-                      {/* Selected mode scent */}
+                      {/* Selected mode scent — uses the same Odara layer area placement; no filler prose */}
                       <div className="flex flex-col items-center text-center gap-0.5">
                         <span
                           className="text-[18px] leading-tight text-foreground"
@@ -1687,11 +1694,6 @@ const OdaraScreen = ({
                           {modeScent.brand}
                         </span>
                       </div>
-
-                      {/* Deeper explanation lives only here */}
-                      <p className="text-[12px] text-foreground/70 leading-snug text-center px-1">
-                        {GUEST_MODE_REASON[guestSelectedMood]}
-                      </p>
                     </div>
                   )}
                 </div>
@@ -1735,7 +1737,10 @@ const OdaraScreen = ({
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                     Alternatives
                   </span>
-                  <div className="flex gap-2 flex-wrap justify-center w-full px-1">
+                  <div
+                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-1 justify-start sm:justify-center"
+                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                  >
                     {alts.map((alt, i) => {
                       const isActive =
                         guestHeroOverride?.name === alt.name && guestHeroOverride?.brand === alt.brand;
@@ -1744,7 +1749,7 @@ const OdaraScreen = ({
                           key={`${alt.name}-${i}`}
                           type="button"
                           onClick={() => setGuestHeroOverride(isActive ? null : alt)}
-                          className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
+                          className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
                             isActive
                               ? 'bg-foreground/12 text-foreground border border-foreground/30'
                               : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
