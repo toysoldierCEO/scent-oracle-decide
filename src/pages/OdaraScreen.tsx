@@ -4,6 +4,7 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
+import { getGuestStyleEntry, GUEST_LAYER_MOODS, GUEST_MODE_REASON, type GuestLayerMood, type GuestScent } from "@/lib/guest-content";
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -398,6 +399,19 @@ const OdaraScreen = ({
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
+
+  // ── Guest-mode-only state: curated visual sampler ──
+  // Tracks which curated alternate the guest tapped (swaps the hero name+brand).
+  // null = show backend payload hero (today_pick).
+  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestScent | null>(null);
+  const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
+  const [guestSelectedMood, setGuestSelectedMood] = useState<GuestLayerMood>('balance');
+  // Reset guest swap state whenever the slot (date/context) or backend style changes.
+  useEffect(() => {
+    setGuestHeroOverride(null);
+    setGuestLayerExpanded(false);
+    setGuestSelectedMood('balance');
+  }, [selectedDate, selectedContext, (oracle as any)?.style_key]);
 
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
@@ -1490,8 +1504,22 @@ const OdaraScreen = ({
                 )}
               </div>
               )}
-              {/* Guest mode: keep right column reserved to preserve symmetric header layout */}
-              {isGuestMode && <div className="min-w-[52px]" />}
+              {/* Guest mode: visible-but-disabled lock to preserve card chrome */}
+              {isGuestMode && (
+                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="Lock (sign in to use)"
+                    className="p-0.5 cursor-default opacity-50"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40">
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Source badge for queue cards */}
@@ -1501,17 +1529,19 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Fragrance name */}
+            {/* Fragrance name (guest may override via curated alternate tap) */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {getDisplayName(visibleCard.name, visibleCard.brand)}
+              {isGuestMode && guestHeroOverride
+                ? getDisplayName(guestHeroOverride.name, guestHeroOverride.brand)
+                : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {visibleCard.brand}
+              {isGuestMode && guestHeroOverride ? guestHeroOverride.brand : visibleCard.brand}
             </span>
 
             {/* Family label — suppressed in guest mode (style world drives identity instead) */}
@@ -1524,93 +1554,146 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Accords */}
-            {pickAccords.length > 0 && (
+            {/* Accords (signed-in) / Hero tokens (guest) — tokens carry the meaning in guest mode */}
+            {isGuestMode ? (() => {
+              const o: any = activeOracle ?? oracle ?? {};
+              const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              if (tokens.length === 0) return null;
+              return (
+                <div className="flex flex-wrap justify-center gap-1.5 px-1 mb-3">
+                  {tokens.map((t, i) => (
+                    <span
+                      key={`hero-tok-${t.token_key ?? 'tok'}-${i}`}
+                      className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                      style={{
+                        color: t.color_hex || '#aaa',
+                        border: `1px solid ${(t.color_hex || '#888')}55`,
+                        background: `${(t.color_hex || '#888')}10`,
+                      }}
+                    >
+                      {t.token_label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })() : (pickAccords.length > 0 && (
               <p className="text-[13px] text-center mb-3" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
                 <span className="text-foreground/50">accords: </span>
                 <span className="text-foreground/85 font-medium lowercase">
                   {pickAccords.join(', ')}
                 </span>
               </p>
-            )}
+            ))}
 
-            {/* ── Guest mode: render style copy + layer + accord tokens directly from backend payload ── */}
+            {/* ── Guest mode: minimal collapsed face. Tokens carry the meaning. ── */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
-              const guestLayer = o.layer ?? null;
               const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              const styleEntry = getGuestStyleEntry(o.style_key);
+              const layerScent: GuestScent = styleEntry?.defaultLayer ?? {
+                name: o.layer?.name ?? '—',
+                brand: o.layer?.brand ?? '',
+              };
+              const modeScent: GuestScent = styleEntry
+                ? styleEntry.modes[guestSelectedMood]
+                : layerScent;
               return (
                 <div className="flex flex-col gap-3 mt-1">
-                  {/* Style copy */}
-                  {(o.style_name || o.style_descriptor || o.style_blurb || o.context_note) && (
-                    <div className="flex flex-col items-center gap-1 text-center">
-                      {o.style_name && (
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-foreground/60">
-                          {o.style_name}
-                        </span>
-                      )}
-                      {o.style_descriptor && (
-                        <p className="text-[13px] text-foreground/80 leading-snug px-2">
-                          {o.style_descriptor}
-                        </p>
-                      )}
-                      {(o.context_note || o.style_blurb) && (
-                        <p className="text-[11px] text-muted-foreground/60 leading-snug px-2">
-                          {o.context_note ?? o.style_blurb}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Centered visual layer preview — minimal on collapsed face */}
+                  <button
+                    type="button"
+                    onClick={() => setGuestLayerExpanded(v => !v)}
+                    aria-expanded={guestLayerExpanded}
+                    className="rounded-[16px] px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
+                      Layer with
+                    </span>
+                    <span
+                      className="text-[20px] leading-tight text-foreground"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                    >
+                      {getDisplayName(layerScent.name, layerScent.brand)}
+                    </span>
+                    {layerScent.brand && (
+                      <span className="text-[12px] text-muted-foreground/60">
+                        {layerScent.brand}
+                      </span>
+                    )}
 
-                  {/* Accord tokens — backend order, backend label, backend color */}
-                  {tokens.length > 0 && (
-                    <div className="flex flex-wrap justify-center gap-1.5 px-1">
-                      {tokens.map((t, i) => (
-                        <span
-                          key={`${t.token_key ?? 'tok'}-${i}`}
-                          className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
-                          style={{
-                            color: t.color_hex || '#aaa',
-                            border: `1px solid ${(t.color_hex || '#888')}55`,
-                            background: `${(t.color_hex || '#888')}10`,
-                          }}
-                        >
-                          {t.token_label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                    {/* Token row under layer preview — same explanatory system as hero */}
+                    {tokens.length > 0 && (
+                      <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
+                        {tokens.map((t, i) => (
+                          <span
+                            key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
+                            className="text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
+                            style={{
+                              color: t.color_hex || '#aaa',
+                              border: `1px solid ${(t.color_hex || '#888')}44`,
+                              background: `${(t.color_hex || '#888')}0A`,
+                            }}
+                          >
+                            {t.token_label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
 
-                  {/* Guest layer — direct from payload.layer */}
-                  {guestLayer ? (
+                  {/* Expanded layer view — modes + deeper explanation live ONLY here */}
+                  {guestLayerExpanded && styleEntry && (
                     <div
-                      className="rounded-[16px] px-4 py-3 flex flex-col gap-1"
+                      className="rounded-[16px] px-4 py-3 flex flex-col gap-3"
                       style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
+                        background: 'rgba(255,255,255,0.025)',
+                        border: '1px solid rgba(255,255,255,0.05)',
                       }}
                     >
-                      <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
-                        Layer with
-                      </span>
-                      <span
-                        className="text-[18px] leading-tight text-foreground"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                      >
-                        {guestLayer.name}
-                      </span>
-                      {guestLayer.brand && (
-                        <span className="text-[12px] text-muted-foreground/60">
-                          {guestLayer.brand}
+                      {/* Mode chips */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {GUEST_LAYER_MOODS.map(m => {
+                          const active = guestSelectedMood === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setGuestSelectedMood(m)}
+                              className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
+                                active
+                                  ? 'bg-foreground/10 text-foreground border border-foreground/25'
+                                  : 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected mode scent */}
+                      <div className="flex flex-col items-center text-center gap-0.5">
+                        <span
+                          className="text-[18px] leading-tight text-foreground"
+                          style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                        >
+                          {getDisplayName(modeScent.name, modeScent.brand)}
                         </span>
-                      )}
-                      {guestLayer.reason && (
-                        <p className="text-[12px] text-foreground/70 leading-snug mt-1">
-                          {guestLayer.reason}
-                        </p>
-                      )}
+                        <span className="text-[12px] text-muted-foreground/60">
+                          {modeScent.brand}
+                        </span>
+                      </div>
+
+                      {/* Deeper explanation lives only here */}
+                      <p className="text-[12px] text-foreground/70 leading-snug text-center px-1">
+                        {GUEST_MODE_REASON[guestSelectedMood]}
+                      </p>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               );
             })() : (
@@ -1639,8 +1722,42 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives — sourced for the current visible card ── */}
-            {alternatesRendered && (
+            {/* ── Alternatives ── */}
+            {isGuestMode ? (() => {
+              // Guest mode: 3 curated clickable alternates from the locked content matrix.
+              // Tapping swaps the visible hero name+brand (curated visual sampler — no signed-in RPCs).
+              const o: any = activeOracle ?? oracle ?? {};
+              const styleEntry = getGuestStyleEntry(o.style_key);
+              const alts = styleEntry?.alternates ?? [];
+              if (alts.length === 0) return null;
+              return (
+                <div className="flex flex-col items-center gap-2 mt-3">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
+                    Alternatives
+                  </span>
+                  <div className="flex gap-2 flex-wrap justify-center w-full px-1">
+                    {alts.map((alt, i) => {
+                      const isActive =
+                        guestHeroOverride?.name === alt.name && guestHeroOverride?.brand === alt.brand;
+                      return (
+                        <button
+                          key={`${alt.name}-${i}`}
+                          type="button"
+                          onClick={() => setGuestHeroOverride(isActive ? null : alt)}
+                          className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
+                            isActive
+                              ? 'bg-foreground/12 text-foreground border border-foreground/30'
+                              : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
+                          }`}
+                        >
+                          {getDisplayName(alt.name)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : (alternatesRendered && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
@@ -1648,7 +1765,6 @@ const OdaraScreen = ({
                 <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
                   {visibleAlts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
-                    // Guest mode is read-only AND null/synthetic ids cannot be promoted (no signed-in layer fetch)
                     const isSyntheticId = !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_');
                     const promotionDisabled = isGuestMode || isSyntheticId;
                     return (
@@ -1670,7 +1786,7 @@ const OdaraScreen = ({
                   })}
                 </div>
               </div>
-            )}
+            ))}
 
 
           </div>
