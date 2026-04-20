@@ -173,6 +173,8 @@ interface OdaraScreenProps {
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
   userId: string;
   resolvedTemperature: number;
+  /** Guest mode: read-only, no signed-in RPCs (queue/alternates/mood). Render strictly from raw payload. */
+  isGuestMode?: boolean;
 }
 
 /* ── Forecast days ── */
