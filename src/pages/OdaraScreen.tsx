@@ -527,6 +527,23 @@ const OdaraScreen = ({
   }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
+    // GUEST MODE: source alternates directly from raw payload — no signed-in RPC.
+    // Null fragrance_id is valid (pending_catalog) — keep the row visible, only id-dependent actions are gated.
+    if (isGuestMode) {
+      const raw = (oracle?.alternates ?? []) as any[];
+      const guestAlts: OracleAlternate[] = raw.map((row, idx) => ({
+        fragrance_id: row?.fragrance_id ?? `__guest_alt_${idx}`,
+        name: row?.name ?? '',
+        family: row?.family ?? '',
+        reason: row?.reason ?? '',
+        brand: row?.brand ?? '',
+        notes: Array.isArray(row?.notes) ? row.notes : [],
+        accords: Array.isArray(row?.accords) ? row.accords : [],
+      })).filter(a => a.name);
+      console.log('[Odara][Guest] alternates from raw payload', { count: guestAlts.length });
+      return guestAlts;
+    }
+
     const altKey = `${selectedDate}|${selectedContext}|${card.fragrance_id}`;
     const cached = alternatesCacheRef.current.get(altKey);
     if (cached !== undefined) {
@@ -573,7 +590,7 @@ const OdaraScreen = ({
       alternatesCacheRef.current.set(altKey, []);
       return [];
     }
-  }, [userId, selectedContext, selectedDate, stateKey]);
+  }, [userId, selectedContext, selectedDate, stateKey, isGuestMode, oracle]);
 
   // Stable ref for fetchQueue so effects don't re-fire on reference change
   const fetchQueueRef = useRef(fetchQueue);
