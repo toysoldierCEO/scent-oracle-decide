@@ -1607,22 +1607,51 @@ const OdaraScreen = ({
               </p>
             ))}
 
-            {/* ── Guest mode: minimal collapsed face. Tokens carry the meaning. ── */}
+            {/* ── Guest mode: backend-driven layer card. All content from payload. ── */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
-              const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
-              const styleEntry = getGuestStyleEntry(o.style_key);
-              const layerScent: GuestScent = styleEntry?.defaultLayer ?? {
-                name: o.layer?.name ?? '—',
-                brand: o.layer?.brand ?? '',
-              };
-              const modeScent: GuestScent = styleEntry
-                ? styleEntry.modes[guestSelectedMood]
-                : layerScent;
+              const heroTokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
+                ? o.hero_tokens
+                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
+              const layerTokens: Array<any> = Array.isArray(o.layer_tokens) && o.layer_tokens.length > 0
+                ? o.layer_tokens
+                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
+              const layerModesRaw: Record<string, any> = (o.layer_modes && typeof o.layer_modes === 'object') ? o.layer_modes : {};
+              const modeOrder: GuestModeKey[] = (Array.isArray(o.layer_mode_order) && o.layer_mode_order.length > 0
+                ? o.layer_mode_order
+                : GUEST_DEFAULT_MODE_ORDER
+              ).filter((m: any): m is GuestModeKey =>
+                m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
+              );
+              const collapsedLayer: GuestBottle | null = o.layer
+                ? {
+                    fragrance_id: o.layer.fragrance_id ?? null,
+                    name: o.layer.name ?? '—',
+                    brand: o.layer.brand ?? '',
+                    bind_status: o.layer.bind_status ?? null,
+                  }
+                : null;
+              const selectedModeRaw: any = layerModesRaw[guestSelectedMood] ?? null;
+              const selectedModeBottle: GuestBottle | null = selectedModeRaw
+                ? {
+                    fragrance_id: selectedModeRaw.fragrance_id ?? null,
+                    name: selectedModeRaw.name ?? '—',
+                    brand: selectedModeRaw.brand ?? '',
+                    bind_status: selectedModeRaw.bind_status ?? null,
+                    why_it_works: selectedModeRaw.why_it_works ?? null,
+                  }
+                : null;
+              console.log('[Odara][Guest] render summary', {
+                selected_mode: guestSelectedMood,
+                selected_mode_scent: selectedModeBottle?.name ?? null,
+                why_it_works_present: !!selectedModeBottle?.why_it_works,
+                hero_token_count: heroTokens.length,
+                layer_token_count: layerTokens.length,
+                alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
+              });
+              if (!collapsedLayer) return null;
               return (
                 <div className="flex flex-col gap-3 mt-1">
-                  {/* ONE layer container — collapsed + expanded live in the SAME card,
-                      mirroring regular Odara LayerCard structure. */}
                   <div
                     className="rounded-[16px] overflow-hidden"
                     style={{
@@ -1630,7 +1659,7 @@ const OdaraScreen = ({
                       border: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    {/* Collapsed face (always visible header of the layer card) */}
+                    {/* Collapsed face */}
                     <button
                       type="button"
                       onClick={() => setGuestLayerExpanded(v => !v)}
@@ -1644,22 +1673,21 @@ const OdaraScreen = ({
                         className="text-[20px] leading-tight text-foreground"
                         style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       >
-                        {getDisplayName(layerScent.name, layerScent.brand)}
+                        {getDisplayName(collapsedLayer.name, collapsedLayer.brand)}
                       </span>
-                      {layerScent.brand && (
+                      {collapsedLayer.brand && (
                         <span className="text-[12px] text-muted-foreground/60">
-                          {layerScent.brand}
+                          {collapsedLayer.brand}
                         </span>
                       )}
 
-                      {/* Layer token rail — single-line, fully contained */}
-                      {tokens.length > 0 && (
+                      {layerTokens.length > 0 && (
                         <div
                           className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
                           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {tokens.map((t, i) => (
+                          {layerTokens.map((t, i) => (
                             <span
                               key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
                               className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
@@ -1676,26 +1704,28 @@ const OdaraScreen = ({
                       )}
                     </button>
 
-                    {/* Expanded section — opens INSIDE the same container.
-                        Mirrors regular Odara LayerCard expanded area. */}
-                    {guestLayerExpanded && styleEntry && (
+                    {/* Expanded section — backend layer_modes drives chips + why_it_works */}
+                    {guestLayerExpanded && modeOrder.length > 0 && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* Mode chips — Balance / Bold / Smooth / Wild */}
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {GUEST_LAYER_MOODS.map(m => {
+                        <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
+                          {modeOrder.map(m => {
                             const active = guestSelectedMood === m;
+                            const present = !!layerModesRaw[m];
                             return (
                               <button
                                 key={m}
                                 type="button"
-                                onClick={() => setGuestSelectedMood(m)}
+                                onClick={() => present && setGuestSelectedMood(m)}
+                                disabled={!present}
                                 className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
                                   active
                                     ? 'bg-foreground/10 text-foreground border border-foreground/25'
-                                    : 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                                    : present
+                                      ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                                      : 'text-muted-foreground/20 border border-transparent cursor-default'
                                 }`}
                               >
                                 {m}
@@ -1704,28 +1734,30 @@ const OdaraScreen = ({
                           })}
                         </div>
 
-                        {/* Selected mode scent */}
-                        <div className="flex flex-col items-center text-center gap-0.5">
-                          <span
-                            className="text-[18px] leading-tight text-foreground"
-                            style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                          >
-                            {getDisplayName(modeScent.name, modeScent.brand)}
-                          </span>
-                          <span className="text-[12px] text-muted-foreground/60">
-                            {modeScent.brand}
-                          </span>
-                        </div>
+                        {selectedModeBottle && (
+                          <div className="flex flex-col items-center text-center gap-0.5">
+                            <span
+                              className="text-[18px] leading-tight text-foreground"
+                              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                            >
+                              {getDisplayName(selectedModeBottle.name, selectedModeBottle.brand)}
+                            </span>
+                            <span className="text-[12px] text-muted-foreground/60">
+                              {selectedModeBottle.brand}
+                            </span>
+                          </div>
+                        )}
 
-                        {/* Why it works — same placement/treatment as regular Odara LayerCard.
-                            No generic filler prose: render the section header so the structure
-                            matches signed-in mode, and only render body copy when real
-                            guest-approved why-it-works text exists. */}
+                        {/* Why it works — backend-supplied copy only. No fake fallback. */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
                             Why it works
                           </span>
-                          {/* Intentionally no body copy: no fake prose. */}
+                          {selectedModeBottle?.why_it_works && (
+                            <p className="text-[12px] text-foreground/75 text-center mt-2 leading-relaxed">
+                              {selectedModeBottle.why_it_works}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
