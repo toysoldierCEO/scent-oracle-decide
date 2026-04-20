@@ -173,6 +173,8 @@ interface OdaraScreenProps {
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
   userId: string;
   resolvedTemperature: number;
+  /** Guest mode: read-only, no signed-in RPCs (queue/alternates/mood). Render strictly from raw payload. */
+  isGuestMode?: boolean;
 }
 
 /* ── Forecast days ── */
@@ -310,6 +312,7 @@ const OdaraScreen = ({
   selectedDate, onDateChange,
   onAccept, onSkip, userId,
   resolvedTemperature,
+  isGuestMode = false,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
@@ -339,8 +342,13 @@ const OdaraScreen = ({
 
   const hasHistory = viewHistory.length > 0;
 
-  // Fetch queue from backend — background only, never blocks hero
+  // Fetch queue from backend — background only, never blocks hero.
+  // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
+    if (isGuestMode) {
+      console.log('[Odara][Guest] queue fetch skipped (read-only)');
+      return [];
+    }
     console.log('[Odara] queue fetch start');
     try {
       setQueueError(null);
@@ -368,7 +376,7 @@ const OdaraScreen = ({
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
-  }, [userId, selectedContext, selectedDate]);
+  }, [userId, selectedContext, selectedDate, isGuestMode]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -401,6 +409,10 @@ const OdaraScreen = ({
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
   const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
+    if (isGuestMode) {
+      console.log('[Odara][Guest] mood fetch skipped (read-only)', { mood, fragranceId });
+      return null;
+    }
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = `${slotPrefix}|${fragranceId}|${mood}`;
     const cached = moodCacheRef.current.get(moodKey);
@@ -512,9 +524,26 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, activeOracle, stateKey]);
+  }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
+    // GUEST MODE: source alternates directly from raw payload — no signed-in RPC.
+    // Null fragrance_id is valid (pending_catalog) — keep the row visible, only id-dependent actions are gated.
+    if (isGuestMode) {
+      const raw = (oracle?.alternates ?? []) as any[];
+      const guestAlts: OracleAlternate[] = raw.map((row, idx) => ({
+        fragrance_id: row?.fragrance_id ?? `__guest_alt_${idx}`,
+        name: row?.name ?? '',
+        family: row?.family ?? '',
+        reason: row?.reason ?? '',
+        brand: row?.brand ?? '',
+        notes: Array.isArray(row?.notes) ? row.notes : [],
+        accords: Array.isArray(row?.accords) ? row.accords : [],
+      })).filter(a => a.name);
+      console.log('[Odara][Guest] alternates from raw payload', { count: guestAlts.length });
+      return guestAlts;
+    }
+
     const altKey = `${selectedDate}|${selectedContext}|${card.fragrance_id}`;
     const cached = alternatesCacheRef.current.get(altKey);
     if (cached !== undefined) {
@@ -561,7 +590,7 @@ const OdaraScreen = ({
       alternatesCacheRef.current.set(altKey, []);
       return [];
     }
-  }, [userId, selectedContext, selectedDate, stateKey]);
+  }, [userId, selectedContext, selectedDate, stateKey, isGuestMode, oracle]);
 
   // Stable ref for fetchQueue so effects don't re-fire on reference change
   const fetchQueueRef = useRef(fetchQueue);
@@ -785,8 +814,12 @@ const OdaraScreen = ({
   const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
   const isShowingHeroCard =
     !!visibleCard &&
-    !!oracleHeroId &&
-    visibleCard.fragrance_id === oracleHeroId;
+    (
+      // Signed-in: must match oracle hero id
+      (!!oracleHeroId && visibleCard.fragrance_id === oracleHeroId) ||
+      // Guest mode: today_pick may have null fragrance_id (pending_catalog) — still treat as hero
+      (isGuestMode && !!activeOracle?.today_pick && visibleCard.isHero)
+    );
   // Hero-style = real hero OR promoted alternate (shows alternates + layer)
   const isHeroStyle = isShowingHeroCard || promotedAltId === visibleCard?.fragrance_id;
   const renderType = isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE';
@@ -1176,6 +1209,21 @@ const OdaraScreen = ({
     });
   }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext]);
 
+  if (isGuestMode) {
+    const o: any = oracle ?? {};
+    console.log('[Odara][Guest] render summary', {
+      style_key: o.style_key ?? null,
+      style_name: o.style_name ?? null,
+      weekday_slot: o.weekday_slot ?? null,
+      hero_name: o.today_pick?.name ?? null,
+      hero_bind_status: o.today_pick?.bind_status ?? null,
+      layer_name: o.layer?.name ?? null,
+      alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
+      visibleCardId: visibleCard?.fragrance_id ?? null,
+      isShowingHeroCard,
+    });
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
@@ -1233,11 +1281,11 @@ const OdaraScreen = ({
               touchAction: 'pan-x',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
-            onPointerDownCapture={handlePointerDown}
-            onPointerMoveCapture={handlePointerMove}
-            onPointerUpCapture={handlePointerUp}
-            onPointerCancelCapture={handlePointerCancel}
-            onClickCapture={handleCardClickCapture}
+            onPointerDownCapture={isGuestMode ? undefined : handlePointerDown}
+            onPointerMoveCapture={isGuestMode ? undefined : handlePointerMove}
+            onPointerUpCapture={isGuestMode ? undefined : handlePointerUp}
+            onPointerCancelCapture={isGuestMode ? undefined : handlePointerCancel}
+            onClickCapture={isGuestMode ? undefined : handleCardClickCapture}
           >
             {/* Glow orb */}
             <div
@@ -1259,7 +1307,8 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: lock → star → back vertical stack */}
+              {/* Right: lock → star → back vertical stack — HIDDEN in guest mode (read-only) */}
+              {!isGuestMode && (
               <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
                 <button
@@ -1424,6 +1473,9 @@ const OdaraScreen = ({
                   </button>
                 )}
               </div>
+              )}
+              {/* Guest mode: keep right column reserved to preserve symmetric header layout */}
+              {isGuestMode && <div className="min-w-[52px]" />}
             </div>
 
             {/* Source badge for queue cards */}
@@ -1446,13 +1498,15 @@ const OdaraScreen = ({
               {visibleCard.brand}
             </span>
 
-            {/* Family label */}
-            <span
-              className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-              style={{ color: familyColor }}
-            >
-              {familyLabel}
-            </span>
+            {/* Family label — suppressed in guest mode (style world drives identity instead) */}
+            {!isGuestMode && (
+              <span
+                className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                style={{ color: familyColor }}
+              >
+                {familyLabel}
+              </span>
+            )}
 
             {/* Accords */}
             {pickAccords.length > 0 && (
@@ -1498,12 +1552,16 @@ const OdaraScreen = ({
                 <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
                   {visibleAlts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
+                    // Guest mode is read-only AND null/synthetic ids cannot be promoted (no signed-in layer fetch)
+                    const isSyntheticId = !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_');
+                    const promotionDisabled = isGuestMode || isSyntheticId;
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={() => handlePromoteAlternate(alt)}
+                        onClick={promotionDisabled ? undefined : () => handlePromoteAlternate(alt)}
+                        disabled={promotionDisabled}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
-                          text-foreground/70 hover:text-foreground/90 active:scale-95
+                          text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
                           ${lockState === 'locked' ? 'opacity-30 pointer-events-none' : ''}`}
                         style={{
                           border: `1px solid ${altColor}44`,

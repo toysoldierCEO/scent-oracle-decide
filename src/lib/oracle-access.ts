@@ -52,10 +52,30 @@ export async function fetchHomeOracle(
       p_brand: brand,
       p_wear_date: wearDate,
     };
-    console.log('[Odara] oracle access: GUEST → get_guest_oracle_home_v1');
+    console.log('[Odara][Guest] access mode', { isGuestMode: true });
+    console.log('[Odara][Guest] rpc start', { rpc: 'get_guest_oracle_home_v1', args });
     const { data, error } = await odaraSupabase.rpc('get_guest_oracle_home_v1' as any, args);
     logRawHomePayload('get_guest_oracle_home_v1', args, data, error);
-    if (error) throw error;
+    if (error) {
+      console.error('[Odara][Guest] rpc fail', { error });
+      throw error;
+    }
+    const d: any = data ?? {};
+    const alts = Array.isArray(d.alternates) ? d.alternates : [];
+    const tokens = Array.isArray(d.accord_tokens) ? d.accord_tokens : [];
+    console.log('[Odara][Guest] rpc success');
+    console.log('[Odara][Guest] payload summary', {
+      style_key: d.style_key ?? null,
+      style_name: d.style_name ?? null,
+      weekday_slot: d.weekday_slot ?? null,
+      context_key: d.context_key ?? null,
+      hero_name: d.today_pick?.name ?? null,
+      hero_bind_status: d.today_pick?.bind_status ?? null,
+      layer_name: d.layer?.name ?? null,
+      layer_bind_status: d.layer?.bind_status ?? null,
+      alternates_count: alts.length,
+      token_count: tokens.length,
+    });
     return { data, rpcUsed: 'get_guest_oracle_home_v1' };
   }
 
