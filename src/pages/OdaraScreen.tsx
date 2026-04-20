@@ -1564,83 +1564,115 @@ const OdaraScreen = ({
               </p>
             )}
 
-            {/* ── Guest mode: render style copy + layer + accord tokens directly from backend payload ── */}
+            {/* ── Guest mode: minimal collapsed face. Tokens carry the meaning. ── */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
-              const guestLayer = o.layer ?? null;
               const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              const styleEntry = getGuestStyleEntry(o.style_key);
+              const layerScent: GuestScent = styleEntry?.defaultLayer ?? {
+                name: o.layer?.name ?? '—',
+                brand: o.layer?.brand ?? '',
+              };
+              const modeScent: GuestScent = styleEntry
+                ? styleEntry.modes[guestSelectedMood]
+                : layerScent;
               return (
                 <div className="flex flex-col gap-3 mt-1">
-                  {/* Style copy */}
-                  {(o.style_name || o.style_descriptor || o.style_blurb || o.context_note) && (
-                    <div className="flex flex-col items-center gap-1 text-center">
-                      {o.style_name && (
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-foreground/60">
-                          {o.style_name}
-                        </span>
-                      )}
-                      {o.style_descriptor && (
-                        <p className="text-[13px] text-foreground/80 leading-snug px-2">
-                          {o.style_descriptor}
-                        </p>
-                      )}
-                      {(o.context_note || o.style_blurb) && (
-                        <p className="text-[11px] text-muted-foreground/60 leading-snug px-2">
-                          {o.context_note ?? o.style_blurb}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Centered visual layer preview — minimal on collapsed face */}
+                  <button
+                    type="button"
+                    onClick={() => setGuestLayerExpanded(v => !v)}
+                    aria-expanded={guestLayerExpanded}
+                    className="rounded-[16px] px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
+                      Layer with
+                    </span>
+                    <span
+                      className="text-[20px] leading-tight text-foreground"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                    >
+                      {getDisplayName(layerScent.name, layerScent.brand)}
+                    </span>
+                    {layerScent.brand && (
+                      <span className="text-[12px] text-muted-foreground/60">
+                        {layerScent.brand}
+                      </span>
+                    )}
 
-                  {/* Accord tokens — backend order, backend label, backend color */}
-                  {tokens.length > 0 && (
-                    <div className="flex flex-wrap justify-center gap-1.5 px-1">
-                      {tokens.map((t, i) => (
-                        <span
-                          key={`${t.token_key ?? 'tok'}-${i}`}
-                          className="text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
-                          style={{
-                            color: t.color_hex || '#aaa',
-                            border: `1px solid ${(t.color_hex || '#888')}55`,
-                            background: `${(t.color_hex || '#888')}10`,
-                          }}
-                        >
-                          {t.token_label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                    {/* Token row under layer preview — same explanatory system as hero */}
+                    {tokens.length > 0 && (
+                      <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
+                        {tokens.map((t, i) => (
+                          <span
+                            key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
+                            className="text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
+                            style={{
+                              color: t.color_hex || '#aaa',
+                              border: `1px solid ${(t.color_hex || '#888')}44`,
+                              background: `${(t.color_hex || '#888')}0A`,
+                            }}
+                          >
+                            {t.token_label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
 
-                  {/* Guest layer — direct from payload.layer */}
-                  {guestLayer ? (
+                  {/* Expanded layer view — modes + deeper explanation live ONLY here */}
+                  {guestLayerExpanded && styleEntry && (
                     <div
-                      className="rounded-[16px] px-4 py-3 flex flex-col gap-1"
+                      className="rounded-[16px] px-4 py-3 flex flex-col gap-3"
                       style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
+                        background: 'rgba(255,255,255,0.025)',
+                        border: '1px solid rgba(255,255,255,0.05)',
                       }}
                     >
-                      <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
-                        Layer with
-                      </span>
-                      <span
-                        className="text-[18px] leading-tight text-foreground"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                      >
-                        {guestLayer.name}
-                      </span>
-                      {guestLayer.brand && (
-                        <span className="text-[12px] text-muted-foreground/60">
-                          {guestLayer.brand}
+                      {/* Mode chips */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {GUEST_LAYER_MOODS.map(m => {
+                          const active = guestSelectedMood === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setGuestSelectedMood(m)}
+                              className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
+                                active
+                                  ? 'bg-foreground/10 text-foreground border border-foreground/25'
+                                  : 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected mode scent */}
+                      <div className="flex flex-col items-center text-center gap-0.5">
+                        <span
+                          className="text-[18px] leading-tight text-foreground"
+                          style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                        >
+                          {getDisplayName(modeScent.name, modeScent.brand)}
                         </span>
-                      )}
-                      {guestLayer.reason && (
-                        <p className="text-[12px] text-foreground/70 leading-snug mt-1">
-                          {guestLayer.reason}
-                        </p>
-                      )}
+                        <span className="text-[12px] text-muted-foreground/60">
+                          {modeScent.brand}
+                        </span>
+                      </div>
+
+                      {/* Deeper explanation lives only here */}
+                      <p className="text-[12px] text-foreground/70 leading-snug text-center px-1">
+                        {GUEST_MODE_REASON[guestSelectedMood]}
+                      </p>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               );
             })() : (
