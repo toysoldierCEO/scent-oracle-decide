@@ -429,8 +429,10 @@ const OdaraScreen = ({
   useEffect(() => {
     setGuestHeroOverride(null);
     setGuestLayerExpanded(false);
-    setGuestSelectedMood('balance');
-  }, [selectedDate, selectedContext, (oracle as any)?.style_key]);
+    const def = (oracle as any)?.ui_default_mode;
+    const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
+    setGuestSelectedMood(safeDef);
+  }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.ui_default_mode]);
 
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
