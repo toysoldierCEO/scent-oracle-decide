@@ -814,8 +814,12 @@ const OdaraScreen = ({
   const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
   const isShowingHeroCard =
     !!visibleCard &&
-    !!oracleHeroId &&
-    visibleCard.fragrance_id === oracleHeroId;
+    (
+      // Signed-in: must match oracle hero id
+      (!!oracleHeroId && visibleCard.fragrance_id === oracleHeroId) ||
+      // Guest mode: today_pick may have null fragrance_id (pending_catalog) — still treat as hero
+      (isGuestMode && !!activeOracle?.today_pick && visibleCard.isHero)
+    );
   // Hero-style = real hero OR promoted alternate (shows alternates + layer)
   const isHeroStyle = isShowingHeroCard || promotedAltId === visibleCard?.fragrance_id;
   const renderType = isShowingHeroCard ? 'HERO' : promotedAltId === visibleCard?.fragrance_id ? 'PROMOTED_ALT' : 'QUEUE';
