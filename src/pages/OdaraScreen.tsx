@@ -1475,13 +1475,15 @@ const OdaraScreen = ({
               {visibleCard.brand}
             </span>
 
-            {/* Family label */}
-            <span
-              className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-              style={{ color: familyColor }}
-            >
-              {familyLabel}
-            </span>
+            {/* Family label — suppressed in guest mode (style world drives identity instead) */}
+            {!isGuestMode && (
+              <span
+                className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                style={{ color: familyColor }}
+              >
+                {familyLabel}
+              </span>
+            )}
 
             {/* Accords */}
             {pickAccords.length > 0 && (
