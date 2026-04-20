@@ -1722,8 +1722,42 @@ const OdaraScreen = ({
               />
             )}
 
-            {/* ── Alternatives — sourced for the current visible card ── */}
-            {alternatesRendered && (
+            {/* ── Alternatives ── */}
+            {isGuestMode ? (() => {
+              // Guest mode: 3 curated clickable alternates from the locked content matrix.
+              // Tapping swaps the visible hero name+brand (curated visual sampler — no signed-in RPCs).
+              const o: any = activeOracle ?? oracle ?? {};
+              const styleEntry = getGuestStyleEntry(o.style_key);
+              const alts = styleEntry?.alternates ?? [];
+              if (alts.length === 0) return null;
+              return (
+                <div className="flex flex-col items-center gap-2 mt-3">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
+                    Alternatives
+                  </span>
+                  <div className="flex gap-2 flex-wrap justify-center w-full px-1">
+                    {alts.map((alt, i) => {
+                      const isActive =
+                        guestHeroOverride?.name === alt.name && guestHeroOverride?.brand === alt.brand;
+                      return (
+                        <button
+                          key={`${alt.name}-${i}`}
+                          type="button"
+                          onClick={() => setGuestHeroOverride(isActive ? null : alt)}
+                          className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
+                            isActive
+                              ? 'bg-foreground/12 text-foreground border border-foreground/30'
+                              : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
+                          }`}
+                        >
+                          {getDisplayName(alt.name)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : (alternatesRendered && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
@@ -1731,7 +1765,6 @@ const OdaraScreen = ({
                 <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
                   {visibleAlts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
-                    // Guest mode is read-only AND null/synthetic ids cannot be promoted (no signed-in layer fetch)
                     const isSyntheticId = !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_');
                     const promotionDisabled = isGuestMode || isSyntheticId;
                     return (
@@ -1753,7 +1786,7 @@ const OdaraScreen = ({
                   })}
                 </div>
               </div>
-            )}
+            ))}
 
 
           </div>
