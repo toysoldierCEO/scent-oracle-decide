@@ -4,7 +4,23 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
-import { getGuestStyleEntry, GUEST_LAYER_MOODS, GUEST_MODE_REASON, type GuestLayerMood, type GuestScent } from "@/lib/guest-content";
+// NOTE: guest-content.ts is INTENTIONALLY no longer imported.
+// Guest mode renders strictly from the backend payload returned by
+// get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
+// layer_mode_order, ui_default_mode, hero_tokens, layer_tokens,
+// accord_tokens). Do NOT reintroduce frontend curation here.
+
+type GuestModeKey = 'balance' | 'bold' | 'smooth' | 'wild';
+const GUEST_DEFAULT_MODE_ORDER: GuestModeKey[] = ['balance', 'bold', 'smooth', 'wild'];
+
+interface GuestBottle {
+  fragrance_id: string | null;
+  name: string;
+  brand: string;
+  bind_status?: 'bound' | 'pending_catalog' | 'duplicate_review' | null;
+  reason?: string | null;
+  why_it_works?: string | null;
+}
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
