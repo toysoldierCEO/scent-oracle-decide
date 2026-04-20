@@ -1262,11 +1262,11 @@ const OdaraScreen = ({
               touchAction: 'pan-x',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
-            onPointerDownCapture={handlePointerDown}
-            onPointerMoveCapture={handlePointerMove}
-            onPointerUpCapture={handlePointerUp}
-            onPointerCancelCapture={handlePointerCancel}
-            onClickCapture={handleCardClickCapture}
+            onPointerDownCapture={isGuestMode ? undefined : handlePointerDown}
+            onPointerMoveCapture={isGuestMode ? undefined : handlePointerMove}
+            onPointerUpCapture={isGuestMode ? undefined : handlePointerUp}
+            onPointerCancelCapture={isGuestMode ? undefined : handlePointerCancel}
+            onClickCapture={isGuestMode ? undefined : handleCardClickCapture}
           >
             {/* Glow orb */}
             <div
