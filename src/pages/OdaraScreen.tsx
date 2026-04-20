@@ -1529,17 +1529,19 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Fragrance name */}
+            {/* Fragrance name (guest may override via curated alternate tap) */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {getDisplayName(visibleCard.name, visibleCard.brand)}
+              {isGuestMode && guestHeroOverride
+                ? getDisplayName(guestHeroOverride.name, guestHeroOverride.brand)
+                : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {visibleCard.brand}
+              {isGuestMode && guestHeroOverride ? guestHeroOverride.brand : visibleCard.brand}
             </span>
 
             {/* Family label — suppressed in guest mode (style world drives identity instead) */}
