@@ -1533,12 +1533,16 @@ const OdaraScreen = ({
                 <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
                   {visibleAlts.map((alt, i) => {
                     const altColor = FAMILY_COLORS[alt.family] ?? '#888';
+                    // Guest mode is read-only AND null/synthetic ids cannot be promoted (no signed-in layer fetch)
+                    const isSyntheticId = !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_');
+                    const promotionDisabled = isGuestMode || isSyntheticId;
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={() => handlePromoteAlternate(alt)}
+                        onClick={promotionDisabled ? undefined : () => handlePromoteAlternate(alt)}
+                        disabled={promotionDisabled}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
-                          text-foreground/70 hover:text-foreground/90 active:scale-95
+                          text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
                           ${lockState === 'locked' ? 'opacity-30 pointer-events-none' : ''}`}
                         style={{
                           border: `1px solid ${altColor}44`,
