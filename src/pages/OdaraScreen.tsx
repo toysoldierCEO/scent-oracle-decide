@@ -1288,7 +1288,8 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: lock → star → back vertical stack */}
+              {/* Right: lock → star → back vertical stack — HIDDEN in guest mode (read-only) */}
+              {!isGuestMode && (
               <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
                 <button
@@ -1453,6 +1454,9 @@ const OdaraScreen = ({
                   </button>
                 )}
               </div>
+              )}
+              {/* Guest mode: keep right column reserved to preserve symmetric header layout */}
+              {isGuestMode && <div className="min-w-[52px]" />}
             </div>
 
             {/* Source badge for queue cards */}
