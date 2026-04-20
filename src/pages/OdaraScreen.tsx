@@ -1792,11 +1792,16 @@ const OdaraScreen = ({
 
             {/* ── Alternatives ── */}
             {isGuestMode ? (() => {
-              // Guest mode: 3 curated clickable alternates from the locked content matrix.
-              // Tapping swaps the visible hero name+brand (curated visual sampler — no signed-in RPCs).
+              // Guest mode: alternates come strictly from backend payload.alternates.
+              // Tapping swaps the visible hero name+brand (read-only sampler — no signed-in RPCs).
               const o: any = activeOracle ?? oracle ?? {};
-              const styleEntry = getGuestStyleEntry(o.style_key);
-              const alts = styleEntry?.alternates ?? [];
+              const rawAlts: any[] = Array.isArray(o.alternates) ? o.alternates : [];
+              const alts: GuestBottle[] = rawAlts.map((a) => ({
+                fragrance_id: a?.fragrance_id ?? null,
+                name: a?.name ?? '—',
+                brand: a?.brand ?? '',
+                bind_status: a?.bind_status ?? null,
+              }));
               if (alts.length === 0) return null;
               return (
                 <div className="flex flex-col items-center gap-2 mt-3">
