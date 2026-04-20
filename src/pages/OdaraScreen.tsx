@@ -1209,6 +1209,21 @@ const OdaraScreen = ({
     });
   }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext]);
 
+  if (isGuestMode) {
+    const o: any = oracle ?? {};
+    console.log('[Odara][Guest] render summary', {
+      style_key: o.style_key ?? null,
+      style_name: o.style_name ?? null,
+      weekday_slot: o.weekday_slot ?? null,
+      hero_name: o.today_pick?.name ?? null,
+      hero_bind_status: o.today_pick?.bind_status ?? null,
+      layer_name: o.layer?.name ?? null,
+      alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
+      visibleCardId: visibleCard?.fragrance_id ?? null,
+      isShowingHeroCard,
+    });
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
