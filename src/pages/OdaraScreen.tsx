@@ -136,6 +136,9 @@ export interface OracleResult {
     color_hex: string;
     phase_hint?: string;
   }>;
+  hero_tokens?: Array<any>;
+  layer_tokens?: Array<any>;
+  layer_mode_order?: string[];
 }
 
 /** Backend mood-mode entry from get_layer_for_card_mode_v1 */
