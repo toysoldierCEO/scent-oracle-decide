@@ -103,6 +103,22 @@ export interface OracleResult {
     smooth?: any;
     wild?: any;
   };
+  // ── Guest-mode fields (from get_guest_oracle_home_v1) ──
+  style_key?: string;
+  style_name?: string;
+  style_descriptor?: string;
+  style_blurb?: string;
+  context_key?: string;
+  context_note?: string | null;
+  weekday_slot?: string | null;
+  guest_mode_contract?: string | null;
+  accord_tokens?: Array<{
+    token_rank: number;
+    token_key: string;
+    token_label: string;
+    color_hex: string;
+    phase_hint?: string;
+  }>;
 }
 
 /** Backend mood-mode entry from get_layer_for_card_mode_v1 */
