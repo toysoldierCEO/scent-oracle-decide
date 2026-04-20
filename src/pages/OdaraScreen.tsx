@@ -400,6 +400,19 @@ const OdaraScreen = ({
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
+  // ── Guest-mode-only state: curated visual sampler ──
+  // Tracks which curated alternate the guest tapped (swaps the hero name+brand).
+  // null = show backend payload hero (today_pick).
+  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestScent | null>(null);
+  const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
+  const [guestSelectedMood, setGuestSelectedMood] = useState<GuestLayerMood>('balance');
+  // Reset guest swap state whenever the slot (date/context) or backend style changes.
+  useEffect(() => {
+    setGuestHeroOverride(null);
+    setGuestLayerExpanded(false);
+    setGuestSelectedMood('balance');
+  }, [selectedDate, selectedContext, (oracle as any)?.style_key]);
+
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
   const stateKey = `${selectedDate}:${selectedContext}`;
