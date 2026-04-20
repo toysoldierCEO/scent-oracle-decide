@@ -312,6 +312,7 @@ const OdaraScreen = ({
   selectedDate, onDateChange,
   onAccept, onSkip, userId,
   resolvedTemperature,
+  isGuestMode = false,
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
