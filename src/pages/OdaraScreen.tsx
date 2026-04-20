@@ -524,7 +524,7 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, activeOracle, stateKey]);
+  }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
     const altKey = `${selectedDate}|${selectedContext}|${card.fragrance_id}`;
