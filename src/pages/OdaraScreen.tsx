@@ -1771,7 +1771,7 @@ const OdaraScreen = ({
 
                     {/* Expanded section — mode row + Why It Works ONLY.
                         No second scent title block — collapsed face already updates in-place. */}
-                    {guestLayerExpanded && modeOrder.length > 0 && (
+                    {guestLayerExpanded && (modeOrder.length > 0 || altBundleActive) && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
