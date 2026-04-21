@@ -1776,30 +1776,32 @@ const OdaraScreen = ({
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* 5. mode row */}
-                        <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
-                          {modeOrder.map(m => {
-                            const active = guestSelectedMood === m;
-                            const present = !!layerModesRaw[m];
-                            return (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => present && setGuestSelectedMood(m)}
-                                disabled={!present}
-                                className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
-                                  active
-                                    ? 'bg-foreground/10 text-foreground border border-foreground/25'
-                                    : present
-                                      ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
-                                      : 'text-muted-foreground/20 border border-transparent cursor-default'
-                                }`}
-                              >
-                                {m}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {/* 5. mode row — hidden while alternate bundle is active (alternates have no mode set) */}
+                        {!altBundleActive && modeOrder.length > 0 && (
+                          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
+                            {modeOrder.map(m => {
+                              const active = guestSelectedMood === m;
+                              const present = !!layerModesRaw[m];
+                              return (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => present && setGuestSelectedMood(m)}
+                                  disabled={!present}
+                                  className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
+                                    active
+                                      ? 'bg-foreground/10 text-foreground border border-foreground/25'
+                                      : present
+                                        ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                                        : 'text-muted-foreground/20 border border-transparent cursor-default'
+                                  }`}
+                                >
+                                  {m}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* 6 + 7. Why it works heading + body — backend-supplied copy only */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
