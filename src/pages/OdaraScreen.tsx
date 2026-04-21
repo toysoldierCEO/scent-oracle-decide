@@ -20,6 +20,10 @@ interface GuestBottle {
   bind_status?: 'bound' | 'pending_catalog' | 'duplicate_review' | null;
   reason?: string | null;
   why_it_works?: string | null;
+  family?: string | null;
+  /** When tapped from alternates, carries the alternate's nested layer bundle so the
+   *  layer card can render the alternate's real backend layer (not the main mode). */
+  layer?: any | null;
 }
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
@@ -1641,7 +1645,13 @@ const OdaraScreen = ({
               ).filter((m: any): m is GuestModeKey =>
                 m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
               );
-              const selectedModeRaw: any = layerModesRaw[guestSelectedMood] ?? null;
+              // ── Alternate-bundle override: when a guest taps an alternate that carries
+              //    a nested backend `layer` bundle, the layer card switches to render
+              //    THAT alternate's backend layer (name/brand/family/tokens/why_it_works),
+              //    and the mode row hides (alternates have no backend mode set).
+              const altLayer: any = (guestHeroOverride && (guestHeroOverride as any).layer) ? (guestHeroOverride as any).layer : null;
+              const altBundleActive = !!altLayer;
+              const selectedModeRaw: any = altLayer ?? (layerModesRaw[guestSelectedMood] ?? null);
               // Layer token rail: FIRST CHOICE is the selected mode's own tokens,
               // so the rail updates together with the scent/brand/why-it-works.
               const layerTokens: Array<any> =
@@ -1761,35 +1771,37 @@ const OdaraScreen = ({
 
                     {/* Expanded section — mode row + Why It Works ONLY.
                         No second scent title block — collapsed face already updates in-place. */}
-                    {guestLayerExpanded && modeOrder.length > 0 && (
+                    {guestLayerExpanded && (modeOrder.length > 0 || altBundleActive) && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* 5. mode row */}
-                        <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
-                          {modeOrder.map(m => {
-                            const active = guestSelectedMood === m;
-                            const present = !!layerModesRaw[m];
-                            return (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => present && setGuestSelectedMood(m)}
-                                disabled={!present}
-                                className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
-                                  active
-                                    ? 'bg-foreground/10 text-foreground border border-foreground/25'
-                                    : present
-                                      ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
-                                      : 'text-muted-foreground/20 border border-transparent cursor-default'
-                                }`}
-                              >
-                                {m}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {/* 5. mode row — hidden while alternate bundle is active (alternates have no mode set) */}
+                        {!altBundleActive && modeOrder.length > 0 && (
+                          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
+                            {modeOrder.map(m => {
+                              const active = guestSelectedMood === m;
+                              const present = !!layerModesRaw[m];
+                              return (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => present && setGuestSelectedMood(m)}
+                                  disabled={!present}
+                                  className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
+                                    active
+                                      ? 'bg-foreground/10 text-foreground border border-foreground/25'
+                                      : present
+                                        ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
+                                        : 'text-muted-foreground/20 border border-transparent cursor-default'
+                                  }`}
+                                >
+                                  {m}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* 6 + 7. Why it works heading + body — backend-supplied copy only */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1844,6 +1856,10 @@ const OdaraScreen = ({
                 name: a?.name ?? '—',
                 brand: a?.brand ?? '',
                 bind_status: a?.bind_status ?? null,
+                family: a?.family ?? null,
+                // Carry the alternate's nested backend layer bundle (when present)
+                // so the layer card can render the alternate's real layer set.
+                layer: a?.layer ?? null,
               }));
               if (alts.length === 0) return null;
               return (
@@ -1862,7 +1878,14 @@ const OdaraScreen = ({
                         <button
                           key={`${alt.name}-${i}`}
                           type="button"
-                          onClick={() => setGuestHeroOverride(isActive ? null : alt)}
+                          onClick={() => {
+                            if (isActive) {
+                              setGuestHeroOverride(null);
+                            } else {
+                              setGuestHeroOverride(alt);
+                              if (alt.layer) setGuestLayerExpanded(true);
+                            }
+                          }}
                           className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
                             isActive
                               ? 'bg-foreground/12 text-foreground border border-foreground/30'
