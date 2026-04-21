@@ -1645,7 +1645,13 @@ const OdaraScreen = ({
               ).filter((m: any): m is GuestModeKey =>
                 m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
               );
-              const selectedModeRaw: any = layerModesRaw[guestSelectedMood] ?? null;
+              // ── Alternate-bundle override: when a guest taps an alternate that carries
+              //    a nested backend `layer` bundle, the layer card switches to render
+              //    THAT alternate's backend layer (name/brand/family/tokens/why_it_works),
+              //    and the mode row hides (alternates have no backend mode set).
+              const altLayer: any = (guestHeroOverride && (guestHeroOverride as any).layer) ? (guestHeroOverride as any).layer : null;
+              const altBundleActive = !!altLayer;
+              const selectedModeRaw: any = altLayer ?? (layerModesRaw[guestSelectedMood] ?? null);
               // Layer token rail: FIRST CHOICE is the selected mode's own tokens,
               // so the rail updates together with the scent/brand/why-it-works.
               const layerTokens: Array<any> =
