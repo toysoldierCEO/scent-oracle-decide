@@ -1565,20 +1565,39 @@ const OdaraScreen = ({
               {isGuestMode && guestHeroOverride ? guestHeroOverride.brand : visibleCard.brand}
             </span>
 
-            {/* Family label — suppressed in guest mode (style world drives identity instead) */}
-            {!isGuestMode && (
+            {/* Family label — signed-in: derived label; guest: backend family string verbatim */}
+            {!isGuestMode ? (
               <span
                 className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
                 style={{ color: familyColor }}
               >
                 {familyLabel}
               </span>
-            )}
+            ) : (() => {
+              const o: any = activeOracle ?? oracle ?? {};
+              const guestHeroFamily: string | null =
+                (guestHeroOverride && (guestHeroOverride as any).family)
+                  ? String((guestHeroOverride as any).family)
+                  : (o.today_pick?.family ? String(o.today_pick.family) : null);
+              if (!guestHeroFamily) return null;
+              const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
+              const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
+              return (
+                <span
+                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                  style={{ color: guestHeroFamilyColor }}
+                >
+                  {guestHeroFamily}
+                </span>
+              );
+            })()}
 
             {/* Accords (signed-in) / Hero tokens (guest) — tokens carry the meaning in guest mode */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
-              const tokens: Array<any> = Array.isArray(o.accord_tokens) ? o.accord_tokens : [];
+              const tokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
+                ? o.hero_tokens
+                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
               if (tokens.length === 0) return null;
               return (
                 <div
