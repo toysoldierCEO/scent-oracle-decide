@@ -1856,6 +1856,10 @@ const OdaraScreen = ({
                 name: a?.name ?? '—',
                 brand: a?.brand ?? '',
                 bind_status: a?.bind_status ?? null,
+                family: a?.family ?? null,
+                // Carry the alternate's nested backend layer bundle (when present)
+                // so the layer card can render the alternate's real layer set.
+                layer: a?.layer ?? null,
               }));
               if (alts.length === 0) return null;
               return (
