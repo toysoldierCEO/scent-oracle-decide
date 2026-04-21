@@ -1715,7 +1715,27 @@ const OdaraScreen = ({
                           {activeBottle.brand}
                         </span>
                       )}
-                      {/* 4. selected layer token rail */}
+                      {/* 4. selected layer family tag — backend verbatim, updates with selectedMode */}
+                      {(() => {
+                        const layerFamily: string | null =
+                          (selectedModeRaw && selectedModeRaw.family)
+                            ? String(selectedModeRaw.family)
+                            : (fallbackLayer && fallbackLayer.family)
+                              ? String(fallbackLayer.family)
+                              : null;
+                        if (!layerFamily) return null;
+                        const fam = layerFamily as keyof typeof FAMILY_COLORS;
+                        const layerFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
+                        return (
+                          <span
+                            className="text-[10px] uppercase tracking-[0.15em] font-medium mt-0.5"
+                            style={{ color: layerFamilyColor }}
+                          >
+                            {layerFamily}
+                          </span>
+                        );
+                      })()}
+                      {/* 5. selected layer token rail */}
                       {layerTokens.length > 0 && (
                         <div
                           className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
