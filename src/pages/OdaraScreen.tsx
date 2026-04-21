@@ -20,6 +20,10 @@ interface GuestBottle {
   bind_status?: 'bound' | 'pending_catalog' | 'duplicate_review' | null;
   reason?: string | null;
   why_it_works?: string | null;
+  family?: string | null;
+  /** When tapped from alternates, carries the alternate's nested layer bundle so the
+   *  layer card can render the alternate's real backend layer (not the main mode). */
+  layer?: any | null;
 }
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
