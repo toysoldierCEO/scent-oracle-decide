@@ -1878,7 +1878,14 @@ const OdaraScreen = ({
                         <button
                           key={`${alt.name}-${i}`}
                           type="button"
-                          onClick={() => setGuestHeroOverride(isActive ? null : alt)}
+                          onClick={() => {
+                            if (isActive) {
+                              setGuestHeroOverride(null);
+                            } else {
+                              setGuestHeroOverride(alt);
+                              if (alt.layer) setGuestLayerExpanded(true);
+                            }
+                          }}
                           className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
                             isActive
                               ? 'bg-foreground/12 text-foreground border border-foreground/30'
