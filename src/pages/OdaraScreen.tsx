@@ -246,8 +246,15 @@ function getDateLabel(dateStr: string) {
 type LockState = 'neutral' | 'locked' | 'skipping';
 
 /* ── Gesture constants ──
- * NOTE: swipe-up-to-lock has been removed.
- * Card approval is now a double-tap (handled in OdaraScreen). */
+ * Card approval is a double-tap (click-based).
+ * Swipe-up-to-lock is REMOVED and must not be reintroduced.
+ * Swipe-DOWN remains a two-step contract:
+ *   - locked   → swipe down = unlock
+ *   - neutral  → swipe down = skip
+ */
+const SWIPE_DOWN_DISTANCE = 60;     // px of downward travel to trigger
+const SWIPE_DIRECTION_LOCK = 8;     // px before we lock direction
+const SWIPE_HORIZONTAL_TOLERANCE = 1.2; // |dy| must exceed |dx| * this
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
@@ -1118,6 +1125,82 @@ const OdaraScreen = ({
     visibleModeEntry,
   ]);
 
+  /* ──────────────────────────────────────────────────────────────
+   * Swipe-DOWN two-step contract (state-aware):
+   *   - lockState === 'locked'  → swipe down UNLOCKS the card
+   *   - lockState === 'neutral' → swipe down SKIPS to next card
+   * Swipe-UP is intentionally a no-op (lock is double-tap only).
+   * Same contract applies to signed-in AND guest/fallback profiles.
+   * ────────────────────────────────────────────────────────────── */
+  const swipeRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    direction: 'none' | 'vertical' | 'horizontal';
+    fired: boolean;
+    pointerId: number | null;
+  }>({ active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null });
+
+  const isInteractiveSwipeTarget = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el || !el.closest) return false;
+    return !!(
+      el.closest('[data-action-stack]') ||
+      el.closest('[data-debug-controls]') ||
+      el.closest('[data-layer-section]') ||
+      el.closest('button, a, input, textarea, select, [role="button"]')
+    );
+  };
+
+  const handleCardPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!visibleCard) return;
+    if (isInteractiveSwipeTarget(e.target)) return;
+    swipeRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      direction: 'none',
+      fired: false,
+      pointerId: e.pointerId,
+    };
+  }, [visibleCard]);
+
+  const handleCardPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const s = swipeRef.current;
+    if (!s.active || s.pointerId !== e.pointerId || s.fired) return;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    if (s.direction === 'none') {
+      if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
+      s.direction = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+    }
+    if (s.direction !== 'vertical') return;
+    if (dy < SWIPE_DOWN_DISTANCE) return;
+    if (Math.abs(dy) < Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE) return;
+
+    // Threshold reached: fire the state-aware swipe-down action ONCE.
+    s.fired = true;
+    if (lockState === 'locked') {
+      // First swipe down on locked card → unlock.
+      setLockState('neutral');
+      clearLockedSelection();
+      setUnlockFlash(true);
+      window.setTimeout(() => setUnlockFlash(false), 700);
+      pulseLock();
+    } else {
+      // Card is neutral → skip to next.
+      setSkipFlash(true);
+      window.setTimeout(() => setSkipFlash(false), 500);
+      void handleSkipLocal();
+    }
+  }, [lockState, setLockState, clearLockedSelection, pulseLock, handleSkipLocal]);
+
+  const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const s = swipeRef.current;
+    if (s.pointerId !== e.pointerId) return;
+    swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
+  }, []);
+
   const visibleAlts = currentCardAlternates;
   const alternatesRendered = currentCardAlternates.length > 0;
 
@@ -1243,10 +1326,14 @@ const OdaraScreen = ({
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-              touchAction: 'manipulation',
+              touchAction: 'pan-y',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
-            onClick={isGuestMode ? undefined : handleCardClick}
+            onClick={handleCardClick}
+            onPointerDown={handleCardPointerDown}
+            onPointerMove={handleCardPointerMove}
+            onPointerUp={handleCardPointerEnd}
+            onPointerCancel={handleCardPointerEnd}
           >
             {/* Glow orb */}
             <div
