@@ -402,7 +402,7 @@ const LayerCard = ({
   modeLoading,
   modeErrors,
   onRetryMood,
-}: LayerCardProps) => {
+  layerTokens = null,
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
