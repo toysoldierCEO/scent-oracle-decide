@@ -1694,22 +1694,24 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Fragrance name (guest may override via curated alternate tap) */}
+            {/* Fragrance name — guest v5: from activeGuestRender.activeHero */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {isGuestMode && guestHeroOverride
-                ? getDisplayName(guestHeroOverride.name, guestHeroOverride.brand)
+              {isGuestMode && activeGuestRender?.activeHero
+                ? getDisplayName(activeGuestRender.activeHero.name, activeGuestRender.activeHero.brand)
                 : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {isGuestMode && guestHeroOverride ? guestHeroOverride.brand : visibleCard.brand}
+              {isGuestMode && activeGuestRender?.activeHero
+                ? activeGuestRender.activeHero.brand
+                : visibleCard.brand}
             </span>
 
-            {/* Family label — signed-in: derived label; guest: backend family string verbatim */}
+            {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
             {!isGuestMode ? (
               <span
                 className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
@@ -1718,11 +1720,9 @@ const OdaraScreen = ({
                 {familyLabel}
               </span>
             ) : (() => {
-              const o: any = activeOracle ?? oracle ?? {};
-              const guestHeroFamily: string | null =
-                (guestHeroOverride && (guestHeroOverride as any).family)
-                  ? String((guestHeroOverride as any).family)
-                  : (o.today_pick?.family ? String(o.today_pick.family) : null);
+              const guestHeroFamily: string | null = activeGuestRender?.activeHero?.family
+                ? String(activeGuestRender.activeHero.family)
+                : null;
               if (!guestHeroFamily) return null;
               const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
               const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
@@ -1736,12 +1736,9 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Accords (signed-in) / Hero tokens (guest) — tokens carry the meaning in guest mode */}
+            {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
-              const o: any = activeOracle ?? oracle ?? {};
-              const tokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
-                ? o.hero_tokens
-                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
+              const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
               if (tokens.length === 0) return null;
               return (
                 <div
