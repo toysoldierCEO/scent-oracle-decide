@@ -376,6 +376,10 @@ interface LayerCardProps {
   modeLoading?: Record<LayerMood, boolean>;
   modeErrors?: Record<LayerMood, string | null>;
   onRetryMood?: (mood: LayerMood) => void;
+  /** Optional backend-provided token rail for the visible layer (signed-in main page).
+   *  Rendered between the layer family chip and the mode row to match the locked
+   *  layer order (name → brand → family → tokens → mode row → why it works). */
+  layerTokens?: Array<any> | null;
 }
 
 const LayerCard = ({
