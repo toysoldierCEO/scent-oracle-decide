@@ -20,7 +20,7 @@ export interface FetchHomeOracleParams {
 
 export interface FetchHomeOracleResult {
   data: any;
-  rpcUsed: 'get_todays_oracle_home_v1' | 'get_guest_oracle_home_v1';
+  rpcUsed: 'get_todays_oracle_home_v1' | 'get_guest_oracle_home_v1' | 'get_guest_oracle_home_v5';
 }
 
 function logRawHomePayload(rpc: string, args: Record<string, unknown>, data: any, error: any) {
