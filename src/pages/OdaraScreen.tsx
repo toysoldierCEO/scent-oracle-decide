@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
@@ -430,20 +430,153 @@ const OdaraScreen = ({
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
-  // ── Guest-mode-only state: curated visual sampler ──
-  // Tracks which curated alternate the guest tapped (swaps the hero name+brand).
-  // null = show backend payload hero (today_pick).
-  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestBottle | null>(null);
+  // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
+  // Two render states only:
+  //   A) selectedAlternateIdx === null → main-mode state
+  //      Drives selectedMode + activeLayerIndex against payload.main_bundle.layer_modes[mode].layers[]
+  //   B) selectedAlternateIdx !== null → alternate-bundle state
+  //      Renders payload.alternate_bundles[idx]; mode row hidden.
+  // selectedAlternateIdx must NOT overwrite selectedMode/activeLayerIndex —
+  // those are restored verbatim when the alternate is cleared.
   const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
   const [guestSelectedMood, setGuestSelectedMood] = useState<GuestModeKey>('balance');
-  // Reset guest swap state whenever the slot (date/context) or backend style changes.
+  const [guestActiveLayerIdx, setGuestActiveLayerIdx] = useState(0);
+  const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
+  // Snapshot of main-state at time alternate was selected, for clean restore.
+  const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
+
+  // Reset guest state whenever the slot (date/context) or backend payload changes.
   useEffect(() => {
-    setGuestHeroOverride(null);
+    setSelectedAlternateIdx(null);
+    guestPrevMainStateRef.current = null;
     setGuestLayerExpanded(false);
-    const def = (oracle as any)?.ui_default_mode;
+    setGuestActiveLayerIdx(0);
+    const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
     const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
     setGuestSelectedMood(safeDef);
-  }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.ui_default_mode]);
+  }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.main_bundle?.ui_default_mode, (oracle as any)?.ui_default_mode]);
+
+  // ── Guest v5 contract guard + single derivation helper ──
+  // ALL guest JSX must read from `activeGuestRender` only. Do NOT reach back into
+  // payload fields directly elsewhere.
+  const activeGuestRender = useMemo(() => {
+    if (!isGuestMode) return null;
+    const o: any = activeOracle ?? oracle ?? {};
+    const isV5 = o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' && o?.main_bundle;
+    if (!isV5) return null;
+
+    const main: any = o.main_bundle ?? {};
+    const altBundles: any[] = Array.isArray(o.alternate_bundles) ? o.alternate_bundles : [];
+    const modeOrderRaw: any[] = Array.isArray(main.layer_mode_order) && main.layer_mode_order.length > 0
+      ? main.layer_mode_order
+      : GUEST_DEFAULT_MODE_ORDER;
+    const modeOrder: GuestModeKey[] = modeOrderRaw.filter(
+      (m: any): m is GuestModeKey => m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild',
+    );
+
+    // STATE B — alternate bundle active
+    if (selectedAlternateIdx !== null && altBundles[selectedAlternateIdx]) {
+      const ab = altBundles[selectedAlternateIdx];
+      return {
+        contract: 'v5' as const,
+        showModeRow: false,
+        modeOrder,
+        selectedMode: guestSelectedMood,
+        activeLayerIndex: guestActiveLayerIdx,
+        selectedAlternateIndex: selectedAlternateIdx,
+        activeHero: ab.hero ?? null,
+        activeHeroTokens: Array.isArray(ab.hero_tokens) ? ab.hero_tokens : [],
+        activeLayer: ab.layer ?? null,
+        modeLayerStack: [] as any[],
+      };
+    }
+
+    // STATE A — main mode state
+    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
+    const defMode: GuestModeKey = (main.ui_default_mode === 'balance' || main.ui_default_mode === 'bold' || main.ui_default_mode === 'smooth' || main.ui_default_mode === 'wild')
+      ? main.ui_default_mode : 'balance';
+
+    let mode: GuestModeKey = guestSelectedMood;
+    if (!modesObj[mode]) mode = defMode;
+    if (!modesObj[mode] && modeOrder[0]) mode = modeOrder[0];
+
+    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
+    let idx = guestActiveLayerIdx;
+    if (idx < 0 || idx >= stack.length) idx = 0;
+    const layerFromStack = stack[idx] ?? null;
+    const activeLayer = layerFromStack ?? main.layer ?? null;
+
+    return {
+      contract: 'v5' as const,
+      showModeRow: true,
+      modeOrder,
+      selectedMode: mode,
+      activeLayerIndex: idx,
+      selectedAlternateIndex: null,
+      activeHero: main.hero ?? null,
+      activeHeroTokens: Array.isArray(main.hero_tokens) ? main.hero_tokens : [],
+      activeLayer,
+      modeLayerStack: stack,
+    };
+  }, [isGuestMode, activeOracle, oracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+
+  // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
+  const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
+    const o: any = activeOracle ?? oracle ?? {};
+    const main: any = o?.main_bundle ?? {};
+    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
+    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
+    if (stack.length === 0) return;
+    if (mode !== guestSelectedMood) {
+      setGuestSelectedMood(mode);
+      setGuestActiveLayerIdx(0);
+    } else {
+      // cycle within current mode using backend layers.length (no hard-coded N)
+      setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
+    }
+  }, [activeOracle, oracle, guestSelectedMood]);
+
+  // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
+  const handleGuestAlternateTap = useCallback((idx: number) => {
+    if (selectedAlternateIdx === idx) {
+      // Clear alternate → restore previous main mode + layer index
+      const prev = guestPrevMainStateRef.current;
+      if (prev) {
+        setGuestSelectedMood(prev.mood);
+        setGuestActiveLayerIdx(prev.idx);
+      }
+      guestPrevMainStateRef.current = null;
+      setSelectedAlternateIdx(null);
+      return;
+    }
+    // Snapshot main state once (only if not already in alternate state)
+    if (selectedAlternateIdx === null) {
+      guestPrevMainStateRef.current = { mood: guestSelectedMood, idx: guestActiveLayerIdx };
+    }
+    setSelectedAlternateIdx(idx);
+    setGuestLayerExpanded(true);
+  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+
+  // Guest back-button unwind: alternate → mode-depth → normal back
+  const handleGuestBack = useCallback((): boolean => {
+    if (!isGuestMode) return false;
+    if (selectedAlternateIdx !== null) {
+      const prev = guestPrevMainStateRef.current;
+      if (prev) {
+        setGuestSelectedMood(prev.mood);
+        setGuestActiveLayerIdx(prev.idx);
+      }
+      guestPrevMainStateRef.current = null;
+      setSelectedAlternateIdx(null);
+      return true; // consumed
+    }
+    if (guestActiveLayerIdx > 0) {
+      setGuestActiveLayerIdx((cur) => Math.max(0, cur - 1));
+      return true; // consumed
+    }
+    return false; // let normal back run
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx]);
+
 
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
@@ -1016,6 +1149,8 @@ const OdaraScreen = ({
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
+    // Guest v5: unwind alternate state, then mode-layer depth, before normal back.
+    if (handleGuestBack()) return;
     if (viewHistory.length === 0 || lockState === 'locked') return;
     const entry = viewHistory[viewHistory.length - 1];
 
@@ -1041,7 +1176,7 @@ const OdaraScreen = ({
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [viewHistory]);
+  }, [viewHistory, handleGuestBack]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
@@ -1534,7 +1669,7 @@ const OdaraScreen = ({
                 )}
               </div>
               )}
-              {/* Guest mode: visible-but-disabled lock to preserve card chrome */}
+              {/* Guest mode: visible-but-disabled lock + back arrow when guest unwind state exists */}
               {isGuestMode && (
                 <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                   <button
@@ -1548,6 +1683,13 @@ const OdaraScreen = ({
                       <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                     </svg>
                   </button>
+                  {(selectedAlternateIdx !== null || guestActiveLayerIdx > 0) && (
+                    <button onClick={handleBack} className="p-0.5" aria-label="Back">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1559,22 +1701,24 @@ const OdaraScreen = ({
               </span>
             )}
 
-            {/* Fragrance name (guest may override via curated alternate tap) */}
+            {/* Fragrance name — guest v5: from activeGuestRender.activeHero */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {isGuestMode && guestHeroOverride
-                ? getDisplayName(guestHeroOverride.name, guestHeroOverride.brand)
+              {isGuestMode && activeGuestRender?.activeHero
+                ? getDisplayName(activeGuestRender.activeHero.name, activeGuestRender.activeHero.brand)
                 : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {isGuestMode && guestHeroOverride ? guestHeroOverride.brand : visibleCard.brand}
+              {isGuestMode && activeGuestRender?.activeHero
+                ? activeGuestRender.activeHero.brand
+                : visibleCard.brand}
             </span>
 
-            {/* Family label — signed-in: derived label; guest: backend family string verbatim */}
+            {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
             {!isGuestMode ? (
               <span
                 className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
@@ -1583,11 +1727,9 @@ const OdaraScreen = ({
                 {familyLabel}
               </span>
             ) : (() => {
-              const o: any = activeOracle ?? oracle ?? {};
-              const guestHeroFamily: string | null =
-                (guestHeroOverride && (guestHeroOverride as any).family)
-                  ? String((guestHeroOverride as any).family)
-                  : (o.today_pick?.family ? String(o.today_pick.family) : null);
+              const guestHeroFamily: string | null = activeGuestRender?.activeHero?.family
+                ? String(activeGuestRender.activeHero.family)
+                : null;
               if (!guestHeroFamily) return null;
               const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
               const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
@@ -1601,12 +1743,9 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Accords (signed-in) / Hero tokens (guest) — tokens carry the meaning in guest mode */}
+            {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
-              const o: any = activeOracle ?? oracle ?? {};
-              const tokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
-                ? o.hero_tokens
-                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
+              const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
               if (tokens.length === 0) return null;
               return (
                 <div
@@ -1637,66 +1776,31 @@ const OdaraScreen = ({
               </p>
             ))}
 
-            {/* ── Guest mode: backend-driven layer card. All content from payload. ── */}
+            {/* ── Guest v5: backend-driven layer card. Renders from activeGuestRender only. ── */}
             {isGuestMode ? (() => {
+              if (!activeGuestRender) return null;
+              const { activeLayer, showModeRow, modeOrder, selectedMode, activeLayerIndex, modeLayerStack, selectedAlternateIndex } = activeGuestRender;
+              if (!activeLayer) return null;
+
+              // Layer token rail comes from activeLayer.tokens
+              const layerTokens: Array<any> = Array.isArray(activeLayer.tokens) ? activeLayer.tokens : [];
+
+              // Mode availability for disabled state
               const o: any = activeOracle ?? oracle ?? {};
-              const heroTokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
-                ? o.hero_tokens
-                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
-              const layerModesRaw: Record<string, any> = (o.layer_modes && typeof o.layer_modes === 'object') ? o.layer_modes : {};
-              const modeOrder: GuestModeKey[] = (Array.isArray(o.layer_mode_order) && o.layer_mode_order.length > 0
-                ? o.layer_mode_order
-                : GUEST_DEFAULT_MODE_ORDER
-              ).filter((m: any): m is GuestModeKey =>
-                m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
-              );
-              // ── Alternate-bundle override: when a guest taps an alternate that carries
-              //    a nested backend `layer` bundle, the layer card switches to render
-              //    THAT alternate's backend layer (name/brand/family/tokens/why_it_works),
-              //    and the mode row hides (alternates have no backend mode set).
-              const altLayer: any = (guestHeroOverride && (guestHeroOverride as any).layer) ? (guestHeroOverride as any).layer : null;
-              const altBundleActive = !!altLayer;
-              const selectedModeRaw: any = altLayer ?? (layerModesRaw[guestSelectedMood] ?? null);
-              // Layer token rail: FIRST CHOICE is the selected mode's own tokens,
-              // so the rail updates together with the scent/brand/why-it-works.
-              const layerTokens: Array<any> =
-                (Array.isArray(selectedModeRaw?.tokens) && selectedModeRaw.tokens.length > 0)
-                  ? selectedModeRaw.tokens
-                  : (Array.isArray(o.layer?.tokens) && o.layer.tokens.length > 0)
-                    ? o.layer.tokens
-                    : (Array.isArray(o.layer_tokens) && o.layer_tokens.length > 0)
-                      ? o.layer_tokens
-                      : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
-              // SINGLE source of truth for the layer scent block:
-              //   - prefer payload.layer_modes[selectedMood]
-              //   - fallback to payload.layer (which == layer_modes.balance per backend contract)
-              const fallbackLayer = o.layer ?? null;
-              const activeBottle: GuestBottle | null = selectedModeRaw
-                ? {
-                    fragrance_id: selectedModeRaw.fragrance_id ?? null,
-                    name: selectedModeRaw.name ?? '—',
-                    brand: selectedModeRaw.brand ?? '',
-                    bind_status: selectedModeRaw.bind_status ?? null,
-                    why_it_works: selectedModeRaw.why_it_works ?? null,
-                  }
-                : fallbackLayer
-                  ? {
-                      fragrance_id: fallbackLayer.fragrance_id ?? null,
-                      name: fallbackLayer.name ?? '—',
-                      brand: fallbackLayer.brand ?? '',
-                      bind_status: fallbackLayer.bind_status ?? null,
-                      why_it_works: fallbackLayer.why_it_works ?? null,
-                    }
-                  : null;
-              console.log('[Odara][Guest] render summary', {
-                selected_mode: guestSelectedMood,
-                selected_mode_scent: activeBottle?.name ?? null,
-                why_it_works_present: !!activeBottle?.why_it_works,
-                hero_token_count: heroTokens.length,
+              const layerModesObj: Record<string, any> = o?.main_bundle?.layer_modes ?? {};
+
+              console.log('[Odara][Guest][v5] render', {
+                state: selectedAlternateIndex !== null ? 'ALTERNATE' : 'MAIN',
+                selectedMode,
+                activeLayerIndex,
+                stackLen: modeLayerStack.length,
+                hero_name: activeGuestRender.activeHero?.name ?? null,
+                layer_name: activeLayer?.name ?? null,
+                layer_family: activeLayer?.family ?? null,
                 layer_token_count: layerTokens.length,
-                alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
+                why_it_works_present: !!activeLayer?.why_it_works,
               });
-              if (!activeBottle) return null;
+
               return (
                 <div className="flex flex-col gap-3 mt-1">
                   <div
@@ -1706,7 +1810,7 @@ const OdaraScreen = ({
                       border: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    {/* Collapsed face — single scent block (updates in-place when mode changes) */}
+                    {/* Collapsed face — single scent block (updates in-place when mode/index/alt changes) */}
                     <button
                       type="button"
                       onClick={() => setGuestLayerExpanded(v => !v)}
@@ -1717,40 +1821,33 @@ const OdaraScreen = ({
                       <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
                         Layer with
                       </span>
-                      {/* 2. selected layer scent name */}
+                      {/* 2. layer scent name */}
                       <span
                         className="text-[20px] leading-tight text-foreground"
                         style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       >
-                        {getDisplayName(activeBottle.name, activeBottle.brand)}
+                        {getDisplayName(activeLayer.name, activeLayer.brand)}
                       </span>
-                      {/* 3. selected layer brand */}
-                      {activeBottle.brand && (
+                      {/* 3. layer brand */}
+                      {activeLayer.brand && (
                         <span className="text-[12px] text-muted-foreground/60">
-                          {activeBottle.brand}
+                          {activeLayer.brand}
                         </span>
                       )}
-                      {/* 4. selected layer family tag — backend verbatim, updates with selectedMode */}
-                      {(() => {
-                        const layerFamily: string | null =
-                          (selectedModeRaw && selectedModeRaw.family)
-                            ? String(selectedModeRaw.family)
-                            : (fallbackLayer && fallbackLayer.family)
-                              ? String(fallbackLayer.family)
-                              : null;
-                        if (!layerFamily) return null;
-                        const fam = layerFamily as keyof typeof FAMILY_COLORS;
+                      {/* 4. layer family chip — backend verbatim */}
+                      {activeLayer.family && (() => {
+                        const fam = activeLayer.family as keyof typeof FAMILY_COLORS;
                         const layerFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
                         return (
                           <span
                             className="text-[10px] uppercase tracking-[0.15em] font-medium mt-0.5"
                             style={{ color: layerFamilyColor }}
                           >
-                            {layerFamily}
+                            {String(activeLayer.family)}
                           </span>
                         );
                       })()}
-                      {/* 5. selected layer token rail */}
+                      {/* 5. layer token rail */}
                       {layerTokens.length > 0 && (
                         <div
                           className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
@@ -1774,24 +1871,24 @@ const OdaraScreen = ({
                       )}
                     </button>
 
-                    {/* Expanded section — mode row + Why It Works ONLY.
-                        No second scent title block — collapsed face already updates in-place. */}
-                    {guestLayerExpanded && (modeOrder.length > 0 || altBundleActive) && (
+                    {/* Expanded section — mode row (main only) + Why It Works */}
+                    {guestLayerExpanded && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* 5. mode row — hidden while alternate bundle is active (alternates have no mode set) */}
-                        {!altBundleActive && modeOrder.length > 0 && (
+                        {/* 6. mode row — main state only; cycles within mode using backend layers[] length */}
+                        {showModeRow && modeOrder.length > 0 && (
                           <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
                             {modeOrder.map(m => {
-                              const active = guestSelectedMood === m;
-                              const present = !!layerModesRaw[m];
+                              const active = selectedMode === m;
+                              const stackLen = Array.isArray(layerModesObj[m]?.layers) ? layerModesObj[m].layers.length : 0;
+                              const present = stackLen > 0;
                               return (
                                 <button
                                   key={m}
                                   type="button"
-                                  onClick={() => present && setGuestSelectedMood(m)}
+                                  onClick={() => present && handleGuestModeTap(m)}
                                   disabled={!present}
                                   className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
                                     active
@@ -1808,14 +1905,14 @@ const OdaraScreen = ({
                           </div>
                         )}
 
-                        {/* 6 + 7. Why it works heading + body — backend-supplied copy only */}
+                        {/* 7 + 8. Why it works heading + body — backend-supplied copy only */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
                             Why it works
                           </span>
-                          {activeBottle.why_it_works && (
+                          {activeLayer.why_it_works && (
                             <p className="text-[12px] text-foreground/75 text-center mt-2 leading-relaxed">
-                              {activeBottle.why_it_works}
+                              {activeLayer.why_it_works}
                             </p>
                           )}
                         </div>
@@ -1855,23 +1952,11 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* ── Alternatives ── */}
+            {/* ── Alternatives — guest v5: payload.alternate_bundles ── */}
             {isGuestMode ? (() => {
-              // Guest mode: alternates come strictly from backend payload.alternates.
-              // Tapping swaps the visible hero name+brand (read-only sampler — no signed-in RPCs).
               const o: any = activeOracle ?? oracle ?? {};
-              const rawAlts: any[] = Array.isArray(o.alternates) ? o.alternates : [];
-              const alts: GuestBottle[] = rawAlts.map((a) => ({
-                fragrance_id: a?.fragrance_id ?? null,
-                name: a?.name ?? '—',
-                brand: a?.brand ?? '',
-                bind_status: a?.bind_status ?? null,
-                family: a?.family ?? null,
-                // Carry the alternate's nested backend layer bundle (when present)
-                // so the layer card can render the alternate's real layer set.
-                layer: a?.layer ?? null,
-              }));
-              if (alts.length === 0) return null;
+              const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+              if (altBundles.length === 0) return null;
               return (
                 <div className="flex flex-col items-center gap-2 mt-3">
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
@@ -1881,28 +1966,22 @@ const OdaraScreen = ({
                     className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
-                    {alts.map((alt, i) => {
-                      const isActive =
-                        guestHeroOverride?.name === alt.name && guestHeroOverride?.brand === alt.brand;
+                    {altBundles.map((ab, i) => {
+                      const heroName = ab?.hero?.name ?? '—';
+                      const heroBrand = ab?.hero?.brand ?? '';
+                      const isActive = selectedAlternateIdx === i;
                       return (
                         <button
-                          key={`${alt.name}-${i}`}
+                          key={`${heroName}-${i}`}
                           type="button"
-                          onClick={() => {
-                            if (isActive) {
-                              setGuestHeroOverride(null);
-                            } else {
-                              setGuestHeroOverride(alt);
-                              if (alt.layer) setGuestLayerExpanded(true);
-                            }
-                          }}
+                          onClick={() => handleGuestAlternateTap(i)}
                           className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
                             isActive
                               ? 'bg-foreground/12 text-foreground border border-foreground/30'
                               : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
                           }`}
                         >
-                          {getDisplayName(alt.name)}
+                          {getDisplayName(heroName, heroBrand)}
                         </button>
                       );
                     })}
