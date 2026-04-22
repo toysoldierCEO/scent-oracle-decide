@@ -80,7 +80,7 @@ export async function fetchHomeOracle(
         : null,
       alternate_bundles_count: altBundles.length,
     });
-    return { data, rpcUsed: 'get_guest_oracle_home_v1' };
+    return { data, rpcUsed: 'get_guest_oracle_home_v5' };
   }
 
   if (!access.isSignedIn || !access.resolvedUserId) {
