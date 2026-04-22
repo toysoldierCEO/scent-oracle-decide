@@ -1726,29 +1726,34 @@ const OdaraScreen = ({
                 </div>
               );
             })() : (
-              <LayerCard
-                mainName={visibleCard.name}
-                mainBrand={visibleCard.brand}
-                mainNotes={visibleCard.notes}
-                mainFamily={visibleCard.family}
-                mainProjection={null}
-                layerModes={modeResults}
-                visibleLayerMode={visibleModeEntry}
-                selectedMood={selectedMood}
-                onSelectMood={handleMoodSelect}
-                selectedRatio={selectedRatio}
-                onSelectRatio={setSelectedRatio}
-                isExpanded={layerExpanded}
-                onToggleExpand={() => setLayerExpanded(!layerExpanded)}
-                lockPulse={lockPulse}
-                locked={lockState === 'locked'}
-                modeLoading={modeLoading}
-                modeErrors={modeErrors}
-                onRetryMood={(mood) => {
-                  if (!visibleCard) return;
-                  void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
-                }}
-              />
+              // Mark the layer section so the card-level double-tap handler
+              // ignores taps that land inside it. LayerCard already calls
+              // stopPropagation on its expand/collapse trigger.
+              <div data-layer-section>
+                <LayerCard
+                  mainName={visibleCard.name}
+                  mainBrand={visibleCard.brand}
+                  mainNotes={visibleCard.notes}
+                  mainFamily={visibleCard.family}
+                  mainProjection={null}
+                  layerModes={modeResults}
+                  visibleLayerMode={visibleModeEntry}
+                  selectedMood={selectedMood}
+                  onSelectMood={handleMoodSelect}
+                  selectedRatio={selectedRatio}
+                  onSelectRatio={setSelectedRatio}
+                  isExpanded={layerExpanded}
+                  onToggleExpand={() => setLayerExpanded(!layerExpanded)}
+                  lockPulse={lockPulse}
+                  locked={lockState === 'locked'}
+                  modeLoading={modeLoading}
+                  modeErrors={modeErrors}
+                  onRetryMood={(mood) => {
+                    if (!visibleCard) return;
+                    void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
+                  }}
+                />
+              </div>
             )}
 
             {/* ── Alternatives ── */}
