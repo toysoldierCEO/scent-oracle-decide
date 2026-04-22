@@ -430,20 +430,31 @@ const OdaraScreen = ({
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
 
-  // ── Guest-mode-only state: curated visual sampler ──
-  // Tracks which curated alternate the guest tapped (swaps the hero name+brand).
-  // null = show backend payload hero (today_pick).
-  const [guestHeroOverride, setGuestHeroOverride] = useState<GuestBottle | null>(null);
+  // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
+  // Two render states only:
+  //   A) selectedAlternateIdx === null → main-mode state
+  //      Drives selectedMode + activeLayerIndex against payload.main_bundle.layer_modes[mode].layers[]
+  //   B) selectedAlternateIdx !== null → alternate-bundle state
+  //      Renders payload.alternate_bundles[idx]; mode row hidden.
+  // selectedAlternateIdx must NOT overwrite selectedMode/activeLayerIndex —
+  // those are restored verbatim when the alternate is cleared.
   const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
   const [guestSelectedMood, setGuestSelectedMood] = useState<GuestModeKey>('balance');
-  // Reset guest swap state whenever the slot (date/context) or backend style changes.
+  const [guestActiveLayerIdx, setGuestActiveLayerIdx] = useState(0);
+  const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
+  // Snapshot of main-state at time alternate was selected, for clean restore.
+  const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
+
+  // Reset guest state whenever the slot (date/context) or backend payload changes.
   useEffect(() => {
-    setGuestHeroOverride(null);
+    setSelectedAlternateIdx(null);
+    guestPrevMainStateRef.current = null;
     setGuestLayerExpanded(false);
-    const def = (oracle as any)?.ui_default_mode;
+    setGuestActiveLayerIdx(0);
+    const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
     const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
     setGuestSelectedMood(safeDef);
-  }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.ui_default_mode]);
+  }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.main_bundle?.ui_default_mode, (oracle as any)?.ui_default_mode]);
 
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
