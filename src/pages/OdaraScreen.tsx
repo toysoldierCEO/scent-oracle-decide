@@ -245,9 +245,9 @@ function getDateLabel(dateStr: string) {
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
-/* ── Gesture constants ── */
-const DIRECTION_LOCK_THRESHOLD = 8;
-const SWIPE_DISTANCE = 28;
+/* ── Gesture constants ──
+ * NOTE: swipe-up-to-lock has been removed.
+ * Card approval is now a double-tap (handled in OdaraScreen). */
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
@@ -449,12 +449,12 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
+  const [likeFlash, setLikeFlash] = useState(false);
   const [skipFlash, setSkipFlash] = useState(false);
   const [skipAnimating, setSkipAnimating] = useState(false);
 
   // Locked selections for weekly lanes
   const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
-  const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Favorite state — persisted per day+context
   const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
@@ -846,25 +846,12 @@ const OdaraScreen = ({
     };
   }, [visibleCard, resolveAlternatesForCard, stateKey]);
 
-  // Gesture refs
-  const gestureRef = useRef<{
-    pointerId: number | null;
-    startX: number;
-    startY: number;
-    lastY: number;
-    locked: 'v' | 'h' | null;
-    isDragging: boolean;
-    suppressClick: boolean;
-  }>({
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    lastY: 0,
-    locked: null,
-    isDragging: false,
-    suppressClick: false,
-  });
+  // Double-tap detector ref (replaces old swipe-gesture system).
+  // double tap on card = like + lock
+  const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const unlockTimeoutRef = useRef<number | null>(null);
+  const DOUBLE_TAP_MS = 320;
+  const DOUBLE_TAP_DIST = 32;
 
   const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
   const isShowingHeroCard =
@@ -1061,151 +1048,75 @@ const OdaraScreen = ({
     }
   }, []);
 
-  const resetGesture = useCallback(() => {
-    gestureRef.current = {
-      pointerId: null,
-      startX: 0,
-      startY: 0,
-      lastY: 0,
-      locked: null,
-      isDragging: false,
-      suppressClick: gestureRef.current.suppressClick,
-    };
-    setCardTranslateY(0);
-  }, []);
-
   useEffect(() => {
     return () => clearUnlockTimeout();
   }, [clearUnlockTimeout]);
 
-  /* ── Gesture handlers ── */
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+  /* ──────────────────────────────────────────────────────────────
+   * Card interaction contract:
+   *   - double tap on the overall card = like + lock
+   *   - single tap on the layer section = expand/collapse
+   *     (LayerCard handles its own onClick + stopPropagation)
+   *   - swipe-up lock has been REMOVED
+   *   - manual unlock is still available via the lock icon button
+   * ────────────────────────────────────────────────────────────── */
+  const handleCardClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!visibleCard) return;
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
     const target = e.target as HTMLElement;
-    if (target.closest('[data-debug-controls]') || target.closest('[data-action-stack]')) return;
-
-    clearUnlockTimeout();
-    gestureRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      lastY: 0,
-      locked: null,
-      isDragging: false,
-      suppressClick: false,
-    };
-
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, [clearUnlockTimeout, visibleCard]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const gesture = gestureRef.current;
-    if (gesture.pointerId !== e.pointerId) return;
-
-    const dx = e.clientX - gesture.startX;
-    const dy = e.clientY - gesture.startY;
-
-    if (!gesture.locked) {
-      if (Math.abs(dy) < DIRECTION_LOCK_THRESHOLD && Math.abs(dx) < DIRECTION_LOCK_THRESHOLD) {
-        return;
-      }
-      gesture.locked = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
-      if (gesture.locked === 'h') {
-        resetGesture();
-        return;
-      }
-    }
-
-    if (gesture.locked !== 'v') return;
-
-    gesture.isDragging = true;
-    gesture.suppressClick = Math.abs(dy) > DIRECTION_LOCK_THRESHOLD;
-    gesture.lastY = dy;
-
-    const clamped = lockState === 'locked'
-      ? Math.max(0, Math.min(96, dy))
-      : Math.max(-96, Math.min(96, dy));
-
-    setCardTranslateY(clamped);
-    e.preventDefault();
-  }, [lockState, resetGesture]);
-
-  const completeGesture = useCallback(async (pointerId: number, currentTarget: HTMLDivElement | null) => {
-    const gesture = gestureRef.current;
-    if (gesture.pointerId !== pointerId) return;
-
-    if (currentTarget?.hasPointerCapture(pointerId)) {
-      currentTarget.releasePointerCapture(pointerId);
-    }
-
-    const dy = gesture.lastY;
-    const wasVertical = gesture.locked === 'v';
-    const shouldSuppressClick = gesture.suppressClick;
-
-    gestureRef.current = {
-      pointerId: null,
-      startX: 0,
-      startY: 0,
-      lastY: 0,
-      locked: null,
-      isDragging: false,
-      suppressClick: shouldSuppressClick,
-    };
-    setCardTranslateY(0);
-
-    if (!wasVertical || !visibleCard) return;
-
-    if (lockState === 'locked') {
-      if (dy > SWIPE_DISTANCE) {
-        clearUnlockTimeout();
-        setLockState('neutral');
-        clearLockedSelection();
-        setUnlockFlash(true);
-        window.setTimeout(() => setUnlockFlash(false), 700);
-        pulseLock();
-      }
-      return;
-    }
-
-    if (dy < -SWIPE_DISTANCE) {
-      clearUnlockTimeout();
-      setLockState('locked');
-      recordLockedSelection();
-      setLockFlash(true);
-      window.setTimeout(() => setLockFlash(false), 700);
-      pulseLock();
-      // Resolve visible layer fragrance id
-      const visibleLayerId = visibleModeEntry?.id ?? null;
-      await onAccept(visibleCard.fragrance_id, visibleLayerId);
-      return;
-    }
-
-    if (dy > SWIPE_DISTANCE) {
-      clearUnlockTimeout();
-      void handleSkipLocal();
-    }
-  }, [clearUnlockTimeout, handleSkipLocal, lockState, onAccept, visibleCard, pulseLock, visibleModeEntry]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    void completeGesture(e.pointerId, e.currentTarget);
-  }, [completeGesture]);
-
-  const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    void completeGesture(e.pointerId, e.currentTarget);
-  }, [completeGesture]);
-
-  const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!gestureRef.current.suppressClick) return;
-    gestureRef.current.suppressClick = false;
-    const target = e.target as HTMLElement;
-    // Never suppress clicks on the action-stack buttons (lock, star, back)
+    // Never treat taps on action stack buttons, layer section, or other
+    // interactive elements as a card double-tap.
     if (target.closest('[data-action-stack]')) return;
-    if (target.closest('button, a, input, textarea, select, [role="button"]')) {
-      e.preventDefault();
-      e.stopPropagation();
+    if (target.closest('[data-debug-controls]')) return;
+    if (target.closest('[data-layer-section]')) return;
+    if (target.closest('button, a, input, textarea, select, [role="button"]')) return;
+
+    // Already locked → no-op (use the lock icon to unlock).
+    if (lockState === 'locked') return;
+
+    const now = Date.now();
+    const last = lastTapRef.current;
+    const dx = e.clientX - last.x;
+    const dy = e.clientY - last.y;
+    const within = (now - last.time) <= DOUBLE_TAP_MS &&
+      Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
+
+    if (!within) {
+      lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
+      return;
     }
-  }, []);
+
+    // Second tap → like + lock together.
+    lastTapRef.current = { time: 0, x: 0, y: 0 };
+    clearUnlockTimeout();
+    setLockState('locked');
+    recordLockedSelection();
+
+    // Visual confirmation: like pulse + lock burst.
+    setLikeFlash(true);
+    window.setTimeout(() => setLikeFlash(false), 600);
+    setLockFlash(true);
+    window.setTimeout(() => setLockFlash(false), 700);
+    pulseLock();
+
+    // NOTE: backend "like" persistence is not yet wired — when it lands,
+    // call it here alongside onAccept. Lock persistence runs through onAccept.
+    const visibleLayerId = visibleModeEntry?.id ?? null;
+    try {
+      await onAccept(visibleCard.fragrance_id, visibleLayerId);
+    } catch (err) {
+      console.warn('[Odara] onAccept failed after double-tap lock', err);
+    }
+  }, [
+    visibleCard,
+    lockState,
+    clearUnlockTimeout,
+    setLockState,
+    recordLockedSelection,
+    pulseLock,
+    onAccept,
+    visibleModeEntry,
+  ]);
 
   const visibleAlts = currentCardAlternates;
   const alternatesRendered = currentCardAlternates.length > 0;
@@ -1332,15 +1243,10 @@ const OdaraScreen = ({
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-              transform: `translateY(${cardTranslateY * 0.4}px)`,
-              touchAction: 'pan-x',
+              touchAction: 'manipulation',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
-            onPointerDownCapture={isGuestMode ? undefined : handlePointerDown}
-            onPointerMoveCapture={isGuestMode ? undefined : handlePointerMove}
-            onPointerUpCapture={isGuestMode ? undefined : handlePointerUp}
-            onPointerCancelCapture={isGuestMode ? undefined : handlePointerCancel}
-            onClickCapture={isGuestMode ? undefined : handleCardClickCapture}
+            onClick={isGuestMode ? undefined : handleCardClick}
           >
             {/* Glow orb */}
             <div
@@ -1348,6 +1254,18 @@ const OdaraScreen = ({
               style={{ background: tint.glow, opacity: 0.35 }}
             />
 
+            {/* Like flash — restrained white pulse confirming the "like" half
+                of the double-tap. Lock burst lives on the lock icon. */}
+            {likeFlash && (
+              <div
+                className="absolute inset-0 pointer-events-none rounded-[24px] z-[1]"
+                style={{
+                  background:
+                    'radial-gradient(circle at 50% 45%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 60%)',
+                  animation: 'orbBreathe 0.55s ease-out forwards',
+                }}
+              />
+            )}
             {/* Top row: temp left · centered date · action stack right */}
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature */}
@@ -1820,29 +1738,34 @@ const OdaraScreen = ({
                 </div>
               );
             })() : (
-              <LayerCard
-                mainName={visibleCard.name}
-                mainBrand={visibleCard.brand}
-                mainNotes={visibleCard.notes}
-                mainFamily={visibleCard.family}
-                mainProjection={null}
-                layerModes={modeResults}
-                visibleLayerMode={visibleModeEntry}
-                selectedMood={selectedMood}
-                onSelectMood={handleMoodSelect}
-                selectedRatio={selectedRatio}
-                onSelectRatio={setSelectedRatio}
-                isExpanded={layerExpanded}
-                onToggleExpand={() => setLayerExpanded(!layerExpanded)}
-                lockPulse={lockPulse}
-                locked={lockState === 'locked'}
-                modeLoading={modeLoading}
-                modeErrors={modeErrors}
-                onRetryMood={(mood) => {
-                  if (!visibleCard) return;
-                  void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
-                }}
-              />
+              // Mark the layer section so the card-level double-tap handler
+              // ignores taps that land inside it. LayerCard already calls
+              // stopPropagation on its expand/collapse trigger.
+              <div data-layer-section>
+                <LayerCard
+                  mainName={visibleCard.name}
+                  mainBrand={visibleCard.brand}
+                  mainNotes={visibleCard.notes}
+                  mainFamily={visibleCard.family}
+                  mainProjection={null}
+                  layerModes={modeResults}
+                  visibleLayerMode={visibleModeEntry}
+                  selectedMood={selectedMood}
+                  onSelectMood={handleMoodSelect}
+                  selectedRatio={selectedRatio}
+                  onSelectRatio={setSelectedRatio}
+                  isExpanded={layerExpanded}
+                  onToggleExpand={() => setLayerExpanded(!layerExpanded)}
+                  lockPulse={lockPulse}
+                  locked={lockState === 'locked'}
+                  modeLoading={modeLoading}
+                  modeErrors={modeErrors}
+                  onRetryMood={(mood) => {
+                    if (!visibleCard) return;
+                    void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
+                  }}
+                />
+              </div>
             )}
 
             {/* ── Alternatives ── */}
