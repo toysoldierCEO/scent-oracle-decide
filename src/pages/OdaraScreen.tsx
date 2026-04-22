@@ -1243,15 +1243,10 @@ const OdaraScreen = ({
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-              transform: `translateY(${cardTranslateY * 0.4}px)`,
-              touchAction: 'pan-x',
+              touchAction: 'manipulation',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
-            onPointerDownCapture={isGuestMode ? undefined : handlePointerDown}
-            onPointerMoveCapture={isGuestMode ? undefined : handlePointerMove}
-            onPointerUpCapture={isGuestMode ? undefined : handlePointerUp}
-            onPointerCancelCapture={isGuestMode ? undefined : handlePointerCancel}
-            onClickCapture={isGuestMode ? undefined : handleCardClickCapture}
+            onClick={isGuestMode ? undefined : handleCardClick}
           >
             {/* Glow orb */}
             <div
