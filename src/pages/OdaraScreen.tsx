@@ -1254,6 +1254,18 @@ const OdaraScreen = ({
               style={{ background: tint.glow, opacity: 0.35 }}
             />
 
+            {/* Like flash — restrained white pulse confirming the "like" half
+                of the double-tap. Lock burst lives on the lock icon. */}
+            {likeFlash && (
+              <div
+                className="absolute inset-0 pointer-events-none rounded-[24px] z-[1]"
+                style={{
+                  background:
+                    'radial-gradient(circle at 50% 45%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 60%)',
+                  animation: 'orbBreathe 0.55s ease-out forwards',
+                }}
+              />
+            )}
             {/* Top row: temp left · centered date · action stack right */}
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature */}
