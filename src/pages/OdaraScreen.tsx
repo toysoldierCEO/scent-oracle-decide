@@ -1312,6 +1312,22 @@ const OdaraScreen = ({
     pointerId: number | null;
   }>({ active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null });
 
+  // ── SKIP GESTURE LIFECYCLE RESET ──
+  // Any pending pointer/gesture state from the prior visible card MUST be
+  // cleared the instant a new visible card mounts. Without this, a leaked
+  // `fired:true` flag (e.g. from an aborted pointer or rapid card swap) can
+  // block subsequent swipes from firing on later cards.
+  useEffect(() => {
+    swipeRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      direction: 'none',
+      fired: false,
+      pointerId: null,
+    };
+  }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
+
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el || !el.closest) return false;
