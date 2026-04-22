@@ -456,6 +456,128 @@ const OdaraScreen = ({
     setGuestSelectedMood(safeDef);
   }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.main_bundle?.ui_default_mode, (oracle as any)?.ui_default_mode]);
 
+  // ── Guest v5 contract guard + single derivation helper ──
+  // ALL guest JSX must read from `activeGuestRender` only. Do NOT reach back into
+  // payload fields directly elsewhere.
+  const activeGuestRender = useMemo(() => {
+    if (!isGuestMode) return null;
+    const o: any = activeOracle ?? oracle ?? {};
+    const isV5 = o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' && o?.main_bundle;
+    if (!isV5) return null;
+
+    const main: any = o.main_bundle ?? {};
+    const altBundles: any[] = Array.isArray(o.alternate_bundles) ? o.alternate_bundles : [];
+    const modeOrderRaw: any[] = Array.isArray(main.layer_mode_order) && main.layer_mode_order.length > 0
+      ? main.layer_mode_order
+      : GUEST_DEFAULT_MODE_ORDER;
+    const modeOrder: GuestModeKey[] = modeOrderRaw.filter(
+      (m: any): m is GuestModeKey => m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild',
+    );
+
+    // STATE B — alternate bundle active
+    if (selectedAlternateIdx !== null && altBundles[selectedAlternateIdx]) {
+      const ab = altBundles[selectedAlternateIdx];
+      return {
+        contract: 'v5' as const,
+        showModeRow: false,
+        modeOrder,
+        selectedMode: guestSelectedMood,
+        activeLayerIndex: guestActiveLayerIdx,
+        selectedAlternateIndex: selectedAlternateIdx,
+        activeHero: ab.hero ?? null,
+        activeHeroTokens: Array.isArray(ab.hero_tokens) ? ab.hero_tokens : [],
+        activeLayer: ab.layer ?? null,
+        modeLayerStack: [] as any[],
+      };
+    }
+
+    // STATE A — main mode state
+    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
+    const defMode: GuestModeKey = (main.ui_default_mode === 'balance' || main.ui_default_mode === 'bold' || main.ui_default_mode === 'smooth' || main.ui_default_mode === 'wild')
+      ? main.ui_default_mode : 'balance';
+
+    let mode: GuestModeKey = guestSelectedMood;
+    if (!modesObj[mode]) mode = defMode;
+    if (!modesObj[mode] && modeOrder[0]) mode = modeOrder[0];
+
+    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
+    let idx = guestActiveLayerIdx;
+    if (idx < 0 || idx >= stack.length) idx = 0;
+    const layerFromStack = stack[idx] ?? null;
+    const activeLayer = layerFromStack ?? main.layer ?? null;
+
+    return {
+      contract: 'v5' as const,
+      showModeRow: true,
+      modeOrder,
+      selectedMode: mode,
+      activeLayerIndex: idx,
+      selectedAlternateIndex: null,
+      activeHero: main.hero ?? null,
+      activeHeroTokens: Array.isArray(main.hero_tokens) ? main.hero_tokens : [],
+      activeLayer,
+      modeLayerStack: stack,
+    };
+  }, [isGuestMode, activeOracle, oracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+
+  // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
+  const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
+    const o: any = activeOracle ?? oracle ?? {};
+    const main: any = o?.main_bundle ?? {};
+    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
+    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
+    if (stack.length === 0) return;
+    if (mode !== guestSelectedMood) {
+      setGuestSelectedMood(mode);
+      setGuestActiveLayerIdx(0);
+    } else {
+      // cycle within current mode using backend layers.length (no hard-coded N)
+      setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
+    }
+  }, [activeOracle, oracle, guestSelectedMood]);
+
+  // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
+  const handleGuestAlternateTap = useCallback((idx: number) => {
+    if (selectedAlternateIdx === idx) {
+      // Clear alternate → restore previous main mode + layer index
+      const prev = guestPrevMainStateRef.current;
+      if (prev) {
+        setGuestSelectedMood(prev.mood);
+        setGuestActiveLayerIdx(prev.idx);
+      }
+      guestPrevMainStateRef.current = null;
+      setSelectedAlternateIdx(null);
+      return;
+    }
+    // Snapshot main state once (only if not already in alternate state)
+    if (selectedAlternateIdx === null) {
+      guestPrevMainStateRef.current = { mood: guestSelectedMood, idx: guestActiveLayerIdx };
+    }
+    setSelectedAlternateIdx(idx);
+    setGuestLayerExpanded(true);
+  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+
+  // Guest back-button unwind: alternate → mode-depth → normal back
+  const handleGuestBack = useCallback((): boolean => {
+    if (!isGuestMode) return false;
+    if (selectedAlternateIdx !== null) {
+      const prev = guestPrevMainStateRef.current;
+      if (prev) {
+        setGuestSelectedMood(prev.mood);
+        setGuestActiveLayerIdx(prev.idx);
+      }
+      guestPrevMainStateRef.current = null;
+      setSelectedAlternateIdx(null);
+      return true; // consumed
+    }
+    if (guestActiveLayerIdx > 0) {
+      setGuestActiveLayerIdx((cur) => Math.max(0, cur - 1));
+      return true; // consumed
+    }
+    return false; // let normal back run
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx]);
+
+
   // Lock & gesture state — persisted per day+context
   const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
   const stateKey = `${selectedDate}:${selectedContext}`;
