@@ -449,12 +449,12 @@ const OdaraScreen = ({
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
+  const [likeFlash, setLikeFlash] = useState(false);
   const [skipFlash, setSkipFlash] = useState(false);
   const [skipAnimating, setSkipAnimating] = useState(false);
 
   // Locked selections for weekly lanes
   const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
-  const [cardTranslateY, setCardTranslateY] = useState(0);
 
   // Favorite state — persisted per day+context
   const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
