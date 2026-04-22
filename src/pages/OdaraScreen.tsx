@@ -1945,23 +1945,11 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* ── Alternatives ── */}
+            {/* ── Alternatives — guest v5: payload.alternate_bundles ── */}
             {isGuestMode ? (() => {
-              // Guest mode: alternates come strictly from backend payload.alternates.
-              // Tapping swaps the visible hero name+brand (read-only sampler — no signed-in RPCs).
               const o: any = activeOracle ?? oracle ?? {};
-              const rawAlts: any[] = Array.isArray(o.alternates) ? o.alternates : [];
-              const alts: GuestBottle[] = rawAlts.map((a) => ({
-                fragrance_id: a?.fragrance_id ?? null,
-                name: a?.name ?? '—',
-                brand: a?.brand ?? '',
-                bind_status: a?.bind_status ?? null,
-                family: a?.family ?? null,
-                // Carry the alternate's nested backend layer bundle (when present)
-                // so the layer card can render the alternate's real layer set.
-                layer: a?.layer ?? null,
-              }));
-              if (alts.length === 0) return null;
+              const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+              if (altBundles.length === 0) return null;
               return (
                 <div className="flex flex-col items-center gap-2 mt-3">
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
@@ -1971,28 +1959,22 @@ const OdaraScreen = ({
                     className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
-                    {alts.map((alt, i) => {
-                      const isActive =
-                        guestHeroOverride?.name === alt.name && guestHeroOverride?.brand === alt.brand;
+                    {altBundles.map((ab, i) => {
+                      const heroName = ab?.hero?.name ?? '—';
+                      const heroBrand = ab?.hero?.brand ?? '';
+                      const isActive = selectedAlternateIdx === i;
                       return (
                         <button
-                          key={`${alt.name}-${i}`}
+                          key={`${heroName}-${i}`}
                           type="button"
-                          onClick={() => {
-                            if (isActive) {
-                              setGuestHeroOverride(null);
-                            } else {
-                              setGuestHeroOverride(alt);
-                              if (alt.layer) setGuestLayerExpanded(true);
-                            }
-                          }}
+                          onClick={() => handleGuestAlternateTap(i)}
                           className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
                             isActive
                               ? 'bg-foreground/12 text-foreground border border-foreground/30'
                               : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
                           }`}
                         >
-                          {getDisplayName(alt.name)}
+                          {getDisplayName(heroName, heroBrand)}
                         </button>
                       );
                     })}
