@@ -2026,6 +2026,7 @@ const OdaraScreen = ({
                     if (!visibleCard) return;
                     void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
                   }}
+                  layerTokens={activeMainCardRender?.activeLayerTokens ?? null}
                 />
               </div>
             )}
