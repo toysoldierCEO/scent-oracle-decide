@@ -1176,7 +1176,7 @@ const OdaraScreen = ({
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [viewHistory]);
+  }, [viewHistory, handleGuestBack]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
