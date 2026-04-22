@@ -245,9 +245,9 @@ function getDateLabel(dateStr: string) {
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 
-/* ── Gesture constants ── */
-const DIRECTION_LOCK_THRESHOLD = 8;
-const SWIPE_DISTANCE = 28;
+/* ── Gesture constants ──
+ * NOTE: swipe-up-to-lock has been removed.
+ * Card approval is now a double-tap (handled in OdaraScreen). */
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
