@@ -1181,7 +1181,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, queue, queuePointer, fetchQueue, userId, selectedContext]);
+  }, [skipLoading, visibleCard, lockState, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
