@@ -376,6 +376,10 @@ interface LayerCardProps {
   modeLoading?: Record<LayerMood, boolean>;
   modeErrors?: Record<LayerMood, string | null>;
   onRetryMood?: (mood: LayerMood) => void;
+  /** Optional backend-provided token rail for the visible layer (signed-in main page).
+   *  Rendered between the layer family chip and the mode row to match the locked
+   *  layer order (name → brand → family → tokens → mode row → why it works). */
+  layerTokens?: Array<any> | null;
 }
 
 const LayerCard = ({
@@ -398,6 +402,7 @@ const LayerCard = ({
   modeLoading,
   modeErrors,
   onRetryMood,
+  layerTokens = null,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
@@ -455,6 +460,29 @@ const LayerCard = ({
           >
             {activeModeEntry.family_key?.toUpperCase() ?? ''}
           </span>
+
+          {/* Layer token rail — backend-supplied, between family chip and accords/mode row */}
+          {Array.isArray(layerTokens) && layerTokens.length > 0 && (
+            <div
+              className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1 justify-center"
+              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {layerTokens.map((t: any, i: number) => (
+                <span
+                  key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
+                  className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
+                  style={{
+                    color: t?.color_hex || '#aaa',
+                    border: `1px solid ${(t?.color_hex || '#888')}44`,
+                    background: `${(t?.color_hex || '#888')}0A`,
+                  }}
+                >
+                  {t?.token_label}
+                </span>
+              ))}
+            </div>
+          )}
 
           {(() => {
             const layerNotes = activeModeEntry.notes ?? [];

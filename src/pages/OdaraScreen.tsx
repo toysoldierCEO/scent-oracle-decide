@@ -1028,6 +1028,42 @@ const OdaraScreen = ({
   };
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
+  // ── SINGLE-SOURCE RENDER for the signed-in main card ──
+  // All signed-in JSX MUST read hero/layer/tokens from this resolved object.
+  // Re-derives whenever visible card, mood, mood-cache, or active oracle changes.
+  const activeMainCardRender = useMemo(() => {
+    if (isGuestMode || !visibleCard) return null;
+    const o: any = activeOracle ?? {};
+    const heroId = o?.today_pick?.fragrance_id ?? null;
+    const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
+
+    // Hero tokens: only the oracle hero owns hero_tokens. Promoted/queue cards
+    // currently have none in the signed-in payload.
+    const heroTokens: any[] = isHeroCard && Array.isArray(o?.hero_tokens) ? o.hero_tokens : [];
+
+    // Layer tokens: prefer layer_modes[selectedMood].tokens (per-mode), then
+    // top-level layer_tokens (only valid for hero+balance), else empty.
+    const modeBlock: any = o?.layer_modes?.[selectedMood] ?? null;
+    let layerTokens: any[] = [];
+    if (modeBlock && Array.isArray(modeBlock.tokens)) {
+      layerTokens = modeBlock.tokens;
+    } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
+      layerTokens = o.layer_tokens;
+    }
+
+    return {
+      activeHero: visibleCard,
+      activeHeroTokens: heroTokens,
+      activeLayer: visibleModeEntry,
+      activeLayerTokens: layerTokens,
+      selectedMode: selectedMood,
+      visibleCardId: visibleCard.fragrance_id,
+      isLocked: lockState === 'locked',
+    };
+  }, [isGuestMode, visibleCard, activeOracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
+
+  // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
+
   useEffect(() => {
     console.log('[Odara] mode-results debug', {
       cardId,
@@ -1145,7 +1181,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, queue, queuePointer, fetchQueue, userId, selectedContext]);
+  }, [skipLoading, visibleCard, lockState, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -1275,6 +1311,22 @@ const OdaraScreen = ({
     fired: boolean;
     pointerId: number | null;
   }>({ active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null });
+
+  // ── SKIP GESTURE LIFECYCLE RESET ──
+  // Any pending pointer/gesture state from the prior visible card MUST be
+  // cleared the instant a new visible card mounts. Without this, a leaked
+  // `fired:true` flag (e.g. from an aborted pointer or rapid card swap) can
+  // block subsequent swipes from firing on later cards.
+  useEffect(() => {
+    swipeRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      direction: 'none',
+      fired: false,
+      pointerId: null,
+    };
+  }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
@@ -1743,6 +1795,32 @@ const OdaraScreen = ({
               );
             })()}
 
+            {/* Signed-in hero token rail — sourced from activeMainCardRender.activeHeroTokens */}
+            {!isGuestMode && (() => {
+              const tokens: Array<any> = activeMainCardRender?.activeHeroTokens ?? [];
+              if (tokens.length === 0) return null;
+              return (
+                <div
+                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-2 overflow-x-auto justify-start sm:justify-center w-full"
+                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                >
+                  {tokens.map((t, i) => (
+                    <span
+                      key={`mhero-tok-${t.token_key ?? 'tok'}-${i}`}
+                      className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                      style={{
+                        color: t.color_hex || '#aaa',
+                        border: `1px solid ${(t.color_hex || '#888')}55`,
+                        background: `${(t.color_hex || '#888')}10`,
+                      }}
+                    >
+                      {t.token_label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
               const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
@@ -1948,6 +2026,7 @@ const OdaraScreen = ({
                     if (!visibleCard) return;
                     void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
                   }}
+                  layerTokens={activeMainCardRender?.activeLayerTokens ?? null}
                 />
               </div>
             )}
