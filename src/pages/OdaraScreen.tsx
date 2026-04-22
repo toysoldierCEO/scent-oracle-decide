@@ -1062,22 +1062,7 @@ const OdaraScreen = ({
     };
   }, [isGuestMode, visibleCard, activeOracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
 
-  // ── SKIP GESTURE LIFECYCLE RESET ──
-  // Any pending pointer/gesture state from the prior visible card MUST be
-  // cleared the instant a new visible card mounts. Without this, a `fired:true`
-  // flag can leak across cards and block subsequent swipes from firing.
-  // Resets on: visible card change, lock state change, queue advance, history
-  // restore, and skipAnimating end.
-  useEffect(() => {
-    swipeRef.current = {
-      active: false,
-      startX: 0,
-      startY: 0,
-      direction: 'none',
-      fired: false,
-      pointerId: null,
-    };
-  }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
+  // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
   useEffect(() => {
     console.log('[Odara] mode-results debug', {
