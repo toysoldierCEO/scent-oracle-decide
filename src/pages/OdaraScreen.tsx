@@ -846,25 +846,12 @@ const OdaraScreen = ({
     };
   }, [visibleCard, resolveAlternatesForCard, stateKey]);
 
-  // Gesture refs
-  const gestureRef = useRef<{
-    pointerId: number | null;
-    startX: number;
-    startY: number;
-    lastY: number;
-    locked: 'v' | 'h' | null;
-    isDragging: boolean;
-    suppressClick: boolean;
-  }>({
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    lastY: 0,
-    locked: null,
-    isDragging: false,
-    suppressClick: false,
-  });
+  // Double-tap detector ref (replaces old swipe-gesture system).
+  // double tap on card = like + lock
+  const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const unlockTimeoutRef = useRef<number | null>(null);
+  const DOUBLE_TAP_MS = 320;
+  const DOUBLE_TAP_DIST = 32;
 
   const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
   const isShowingHeroCard =
