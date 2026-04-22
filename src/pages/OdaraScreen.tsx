@@ -1149,6 +1149,8 @@ const OdaraScreen = ({
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
+    // Guest v5: unwind alternate state, then mode-layer depth, before normal back.
+    if (handleGuestBack()) return;
     if (viewHistory.length === 0 || lockState === 'locked') return;
     const entry = viewHistory[viewHistory.length - 1];
 
