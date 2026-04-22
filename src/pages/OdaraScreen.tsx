@@ -1795,6 +1795,32 @@ const OdaraScreen = ({
               );
             })()}
 
+            {/* Signed-in hero token rail — sourced from activeMainCardRender.activeHeroTokens */}
+            {!isGuestMode && (() => {
+              const tokens: Array<any> = activeMainCardRender?.activeHeroTokens ?? [];
+              if (tokens.length === 0) return null;
+              return (
+                <div
+                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-2 overflow-x-auto justify-start sm:justify-center w-full"
+                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                >
+                  {tokens.map((t, i) => (
+                    <span
+                      key={`mhero-tok-${t.token_key ?? 'tok'}-${i}`}
+                      className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                      style={{
+                        color: t.color_hex || '#aaa',
+                        border: `1px solid ${(t.color_hex || '#888')}55`,
+                        background: `${(t.color_hex || '#888')}10`,
+                      }}
+                    >
+                      {t.token_label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
               const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
