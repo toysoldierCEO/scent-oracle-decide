@@ -1769,66 +1769,31 @@ const OdaraScreen = ({
               </p>
             ))}
 
-            {/* ── Guest mode: backend-driven layer card. All content from payload. ── */}
+            {/* ── Guest v5: backend-driven layer card. Renders from activeGuestRender only. ── */}
             {isGuestMode ? (() => {
+              if (!activeGuestRender) return null;
+              const { activeLayer, showModeRow, modeOrder, selectedMode, activeLayerIndex, modeLayerStack, selectedAlternateIndex } = activeGuestRender;
+              if (!activeLayer) return null;
+
+              // Layer token rail comes from activeLayer.tokens
+              const layerTokens: Array<any> = Array.isArray(activeLayer.tokens) ? activeLayer.tokens : [];
+
+              // Mode availability for disabled state
               const o: any = activeOracle ?? oracle ?? {};
-              const heroTokens: Array<any> = Array.isArray(o.hero_tokens) && o.hero_tokens.length > 0
-                ? o.hero_tokens
-                : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
-              const layerModesRaw: Record<string, any> = (o.layer_modes && typeof o.layer_modes === 'object') ? o.layer_modes : {};
-              const modeOrder: GuestModeKey[] = (Array.isArray(o.layer_mode_order) && o.layer_mode_order.length > 0
-                ? o.layer_mode_order
-                : GUEST_DEFAULT_MODE_ORDER
-              ).filter((m: any): m is GuestModeKey =>
-                m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild'
-              );
-              // ── Alternate-bundle override: when a guest taps an alternate that carries
-              //    a nested backend `layer` bundle, the layer card switches to render
-              //    THAT alternate's backend layer (name/brand/family/tokens/why_it_works),
-              //    and the mode row hides (alternates have no backend mode set).
-              const altLayer: any = (guestHeroOverride && (guestHeroOverride as any).layer) ? (guestHeroOverride as any).layer : null;
-              const altBundleActive = !!altLayer;
-              const selectedModeRaw: any = altLayer ?? (layerModesRaw[guestSelectedMood] ?? null);
-              // Layer token rail: FIRST CHOICE is the selected mode's own tokens,
-              // so the rail updates together with the scent/brand/why-it-works.
-              const layerTokens: Array<any> =
-                (Array.isArray(selectedModeRaw?.tokens) && selectedModeRaw.tokens.length > 0)
-                  ? selectedModeRaw.tokens
-                  : (Array.isArray(o.layer?.tokens) && o.layer.tokens.length > 0)
-                    ? o.layer.tokens
-                    : (Array.isArray(o.layer_tokens) && o.layer_tokens.length > 0)
-                      ? o.layer_tokens
-                      : (Array.isArray(o.accord_tokens) ? o.accord_tokens : []);
-              // SINGLE source of truth for the layer scent block:
-              //   - prefer payload.layer_modes[selectedMood]
-              //   - fallback to payload.layer (which == layer_modes.balance per backend contract)
-              const fallbackLayer = o.layer ?? null;
-              const activeBottle: GuestBottle | null = selectedModeRaw
-                ? {
-                    fragrance_id: selectedModeRaw.fragrance_id ?? null,
-                    name: selectedModeRaw.name ?? '—',
-                    brand: selectedModeRaw.brand ?? '',
-                    bind_status: selectedModeRaw.bind_status ?? null,
-                    why_it_works: selectedModeRaw.why_it_works ?? null,
-                  }
-                : fallbackLayer
-                  ? {
-                      fragrance_id: fallbackLayer.fragrance_id ?? null,
-                      name: fallbackLayer.name ?? '—',
-                      brand: fallbackLayer.brand ?? '',
-                      bind_status: fallbackLayer.bind_status ?? null,
-                      why_it_works: fallbackLayer.why_it_works ?? null,
-                    }
-                  : null;
-              console.log('[Odara][Guest] render summary', {
-                selected_mode: guestSelectedMood,
-                selected_mode_scent: activeBottle?.name ?? null,
-                why_it_works_present: !!activeBottle?.why_it_works,
-                hero_token_count: heroTokens.length,
+              const layerModesObj: Record<string, any> = o?.main_bundle?.layer_modes ?? {};
+
+              console.log('[Odara][Guest][v5] render', {
+                state: selectedAlternateIndex !== null ? 'ALTERNATE' : 'MAIN',
+                selectedMode,
+                activeLayerIndex,
+                stackLen: modeLayerStack.length,
+                hero_name: activeGuestRender.activeHero?.name ?? null,
+                layer_name: activeLayer?.name ?? null,
+                layer_family: activeLayer?.family ?? null,
                 layer_token_count: layerTokens.length,
-                alternates_count: Array.isArray(o.alternates) ? o.alternates.length : 0,
+                why_it_works_present: !!activeLayer?.why_it_works,
               });
-              if (!activeBottle) return null;
+
               return (
                 <div className="flex flex-col gap-3 mt-1">
                   <div
@@ -1838,7 +1803,7 @@ const OdaraScreen = ({
                       border: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    {/* Collapsed face — single scent block (updates in-place when mode changes) */}
+                    {/* Collapsed face — single scent block (updates in-place when mode/index/alt changes) */}
                     <button
                       type="button"
                       onClick={() => setGuestLayerExpanded(v => !v)}
@@ -1849,40 +1814,33 @@ const OdaraScreen = ({
                       <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
                         Layer with
                       </span>
-                      {/* 2. selected layer scent name */}
+                      {/* 2. layer scent name */}
                       <span
                         className="text-[20px] leading-tight text-foreground"
                         style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       >
-                        {getDisplayName(activeBottle.name, activeBottle.brand)}
+                        {getDisplayName(activeLayer.name, activeLayer.brand)}
                       </span>
-                      {/* 3. selected layer brand */}
-                      {activeBottle.brand && (
+                      {/* 3. layer brand */}
+                      {activeLayer.brand && (
                         <span className="text-[12px] text-muted-foreground/60">
-                          {activeBottle.brand}
+                          {activeLayer.brand}
                         </span>
                       )}
-                      {/* 4. selected layer family tag — backend verbatim, updates with selectedMode */}
-                      {(() => {
-                        const layerFamily: string | null =
-                          (selectedModeRaw && selectedModeRaw.family)
-                            ? String(selectedModeRaw.family)
-                            : (fallbackLayer && fallbackLayer.family)
-                              ? String(fallbackLayer.family)
-                              : null;
-                        if (!layerFamily) return null;
-                        const fam = layerFamily as keyof typeof FAMILY_COLORS;
+                      {/* 4. layer family chip — backend verbatim */}
+                      {activeLayer.family && (() => {
+                        const fam = activeLayer.family as keyof typeof FAMILY_COLORS;
                         const layerFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
                         return (
                           <span
                             className="text-[10px] uppercase tracking-[0.15em] font-medium mt-0.5"
                             style={{ color: layerFamilyColor }}
                           >
-                            {layerFamily}
+                            {String(activeLayer.family)}
                           </span>
                         );
                       })()}
-                      {/* 5. selected layer token rail */}
+                      {/* 5. layer token rail */}
                       {layerTokens.length > 0 && (
                         <div
                           className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
@@ -1906,24 +1864,24 @@ const OdaraScreen = ({
                       )}
                     </button>
 
-                    {/* Expanded section — mode row + Why It Works ONLY.
-                        No second scent title block — collapsed face already updates in-place. */}
-                    {guestLayerExpanded && (modeOrder.length > 0 || altBundleActive) && (
+                    {/* Expanded section — mode row (main only) + Why It Works */}
+                    {guestLayerExpanded && (
                       <div
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* 5. mode row — hidden while alternate bundle is active (alternates have no mode set) */}
-                        {!altBundleActive && modeOrder.length > 0 && (
+                        {/* 6. mode row — main state only; cycles within mode using backend layers[] length */}
+                        {showModeRow && modeOrder.length > 0 && (
                           <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
                             {modeOrder.map(m => {
-                              const active = guestSelectedMood === m;
-                              const present = !!layerModesRaw[m];
+                              const active = selectedMode === m;
+                              const stackLen = Array.isArray(layerModesObj[m]?.layers) ? layerModesObj[m].layers.length : 0;
+                              const present = stackLen > 0;
                               return (
                                 <button
                                   key={m}
                                   type="button"
-                                  onClick={() => present && setGuestSelectedMood(m)}
+                                  onClick={() => present && handleGuestModeTap(m)}
                                   disabled={!present}
                                   className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
                                     active
@@ -1940,14 +1898,14 @@ const OdaraScreen = ({
                           </div>
                         )}
 
-                        {/* 6 + 7. Why it works heading + body — backend-supplied copy only */}
+                        {/* 7 + 8. Why it works heading + body — backend-supplied copy only */}
                         <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
                             Why it works
                           </span>
-                          {activeBottle.why_it_works && (
+                          {activeLayer.why_it_works && (
                             <p className="text-[12px] text-foreground/75 text-center mt-2 leading-relaxed">
-                              {activeBottle.why_it_works}
+                              {activeLayer.why_it_works}
                             </p>
                           )}
                         </div>
