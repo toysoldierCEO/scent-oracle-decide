@@ -1028,6 +1028,57 @@ const OdaraScreen = ({
   };
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
+  // ── SINGLE-SOURCE RENDER for the signed-in main card ──
+  // All signed-in JSX MUST read hero/layer/tokens from this resolved object.
+  // Re-derives whenever visible card, mood, mood-cache, or active oracle changes.
+  const activeMainCardRender = useMemo(() => {
+    if (isGuestMode || !visibleCard) return null;
+    const o: any = activeOracle ?? {};
+    const heroId = o?.today_pick?.fragrance_id ?? null;
+    const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
+
+    // Hero tokens: only the oracle hero owns hero_tokens. Promoted/queue cards
+    // currently have none in the signed-in payload.
+    const heroTokens: any[] = isHeroCard && Array.isArray(o?.hero_tokens) ? o.hero_tokens : [];
+
+    // Layer tokens: prefer layer_modes[selectedMood].tokens (per-mode), then
+    // top-level layer_tokens (only valid for hero+balance), else empty.
+    const modeBlock: any = o?.layer_modes?.[selectedMood] ?? null;
+    let layerTokens: any[] = [];
+    if (modeBlock && Array.isArray(modeBlock.tokens)) {
+      layerTokens = modeBlock.tokens;
+    } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
+      layerTokens = o.layer_tokens;
+    }
+
+    return {
+      activeHero: visibleCard,
+      activeHeroTokens: heroTokens,
+      activeLayer: visibleModeEntry,
+      activeLayerTokens: layerTokens,
+      selectedMode: selectedMood,
+      visibleCardId: visibleCard.fragrance_id,
+      isLocked: lockState === 'locked',
+    };
+  }, [isGuestMode, visibleCard, activeOracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
+
+  // ── SKIP GESTURE LIFECYCLE RESET ──
+  // Any pending pointer/gesture state from the prior visible card MUST be
+  // cleared the instant a new visible card mounts. Without this, a `fired:true`
+  // flag can leak across cards and block subsequent swipes from firing.
+  // Resets on: visible card change, lock state change, queue advance, history
+  // restore, and skipAnimating end.
+  useEffect(() => {
+    swipeRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      direction: 'none',
+      fired: false,
+      pointerId: null,
+    };
+  }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
+
   useEffect(() => {
     console.log('[Odara] mode-results debug', {
       cardId,
