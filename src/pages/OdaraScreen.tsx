@@ -279,6 +279,35 @@ function backendModeEntryToLayerMode(
   };
 }
 
+/** Convert a v6 layer entry (from get_signed_in_card_contract_v6, either the
+ *  top-level `layer` object or `layer_modes[mood].layers[idx]`) into the
+ *  LayerMode shape consumed by LayerCard. Pure mapping — no inference. */
+function v6LayerToLayerMode(
+  layer: any,
+  mood: LayerMood,
+): NonNullable<LayerModes[LayerMood]> | null {
+  if (!layer || typeof layer !== 'object') return null;
+  const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
+  const name = layer.name ?? layer.layer_name ?? '';
+  if (!id && !name) return null;
+  return {
+    id,
+    name,
+    brand: layer.brand ?? layer.layer_brand ?? '',
+    family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
+    notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : [],
+    accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : [],
+    interactionType: ((layer.interaction_type ?? layer.layer_mode ?? mood) as InteractionType) || mood,
+    reason: layer.reason ?? '',
+    why_it_works: layer.why_it_works ?? '',
+    projection: layer.projection ?? null,
+    ratio_hint: layer.ratio_hint ?? '',
+    application_style: layer.application_style ?? '',
+    placement_hint: layer.placement_hint ?? '',
+    spray_guidance: layer.spray_guidance ?? '',
+  } as any;
+}
+
 // (oracleModeEntryToLayerMode removed — Effect 2 now pre-seeds cache directly)
 
 function normalizeAlternateRow(row: any): OracleAlternate | null {
@@ -429,6 +458,12 @@ const OdaraScreen = ({
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
+  // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
+  // Reset to {balance:0,bold:0,smooth:0,wild:0} on every payload change.
+  // Repeated taps on the same mood cycle this index modulo stack length.
+  const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
+    balance: 0, bold: 0, smooth: 0, wild: 0,
+  });
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
