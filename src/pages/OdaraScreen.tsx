@@ -279,6 +279,35 @@ function backendModeEntryToLayerMode(
   };
 }
 
+/** Convert a v6 layer entry (from get_signed_in_card_contract_v6, either the
+ *  top-level `layer` object or `layer_modes[mood].layers[idx]`) into the
+ *  LayerMode shape consumed by LayerCard. Pure mapping — no inference. */
+function v6LayerToLayerMode(
+  layer: any,
+  mood: LayerMood,
+): NonNullable<LayerModes[LayerMood]> | null {
+  if (!layer || typeof layer !== 'object') return null;
+  const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
+  const name = layer.name ?? layer.layer_name ?? '';
+  if (!id && !name) return null;
+  return {
+    id,
+    name,
+    brand: layer.brand ?? layer.layer_brand ?? '',
+    family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
+    notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : [],
+    accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : [],
+    interactionType: ((layer.interaction_type ?? layer.layer_mode ?? mood) as InteractionType) || mood,
+    reason: layer.reason ?? '',
+    why_it_works: layer.why_it_works ?? '',
+    projection: layer.projection ?? null,
+    ratio_hint: layer.ratio_hint ?? '',
+    application_style: layer.application_style ?? '',
+    placement_hint: layer.placement_hint ?? '',
+    spray_guidance: layer.spray_guidance ?? '',
+  } as any;
+}
+
 // (oracleModeEntryToLayerMode removed — Effect 2 now pre-seeds cache directly)
 
 function normalizeAlternateRow(row: any): OracleAlternate | null {
@@ -429,6 +458,12 @@ const OdaraScreen = ({
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
+  // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
+  // Reset to {balance:0,bold:0,smooth:0,wild:0} on every payload change.
+  // Repeated taps on the same mood cycle this index modulo stack length.
+  const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
+    balance: 0, bold: 0, smooth: 0, wild: 0,
+  });
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
@@ -858,6 +893,7 @@ const OdaraScreen = ({
     setPromotedAltId(null);
     setLayerExpanded(false);
     setSelectedMood('balance');
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
     moodCacheRef.current.clear();
@@ -908,9 +944,15 @@ const OdaraScreen = ({
     // 2) Set oracle
     setActiveOracle(oracle);
 
-    // 3) PRODUCT LAW: Home always opens on `balance`. Ignore server-suggested mode.
-    const initialMood: LayerMood = normalized.defaultMode;
+    // 3) Initialize from v6 contract: ui_default_mode + reset all mode indexes to 0
+    const v6 = (oracle as any)?.__v6 ?? null;
+    const v6DefaultMood: LayerMood = (() => {
+      const def = v6?.ui_default_mode ?? normalized.defaultMode;
+      return (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : normalized.defaultMode;
+    })();
+    const initialMood: LayerMood = v6DefaultMood;
     setSelectedMood(initialMood);
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
     console.log('[Odara] oracle apply complete', {
       newVisibleId: oracle.today_pick?.fragrance_id ?? '(none)',
@@ -1060,55 +1102,95 @@ const OdaraScreen = ({
   const cardId = visibleCard?.fragrance_id ?? '';
   const slotPrefix = `${selectedDate}|${selectedContext}`;
 
-  // Mode results — single source: mood cache (pre-seeded for hero, lazy-fetched for promoted/queue)
-  const modeResults: LayerModes = {
-    balance: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|balance`)) ?? null,
-    bold: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|bold`)) ?? null,
-    smooth: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|smooth`)) ?? null,
-    wild: backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|wild`)) ?? null,
-  };
+  // ────────────────────────────────────────────────────────────────────
+  // SIGNED-IN CANONICAL VIEW MODEL — v6 contract (get_signed_in_card_contract_v6)
+  // Single resolved source for the visible signed-in card. All signed-in JSX
+  // MUST read hero/layer/tokens through this object.
+  //
+  // Resolution order for the visible layer:
+  //   1) payload.layer_modes[selectedMood].layers[ activeIdx ]
+  //   2) payload.layer_modes[selectedMood] (if backend used flat per-mode shape)
+  //   3) payload.layer (top-level fallback for balance only)
+  //
+  // Tokens:
+  //   hero  → payload.hero_tokens
+  //   layer → visibleLayer.tokens ?? payload.layer_tokens (balance only) ?? []
+  // ────────────────────────────────────────────────────────────────────
+  const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
+
+  // First-paint mode results — derived directly from v6 layer_modes (preview
+  // stack) instead of the slot-scoped mood cache. The cache is still used as
+  // a fallback (legacy/promoted/queue cards).
+  const modeResults: LayerModes = useMemo(() => {
+    const lm: any = v6Payload?.layer_modes ?? (activeOracle as any)?.layer_modes ?? null;
+    const fromV6 = (mood: LayerMood) => {
+      const block = lm?.[mood] ?? null;
+      if (!block) return null;
+      const idx = signedInLayerIdxByMood[mood] ?? 0;
+      const stack: any[] = Array.isArray(block.layers) ? block.layers : [];
+      const picked = stack.length > 0 ? stack[idx % stack.length] : block;
+      return v6LayerToLayerMode(picked, mood);
+    };
+    const fallback = (mood: LayerMood) =>
+      backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|${mood}`)) ?? null;
+    return {
+      balance: fromV6('balance') ?? fallback('balance'),
+      bold:    fromV6('bold')    ?? fallback('bold'),
+      smooth:  fromV6('smooth')  ?? fallback('smooth'),
+      wild:    fromV6('wild')    ?? fallback('wild'),
+    };
+    // moodCacheVersion read above keeps this fresh when cache changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion]);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
 
-  // ── SINGLE-SOURCE RENDER for the signed-in main card ──
-  // All signed-in JSX MUST read hero/layer/tokens from this resolved object.
-  // Re-derives whenever visible card, mood, mood-cache, or active oracle changes.
+  // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
     if (isGuestMode || !visibleCard) return null;
-    // Read tokens from the FRESHEST payload available — prefer activeOracle
-    // (latest in-flight result) but fall back to the original `oracle` prop
-    // so token rails paint on the very first render pass after hydration.
+    // Prefer the v6 raw payload (carries hero_tokens / layer_tokens / per-mode
+    // tokens). Fall back to legacy oracle prop for non-v6 paths.
+    const v6: any = v6Payload;
     const o: any = activeOracle ?? oracle ?? {};
-    const heroId = o?.today_pick?.fragrance_id ?? null;
+    const heroId = (v6?.hero?.fragrance_id ?? o?.today_pick?.fragrance_id) ?? null;
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
-    // Hero tokens: backend only ships them for the oracle hero. Allow them
-    // to render whenever they exist on the visible hero card; queue cards
-    // genuinely have none and will simply render an empty rail.
-    const heroTokens: any[] = isHeroCard && Array.isArray(o?.hero_tokens) ? o.hero_tokens : [];
+    // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
+    const heroTokensSrc: any[] = isHeroCard
+      ? (Array.isArray(v6?.hero_tokens) ? v6.hero_tokens
+        : Array.isArray(o?.hero_tokens) ? o.hero_tokens
+        : [])
+      : [];
 
-    // Layer tokens — single resolved source: per-mode block first, then the
-    // top-level layer_tokens (balance hero), then any tokens carried on the
-    // resolved BackendModeEntry from cache (forward-compat).
-    const modeBlock: any = o?.layer_modes?.[selectedMood] ?? null;
+    // Visible layer — resolved from the v6 mode stack (already in modeResults).
+    const visibleLayer = visibleModeEntry;
+
+    // Layer tokens — visibleLayer.tokens FIRST (per-layer in the stack),
+    // then payload.layer_tokens (balance hero fallback only), then [].
+    const stackBlock: any = v6?.layer_modes?.[selectedMood] ?? null;
+    const stackArr: any[] = Array.isArray(stackBlock?.layers) ? stackBlock.layers : [];
+    const stackIdx = signedInLayerIdxByMood[selectedMood] ?? 0;
+    const stackPick: any = stackArr.length > 0 ? stackArr[stackIdx % stackArr.length] : stackBlock;
     let layerTokens: any[] = [];
-    if (modeBlock && Array.isArray(modeBlock.tokens) && modeBlock.tokens.length > 0) {
-      layerTokens = modeBlock.tokens;
+    if (Array.isArray(stackPick?.tokens) && stackPick.tokens.length > 0) {
+      layerTokens = stackPick.tokens;
+    } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(v6?.layer_tokens)) {
+      layerTokens = v6.layer_tokens;
     } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
       layerTokens = o.layer_tokens;
-    } else if (Array.isArray((visibleModeEntry as any)?.tokens)) {
-      layerTokens = (visibleModeEntry as any).tokens;
+    } else if (Array.isArray((visibleLayer as any)?.tokens)) {
+      layerTokens = (visibleLayer as any).tokens;
     }
 
     return {
       activeHero: visibleCard,
-      activeHeroTokens: heroTokens,
-      activeLayer: visibleModeEntry,
+      activeHeroTokens: heroTokensSrc,
+      activeLayer: visibleLayer,
       activeLayerTokens: layerTokens,
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
     };
-  }, [isGuestMode, visibleCard, activeOracle, oracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
+  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion]);
 
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
@@ -1123,28 +1205,48 @@ const OdaraScreen = ({
     });
   }, [cardId, selectedMood, modeResults.balance, modeResults.bold, visibleModeEntry]);
 
-  // Mood tap handler — lazy loads if not cached (slot-scoped)
+  // ── v6 mood tap handler ──
+  // Different mood  → switch selectedMood; if no idx exists, start at 0.
+  // Same mood again → cycle (idx + 1) % layer_modes[mood].layers.length.
+  // Mood cycling source is ONLY payload.layer_modes[mood].layers[]. Never alternates.
+  // Falls back to legacy lazy fetch (signed-in non-v6 cards: queue / promoted alts).
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
     const currentCardId = visibleCard.fragrance_id;
-    const moodKey = `${selectedDate}|${selectedContext}|${currentCardId}|${mood}`;
-    const cached = moodCacheRef.current.get(moodKey);
-    setSelectedMood(mood);
+    const v6: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
+    const heroIdV6 = v6?.hero?.fragrance_id ?? null;
+    const isHeroCard = !!heroIdV6 && currentCardId === heroIdV6;
+    const stackArr: any[] = isHeroCard && Array.isArray(v6?.layer_modes?.[mood]?.layers)
+      ? v6.layer_modes[mood].layers
+      : [];
 
-    console.log('[Odara] mood click', { mood, currentCardId, hasCached: cached !== undefined });
+    if (mood !== selectedMood) {
+      // DIFFERENT mood: switch and reset to current index for that mood (or 0 if first time).
+      setSelectedMood(mood);
+      console.log('[Odara][SignedIn][v6] mood switch', { mood, stackLen: stackArr.length, idx: signedInLayerIdxByMood[mood] ?? 0 });
+    } else if (stackArr.length > 1) {
+      // SAME mood: cycle through this mood's stack only.
+      const cur = signedInLayerIdxByMood[mood] ?? 0;
+      const next = (cur + 1) % stackArr.length;
+      setSignedInLayerIdxByMood(prev => ({ ...prev, [mood]: next }));
+      console.log('[Odara][SignedIn][v6] mood cycle', { mood, from: cur, to: next, stackLen: stackArr.length });
+      return;
+    } else {
+      console.log('[Odara][SignedIn][v6] mood re-tap (no cycle, single layer)', { mood });
+    }
 
-    if (cached !== undefined) return; // already cached (including null = failed)
-    // Lazy fetch — with stale-card guard on result
-    void fetchMoodForCard(currentCardId, mood).then((entry) => {
-      // Stale-card guard: only apply if visibleCard hasn't changed
-      console.log('[Odara] mood click result', {
-        mood,
-        fetchedForCard: currentCardId,
-        layerName: entry?.layer_name ?? '(null)',
-      });
-    });
-  }, [lockState, visibleCard, fetchMoodForCard, selectedDate, selectedContext]);
+    // Legacy fallback for non-v6 cards (promoted alternates / queue): lazy fetch.
+    if (!isHeroCard || stackArr.length === 0) {
+      const moodKey = `${selectedDate}|${selectedContext}|${currentCardId}|${mood}`;
+      const cached = moodCacheRef.current.get(moodKey);
+      if (cached === undefined) {
+        void fetchMoodForCard(currentCardId, mood).then((entry) => {
+          console.log('[Odara] mood click result (legacy)', { mood, fetchedForCard: currentCardId, layerName: entry?.layer_name ?? '(null)' });
+        });
+      }
+    }
+  }, [lockState, visibleCard, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, fetchMoodForCard, selectedDate, selectedContext]);
 
   // Lock icon color
   const lockIconColor = lockState === 'locked' ? '#22c55e' : 'currentColor';
@@ -1223,7 +1325,8 @@ const OdaraScreen = ({
       }
 
       setPromotedAltId(null);
-        setSelectedMood('balance');
+      setSelectedMood('balance');
+      setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
       setLayerExpanded(false);
       setLockState('neutral');
     } finally {
@@ -1480,6 +1583,7 @@ const OdaraScreen = ({
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
     // 4. Immediately trigger BALANCE layer fetch for the promoted scent
     const capturedAltId = alt.fragrance_id;
