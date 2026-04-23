@@ -461,8 +461,15 @@ const OdaraScreen = ({
   // payload fields directly elsewhere.
   const activeGuestRender = useMemo(() => {
     if (!isGuestMode) return null;
-    const o: any = activeOracle ?? oracle ?? {};
-    const isV5 = o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' && o?.main_bundle;
+    // Prefer the freshest payload — `oracle` (latest prop) before
+    // `activeOracle` (state mirror) so guest tokens paint on the very first
+    // render pass after hydration without needing a manual repaint/scroll.
+    const o: any = oracle ?? activeOracle ?? {};
+    // Accept v5 either via the explicit contract flag OR by structural
+    // signature (main_bundle.hero present). This eliminates the hydration
+    // race where the contract field arrives one tick after main_bundle.
+    const isV5 = !!(o?.main_bundle?.hero) &&
+      (o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' || !!o?.main_bundle?.layer_modes);
     if (!isV5) return null;
 
     const main: any = o.main_bundle ?? {};
@@ -518,7 +525,7 @@ const OdaraScreen = ({
       activeLayer,
       modeLayerStack: stack,
     };
-  }, [isGuestMode, activeOracle, oracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
@@ -1033,22 +1040,29 @@ const OdaraScreen = ({
   // Re-derives whenever visible card, mood, mood-cache, or active oracle changes.
   const activeMainCardRender = useMemo(() => {
     if (isGuestMode || !visibleCard) return null;
-    const o: any = activeOracle ?? {};
+    // Read tokens from the FRESHEST payload available — prefer activeOracle
+    // (latest in-flight result) but fall back to the original `oracle` prop
+    // so token rails paint on the very first render pass after hydration.
+    const o: any = activeOracle ?? oracle ?? {};
     const heroId = o?.today_pick?.fragrance_id ?? null;
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
-    // Hero tokens: only the oracle hero owns hero_tokens. Promoted/queue cards
-    // currently have none in the signed-in payload.
+    // Hero tokens: backend only ships them for the oracle hero. Allow them
+    // to render whenever they exist on the visible hero card; queue cards
+    // genuinely have none and will simply render an empty rail.
     const heroTokens: any[] = isHeroCard && Array.isArray(o?.hero_tokens) ? o.hero_tokens : [];
 
-    // Layer tokens: prefer layer_modes[selectedMood].tokens (per-mode), then
-    // top-level layer_tokens (only valid for hero+balance), else empty.
+    // Layer tokens — single resolved source: per-mode block first, then the
+    // top-level layer_tokens (balance hero), then any tokens carried on the
+    // resolved BackendModeEntry from cache (forward-compat).
     const modeBlock: any = o?.layer_modes?.[selectedMood] ?? null;
     let layerTokens: any[] = [];
-    if (modeBlock && Array.isArray(modeBlock.tokens)) {
+    if (modeBlock && Array.isArray(modeBlock.tokens) && modeBlock.tokens.length > 0) {
       layerTokens = modeBlock.tokens;
     } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
       layerTokens = o.layer_tokens;
+    } else if (Array.isArray((visibleModeEntry as any)?.tokens)) {
+      layerTokens = (visibleModeEntry as any).tokens;
     }
 
     return {
@@ -1060,7 +1074,7 @@ const OdaraScreen = ({
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
     };
-  }, [isGuestMode, visibleCard, activeOracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
+  }, [isGuestMode, visibleCard, activeOracle, oracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
 
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
