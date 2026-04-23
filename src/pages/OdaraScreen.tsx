@@ -1603,6 +1603,43 @@ const OdaraScreen = ({
               </span>
 
               {/* Right: lock → star → back vertical stack — HIDDEN in guest mode (read-only) */}
+              {/* Guest-only lock indicator: gives visible feedback for the
+                  double-tap lock gesture even though the full action stack
+                  is hidden in guest mode. */}
+              {isGuestMode && (
+                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                  <div className="p-0.5 relative" aria-label="lock indicator">
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={lockState === 'locked' ? '#22c55e' : 'rgba(255,255,255,0.35)'}
+                      strokeWidth="1.5"
+                      className="transition-colors duration-300 relative z-[1]"
+                    >
+                      {lockState === 'locked' ? (
+                        <>
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M7 11V7a5 5 0 0110 0v4" />
+                        </>
+                      ) : (
+                        <>
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                        </>
+                      )}
+                    </svg>
+                    {lockFlash && (
+                      <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
+                        <span className="absolute inset-0 rounded-full"
+                          style={{
+                            background: 'radial-gradient(circle, rgba(34,197,94,0.45) 0%, transparent 70%)',
+                            animation: 'tronBurst 0.6s ease-out forwards',
+                          }}
+                        />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               {!isGuestMode && (
               <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
