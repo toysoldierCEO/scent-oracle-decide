@@ -669,6 +669,40 @@ const OdaraScreen = ({
 
         if (error) {
           console.error('[Odara] lazy mood fetch fail', mood, error.message);
+          // Fallback: if the home payload pre-seeded this mood block, hydrate
+          // from there instead of surfacing a hard error to the user. This
+          // keeps mode buttons functional even when the per-mode RPC is
+          // unavailable on the backend.
+          const hp: any = activeOracle ?? oracle ?? {};
+          const heroIdHp = hp?.today_pick?.fragrance_id ?? null;
+          const seed: any = (heroIdHp === fragranceId) ? hp?.layer_modes?.[mood] : null;
+          if (seed && (seed.layer_fragrance_id || seed.fragrance_id || seed.layer_name || seed.name)) {
+            const fbEntry: BackendModeEntry = {
+              mode: mood,
+              layer_fragrance_id: seed.layer_fragrance_id ?? seed.fragrance_id ?? '',
+              layer_name: seed.layer_name ?? seed.name ?? '',
+              layer_brand: seed.layer_brand ?? seed.brand ?? '',
+              layer_family: seed.layer_family ?? seed.family ?? '',
+              layer_notes: Array.isArray(seed.layer_notes) ? seed.layer_notes : Array.isArray(seed.notes) ? seed.notes : [],
+              layer_accords: Array.isArray(seed.layer_accords) ? seed.layer_accords : Array.isArray(seed.accords) ? seed.accords : [],
+              layer_score: seed.layer_score ?? 0,
+              reason: seed.reason ?? '',
+              why_it_works: seed.why_it_works ?? '',
+              ratio_hint: seed.ratio_hint ?? '',
+              application_style: seed.application_style ?? '',
+              placement_hint: seed.placement_hint ?? '',
+              spray_guidance: seed.spray_guidance ?? '',
+              interaction_type: seed.interaction_type ?? mood,
+            };
+            (fbEntry as any).tokens = Array.isArray(seed.tokens) ? seed.tokens : undefined;
+            moodCacheRef.current.set(moodKey, fbEntry);
+            setModeErrors(prev => ({ ...prev, [mood]: null }));
+            setLayerDebugSource(`fallback:${mood}`);
+            setModeLoading(prev => ({ ...prev, [mood]: false }));
+            setMoodCacheVersion(v => v + 1);
+            console.log('[Odara] mood RPC failed → seeded from home payload', mood);
+            return fbEntry;
+          }
           setModeErrors(prev => ({ ...prev, [mood]: error.message }));
           setLayerDebugSource(`err:${error.message}`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
