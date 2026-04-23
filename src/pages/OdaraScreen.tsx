@@ -461,8 +461,15 @@ const OdaraScreen = ({
   // payload fields directly elsewhere.
   const activeGuestRender = useMemo(() => {
     if (!isGuestMode) return null;
-    const o: any = activeOracle ?? oracle ?? {};
-    const isV5 = o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' && o?.main_bundle;
+    // Prefer the freshest payload — `oracle` (latest prop) before
+    // `activeOracle` (state mirror) so guest tokens paint on the very first
+    // render pass after hydration without needing a manual repaint/scroll.
+    const o: any = oracle ?? activeOracle ?? {};
+    // Accept v5 either via the explicit contract flag OR by structural
+    // signature (main_bundle.hero present). This eliminates the hydration
+    // race where the contract field arrives one tick after main_bundle.
+    const isV5 = !!(o?.main_bundle?.hero) &&
+      (o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' || !!o?.main_bundle?.layer_modes);
     if (!isV5) return null;
 
     const main: any = o.main_bundle ?? {};
@@ -518,7 +525,7 @@ const OdaraScreen = ({
       activeLayer,
       modeLayerStack: stack,
     };
-  }, [isGuestMode, activeOracle, oracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
@@ -662,6 +669,40 @@ const OdaraScreen = ({
 
         if (error) {
           console.error('[Odara] lazy mood fetch fail', mood, error.message);
+          // Fallback: if the home payload pre-seeded this mood block, hydrate
+          // from there instead of surfacing a hard error to the user. This
+          // keeps mode buttons functional even when the per-mode RPC is
+          // unavailable on the backend.
+          const hp: any = activeOracle ?? oracle ?? {};
+          const heroIdHp = hp?.today_pick?.fragrance_id ?? null;
+          const seed: any = (heroIdHp === fragranceId) ? hp?.layer_modes?.[mood] : null;
+          if (seed && (seed.layer_fragrance_id || seed.fragrance_id || seed.layer_name || seed.name)) {
+            const fbEntry: BackendModeEntry = {
+              mode: mood,
+              layer_fragrance_id: seed.layer_fragrance_id ?? seed.fragrance_id ?? '',
+              layer_name: seed.layer_name ?? seed.name ?? '',
+              layer_brand: seed.layer_brand ?? seed.brand ?? '',
+              layer_family: seed.layer_family ?? seed.family ?? '',
+              layer_notes: Array.isArray(seed.layer_notes) ? seed.layer_notes : Array.isArray(seed.notes) ? seed.notes : [],
+              layer_accords: Array.isArray(seed.layer_accords) ? seed.layer_accords : Array.isArray(seed.accords) ? seed.accords : [],
+              layer_score: seed.layer_score ?? 0,
+              reason: seed.reason ?? '',
+              why_it_works: seed.why_it_works ?? '',
+              ratio_hint: seed.ratio_hint ?? '',
+              application_style: seed.application_style ?? '',
+              placement_hint: seed.placement_hint ?? '',
+              spray_guidance: seed.spray_guidance ?? '',
+              interaction_type: seed.interaction_type ?? mood,
+            };
+            (fbEntry as any).tokens = Array.isArray(seed.tokens) ? seed.tokens : undefined;
+            moodCacheRef.current.set(moodKey, fbEntry);
+            setModeErrors(prev => ({ ...prev, [mood]: null }));
+            setLayerDebugSource(`fallback:${mood}`);
+            setModeLoading(prev => ({ ...prev, [mood]: false }));
+            setMoodCacheVersion(v => v + 1);
+            console.log('[Odara] mood RPC failed → seeded from home payload', mood);
+            return fbEntry;
+          }
           setModeErrors(prev => ({ ...prev, [mood]: error.message }));
           setLayerDebugSource(`err:${error.message}`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
@@ -1033,22 +1074,29 @@ const OdaraScreen = ({
   // Re-derives whenever visible card, mood, mood-cache, or active oracle changes.
   const activeMainCardRender = useMemo(() => {
     if (isGuestMode || !visibleCard) return null;
-    const o: any = activeOracle ?? {};
+    // Read tokens from the FRESHEST payload available — prefer activeOracle
+    // (latest in-flight result) but fall back to the original `oracle` prop
+    // so token rails paint on the very first render pass after hydration.
+    const o: any = activeOracle ?? oracle ?? {};
     const heroId = o?.today_pick?.fragrance_id ?? null;
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
-    // Hero tokens: only the oracle hero owns hero_tokens. Promoted/queue cards
-    // currently have none in the signed-in payload.
+    // Hero tokens: backend only ships them for the oracle hero. Allow them
+    // to render whenever they exist on the visible hero card; queue cards
+    // genuinely have none and will simply render an empty rail.
     const heroTokens: any[] = isHeroCard && Array.isArray(o?.hero_tokens) ? o.hero_tokens : [];
 
-    // Layer tokens: prefer layer_modes[selectedMood].tokens (per-mode), then
-    // top-level layer_tokens (only valid for hero+balance), else empty.
+    // Layer tokens — single resolved source: per-mode block first, then the
+    // top-level layer_tokens (balance hero), then any tokens carried on the
+    // resolved BackendModeEntry from cache (forward-compat).
     const modeBlock: any = o?.layer_modes?.[selectedMood] ?? null;
     let layerTokens: any[] = [];
-    if (modeBlock && Array.isArray(modeBlock.tokens)) {
+    if (modeBlock && Array.isArray(modeBlock.tokens) && modeBlock.tokens.length > 0) {
       layerTokens = modeBlock.tokens;
     } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
       layerTokens = o.layer_tokens;
+    } else if (Array.isArray((visibleModeEntry as any)?.tokens)) {
+      layerTokens = (visibleModeEntry as any).tokens;
     }
 
     return {
@@ -1060,7 +1108,7 @@ const OdaraScreen = ({
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
     };
-  }, [isGuestMode, visibleCard, activeOracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
+  }, [isGuestMode, visibleCard, activeOracle, oracle, selectedMood, visibleModeEntry, lockState, moodCacheVersion]);
 
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
@@ -1555,6 +1603,43 @@ const OdaraScreen = ({
               </span>
 
               {/* Right: lock → star → back vertical stack — HIDDEN in guest mode (read-only) */}
+              {/* Guest-only lock indicator: gives visible feedback for the
+                  double-tap lock gesture even though the full action stack
+                  is hidden in guest mode. */}
+              {isGuestMode && (
+                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                  <div className="p-0.5 relative" aria-label="lock indicator">
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={lockState === 'locked' ? '#22c55e' : 'rgba(255,255,255,0.35)'}
+                      strokeWidth="1.5"
+                      className="transition-colors duration-300 relative z-[1]"
+                    >
+                      {lockState === 'locked' ? (
+                        <>
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M7 11V7a5 5 0 0110 0v4" />
+                        </>
+                      ) : (
+                        <>
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                        </>
+                      )}
+                    </svg>
+                    {lockFlash && (
+                      <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
+                        <span className="absolute inset-0 rounded-full"
+                          style={{
+                            background: 'radial-gradient(circle, rgba(34,197,94,0.45) 0%, transparent 70%)',
+                            animation: 'tronBurst 0.6s ease-out forwards',
+                          }}
+                        />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               {!isGuestMode && (
               <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
