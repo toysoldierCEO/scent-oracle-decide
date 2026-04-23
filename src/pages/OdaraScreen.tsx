@@ -893,6 +893,7 @@ const OdaraScreen = ({
     setPromotedAltId(null);
     setLayerExpanded(false);
     setSelectedMood('balance');
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
     moodCacheRef.current.clear();
@@ -943,9 +944,15 @@ const OdaraScreen = ({
     // 2) Set oracle
     setActiveOracle(oracle);
 
-    // 3) PRODUCT LAW: Home always opens on `balance`. Ignore server-suggested mode.
-    const initialMood: LayerMood = normalized.defaultMode;
+    // 3) Initialize from v6 contract: ui_default_mode + reset all mode indexes to 0
+    const v6 = (oracle as any)?.__v6 ?? null;
+    const v6DefaultMood: LayerMood = (() => {
+      const def = v6?.ui_default_mode ?? normalized.defaultMode;
+      return (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : normalized.defaultMode;
+    })();
+    const initialMood: LayerMood = v6DefaultMood;
     setSelectedMood(initialMood);
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
     console.log('[Odara] oracle apply complete', {
       newVisibleId: oracle.today_pick?.fragrance_id ?? '(none)',
@@ -1258,7 +1265,8 @@ const OdaraScreen = ({
       }
 
       setPromotedAltId(null);
-        setSelectedMood('balance');
+      setSelectedMood('balance');
+      setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
       setLayerExpanded(false);
       setLockState('neutral');
     } finally {
@@ -1515,6 +1523,7 @@ const OdaraScreen = ({
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
     setSelectedMood('balance');
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
     // 4. Immediately trigger BALANCE layer fetch for the promoted scent
     const capturedAltId = alt.fragrance_id;
