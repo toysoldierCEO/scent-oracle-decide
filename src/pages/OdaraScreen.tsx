@@ -1203,15 +1203,19 @@ const OdaraScreen = ({
     if (isGuestMode) return;
     const contract: any = v6Payload ?? activeOracle ?? oracle ?? {};
     const lm: any = contract?.layer_modes ?? {};
-    console.debug('ODARA_SIGNED_IN_CONTRACT_PROOF', {
+    const heroTokensArr = Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender!.activeHeroTokens : [];
+    const layerTokensArr = Array.isArray(activeMainCardRender?.activeLayerTokens) ? activeMainCardRender!.activeLayerTokens : [];
+    console.info('ODARA_SIGNED_IN_CONTRACT_PROOF', {
       contractVersion: contract?.card_contract_version ?? contract?.layer_mode_contract ?? null,
       surfaceType: contract?.surface_type ?? null,
       heroName: activeMainCardRender?.activeHero?.name ?? null,
-      heroTokens: activeMainCardRender?.activeHeroTokens ?? [],
+      heroTokenObjects: heroTokensArr,
+      heroTokenLabels: heroTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       activeMode: activeMainCardRender?.selectedMode ?? null,
       activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
       layerName: activeMainCardRender?.activeLayer?.name ?? null,
-      layerTokens: activeMainCardRender?.activeLayerTokens ?? [],
+      layerTokenObjects: layerTokensArr,
+      layerTokenLabels: layerTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       balanceNames: Array.isArray(lm?.balance?.layers) ? lm.balance.layers.map((l: any) => l?.name) : null,
       boldNames: Array.isArray(lm?.bold?.layers) ? lm.bold.layers.map((l: any) => l?.name) : null,
       smoothNames: Array.isArray(lm?.smooth?.layers) ? lm.smooth.layers.map((l: any) => l?.name) : null,
