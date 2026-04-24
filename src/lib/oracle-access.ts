@@ -54,7 +54,10 @@ function adaptSignedInV6ToOracleResult(v6: any): any {
     oracle_layer: layer,
     alternates: Array.isArray(v6.alternates) ? v6.alternates : [],
     ui_default_mode: v6.ui_default_mode ?? 'balance',
-    layer_mode_contract: v6.layer_mode_contract ?? 'signed_in_card_contract_v6',
+    // Propagate the REAL backend contract version (v7 today). Never hardcode v6.
+    layer_mode_contract: v6.card_contract_version ?? v6.layer_mode_contract ?? null,
+    card_contract_version: v6.card_contract_version ?? null,
+    surface_type: v6.surface_type ?? null,
     layer_modes: v6.layer_modes ?? null,
     hero_tokens: Array.isArray(v6.hero_tokens) ? v6.hero_tokens : [],
     layer_tokens: Array.isArray(v6.layer_tokens) ? v6.layer_tokens : [],
