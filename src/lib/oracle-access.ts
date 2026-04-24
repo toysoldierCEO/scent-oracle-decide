@@ -21,10 +21,11 @@ export interface FetchHomeOracleParams {
 export interface FetchHomeOracleResult {
   data: any;
   rpcUsed:
-    | 'get_todays_oracle_home_v1'
+  | 'get_todays_oracle_home_v1'
     | 'get_guest_oracle_home_v1'
     | 'get_guest_oracle_home_v5'
-    | 'get_signed_in_card_contract_v6';
+    | 'get_signed_in_card_contract_v6'
+    | 'get_signed_in_card_contract_v7';
 }
 
 /** Adapt the canonical signed-in v6 contract into the existing OracleResult
