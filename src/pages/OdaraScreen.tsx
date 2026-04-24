@@ -923,15 +923,21 @@ const OdaraScreen = ({
     // ── Normalize raw payload ONCE — single source of truth ──
     const normalized = normalizeOracleHomePayload(oracle);
 
-    console.log('[Odara] oracle apply', {
+    const v6Peek: any = (oracle as any)?.__v6 ?? null;
+    const balanceLayersPeek = Array.isArray(v6Peek?.layer_modes?.balance?.layers)
+      ? v6Peek.layer_modes.balance.layers
+      : [];
+    console.info('[Odara] oracle apply', {
       selectedDate,
       selectedContext,
-      backendHeroId: oracle.today_pick?.fragrance_id ?? '(none)',
+      backendHeroId: v6Peek?.hero?.fragrance_id ?? oracle.today_pick?.fragrance_id ?? '(none)',
       previousVisibleId: prevVisibleId,
       promotedAltIdBeforeReset: prevPromotedId,
-      contract: normalized.rawModeContract,
-      seededBalanceLayerName: normalized.seededBalanceLayer?.name ?? '(null)',
-      seededBalanceLayerId: normalized.seededBalanceLayer?.fragranceId ?? '(null)',
+      contract: v6Peek?.card_contract_version ?? (oracle as any)?.card_contract_version ?? normalized.rawModeContract,
+      surfaceType: v6Peek?.surface_type ?? (oracle as any)?.surface_type ?? null,
+      heroName: v6Peek?.hero?.name ?? oracle.today_pick?.name ?? null,
+      seededBalanceLayerName: balanceLayersPeek[0]?.name ?? normalized.seededBalanceLayer?.name ?? '(null)',
+      seededBalanceLayerId: balanceLayersPeek[0]?.fragrance_id ?? normalized.seededBalanceLayer?.fragranceId ?? '(null)',
     });
 
     // 1) Clear ALL stale state first
