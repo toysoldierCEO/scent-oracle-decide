@@ -1237,12 +1237,16 @@ const OdaraScreen = ({
     const layerName = isGuestMode
       ? (activeGuestRender?.activeLayer?.name ?? null)
       : (activeMainCardRender?.activeLayer?.name ?? null);
-    console.debug('ODARA_TOKEN_RENDER_PROOF', {
+    const heroTokensArrR = Array.isArray(heroTokens) ? heroTokens : [];
+    const layerTokensArrR = Array.isArray(layerTokens) ? layerTokens : [];
+    console.info('ODARA_TOKEN_RENDER_PROOF', {
       surfaceType: isGuestMode ? 'guest' : 'signed_in',
       heroName,
-      heroTokens,
+      heroTokenObjects: heroTokensArrR,
+      heroTokenLabels: heroTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       layerName,
-      layerTokens,
+      layerTokenObjects: layerTokensArrR,
+      layerTokenLabels: layerTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       activeMode: isGuestMode ? activeGuestRender?.selectedMode : activeMainCardRender?.selectedMode,
       activeLayerIndex: isGuestMode
         ? (activeGuestRender?.activeLayerIndex ?? 0)
