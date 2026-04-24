@@ -923,15 +923,21 @@ const OdaraScreen = ({
     // ── Normalize raw payload ONCE — single source of truth ──
     const normalized = normalizeOracleHomePayload(oracle);
 
-    console.log('[Odara] oracle apply', {
+    const v6Peek: any = (oracle as any)?.__v6 ?? null;
+    const balanceLayersPeek = Array.isArray(v6Peek?.layer_modes?.balance?.layers)
+      ? v6Peek.layer_modes.balance.layers
+      : [];
+    console.info('[Odara] oracle apply', {
       selectedDate,
       selectedContext,
-      backendHeroId: oracle.today_pick?.fragrance_id ?? '(none)',
+      backendHeroId: v6Peek?.hero?.fragrance_id ?? oracle.today_pick?.fragrance_id ?? '(none)',
       previousVisibleId: prevVisibleId,
       promotedAltIdBeforeReset: prevPromotedId,
-      contract: normalized.rawModeContract,
-      seededBalanceLayerName: normalized.seededBalanceLayer?.name ?? '(null)',
-      seededBalanceLayerId: normalized.seededBalanceLayer?.fragranceId ?? '(null)',
+      contract: v6Peek?.card_contract_version ?? (oracle as any)?.card_contract_version ?? normalized.rawModeContract,
+      surfaceType: v6Peek?.surface_type ?? (oracle as any)?.surface_type ?? null,
+      heroName: v6Peek?.hero?.name ?? oracle.today_pick?.name ?? null,
+      seededBalanceLayerName: balanceLayersPeek[0]?.name ?? normalized.seededBalanceLayer?.name ?? '(null)',
+      seededBalanceLayerId: balanceLayersPeek[0]?.fragrance_id ?? normalized.seededBalanceLayer?.fragranceId ?? '(null)',
     });
 
     // 1) Clear ALL stale state first
@@ -1197,15 +1203,19 @@ const OdaraScreen = ({
     if (isGuestMode) return;
     const contract: any = v6Payload ?? activeOracle ?? oracle ?? {};
     const lm: any = contract?.layer_modes ?? {};
-    console.debug('ODARA_SIGNED_IN_CONTRACT_PROOF', {
+    const heroTokensArr = Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender!.activeHeroTokens : [];
+    const layerTokensArr = Array.isArray(activeMainCardRender?.activeLayerTokens) ? activeMainCardRender!.activeLayerTokens : [];
+    console.info('ODARA_SIGNED_IN_CONTRACT_PROOF', {
       contractVersion: contract?.card_contract_version ?? contract?.layer_mode_contract ?? null,
       surfaceType: contract?.surface_type ?? null,
       heroName: activeMainCardRender?.activeHero?.name ?? null,
-      heroTokens: activeMainCardRender?.activeHeroTokens ?? [],
+      heroTokenObjects: heroTokensArr,
+      heroTokenLabels: heroTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       activeMode: activeMainCardRender?.selectedMode ?? null,
       activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
       layerName: activeMainCardRender?.activeLayer?.name ?? null,
-      layerTokens: activeMainCardRender?.activeLayerTokens ?? [],
+      layerTokenObjects: layerTokensArr,
+      layerTokenLabels: layerTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       balanceNames: Array.isArray(lm?.balance?.layers) ? lm.balance.layers.map((l: any) => l?.name) : null,
       boldNames: Array.isArray(lm?.bold?.layers) ? lm.bold.layers.map((l: any) => l?.name) : null,
       smoothNames: Array.isArray(lm?.smooth?.layers) ? lm.smooth.layers.map((l: any) => l?.name) : null,
@@ -1227,12 +1237,16 @@ const OdaraScreen = ({
     const layerName = isGuestMode
       ? (activeGuestRender?.activeLayer?.name ?? null)
       : (activeMainCardRender?.activeLayer?.name ?? null);
-    console.debug('ODARA_TOKEN_RENDER_PROOF', {
+    const heroTokensArrR = Array.isArray(heroTokens) ? heroTokens : [];
+    const layerTokensArrR = Array.isArray(layerTokens) ? layerTokens : [];
+    console.info('ODARA_TOKEN_RENDER_PROOF', {
       surfaceType: isGuestMode ? 'guest' : 'signed_in',
       heroName,
-      heroTokens,
+      heroTokenObjects: heroTokensArrR,
+      heroTokenLabels: heroTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       layerName,
-      layerTokens,
+      layerTokenObjects: layerTokensArrR,
+      layerTokenLabels: layerTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
       activeMode: isGuestMode ? activeGuestRender?.selectedMode : activeMainCardRender?.selectedMode,
       activeLayerIndex: isGuestMode
         ? (activeGuestRender?.activeLayerIndex ?? 0)
