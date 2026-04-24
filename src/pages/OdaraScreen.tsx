@@ -2034,14 +2034,7 @@ const OdaraScreen = ({
                   ))}
                 </div>
               );
-            })() : (pickAccords.length > 0 && (
-              <p className="text-[13px] text-center mb-3" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
-                <span className="text-foreground/50">accords: </span>
-                <span className="text-foreground/85 font-medium lowercase">
-                  {pickAccords.join(', ')}
-                </span>
-              </p>
-            ))}
+            })() : null /* signed-in: hero tokens rendered above from activeMainCardRender.activeHeroTokens; raw "accords:" text removed per v7 contract — backend tokens are the only approved source */}
 
             {/* ── Guest v5: backend-driven layer card. Renders from activeGuestRender only. ── */}
             {isGuestMode ? (() => {
