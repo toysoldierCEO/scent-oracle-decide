@@ -1192,6 +1192,58 @@ const OdaraScreen = ({
     };
   }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion]);
 
+  // ── DEBUG PROOF — signed-in v7 contract ──
+  useEffect(() => {
+    if (isGuestMode) return;
+    const contract: any = v6Payload ?? activeOracle ?? oracle ?? {};
+    const lm: any = contract?.layer_modes ?? {};
+    console.debug('ODARA_SIGNED_IN_CONTRACT_PROOF', {
+      contractVersion: contract?.card_contract_version ?? contract?.layer_mode_contract ?? null,
+      surfaceType: contract?.surface_type ?? null,
+      heroName: activeMainCardRender?.activeHero?.name ?? null,
+      heroTokens: activeMainCardRender?.activeHeroTokens ?? [],
+      activeMode: activeMainCardRender?.selectedMode ?? null,
+      activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
+      layerName: activeMainCardRender?.activeLayer?.name ?? null,
+      layerTokens: activeMainCardRender?.activeLayerTokens ?? [],
+      balanceNames: Array.isArray(lm?.balance?.layers) ? lm.balance.layers.map((l: any) => l?.name) : null,
+      boldNames: Array.isArray(lm?.bold?.layers) ? lm.bold.layers.map((l: any) => l?.name) : null,
+      smoothNames: Array.isArray(lm?.smooth?.layers) ? lm.smooth.layers.map((l: any) => l?.name) : null,
+      wildNames: Array.isArray(lm?.wild?.layers) ? lm.wild.layers.map((l: any) => l?.name) : null,
+    });
+  }, [isGuestMode, v6Payload, activeMainCardRender, selectedMood, signedInLayerIdxByMood]);
+
+  // ── DEBUG PROOF — token render ──
+  useEffect(() => {
+    const heroTokens = isGuestMode
+      ? (activeGuestRender?.activeHeroTokens ?? [])
+      : (activeMainCardRender?.activeHeroTokens ?? []);
+    const layerTokens = isGuestMode
+      ? (Array.isArray(activeGuestRender?.activeLayer?.tokens) ? activeGuestRender!.activeLayer!.tokens : [])
+      : (activeMainCardRender?.activeLayerTokens ?? []);
+    const heroName = isGuestMode
+      ? (activeGuestRender?.activeHero?.name ?? null)
+      : (activeMainCardRender?.activeHero?.name ?? null);
+    const layerName = isGuestMode
+      ? (activeGuestRender?.activeLayer?.name ?? null)
+      : (activeMainCardRender?.activeLayer?.name ?? null);
+    console.debug('ODARA_TOKEN_RENDER_PROOF', {
+      surfaceType: isGuestMode ? 'guest' : 'signed_in',
+      heroName,
+      heroTokens,
+      layerName,
+      layerTokens,
+      activeMode: isGuestMode ? activeGuestRender?.selectedMode : activeMainCardRender?.selectedMode,
+      activeLayerIndex: isGuestMode
+        ? (activeGuestRender?.activeLayerIndex ?? 0)
+        : (signedInLayerIdxByMood[selectedMood] ?? 0),
+      selectedAlternateName: null,
+      rawAccordsTextRendered: false,
+      numericTokenRendered: false,
+      frontendGeneratedTokensRendered: false,
+    });
+  }, [isGuestMode, activeMainCardRender, activeGuestRender, selectedMood, signedInLayerIdxByMood]);
+
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
   useEffect(() => {
@@ -2034,14 +2086,7 @@ const OdaraScreen = ({
                   ))}
                 </div>
               );
-            })() : (pickAccords.length > 0 && (
-              <p className="text-[13px] text-center mb-3" style={{ lineHeight: 1.5, letterSpacing: '0.06em' }}>
-                <span className="text-foreground/50">accords: </span>
-                <span className="text-foreground/85 font-medium lowercase">
-                  {pickAccords.join(', ')}
-                </span>
-              </p>
-            ))}
+            })() : null /* signed-in: hero tokens rendered above from activeMainCardRender.activeHeroTokens; raw "accords:" text removed per v7 contract — backend tokens are the only approved source */}
 
             {/* ── Guest v5: backend-driven layer card. Renders from activeGuestRender only. ── */}
             {isGuestMode ? (() => {
