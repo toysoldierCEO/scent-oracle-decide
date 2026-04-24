@@ -130,13 +130,14 @@ export async function fetchHomeOracle(
     throw new Error('Cannot fetch oracle: no access mode resolved');
   }
 
-  // CANONICAL SIGNED-IN CONTRACT: get_signed_in_card_contract_v6 is the
+  // CANONICAL SIGNED-IN CONTRACT: get_signed_in_card_contract_v7 is the
   // single backend source of truth for the signed-in Odara card. Returns
   // hero, hero_tokens, layer, layer_tokens, layer_modes (with per-mood
-  // layers[] preview stack), layer_mode_order, ui_default_mode, alternates,
-  // queue. Adapter below remaps to the legacy OracleResult shape so existing
-  // wiring keeps working, and stashes the raw v6 payload at __v6 for the
-  // mode-stack-aware view model in OdaraScreen.
+  // layers[] preview stack — preview_depth=3), layer_mode_order,
+  // ui_default_mode, alternates, queue, card_contract_version, surface_type.
+  // The v6/v7 payload shapes are field-compatible for the fields we read,
+  // so the existing adapter remains valid; v7 additionally guarantees the
+  // hard_primary_soft_preview_fallback overlap policy on the backend.
   const args = {
     p_user_id: access.resolvedUserId,
     p_temperature: temperature,
@@ -144,15 +145,17 @@ export async function fetchHomeOracle(
     p_brand: brand,
     p_wear_date: wearDate,
   };
-  console.log('[Odara] oracle access: SIGNED-IN → get_signed_in_card_contract_v6');
+  console.log('[Odara] oracle access: SIGNED-IN → get_signed_in_card_contract_v7');
   const { data, error } = await odaraSupabase.rpc(
-    'get_signed_in_card_contract_v6' as any,
+    'get_signed_in_card_contract_v7' as any,
     args,
   );
-  logRawHomePayload('get_signed_in_card_contract_v6', args, data, error);
+  logRawHomePayload('get_signed_in_card_contract_v7', args, data, error);
   if (error) throw error;
   const adapted = adaptSignedInV6ToOracleResult(data);
-  console.log('[Odara][SignedIn][v6] adapted summary', {
+  console.log('[Odara][SignedIn][v7] adapted summary', {
+    contract_version: (data as any)?.card_contract_version ?? null,
+    surface_type: (data as any)?.surface_type ?? null,
     hero_id: adapted?.today_pick?.fragrance_id ?? null,
     hero_tokens_count: Array.isArray(adapted?.hero_tokens) ? adapted.hero_tokens.length : 0,
     layer_tokens_count: Array.isArray(adapted?.layer_tokens) ? adapted.layer_tokens.length : 0,
@@ -167,5 +170,5 @@ export async function fetchHomeOracle(
       : null,
     ui_default_mode: adapted?.ui_default_mode ?? null,
   });
-  return { data: adapted, rpcUsed: 'get_signed_in_card_contract_v6' };
+  return { data: adapted, rpcUsed: 'get_signed_in_card_contract_v7' };
 }
