@@ -589,6 +589,7 @@ const OdaraScreen = ({
   const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
   // Snapshot of main-state at time alternate was selected, for clean restore.
   const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
+  const guestRenderSourceRef = useRef<GuestRenderSource>('guest_main_bundle');
   // Multi-step guest skip history: each entry is the alternate index that was
   // visible BEFORE the skip (null = main bundle). Pushed on every guest skip,
   // popped by the back button to restore the previous guest card.
@@ -622,67 +623,39 @@ const OdaraScreen = ({
       (o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' || !!o?.main_bundle?.layer_modes);
     if (!isV5) return null;
 
-    const main: any = o.main_bundle ?? {};
-    const altBundles: any[] = Array.isArray(o.alternate_bundles) ? o.alternate_bundles : [];
-    const modeOrderRaw: any[] = Array.isArray(main.layer_mode_order) && main.layer_mode_order.length > 0
-      ? main.layer_mode_order
-      : GUEST_DEFAULT_MODE_ORDER;
-    const modeOrder: GuestModeKey[] = modeOrderRaw.filter(
-      (m: any): m is GuestModeKey => m === 'balance' || m === 'bold' || m === 'smooth' || m === 'wild',
-    );
-
-    // STATE B — alternate bundle active
-    if (selectedAlternateIdx !== null && altBundles[selectedAlternateIdx]) {
-      const ab = altBundles[selectedAlternateIdx];
-      return {
-        contract: 'v5' as const,
-        showModeRow: false,
-        modeOrder,
-        selectedMode: guestSelectedMood,
-        activeLayerIndex: guestActiveLayerIdx,
-        selectedAlternateIndex: selectedAlternateIdx,
-        activeHero: ab.hero ?? null,
-        activeHeroTokens: Array.isArray(ab.hero_tokens) ? ab.hero_tokens : [],
-        activeLayer: ab.layer ?? null,
-        modeLayerStack: [] as any[],
-      };
-    }
-
-    // STATE A — main mode state
-    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
-    const defMode: GuestModeKey = (main.ui_default_mode === 'balance' || main.ui_default_mode === 'bold' || main.ui_default_mode === 'smooth' || main.ui_default_mode === 'wild')
-      ? main.ui_default_mode : 'balance';
-
-    let mode: GuestModeKey = guestSelectedMood;
-    if (!modesObj[mode]) mode = defMode;
-    if (!modesObj[mode] && modeOrder[0]) mode = modeOrder[0];
-
-    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
-    let idx = guestActiveLayerIdx;
-    if (idx < 0 || idx >= stack.length) idx = 0;
-    const layerFromStack = stack[idx] ?? null;
-    const activeLayer = layerFromStack ?? main.layer ?? null;
-
+    const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
+      source: guestRenderSourceRef.current,
+      selectedMood: guestSelectedMood,
+      activeLayerIdx: guestActiveLayerIdx,
+    });
+    if (!resolved) return null;
     return {
       contract: 'v5' as const,
-      showModeRow: true,
-      modeOrder,
-      selectedMode: mode,
-      activeLayerIndex: idx,
-      selectedAlternateIndex: null,
-      activeHero: main.hero ?? null,
-      activeHeroTokens: Array.isArray(main.hero_tokens) ? main.hero_tokens : [],
-      activeLayer,
-      modeLayerStack: stack,
+      source: resolved.source,
+      showModeRow: resolved.modeOrder.length > 0,
+      modeOrder: resolved.modeOrder,
+      selectedMode: resolved.selectedMode,
+      activeLayerIndex: resolved.activeLayerIndex,
+      selectedAlternateIndex: resolved.selectedAlternateIndex,
+      activeHero: resolved.hero,
+      activeHeroTokens: resolved.heroTokens,
+      activeLayer: resolved.layer ? { ...resolved.layer, tokens: resolved.layerTokens } : null,
+      layerModes: resolved.layerModes,
+      modeLayerStack: resolved.modeLayerStack,
+      alternates: resolved.alternates,
+      renderedFromFullBundle: resolved.renderedFromFullBundle,
     };
   }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
     const o: any = activeOracle ?? oracle ?? {};
-    const main: any = o?.main_bundle ?? {};
-    const modesObj: Record<string, any> = (main.layer_modes && typeof main.layer_modes === 'object') ? main.layer_modes : {};
-    const stack: any[] = Array.isArray(modesObj[mode]?.layers) ? modesObj[mode].layers : [];
+    const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
+      source: guestRenderSourceRef.current,
+      selectedMood: mode,
+      activeLayerIdx: 0,
+    });
+    const stack: any[] = Array.isArray(resolved?.layerModes?.[mode]?.layers) ? resolved!.layerModes[mode]!.layers : [];
     if (stack.length === 0) return;
     if (mode !== guestSelectedMood) {
       setGuestSelectedMood(mode);
@@ -691,7 +664,7 @@ const OdaraScreen = ({
       // cycle within current mode using backend layers.length (no hard-coded N)
       setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
     }
-  }, [activeOracle, oracle, guestSelectedMood]);
+  }, [activeOracle, oracle, guestSelectedMood, selectedAlternateIdx]);
 
   // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
   const handleGuestAlternateTap = useCallback((idx: number) => {
@@ -703,6 +676,7 @@ const OdaraScreen = ({
         setGuestActiveLayerIdx(prev.idx);
       }
       guestPrevMainStateRef.current = null;
+      guestRenderSourceRef.current = 'guest_main_bundle';
       setSelectedAlternateIdx(null);
       return;
     }
@@ -710,6 +684,7 @@ const OdaraScreen = ({
     if (selectedAlternateIdx === null) {
       guestPrevMainStateRef.current = { mood: guestSelectedMood, idx: guestActiveLayerIdx };
     }
+    guestRenderSourceRef.current = 'guest_selected_alternate';
     setSelectedAlternateIdx(idx);
     setGuestLayerExpanded(true);
   }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
@@ -732,6 +707,7 @@ const OdaraScreen = ({
           : (altBundles[prevIdx]?.hero?.name ?? null);
       const lengthBefore = guestSkipHistory.length;
       setGuestSkipHistory((h) => h.slice(0, -1));
+      guestRenderSourceRef.current = 'guest_back_restore';
       setSelectedAlternateIdx(prevIdx);
       // Reset alternate snapshot since we're walking the skip stack, not unwinding a tap.
       guestPrevMainStateRef.current = null;
@@ -751,6 +727,7 @@ const OdaraScreen = ({
         setGuestActiveLayerIdx(prev.idx);
       }
       guestPrevMainStateRef.current = null;
+      guestRenderSourceRef.current = 'guest_main_bundle';
       setSelectedAlternateIdx(null);
       return true; // consumed
     }
