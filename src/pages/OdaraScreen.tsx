@@ -1545,13 +1545,17 @@ const OdaraScreen = ({
     };
   }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
+  // Swipe-down must work when the gesture STARTS on the visible card body,
+  // including the layer card area. Only true interactive controls block it.
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el || !el.closest) return false;
     return !!(
       el.closest('[data-action-stack]') ||
       el.closest('[data-debug-controls]') ||
-      el.closest('[data-layer-section]') ||
+      el.closest('[data-mode-chip]') ||
+      el.closest('[data-alternate-chip]') ||
+      el.closest('[data-no-card-swipe]') ||
       el.closest('button, a, input, textarea, select, [role="button"]')
     );
   };
@@ -1559,6 +1563,16 @@ const OdaraScreen = ({
   const handleCardPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
+    // Capture the pointer so the gesture stays attached to the card shell
+    // until pointer up/cancel — prevents the browser/scroll container from
+    // stealing vertical motion mid-swipe.
+    try {
+      if (e.currentTarget.setPointerCapture) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+    } catch {
+      /* setPointerCapture can throw if pointer is already captured elsewhere */
+    }
     swipeRef.current = {
       active: true,
       startX: e.clientX,
@@ -1582,7 +1596,11 @@ const OdaraScreen = ({
     const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
     const downwardOk = dy >= SWIPE_DOWN_DISTANCE && Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE;
 
-    // Diagnostic log — fires on every move once direction is locked.
+    const activeCardNameBefore = visibleCard?.name ?? null;
+    const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
+    const activeMode = selectedMood;
+    const activeLayerIndex = isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0);
+
     const baseProof = {
       surfaceType,
       isLockedBefore: lockState === 'locked',
@@ -1592,15 +1610,20 @@ const OdaraScreen = ({
       velocityY: 0,
       dominantAxis,
       thresholdPassed: downwardOk,
-      activeCardName: visibleCard?.name ?? null,
-      activeCardId: visibleCard?.fragrance_id ?? null,
-      activeMode: selectedMood,
-      activeLayerIndex: isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0),
+      activeCardNameBefore,
+      activeCardIdBefore,
+      activeMode,
+      activeLayerIndex,
     };
     if (s.direction === 'horizontal') {
       if (Math.abs(dx) >= SWIPE_DOWN_DISTANCE) {
         s.fired = true;
-        console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, actionTaken: 'ignored_horizontal_dominant' });
+        console.info('ODARA_SWIPE_DOWN_PROOF', {
+          ...baseProof,
+          actionTaken: 'ignored_horizontal_dominant',
+          activeCardNameAfter: activeCardNameBefore,
+          activeCardIdAfter: activeCardIdBefore,
+        });
       }
       return;
     }
@@ -1611,6 +1634,9 @@ const OdaraScreen = ({
     // Threshold reached: fire the state-aware swipe-down action ONCE.
     s.fired = true;
     let actionTaken: string;
+    let activeCardNameAfter: string | null = activeCardNameBefore;
+    let activeCardIdAfter: string | null = activeCardIdBefore;
+
     if (lockState === 'locked') {
       actionTaken = 'unlock';
       setLockState('neutral');
@@ -1619,10 +1645,23 @@ const OdaraScreen = ({
       window.setTimeout(() => setUnlockFlash(false), 700);
       pulseLock();
     } else if (isGuestMode) {
-      actionTaken = 'skip_guest';
-      // Guest is read-only; show flash feedback only, no backend write, no queue advance.
-      setSkipFlash(true);
-      window.setTimeout(() => setSkipFlash(false), 500);
+      // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
+      const o: any = (oracle ?? activeOracle ?? {});
+      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+      if (altBundles.length === 0) {
+        actionTaken = 'fail_guest_no_skip_source';
+      } else {
+        actionTaken = 'skip_guest';
+        setSkipFlash(true);
+        window.setTimeout(() => setSkipFlash(false), 500);
+        // Advance to next bundle (or wrap to 0). null treated as "main" → go to 0.
+        const current = selectedAlternateIdx;
+        const nextIdx = current === null ? 0 : (current + 1) % altBundles.length;
+        setSelectedAlternateIdx(nextIdx);
+        const nextHero = altBundles[nextIdx]?.hero ?? null;
+        activeCardNameAfter = nextHero?.name ?? activeCardNameBefore;
+        activeCardIdAfter = nextHero?.fragrance_id ?? nextHero?.id ?? activeCardIdBefore;
+      }
     } else {
       actionTaken = 'skip_signed_in';
       setSkipFlash(true);
@@ -1630,25 +1669,39 @@ const OdaraScreen = ({
       void handleSkipLocal();
     }
     console.info('ODARA_SWIPE_DOWN_PROOF', {
-      surfaceType,
-      isLockedBefore: lockState === 'locked',
-      deltaX: dx,
-      deltaY: dy,
-      velocityX: 0,
-      velocityY: 0,
-      dominantAxis,
+      ...baseProof,
       thresholdPassed: true,
       actionTaken,
-      activeCardName: visibleCard?.name ?? null,
-      activeCardId: visibleCard?.fragrance_id ?? null,
-      activeMode: selectedMood,
-      activeLayerIndex: isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0),
+      activeCardNameAfter,
+      activeCardIdAfter,
     });
-  }, [lockState, setLockState, clearLockedSelection, pulseLock, handleSkipLocal, isGuestMode, visibleCard, selectedMood, guestActiveLayerIdx, signedInLayerIdxByMood]);
+  }, [
+    lockState,
+    setLockState,
+    clearLockedSelection,
+    pulseLock,
+    handleSkipLocal,
+    isGuestMode,
+    visibleCard,
+    selectedMood,
+    guestActiveLayerIdx,
+    signedInLayerIdxByMood,
+    oracle,
+    activeOracle,
+    selectedAlternateIdx,
+    setSelectedAlternateIdx,
+  ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const s = swipeRef.current;
     if (s.pointerId !== e.pointerId) return;
+    try {
+      if (e.currentTarget.releasePointerCapture && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* safe release */
+    }
     swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
   }, []);
 
@@ -1778,7 +1831,7 @@ const OdaraScreen = ({
               background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
               border: `1px solid ${tint.border}`,
               boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-              touchAction: 'pan-y',
+              touchAction: 'none',
               ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
             }}
             onClick={handleCardClick}
