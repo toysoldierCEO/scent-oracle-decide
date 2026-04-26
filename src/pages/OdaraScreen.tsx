@@ -123,6 +123,35 @@ function resolveGuestCardVM(
   };
 }
 
+function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> | null {
+  if (!layer) return null;
+  return {
+    id: layer.fragrance_id ?? layer.id ?? '',
+    name: layer.name ?? '',
+    brand: layer.brand ?? null,
+    family_key: layer.family ?? layer.family_key ?? '',
+    notes: Array.isArray(layer.notes) ? layer.notes : null,
+    accords: Array.isArray(layer.accords) ? layer.accords : null,
+    interactionType: (layer.interaction_type ?? layer.layer_mode ?? 'balance') as InteractionType,
+    reason: layer.reason ?? '',
+    why_it_works: layer.why_it_works ?? '',
+    projection: typeof layer.projection === 'number' ? layer.projection : null,
+    ratio_hint: layer.ratio_hint ?? undefined,
+    application_style: layer.application_style ?? undefined,
+    placement_hint: layer.placement_hint ?? undefined,
+    spray_guidance: layer.spray_guidance ?? undefined,
+  };
+}
+
+function guestLayerModesToModeSelector(layerModes: Record<GuestModeKey, any | null>): LayerModes {
+  return {
+    balance: guestLayerToModeEntry(layerModes.balance),
+    bold: guestLayerToModeEntry(layerModes.bold),
+    smooth: guestLayerToModeEntry(layerModes.smooth),
+    wild: guestLayerToModeEntry(layerModes.wild),
+  };
+}
+
 interface GuestBottle {
   fragrance_id: string | null;
   name: string;
