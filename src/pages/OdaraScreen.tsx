@@ -479,11 +479,16 @@ const OdaraScreen = ({
   const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
   // Snapshot of main-state at time alternate was selected, for clean restore.
   const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
+  // Multi-step guest skip history: each entry is the alternate index that was
+  // visible BEFORE the skip (null = main bundle). Pushed on every guest skip,
+  // popped by the back button to restore the previous guest card.
+  const [guestSkipHistory, setGuestSkipHistory] = useState<Array<number | null>>([]);
 
   // Reset guest state whenever the slot (date/context) or backend payload changes.
   useEffect(() => {
     setSelectedAlternateIdx(null);
     guestPrevMainStateRef.current = null;
+    setGuestSkipHistory([]);
     setGuestLayerExpanded(false);
     setGuestActiveLayerIdx(0);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
