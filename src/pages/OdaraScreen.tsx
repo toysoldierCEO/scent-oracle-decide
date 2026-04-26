@@ -2422,7 +2422,7 @@ const OdaraScreen = ({
                       <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                     </svg>
                   </button>
-                  {(selectedAlternateIdx !== null || guestActiveLayerIdx > 0) && (
+                  {(guestSkipHistory.length > 0 || selectedAlternateIdx !== null || guestActiveLayerIdx > 0) && (
                     <button onClick={handleBack} className="p-0.5" aria-label="Back">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
                         <path d="M19 12H5M12 19l-7-7 7-7" />
