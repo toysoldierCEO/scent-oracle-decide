@@ -1348,23 +1348,25 @@ const OdaraScreen = ({
     const heroTokens = activeMainCardRender?.activeHeroTokens ?? [];
     const layer = activeMainCardRender?.activeLayer ?? null;
     const layerTokens = activeMainCardRender?.activeLayerTokens ?? [];
+    const heroAny: any = hero;
+    const layerAny: any = layer;
     return {
       surfaceType: 'signed_in' as const,
       source: 'signed_in' as const,
-      cardId: hero?.fragrance_id ?? hero?.id ?? null,
+      cardId: heroAny?.fragrance_id ?? heroAny?.id ?? null,
       isLocked: lockState === 'locked',
-      hero: hero ? {
-        id: hero.fragrance_id ?? hero.id ?? null,
-        name: hero.name ?? null,
-        brand: hero.brand ?? null,
-        family: hero.family ?? null,
+      hero: heroAny ? {
+        id: heroAny.fragrance_id ?? heroAny.id ?? null,
+        name: heroAny.name ?? null,
+        brand: heroAny.brand ?? null,
+        family: heroAny.family ?? null,
         tokens: heroTokens,
       } : null,
-      layer: layer ? {
-        id: layer.fragrance_id ?? layer.id ?? null,
-        name: layer.name ?? null,
-        brand: layer.brand ?? null,
-        family: layer.family ?? null,
+      layer: layerAny ? {
+        id: layerAny.fragrance_id ?? layerAny.id ?? null,
+        name: layerAny.name ?? null,
+        brand: layerAny.brand ?? null,
+        family: layerAny.family ?? null,
         tokens: layerTokens,
         visible: true,
       } : null,
@@ -1376,10 +1378,10 @@ const OdaraScreen = ({
       },
       selectedMode: activeMainCardRender?.selectedMode ?? selectedMood,
       activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
-      alternateCount: Array.isArray(visibleAlts) ? visibleAlts.length : 0,
+      alternateCount: Array.isArray((activeOracle as any)?.alternates) ? (activeOracle as any).alternates.length : 0,
       modeKeys: ['balance', 'bold', 'smooth', 'wild'].filter(k => !!(modeResults as any)[k]),
     };
-  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood, visibleAlts]);
+  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood]);
 
   useEffect(() => {
     const vm = activeCardVM;
