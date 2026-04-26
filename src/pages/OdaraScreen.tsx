@@ -1583,38 +1583,30 @@ const OdaraScreen = ({
     const downwardOk = dy >= SWIPE_DOWN_DISTANCE && Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE;
 
     // Diagnostic log — fires on every move once direction is locked.
-    if (s.direction !== 'none') {
-      const baseProof = {
-        surfaceType,
-        isLockedBefore: lockState === 'locked',
-        deltaX: dx,
-        deltaY: dy,
-        velocityX: 0,
-        velocityY: 0,
-        dominantAxis,
-        thresholdPassed: downwardOk,
-        activeCardName: visibleCard?.name ?? null,
-        activeCardId: visibleCard?.fragrance_id ?? null,
-        activeMode: selectedMood,
-        activeLayerIndex: isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0),
-      };
-      if (s.direction === 'horizontal') {
-        // Only emit once per gesture for horizontal — log on first detection.
-        if (!s.fired && Math.abs(dx) >= SWIPE_DOWN_DISTANCE) {
-          s.fired = true;
-          console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, actionTaken: 'ignored_horizontal_dominant' });
-        }
-        return;
+    const baseProof = {
+      surfaceType,
+      isLockedBefore: lockState === 'locked',
+      deltaX: dx,
+      deltaY: dy,
+      velocityX: 0,
+      velocityY: 0,
+      dominantAxis,
+      thresholdPassed: downwardOk,
+      activeCardName: visibleCard?.name ?? null,
+      activeCardId: visibleCard?.fragrance_id ?? null,
+      activeMode: selectedMood,
+      activeLayerIndex: isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0),
+    };
+    if (s.direction === 'horizontal') {
+      if (Math.abs(dx) >= SWIPE_DOWN_DISTANCE) {
+        s.fired = true;
+        console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, actionTaken: 'ignored_horizontal_dominant' });
       }
-      // vertical
-      if (dy < 0) {
-        // upward — ignored
-        return;
-      }
-      if (!downwardOk) return;
-    } else {
       return;
     }
+    // vertical
+    if (dy < 0) return; // upward — ignored silently
+    if (!downwardOk) return; // not far enough yet
 
     // Threshold reached: fire the state-aware swipe-down action ONCE.
     s.fired = true;
