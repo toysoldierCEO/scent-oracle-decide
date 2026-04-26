@@ -648,6 +648,29 @@ const OdaraScreen = ({
     };
   }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
+  useEffect(() => {
+    if (!isGuestMode || !activeGuestRender) return;
+    const heroTokens = Array.isArray(activeGuestRender.activeHeroTokens) ? activeGuestRender.activeHeroTokens : [];
+    const layerTokens = Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : [];
+    const modeKeys = Object.keys(activeGuestRender.layerModes ?? {}).filter((key) => !!(activeGuestRender.layerModes as any)?.[key]);
+    console.info('ODARA_GUEST_VM_RENDER_PROOF', {
+      source: activeGuestRender.source,
+      selectedAlternateIdx,
+      heroName: activeGuestRender.activeHero?.name ?? null,
+      heroTokenCount: heroTokens.length,
+      layerName: activeGuestRender.activeLayer?.name ?? null,
+      layerTokenCount: layerTokens.length,
+      hasLayer: !!activeGuestRender.activeLayer,
+      hasLayerModes: modeKeys.length > 0,
+      modeKeys,
+      hasBalance: !!activeGuestRender.layerModes?.balance,
+      hasBold: !!activeGuestRender.layerModes?.bold,
+      hasSmooth: !!activeGuestRender.layerModes?.smooth,
+      hasWild: !!activeGuestRender.layerModes?.wild,
+      renderedFromFullBundle: !!activeGuestRender.renderedFromFullBundle,
+    });
+  }, [isGuestMode, activeGuestRender, selectedAlternateIdx]);
+
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
     const o: any = activeOracle ?? oracle ?? {};
