@@ -2534,146 +2534,33 @@ const OdaraScreen = ({
               );
             })() : null /* signed-in: hero tokens rendered above from activeMainCardRender.activeHeroTokens; raw "accords:" text removed per v7 contract — backend tokens are the only approved source */}
 
-            {/* ── Guest v5: backend-driven layer card. Renders from resolved full bundle only. ── */}
+            {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
             {isGuestMode ? (() => {
               if (!activeGuestRender) return null;
-              const { activeLayer, showModeRow, modeOrder, selectedMode, activeLayerIndex, modeLayerStack, selectedAlternateIndex, layerModes } = activeGuestRender;
+              const { activeHero, activeLayer, selectedMode, layerModes } = activeGuestRender;
               if (!activeLayer) return null;
-
-              // Layer token rail comes from activeLayer.tokens
-              const layerTokens: Array<any> = Array.isArray(activeLayer.tokens) ? activeLayer.tokens : [];
-
-              console.log('[Odara][Guest][v5] render', {
-                state: selectedAlternateIndex !== null ? 'ALTERNATE' : 'MAIN',
-                selectedMode,
-                activeLayerIndex,
-                stackLen: modeLayerStack.length,
-                hero_name: activeGuestRender.activeHero?.name ?? null,
-                layer_name: activeLayer?.name ?? null,
-                layer_family: activeLayer?.family ?? null,
-                layer_token_count: layerTokens.length,
-                why_it_works_present: !!activeLayer?.why_it_works,
-                renderedFromFullBundle: !!activeGuestRender.renderedFromFullBundle,
-              });
+              const guestLayerModes = guestLayerModesToModeSelector(layerModes);
+              const guestVisibleLayerMode = guestLayerToModeEntry(activeLayer);
 
               return (
-                <div className="flex flex-col gap-3 mt-1">
-                  <div
-                    className="rounded-[16px] overflow-hidden"
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                    }}
-                  >
-                    {/* Collapsed face — single scent block (updates in-place when mode/index/alt changes) */}
-                    <button
-                      type="button"
-                      onClick={() => setGuestLayerExpanded(v => !v)}
-                      aria-expanded={guestLayerExpanded}
-                      className="w-full px-4 py-3 flex flex-col items-center gap-1 text-center transition-colors"
-                    >
-                      {/* 1. "Layer with" */}
-                      <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/50">
-                        Layer with
-                      </span>
-                      {/* 2. layer scent name */}
-                      <span
-                        className="text-[20px] leading-tight text-foreground"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                      >
-                        {getDisplayName(activeLayer.name, activeLayer.brand)}
-                      </span>
-                      {/* 3. layer brand */}
-                      {activeLayer.brand && (
-                        <span className="text-[12px] text-muted-foreground/60">
-                          {activeLayer.brand}
-                        </span>
-                      )}
-                      {/* 4. layer family chip — backend verbatim */}
-                      {activeLayer.family && (() => {
-                        const fam = activeLayer.family as keyof typeof FAMILY_COLORS;
-                        const layerFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
-                        return (
-                          <span
-                            className="text-[10px] uppercase tracking-[0.15em] font-medium mt-0.5"
-                            style={{ color: layerFamilyColor }}
-                          >
-                            {String(activeLayer.family)}
-                          </span>
-                        );
-                      })()}
-                      {/* 5. layer token rail */}
-                      {layerTokens.length > 0 && (
-                        <div
-                          className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1"
-                          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {layerTokens.map((t, i) => (
-                            <span
-                              key={`layer-tok-${t.token_key ?? 'tok'}-${i}`}
-                              className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
-                              style={{
-                                color: t.color_hex || '#aaa',
-                                border: `1px solid ${(t.color_hex || '#888')}44`,
-                                background: `${(t.color_hex || '#888')}0A`,
-                              }}
-                            >
-                              {t.token_label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </button>
-
-                    {/* Expanded section — mode row (main only) + Why It Works */}
-                    {guestLayerExpanded && (
-                      <div
-                        className="px-4 pb-3 pt-3 flex flex-col gap-3"
-                        style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
-                      >
-                        {/* 6. mode row — resolved full bundle; cycles within backend layers[] length */}
-                        {showModeRow && modeOrder.length > 0 && (
-                          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
-                            {modeOrder.map(m => {
-                              const active = selectedMode === m;
-                              const stackLen = Array.isArray(layerModes?.[m]?.layers) ? layerModes[m].layers.length : 0;
-                              const present = stackLen > 0;
-                              return (
-                                <button
-                                  key={m}
-                                  type="button"
-                                  onClick={() => present && handleGuestModeTap(m)}
-                                  disabled={!present}
-                                  className={`text-[10px] uppercase tracking-[0.12em] py-1.5 rounded-full transition-all ${
-                                    active
-                                      ? 'bg-foreground/10 text-foreground border border-foreground/25'
-                                      : present
-                                        ? 'text-muted-foreground/55 hover:text-foreground/80 border border-transparent'
-                                        : 'text-muted-foreground/20 border border-transparent cursor-default'
-                                  }`}
-                                >
-                                  {m}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* 7 + 8. Why it works heading + body — backend-supplied copy only */}
-                        <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                          <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">
-                            Why it works
-                          </span>
-                          {activeLayer.why_it_works && (
-                            <p className="text-[12px] text-foreground/75 text-center mt-2 leading-relaxed">
-                              {activeLayer.why_it_works}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div data-layer-section>
+                  <LayerCard
+                    mainName={activeHero?.name ?? ''}
+                    mainBrand={activeHero?.brand ?? null}
+                    mainNotes={Array.isArray(activeHero?.notes) ? activeHero.notes : null}
+                    mainFamily={activeHero?.family ?? null}
+                    mainProjection={typeof activeHero?.projection === 'number' ? activeHero.projection : null}
+                    layerModes={guestLayerModes}
+                    visibleLayerMode={guestVisibleLayerMode}
+                    selectedMood={selectedMode as LayerMood}
+                    onSelectMood={(mood) => handleGuestModeTap(mood as GuestModeKey)}
+                    selectedRatio={selectedRatio}
+                    onSelectRatio={setSelectedRatio}
+                    isExpanded={guestLayerExpanded}
+                    onToggleExpand={() => setGuestLayerExpanded(v => !v)}
+                    locked={false}
+                    layerTokens={Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : []}
+                  />
                 </div>
               );
             })() : (
