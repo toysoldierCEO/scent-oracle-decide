@@ -1290,6 +1290,137 @@ const OdaraScreen = ({
     });
   }, [isGuestMode, activeMainCardRender, activeGuestRender, selectedMood, signedInLayerIdxByMood]);
 
+  // ── UNIFIED ACTIVE-CARD VIEW MODEL ──
+  // Single resolved shape that BOTH signed-in and guest renderers describe.
+  // The JSX above already renders the same logical layout for each surface
+  // (hero name/brand/family/tokens → layer name/brand/family/tokens → mode row
+  // → alternates). This VM is the single source of truth that proves the
+  // shared shell and exposes any guest payload incompleteness.
+  const activeCardVM = useMemo(() => {
+    if (isGuestMode) {
+      const o: any = oracle ?? activeOracle ?? {};
+      const main: any = o?.main_bundle ?? {};
+      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+      const inAlt = selectedAlternateIdx !== null && !!altBundles[selectedAlternateIdx];
+      const inSkipRestore = guestSkipHistory.length === 0 && selectedAlternateIdx !== null && !!altBundles[selectedAlternateIdx];
+      let source: 'guest_main' | 'guest_skip' | 'guest_alternate' | 'guest_back_restore' = 'guest_main';
+      if (inAlt) source = guestSkipHistory.length > 0 ? 'guest_skip' : 'guest_alternate';
+      const hero = activeGuestRender?.activeHero ?? null;
+      const heroTokens = activeGuestRender?.activeHeroTokens ?? [];
+      const layer = activeGuestRender?.activeLayer ?? null;
+      const layerTokens = Array.isArray(layer?.tokens) ? layer!.tokens : [];
+      const layerModesObj: Record<string, any> = main?.layer_modes ?? {};
+      const modeKeys = Object.keys(layerModesObj);
+      return {
+        surfaceType: 'guest' as const,
+        source,
+        cardId: hero?.fragrance_id ?? hero?.id ?? null,
+        isLocked: lockState === 'locked',
+        hero: hero ? {
+          id: hero.fragrance_id ?? hero.id ?? null,
+          name: hero.name ?? null,
+          brand: hero.brand ?? null,
+          family: hero.family ?? null,
+          tokens: heroTokens,
+        } : null,
+        layer: layer ? {
+          id: layer.fragrance_id ?? layer.id ?? null,
+          name: layer.name ?? null,
+          brand: layer.brand ?? null,
+          family: layer.family ?? null,
+          tokens: layerTokens,
+          visible: true,
+        } : null,
+        layerModes: {
+          balance: !!layerModesObj.balance,
+          bold: !!layerModesObj.bold,
+          smooth: !!layerModesObj.smooth,
+          wild: !!layerModesObj.wild,
+        },
+        selectedMode: activeGuestRender?.selectedMode ?? null,
+        activeLayerIndex: activeGuestRender?.activeLayerIndex ?? 0,
+        alternateCount: altBundles.length,
+        modeKeys,
+      };
+    }
+    // Signed-in
+    const hero = activeMainCardRender?.activeHero ?? null;
+    const heroTokens = activeMainCardRender?.activeHeroTokens ?? [];
+    const layer = activeMainCardRender?.activeLayer ?? null;
+    const layerTokens = activeMainCardRender?.activeLayerTokens ?? [];
+    const heroAny: any = hero;
+    const layerAny: any = layer;
+    return {
+      surfaceType: 'signed_in' as const,
+      source: 'signed_in' as const,
+      cardId: heroAny?.fragrance_id ?? heroAny?.id ?? null,
+      isLocked: lockState === 'locked',
+      hero: heroAny ? {
+        id: heroAny.fragrance_id ?? heroAny.id ?? null,
+        name: heroAny.name ?? null,
+        brand: heroAny.brand ?? null,
+        family: heroAny.family ?? null,
+        tokens: heroTokens,
+      } : null,
+      layer: layerAny ? {
+        id: layerAny.fragrance_id ?? layerAny.id ?? null,
+        name: layerAny.name ?? null,
+        brand: layerAny.brand ?? null,
+        family: layerAny.family ?? null,
+        tokens: layerTokens,
+        visible: true,
+      } : null,
+      layerModes: {
+        balance: !!modeResults.balance,
+        bold: !!modeResults.bold,
+        smooth: !!modeResults.smooth,
+        wild: !!modeResults.wild,
+      },
+      selectedMode: activeMainCardRender?.selectedMode ?? selectedMood,
+      activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
+      alternateCount: Array.isArray((activeOracle as any)?.alternates) ? (activeOracle as any).alternates.length : 0,
+      modeKeys: ['balance', 'bold', 'smooth', 'wild'].filter(k => !!(modeResults as any)[k]),
+    };
+  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood]);
+
+  useEffect(() => {
+    const vm = activeCardVM;
+    const heroTokensArr = Array.isArray(vm.hero?.tokens) ? vm.hero!.tokens : [];
+    const layerTokensArr = Array.isArray(vm.layer?.tokens) ? vm.layer!.tokens : [];
+    console.info('ODARA_ACTIVE_CARD_VM_PROOF', {
+      surfaceType: vm.surfaceType,
+      source: vm.source,
+      heroName: vm.hero?.name ?? null,
+      heroTokenCount: heroTokensArr.length,
+      layerName: vm.layer?.name ?? null,
+      layerTokenCount: layerTokensArr.length,
+      hasLayer: !!vm.layer,
+      modeKeys: vm.modeKeys,
+      hasBalance: vm.layerModes.balance,
+      hasBold: vm.layerModes.bold,
+      hasSmooth: vm.layerModes.smooth,
+      hasWild: vm.layerModes.wild,
+      alternateCount: vm.alternateCount,
+      renderedThroughSharedShell: true,
+    });
+    // Guest VM completeness gate — log missing fields when an alternate bundle
+    // can't be resolved into a full card (no layer or no modes available).
+    if (vm.surfaceType === 'guest' && (vm.source === 'guest_alternate' || vm.source === 'guest_skip')) {
+      const missing: string[] = [];
+      if (!vm.hero?.name) missing.push('hero.name');
+      if (!vm.hero?.brand) missing.push('hero.brand');
+      if (!vm.hero?.family) missing.push('hero.family');
+      if (!heroTokensArr.length) missing.push('hero.tokens');
+      if (!vm.layer?.name) missing.push('layer.name');
+      if (!vm.layer?.brand) missing.push('layer.brand');
+      if (!vm.layer?.family) missing.push('layer.family');
+      if (!layerTokensArr.length) missing.push('layer.tokens');
+      if (missing.length > 0) {
+        console.warn('fail_guest_vm_incomplete', { source: vm.source, missing });
+      }
+    }
+  }, [activeCardVM]);
+
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
 
   useEffect(() => {
