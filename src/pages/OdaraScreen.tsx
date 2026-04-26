@@ -479,11 +479,16 @@ const OdaraScreen = ({
   const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
   // Snapshot of main-state at time alternate was selected, for clean restore.
   const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
+  // Multi-step guest skip history: each entry is the alternate index that was
+  // visible BEFORE the skip (null = main bundle). Pushed on every guest skip,
+  // popped by the back button to restore the previous guest card.
+  const [guestSkipHistory, setGuestSkipHistory] = useState<Array<number | null>>([]);
 
   // Reset guest state whenever the slot (date/context) or backend payload changes.
   useEffect(() => {
     setSelectedAlternateIdx(null);
     guestPrevMainStateRef.current = null;
+    setGuestSkipHistory([]);
     setGuestLayerExpanded(false);
     setGuestActiveLayerIdx(0);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
@@ -599,9 +604,36 @@ const OdaraScreen = ({
     setGuestLayerExpanded(true);
   }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
-  // Guest back-button unwind: alternate → mode-depth → normal back
+  // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
   const handleGuestBack = useCallback((): boolean => {
     if (!isGuestMode) return false;
+    // 1. Skip-history rewind takes priority — walks back through every skipped guest card.
+    if (guestSkipHistory.length > 0) {
+      const prevIdx = guestSkipHistory[guestSkipHistory.length - 1];
+      const o: any = (oracle ?? activeOracle ?? {});
+      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+      const beforeName =
+        selectedAlternateIdx === null
+          ? (o?.main_bundle?.hero?.name ?? null)
+          : (altBundles[selectedAlternateIdx]?.hero?.name ?? null);
+      const restoredName =
+        prevIdx === null
+          ? (o?.main_bundle?.hero?.name ?? null)
+          : (altBundles[prevIdx]?.hero?.name ?? null);
+      const lengthBefore = guestSkipHistory.length;
+      setGuestSkipHistory((h) => h.slice(0, -1));
+      setSelectedAlternateIdx(prevIdx);
+      // Reset alternate snapshot since we're walking the skip stack, not unwinding a tap.
+      guestPrevMainStateRef.current = null;
+      console.info('ODARA_GUEST_BACK_PROOF', {
+        actionTaken: 'guest_back_skip',
+        previousCardName: beforeName,
+        restoredCardName: restoredName,
+        guestHistoryLengthBefore: lengthBefore,
+        guestHistoryLengthAfter: lengthBefore - 1,
+      });
+      return true;
+    }
     if (selectedAlternateIdx !== null) {
       const prev = guestPrevMainStateRef.current;
       if (prev) {
@@ -617,7 +649,7 @@ const OdaraScreen = ({
       return true; // consumed
     }
     return false; // let normal back run
-  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx]);
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle]);
 
 
   // Lock & gesture state — persisted per day+context
@@ -1652,15 +1684,42 @@ const OdaraScreen = ({
         actionTaken = 'fail_guest_no_skip_source';
       } else {
         actionTaken = 'skip_guest';
+        // Premium downward-dismiss animation (same `cardSlideDown` keyframe
+        // used by signed-in skip) so the user clearly sees the card advance.
         setSkipFlash(true);
         window.setTimeout(() => setSkipFlash(false), 500);
+        setSkipAnimating(true);
+        window.setTimeout(() => setSkipAnimating(false), 350);
+
         // Advance to next bundle (or wrap to 0). null treated as "main" → go to 0.
         const current = selectedAlternateIdx;
         const nextIdx = current === null ? 0 : (current + 1) % altBundles.length;
-        setSelectedAlternateIdx(nextIdx);
+        const previousCardName =
+          current === null
+            ? (o?.main_bundle?.hero?.name ?? activeCardNameBefore)
+            : (altBundles[current]?.hero?.name ?? activeCardNameBefore);
         const nextHero = altBundles[nextIdx]?.hero ?? null;
+
+        // Push the previously visible guest card onto the multi-step history
+        // BEFORE advancing, so back can rewind step-by-step through every skip.
+        const lengthBefore = guestSkipHistory.length;
+        setGuestSkipHistory((h) => [...h, current]);
+        setSelectedAlternateIdx(nextIdx);
+        // Clear alternate-tap snapshot — skip flow owns the stack now.
+        guestPrevMainStateRef.current = null;
+
         activeCardNameAfter = nextHero?.name ?? activeCardNameBefore;
         activeCardIdAfter = nextHero?.fragrance_id ?? nextHero?.id ?? activeCardIdBefore;
+
+        console.info('ODARA_GUEST_SKIP_PROOF', {
+          actionTaken,
+          previousCardName,
+          nextCardName: nextHero?.name ?? null,
+          guestHistoryLengthBefore: lengthBefore,
+          guestHistoryLengthAfter: lengthBefore + 1,
+          selectedAlternateIdxBefore: current,
+          selectedAlternateIdxAfter: nextIdx,
+        });
       }
     } else {
       actionTaken = 'skip_signed_in';
@@ -1690,6 +1749,7 @@ const OdaraScreen = ({
     activeOracle,
     selectedAlternateIdx,
     setSelectedAlternateIdx,
+    guestSkipHistory,
   ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
