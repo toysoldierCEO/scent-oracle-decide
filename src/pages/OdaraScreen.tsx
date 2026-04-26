@@ -604,9 +604,36 @@ const OdaraScreen = ({
     setGuestLayerExpanded(true);
   }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
-  // Guest back-button unwind: alternate → mode-depth → normal back
+  // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
   const handleGuestBack = useCallback((): boolean => {
     if (!isGuestMode) return false;
+    // 1. Skip-history rewind takes priority — walks back through every skipped guest card.
+    if (guestSkipHistory.length > 0) {
+      const prevIdx = guestSkipHistory[guestSkipHistory.length - 1];
+      const o: any = (oracle ?? activeOracle ?? {});
+      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+      const beforeName =
+        selectedAlternateIdx === null
+          ? (o?.main_bundle?.hero?.name ?? null)
+          : (altBundles[selectedAlternateIdx]?.hero?.name ?? null);
+      const restoredName =
+        prevIdx === null
+          ? (o?.main_bundle?.hero?.name ?? null)
+          : (altBundles[prevIdx]?.hero?.name ?? null);
+      const lengthBefore = guestSkipHistory.length;
+      setGuestSkipHistory((h) => h.slice(0, -1));
+      setSelectedAlternateIdx(prevIdx);
+      // Reset alternate snapshot since we're walking the skip stack, not unwinding a tap.
+      guestPrevMainStateRef.current = null;
+      console.info('ODARA_GUEST_BACK_PROOF', {
+        actionTaken: 'guest_back_skip',
+        previousCardName: beforeName,
+        restoredCardName: restoredName,
+        guestHistoryLengthBefore: lengthBefore,
+        guestHistoryLengthAfter: lengthBefore - 1,
+      });
+      return true;
+    }
     if (selectedAlternateIdx !== null) {
       const prev = guestPrevMainStateRef.current;
       if (prev) {
@@ -622,7 +649,7 @@ const OdaraScreen = ({
       return true; // consumed
     }
     return false; // let normal back run
-  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx]);
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle]);
 
 
   // Lock & gesture state — persisted per day+context
