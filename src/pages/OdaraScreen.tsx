@@ -1946,6 +1946,7 @@ const OdaraScreen = ({
         // BEFORE advancing, so back can rewind step-by-step through every skip.
         const lengthBefore = guestSkipHistory.length;
         setGuestSkipHistory((h) => [...h, current]);
+        guestRenderSourceRef.current = 'guest_skip_target';
         setSelectedAlternateIdx(nextIdx);
         // Clear alternate-tap snapshot — skip flow owns the stack now.
         guestPrevMainStateRef.current = null;
