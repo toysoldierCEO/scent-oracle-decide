@@ -2504,18 +2504,14 @@ const OdaraScreen = ({
               );
             })() : null /* signed-in: hero tokens rendered above from activeMainCardRender.activeHeroTokens; raw "accords:" text removed per v7 contract — backend tokens are the only approved source */}
 
-            {/* ── Guest v5: backend-driven layer card. Renders from activeGuestRender only. ── */}
+            {/* ── Guest v5: backend-driven layer card. Renders from resolved full bundle only. ── */}
             {isGuestMode ? (() => {
               if (!activeGuestRender) return null;
-              const { activeLayer, showModeRow, modeOrder, selectedMode, activeLayerIndex, modeLayerStack, selectedAlternateIndex } = activeGuestRender;
+              const { activeLayer, showModeRow, modeOrder, selectedMode, activeLayerIndex, modeLayerStack, selectedAlternateIndex, layerModes } = activeGuestRender;
               if (!activeLayer) return null;
 
               // Layer token rail comes from activeLayer.tokens
               const layerTokens: Array<any> = Array.isArray(activeLayer.tokens) ? activeLayer.tokens : [];
-
-              // Mode availability for disabled state
-              const o: any = activeOracle ?? oracle ?? {};
-              const layerModesObj: Record<string, any> = o?.main_bundle?.layer_modes ?? {};
 
               console.log('[Odara][Guest][v5] render', {
                 state: selectedAlternateIndex !== null ? 'ALTERNATE' : 'MAIN',
@@ -2527,6 +2523,7 @@ const OdaraScreen = ({
                 layer_family: activeLayer?.family ?? null,
                 layer_token_count: layerTokens.length,
                 why_it_works_present: !!activeLayer?.why_it_works,
+                renderedFromFullBundle: !!activeGuestRender.renderedFromFullBundle,
               });
 
               return (
@@ -2605,12 +2602,12 @@ const OdaraScreen = ({
                         className="px-4 pb-3 pt-3 flex flex-col gap-3"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {/* 6. mode row — main state only; cycles within mode using backend layers[] length */}
+                        {/* 6. mode row — resolved full bundle; cycles within backend layers[] length */}
                         {showModeRow && modeOrder.length > 0 && (
                           <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${modeOrder.length}, minmax(0, 1fr))` }}>
                             {modeOrder.map(m => {
                               const active = selectedMode === m;
-                              const stackLen = Array.isArray(layerModesObj[m]?.layers) ? layerModesObj[m].layers.length : 0;
+                              const stackLen = Array.isArray(layerModes?.[m]?.layers) ? layerModes[m].layers.length : 0;
                               const present = stackLen > 0;
                               return (
                                 <button
