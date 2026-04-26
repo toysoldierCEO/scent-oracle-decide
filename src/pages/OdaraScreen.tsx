@@ -1684,15 +1684,42 @@ const OdaraScreen = ({
         actionTaken = 'fail_guest_no_skip_source';
       } else {
         actionTaken = 'skip_guest';
+        // Premium downward-dismiss animation (same `cardSlideDown` keyframe
+        // used by signed-in skip) so the user clearly sees the card advance.
         setSkipFlash(true);
         window.setTimeout(() => setSkipFlash(false), 500);
+        setSkipAnimating(true);
+        window.setTimeout(() => setSkipAnimating(false), 350);
+
         // Advance to next bundle (or wrap to 0). null treated as "main" → go to 0.
         const current = selectedAlternateIdx;
         const nextIdx = current === null ? 0 : (current + 1) % altBundles.length;
-        setSelectedAlternateIdx(nextIdx);
+        const previousCardName =
+          current === null
+            ? (o?.main_bundle?.hero?.name ?? activeCardNameBefore)
+            : (altBundles[current]?.hero?.name ?? activeCardNameBefore);
         const nextHero = altBundles[nextIdx]?.hero ?? null;
+
+        // Push the previously visible guest card onto the multi-step history
+        // BEFORE advancing, so back can rewind step-by-step through every skip.
+        const lengthBefore = guestSkipHistory.length;
+        setGuestSkipHistory((h) => [...h, current]);
+        setSelectedAlternateIdx(nextIdx);
+        // Clear alternate-tap snapshot — skip flow owns the stack now.
+        guestPrevMainStateRef.current = null;
+
         activeCardNameAfter = nextHero?.name ?? activeCardNameBefore;
         activeCardIdAfter = nextHero?.fragrance_id ?? nextHero?.id ?? activeCardIdBefore;
+
+        console.info('ODARA_GUEST_SKIP_PROOF', {
+          actionTaken,
+          previousCardName,
+          nextCardName: nextHero?.name ?? null,
+          guestHistoryLengthBefore: lengthBefore,
+          guestHistoryLengthAfter: lengthBefore + 1,
+          selectedAlternateIdxBefore: current,
+          selectedAlternateIdxAfter: nextIdx,
+        });
       }
     } else {
       actionTaken = 'skip_signed_in';
@@ -1722,6 +1749,7 @@ const OdaraScreen = ({
     activeOracle,
     selectedAlternateIdx,
     setSelectedAlternateIdx,
+    guestSkipHistory,
   ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
