@@ -13,6 +13,116 @@ import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 type GuestModeKey = 'balance' | 'bold' | 'smooth' | 'wild';
 const GUEST_DEFAULT_MODE_ORDER: GuestModeKey[] = ['balance', 'bold', 'smooth', 'wild'];
 
+type GuestRenderSource =
+  | 'guest_main_bundle'
+  | 'guest_selected_alternate'
+  | 'guest_skip_target'
+  | 'guest_back_restore';
+
+interface GuestResolverState {
+  source: GuestRenderSource;
+  selectedMood: GuestModeKey;
+  activeLayerIdx: number;
+}
+
+interface ResolvedGuestCardVM {
+  source: GuestRenderSource;
+  selectedAlternateIndex: number | null;
+  selectedMode: GuestModeKey;
+  activeLayerIndex: number;
+  hero: any | null;
+  heroTokens: any[];
+  layer: any | null;
+  layerTokens: any[];
+  layerModes: Record<GuestModeKey, any | null>;
+  modeOrder: GuestModeKey[];
+  modeLayerStack: any[];
+  alternates: any[];
+  renderedFromFullBundle: boolean;
+}
+
+function isGuestModeKey(value: any): value is GuestModeKey {
+  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
+}
+
+function resolveGuestCardVM(
+  payload: any,
+  selectedAlternateIdx: number | null,
+  state: GuestResolverState,
+): ResolvedGuestCardVM | null {
+  const main: any = payload?.main_bundle ?? null;
+  if (!main?.hero) return null;
+
+  const altBundles: any[] = Array.isArray(payload?.alternate_bundles) ? payload.alternate_bundles : [];
+  const bundle: any = selectedAlternateIdx === null ? main : (altBundles[selectedAlternateIdx] ?? null);
+  if (!bundle?.hero) return null;
+
+  const modeOrderRaw: any[] = Array.isArray(bundle?.layer_mode_order) && bundle.layer_mode_order.length > 0
+    ? bundle.layer_mode_order
+    : Array.isArray(main?.layer_mode_order) && main.layer_mode_order.length > 0
+      ? main.layer_mode_order
+      : GUEST_DEFAULT_MODE_ORDER;
+  const modeOrder = modeOrderRaw.filter(isGuestModeKey);
+  const layerModesObj: Record<string, any> = bundle?.layer_modes && typeof bundle.layer_modes === 'object'
+    ? bundle.layer_modes
+    : {};
+  const defaultMode: GuestModeKey = isGuestModeKey(bundle?.ui_default_mode)
+    ? bundle.ui_default_mode
+    : modeOrder.find((mode) => !!layerModesObj[mode]) ?? 'balance';
+
+  let selectedMode: GuestModeKey = state.selectedMood;
+  if (!layerModesObj[selectedMode]) {
+    selectedMode = defaultMode;
+  }
+  if (!layerModesObj[selectedMode]) {
+    selectedMode = modeOrder.find((mode) => !!layerModesObj[mode]) ?? defaultMode;
+  }
+
+  const modeLayerStack: any[] = Array.isArray(layerModesObj[selectedMode]?.layers)
+    ? layerModesObj[selectedMode].layers
+    : [];
+  let activeLayerIndex = state.activeLayerIdx;
+  if (activeLayerIndex < 0 || activeLayerIndex >= modeLayerStack.length) {
+    activeLayerIndex = 0;
+  }
+
+  const layerFromMode = modeLayerStack[activeLayerIndex] ?? null;
+  const layer = layerFromMode ?? bundle?.layer ?? null;
+  const heroTokens = Array.isArray(bundle?.hero_tokens)
+    ? bundle.hero_tokens
+    : Array.isArray(bundle?.hero?.tokens)
+      ? bundle.hero.tokens
+      : [];
+  const layerTokens = Array.isArray(layerFromMode?.tokens) && layerFromMode.tokens.length > 0
+    ? layerFromMode.tokens
+    : Array.isArray(bundle?.layer_tokens)
+      ? bundle.layer_tokens
+      : Array.isArray(bundle?.layer?.tokens)
+        ? bundle.layer.tokens
+        : [];
+
+  return {
+    source: state.source,
+    selectedAlternateIndex: selectedAlternateIdx,
+    selectedMode,
+    activeLayerIndex,
+    hero: bundle.hero ?? null,
+    heroTokens,
+    layer,
+    layerTokens,
+    layerModes: {
+      balance: layerModesObj.balance ?? null,
+      bold: layerModesObj.bold ?? null,
+      smooth: layerModesObj.smooth ?? null,
+      wild: layerModesObj.wild ?? null,
+    },
+    modeOrder,
+    modeLayerStack,
+    alternates: altBundles,
+    renderedFromFullBundle: true,
+  };
+}
+
 interface GuestBottle {
   fragrance_id: string | null;
   name: string;
