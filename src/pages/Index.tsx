@@ -365,21 +365,37 @@ const Index = () => {
 
   // ── App shell — both signed-in and guest reach here ──
   return (
-    <OdaraScreen
-      oracle={oracle}
-      oracleLoading={oracleLoading}
-      oracleError={oracleError}
-      onSignOut={handleSignOut}
-      selectedContext={selectedContext}
-      onContextChange={setSelectedContext}
-      selectedDate={selectedDate}
-      onDateChange={setSelectedDate}
-      onAccept={handleAccept}
-      onSkip={handleSkip}
-      userId={access.resolvedUserId!}
-      resolvedTemperature={liveTemperature}
-      isGuestMode={access.isGuestMode}
-    />
+    <>
+      <OdaraScreen
+        oracle={oracle}
+        oracleLoading={oracleLoading}
+        oracleError={oracleError}
+        onSignOut={handleSignOut}
+        selectedContext={selectedContext}
+        onContextChange={setSelectedContext}
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        onAccept={handleAccept}
+        onSkip={handleSkip}
+        userId={access.resolvedUserId!}
+        resolvedTemperature={liveTemperature}
+        isGuestMode={access.isGuestMode}
+      />
+      {access.isGuestMode && (
+        <button
+          type="button"
+          onClick={() => setRecipeMode((v) => !v)}
+          className={`fixed top-3 right-3 z-50 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] font-medium transition-all duration-200 active:scale-95 backdrop-blur-md ${
+            recipeMode
+              ? 'bg-foreground/15 text-foreground border border-foreground/35'
+              : 'bg-foreground/[0.05] text-foreground/70 border border-foreground/15 hover:text-foreground/95'
+          }`}
+          aria-pressed={recipeMode}
+        >
+          {recipeMode ? 'Recipe · On' : 'Recipe Mode'}
+        </button>
+      )}
+    </>
   );
 };
 
