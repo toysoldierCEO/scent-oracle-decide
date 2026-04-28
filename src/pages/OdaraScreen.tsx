@@ -2440,6 +2440,29 @@ const OdaraScreen = ({
               </span>
             )}
 
+            {/* Recipe header — Guest Recipe Mode only. Rendered above hero
+                title in quotes using backend-provided color_hex. Source:
+                option.recipe_header (attached to hero by guest-recipe.ts). */}
+            {isGuestMode && (() => {
+              const rh: any =
+                (activeGuestRender?.activeHero as any)?.recipe_header ??
+                ((activeOracle ?? oracle) as any)?.main_bundle?.recipe_header ??
+                null;
+              if (!rh?.text) return null;
+              const color = typeof rh.color_hex === 'string' && rh.color_hex.startsWith('#')
+                ? rh.color_hex
+                : undefined;
+              return (
+                <div
+                  className="text-center mt-1 mb-1 text-[12px] uppercase tracking-[0.22em] font-medium"
+                  style={color ? { color } : undefined}
+                  data-recipe-header
+                >
+                  {rh.text}
+                </div>
+              );
+            })()}
+
             {/* Fragrance name — guest v5: from activeGuestRender.activeHero */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
