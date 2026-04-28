@@ -5,6 +5,7 @@ import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
 import { resolveAccessMode } from '@/lib/access-mode';
 import { fetchHomeOracle } from '@/lib/oracle-access';
+import { fetchGuestRecipeQueue } from '@/lib/guest-recipe';
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
