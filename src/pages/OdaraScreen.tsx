@@ -1978,10 +1978,16 @@ const OdaraScreen = ({
     } else if (isGuestMode) {
       // Guest locked-card contract: swipe/skip must NOT change the card while
       // guest local lock is engaged. Mirrors signed-in lock semantics.
-      if (isGuestMode && !!guestLockedByKey[guestActionKey]) {
-        actionTaken = 'fail_guest_locked';
-        console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, thresholdPassed: true, actionTaken, activeCardNameAfter, activeCardIdAfter });
-        return;
+      {
+        const gh: any = activeGuestRender?.activeHero ?? null;
+        const ghId = gh?.fragrance_id ?? gh?.id ?? gh?.name ?? '';
+        const ghBrand = gh?.brand ?? '';
+        const gKey = `${selectedDate}|${selectedContext}|${ghId}|${ghBrand}`;
+        if (!!guestLockedByKey[gKey]) {
+          actionTaken = 'fail_guest_locked';
+          console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, thresholdPassed: true, actionTaken, activeCardNameAfter, activeCardIdAfter });
+          return;
+        }
       }
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
