@@ -2228,17 +2228,25 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: shared action stack (lock → star → back).
-                  PHASE 2 SHARED PRESENTER: this single rail renders in BOTH
-                  signed-in and guest modes. Guest mode: lock is visually
-                  disabled, star is hidden, back appears only on guest history.
-                  Signed-in: full interactive rail. Removing the previously
-                  duplicated guest-only lock indicator is intentional. */}
-              {!isGuestMode && (
-              <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
-                {/* Lock button */}
+              {/* Right: SHARED action stack (lock → star → back).
+                  Single rail used by BOTH signed-in and guest modes.
+                  - Lock: interactive when signed-in; visually disabled no-op for guest.
+                  - Star: always rendered; interactive when signed-in; disabled no-op for guest.
+                  - Back: rendered only when there is promotion/history (signed-in OR guest). */}
+              {(() => {
+                const guestHasHistory =
+                  isGuestMode &&
+                  (guestSkipHistory.length > 0 || selectedAlternateIdx !== null || guestActiveLayerIdx > 0);
+                const showBack = isGuestMode ? guestHasHistory : hasHistory;
+                return (
+                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                {/* Lock button — interactive for signed-in, disabled for guest */}
                 <button
+                  type="button"
+                  disabled={isGuestMode}
+                  aria-label={isGuestMode ? 'Lock (sign in to use)' : 'Lock'}
                   onClick={() => {
+                    if (isGuestMode) return;
                     if (lockState === 'locked') {
                       setLockState('neutral');
                       clearLockedSelection();
@@ -2248,15 +2256,15 @@ const OdaraScreen = ({
                       haptic('success');
                     }
                   }}
-                  className="p-0.5 relative"
+                  className={`p-0.5 relative ${isGuestMode ? 'cursor-default opacity-50' : ''}`}
                 >
                   <svg
                     width="14" height="14" viewBox="0 0 24 24" fill="none"
-                    stroke={lockIconColor} strokeWidth="1.5"
-                    className="transition-colors duration-300 relative z-[1]"
-                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                    stroke={isGuestMode ? 'currentColor' : lockIconColor} strokeWidth="1.5"
+                    className={`transition-colors duration-300 relative z-[1] ${isGuestMode ? 'text-foreground/40' : ''}`}
+                    style={!isGuestMode && lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
                   >
-                    {lockState === 'locked' ? (
+                    {!isGuestMode && lockState === 'locked' ? (
                       <>
                         <rect x="3" y="11" width="18" height="11" rx="2" />
                         <path d="M7 11V7a5 5 0 0110 0v4" />
@@ -2269,8 +2277,8 @@ const OdaraScreen = ({
                     )}
                   </svg>
 
-                  {/* GREEN Tron lock-engagement animation */}
-                  {lockFlash && (
+                  {/* GREEN Tron lock-engagement animation (signed-in only) */}
+                  {!isGuestMode && lockFlash && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
@@ -2298,8 +2306,8 @@ const OdaraScreen = ({
                     </span>
                   )}
 
-                  {/* YELLOW Tron unlock animation */}
-                  {unlockFlash && (
+                  {/* YELLOW Tron unlock animation (signed-in only) */}
+                  {!isGuestMode && unlockFlash && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
@@ -2327,8 +2335,8 @@ const OdaraScreen = ({
                     </span>
                   )}
 
-                  {/* RED Tron skip animation */}
-                  {skipFlash && (
+                  {/* RED Tron skip animation (signed-in only) */}
+                  {!isGuestMode && skipFlash && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
@@ -2357,9 +2365,14 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Favorite star — saves current combo, persisted per day+context */}
+                {/* Favorite star — always rendered. Signed-in: persists combo.
+                    Guest: visible-but-disabled (saving not wired for guest yet). */}
                 <button
+                  type="button"
+                  disabled={isGuestMode}
+                  aria-label={isGuestMode ? 'Favorite (sign in to save)' : 'Favorite'}
                   onClick={() => {
+                    if (isGuestMode) return;
                     if (!visibleCard) return;
                     const combo: FavoriteCombo = {
                       mainId: visibleCard.fragrance_id,
@@ -2368,7 +2381,6 @@ const OdaraScreen = ({
                       ratio: selectedRatio,
                     };
                     if (isFavorited) {
-                      // Toggle off
                       setFavoriteMap(prev => {
                         const next = { ...prev };
                         delete next[stateKey];
@@ -2379,52 +2391,34 @@ const OdaraScreen = ({
                     }
                     haptic(isFavorited ? 'light' : 'success');
                   }}
-                  className="p-0.5 relative"
+                  className={`p-0.5 relative ${isGuestMode ? 'cursor-default opacity-50' : ''}`}
                 >
                   <svg
                     width="13" height="13" viewBox="0 0 24 24"
-                    fill={isFavorited ? '#eab308' : 'none'}
-                    stroke={isFavorited ? '#eab308' : 'currentColor'}
+                    fill={!isGuestMode && isFavorited ? '#eab308' : 'none'}
+                    stroke={!isGuestMode && isFavorited ? '#eab308' : 'currentColor'}
                     strokeWidth="1.5"
-                    className={`transition-all duration-300 ${isFavorited ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]' : 'text-foreground/40 hover:text-foreground/70'}`}
+                    className={`transition-all duration-300 ${
+                      !isGuestMode && isFavorited
+                        ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]'
+                        : 'text-foreground/40 hover:text-foreground/70'
+                    }`}
                   >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 </button>
 
-                {/* Back arrow — below star */}
-                {hasHistory && (
-                  <button onClick={handleBack} className="p-0.5">
+                {/* Back arrow — history-gated for both signed-in and guest */}
+                {showBack && (
+                  <button onClick={handleBack} className="p-0.5" aria-label="Back">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
                       <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                   </button>
                 )}
-              </div>
-              )}
-              {/* Guest mode: visible-but-disabled lock + back arrow when guest unwind state exists */}
-              {isGuestMode && (
-                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
-                  <button
-                    type="button"
-                    disabled
-                    aria-label="Lock (sign in to use)"
-                    className="p-0.5 cursor-default opacity-50"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/40">
-                      <rect x="3" y="11" width="18" height="11" rx="2" />
-                      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                    </svg>
-                  </button>
-                  {(guestSkipHistory.length > 0 || selectedAlternateIdx !== null || guestActiveLayerIdx > 0) && (
-                    <button onClick={handleBack} className="p-0.5" aria-label="Back">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
-                        <path d="M19 12H5M12 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Source badge for queue cards */}
