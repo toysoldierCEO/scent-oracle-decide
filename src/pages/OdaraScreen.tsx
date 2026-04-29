@@ -2689,8 +2689,8 @@ const OdaraScreen = ({
                 {familyLabel}
               </span>
             ) : (() => {
-              const guestHeroFamily: string | null = activeGuestRender?.activeHero?.family
-                ? String(activeGuestRender.activeHero.family)
+              const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
+                ? String(visibleGuestRender.activeHero.family)
                 : null;
               if (!guestHeroFamily) return null;
               const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
