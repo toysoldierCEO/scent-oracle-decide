@@ -4,6 +4,7 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
+import { haptic } from "@/lib/haptics";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
@@ -732,6 +733,7 @@ const OdaraScreen = ({
   // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
   const handleGuestAlternateTap = useCallback((idx: number) => {
     if (selectedAlternateIdx === idx) {
+      haptic('selection');
       // Clear alternate → restore previous main mode + layer index
       const prev = guestPrevMainStateRef.current;
       if (prev) {
@@ -750,6 +752,7 @@ const OdaraScreen = ({
     guestRenderSourceRef.current = 'guest_selected_alternate';
     setSelectedAlternateIdx(idx);
     setGuestLayerExpanded(true);
+    haptic('selection');
   }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
   // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
@@ -1799,6 +1802,7 @@ const OdaraScreen = ({
     clearUnlockTimeout();
     setLockState('locked');
     recordLockedSelection();
+    haptic('medium');
 
     // Visual confirmation: like pulse + lock burst.
     setLikeFlash(true);
@@ -1987,6 +1991,7 @@ const OdaraScreen = ({
         setGuestSkipHistory((h) => [...h, current]);
         guestRenderSourceRef.current = 'guest_skip_target';
         setSelectedAlternateIdx(nextIdx);
+        haptic('selection');
         // Clear alternate-tap snapshot — skip flow owns the stack now.
         guestPrevMainStateRef.current = null;
 
@@ -2269,6 +2274,7 @@ const OdaraScreen = ({
                       setUnlockFlash(true);
                       window.setTimeout(() => setUnlockFlash(false), 700);
                       pulseLock();
+                      haptic('success');
                     }
                   }}
                   className="p-0.5 relative"
@@ -2400,6 +2406,7 @@ const OdaraScreen = ({
                     } else {
                       setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
                     }
+                    haptic(isFavorited ? 'light' : 'success');
                   }}
                   className="p-0.5 relative"
                 >
