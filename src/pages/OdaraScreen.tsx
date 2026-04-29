@@ -2227,18 +2227,28 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          const wasLocked = guestLocked;
-          if (wasLocked) {
-            setGuestLocked(false);
-            setGuestUnlockFlash(true);
-            window.setTimeout(() => setGuestUnlockFlash(false), 700);
-            haptic('selection');
-          } else {
-            setGuestLocked(true);
-            setGuestLockFlash(true);
-            window.setTimeout(() => setGuestLockFlash(false), 700);
-            haptic('success');
+          // Engage-only latch. A second tap while already locked is a no-op
+          // so the lock stays green and the snapshot stays frozen until the
+          // slot (date/context/payload) changes.
+          if (guestLocked) {
+            console.info('[ODARA_LOCK_DEBUG] guest lock click ignored_already_locked', {
+              guestLocked,
+              isCardLocked,
+              selectedAlternateIdx,
+              guestSelectedMood,
+              activeHeroName: visibleGuestRender?.activeHero?.name,
+            });
+            return;
           }
+          if (!activeGuestRender) {
+            console.warn('[ODARA_LOCK_DEBUG] guest lock ignored_no_active_guest_render');
+            return;
+          }
+          setLockedGuestSnapshot(activeGuestRender);
+          setGuestLocked(true);
+          setGuestLockFlash(true);
+          window.setTimeout(() => setGuestLockFlash(false), 700);
+          haptic('success');
           return;
         }
         // Signed-in: only the unlock half is exposed via tap (lock is engaged
