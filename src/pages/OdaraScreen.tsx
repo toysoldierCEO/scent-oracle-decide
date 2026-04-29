@@ -659,6 +659,7 @@ const OdaraScreen = ({
     setGuestLayerExpanded(false);
     setGuestActiveLayerIdx(0);
     setGuestLocked(false);
+    setLockedGuestSnapshot(null);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
     const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
     setGuestSelectedMood(safeDef);
