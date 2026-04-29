@@ -642,6 +642,10 @@ const OdaraScreen = ({
   // the same session restores the local state.
   const [guestStarredByKey, setGuestStarredByKey] = useState<Record<string, boolean>>({});
   const [guestLocked, setGuestLocked] = useState(false);
+  // Frozen copy of activeGuestRender at the moment the guest lock engaged.
+  // While guestLocked === true, visible guest JSX renders from this snapshot
+  // so the scent decision (hero/layer/mood/tokens) cannot drift.
+  const [lockedGuestSnapshot, setLockedGuestSnapshot] = useState<any | null>(null);
   const [guestStarFlash, setGuestStarFlash] = useState(false);
   const [guestLockFlash, setGuestLockFlash] = useState(false);
   const [guestUnlockFlash, setGuestUnlockFlash] = useState(false);
