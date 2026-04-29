@@ -2513,39 +2513,7 @@ const OdaraScreen = ({
                 <button
                   type="button"
                   aria-label="Favorite"
-                  onClick={() => {
-                    if (isGuestMode) {
-                      if (!guestActionKey) return;
-                      const wasStarred = guestStarred;
-                      setGuestStarredByKey(prev => {
-                        const next = { ...prev };
-                        if (wasStarred) delete next[guestActionKey];
-                        else next[guestActionKey] = true;
-                        return next;
-                      });
-                      setGuestStarFlash(true);
-                      window.setTimeout(() => setGuestStarFlash(false), 500);
-                      haptic(wasStarred ? 'selection' : 'success');
-                      return;
-                    }
-                    if (!visibleCard) return;
-                    const combo: FavoriteCombo = {
-                      mainId: visibleCard.fragrance_id,
-                      layerId: visibleModeEntry?.id ?? null,
-                      mood: selectedMood ?? 'balance',
-                      ratio: selectedRatio,
-                    };
-                    if (isFavorited) {
-                      setFavoriteMap(prev => {
-                        const next = { ...prev };
-                        delete next[stateKey];
-                        return next;
-                      });
-                    } else {
-                      setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
-                    }
-                    haptic(isFavorited ? 'light' : 'success');
-                  }}
+                  onClick={() => cardController.actions.toggleStar()}
                   className="p-0.5 relative"
                 >
                   <svg
