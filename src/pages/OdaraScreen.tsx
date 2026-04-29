@@ -2163,19 +2163,13 @@ const OdaraScreen = ({
     '';
   const guestHeroBrand = guestHero?.brand ?? '';
 
-  // Lock = slot-scoped (date + context only). Freezes the decision slot,
-  // not the changing hero object.
-  const guestLockKey = isGuestMode
-    ? `${selectedDate}|${selectedContext}`
-    : '';
   // Star = card-scoped (date + context + visible hero id + brand).
   const guestStarKey = isGuestMode
     ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
     : '';
 
-  // (2) Single normalized lock gate — applies to both modes.
-  const guestLockedForCurrentCard =
-    isGuestMode && !!guestLockedByKey[guestLockKey];
+  // (2) Single normalized lock gate — guest lock is one authoritative boolean.
+  const guestLockedForCurrentCard = isGuestMode && guestLocked;
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
     : (lockState === 'locked');
@@ -2193,9 +2187,8 @@ const OdaraScreen = ({
 
   if (isGuestMode) {
     console.info('[ODARA_LOCK_DEBUG] render state', {
-      guestLockKey,
+      guestLocked,
       guestStarKey,
-      lockMapValue: guestLockedByKey?.[guestLockKey],
       starMapValue: guestStarredByKey?.[guestStarKey],
       guestLockedForCurrentCard,
       isCardLocked,
@@ -2219,33 +2212,14 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          if (!guestLockKey) return;
-          const wasLocked = guestLockedForCurrentCard;
-          console.info('[ODARA_LOCK_DEBUG] guest lock click BEFORE', {
-            guestLockKey,
-            guestStarKey,
-            guestLockedForCurrentCard,
-            lockMapValueBefore: guestLockedByKey?.[guestLockKey],
-            activeHeroName: activeGuestRender?.activeHero?.name,
-            selectedDate,
-            selectedContext,
-          });
-          setGuestLockedByKey(prev => {
-            console.info('[ODARA_LOCK_DEBUG] guest lock setState', {
-              guestLockKey,
-              wasLocked,
-              willBeLocked: !wasLocked,
-            });
-            const next = { ...prev };
-            if (wasLocked) delete next[guestLockKey];
-            else next[guestLockKey] = true;
-            return next;
-          });
+          const wasLocked = guestLocked;
           if (wasLocked) {
+            setGuestLocked(false);
             setGuestUnlockFlash(true);
             window.setTimeout(() => setGuestUnlockFlash(false), 700);
             haptic('selection');
           } else {
+            setGuestLocked(true);
             setGuestLockFlash(true);
             window.setTimeout(() => setGuestLockFlash(false), 700);
             haptic('success');
