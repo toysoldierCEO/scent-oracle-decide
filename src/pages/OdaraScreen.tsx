@@ -2663,20 +2663,20 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Fragrance name — guest v5: from activeGuestRender.activeHero */}
+            {/* Fragrance name — guest v5: from visibleGuestRender.activeHero */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {isGuestMode && activeGuestRender?.activeHero
-                ? getDisplayName(activeGuestRender.activeHero.name, activeGuestRender.activeHero.brand)
+              {isGuestMode && visibleGuestRender?.activeHero
+                ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
                 : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {isGuestMode && activeGuestRender?.activeHero
-                ? activeGuestRender.activeHero.brand
+              {isGuestMode && visibleGuestRender?.activeHero
+                ? visibleGuestRender.activeHero.brand
                 : visibleCard.brand}
             </span>
 
