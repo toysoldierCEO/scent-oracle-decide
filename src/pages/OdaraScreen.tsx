@@ -1991,6 +1991,7 @@ const OdaraScreen = ({
         setGuestSkipHistory((h) => [...h, current]);
         guestRenderSourceRef.current = 'guest_skip_target';
         setSelectedAlternateIdx(nextIdx);
+        haptic('selection');
         // Clear alternate-tap snapshot — skip flow owns the stack now.
         guestPrevMainStateRef.current = null;
 
