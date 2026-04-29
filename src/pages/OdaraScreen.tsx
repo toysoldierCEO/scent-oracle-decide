@@ -1802,6 +1802,7 @@ const OdaraScreen = ({
     clearUnlockTimeout();
     setLockState('locked');
     recordLockedSelection();
+    haptic('medium');
 
     // Visual confirmation: like pulse + lock burst.
     setLikeFlash(true);
