@@ -2245,19 +2245,57 @@ const OdaraScreen = ({
                   - Star: always rendered; interactive when signed-in; disabled no-op for guest.
                   - Back: rendered only when there is promotion/history (signed-in OR guest). */}
               {(() => {
+                // Guest back-arrow gating: ONLY based on real card/promotion
+                // history. Mood/layer changes do NOT count as card history.
                 const guestHasHistory =
                   isGuestMode &&
-                  (guestSkipHistory.length > 0 || selectedAlternateIdx !== null || guestActiveLayerIdx > 0);
+                  (guestSkipHistory.length > 0 || selectedAlternateIdx !== null);
                 const showBack = isGuestMode ? guestHasHistory : hasHistory;
+
+                // Guest action key — card-scoped local state. Uses the active
+                // visible guest hero (alternate-aware via activeGuestRender).
+                const guestHero: any = activeGuestRender?.activeHero ?? null;
+                const guestHeroId = guestHero?.fragrance_id ?? guestHero?.id ?? guestHero?.name ?? '';
+                const guestHeroBrand = guestHero?.brand ?? '';
+                const guestActionKey = isGuestMode
+                  ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
+                  : '';
+                const guestStarred = isGuestMode && !!guestStarredByKey[guestActionKey];
+                const guestLocked = isGuestMode && !!guestLockedByKey[guestActionKey];
+
+                // Visual state used by the shared rail
+                const starActive = isGuestMode ? guestStarred : isFavorited;
+                const lockActive = isGuestMode ? guestLocked : (lockState === 'locked');
+                const lockColor = lockActive ? '#22c55e' : 'currentColor';
+
                 return (
                 <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
-                {/* Lock button — interactive for signed-in, disabled for guest */}
+                {/* Lock button — interactive for both signed-in and guest.
+                    Guest writes only to local guestLockedByKey (no Supabase). */}
                 <button
                   type="button"
-                  disabled={isGuestMode}
-                  aria-label={isGuestMode ? 'Lock (sign in to use)' : 'Lock'}
+                  aria-label="Lock"
                   onClick={() => {
-                    if (isGuestMode) return;
+                    if (isGuestMode) {
+                      if (!guestActionKey) return;
+                      const wasLocked = guestLocked;
+                      setGuestLockedByKey(prev => {
+                        const next = { ...prev };
+                        if (wasLocked) delete next[guestActionKey];
+                        else next[guestActionKey] = true;
+                        return next;
+                      });
+                      if (wasLocked) {
+                        setGuestUnlockFlash(true);
+                        window.setTimeout(() => setGuestUnlockFlash(false), 700);
+                        haptic('selection');
+                      } else {
+                        setGuestLockFlash(true);
+                        window.setTimeout(() => setGuestLockFlash(false), 700);
+                        haptic('success');
+                      }
+                      return;
+                    }
                     if (lockState === 'locked') {
                       setLockState('neutral');
                       clearLockedSelection();
@@ -2267,15 +2305,15 @@ const OdaraScreen = ({
                       haptic('success');
                     }
                   }}
-                  className={`p-0.5 relative ${isGuestMode ? 'cursor-default opacity-50' : ''}`}
+                  className="p-0.5 relative"
                 >
                   <svg
                     width="14" height="14" viewBox="0 0 24 24" fill="none"
-                    stroke={isGuestMode ? 'currentColor' : lockIconColor} strokeWidth="1.5"
-                    className={`transition-colors duration-300 relative z-[1] ${isGuestMode ? 'text-foreground/40' : ''}`}
-                    style={!isGuestMode && lockPulse ? { filter: `drop-shadow(0 0 6px ${lockIconColor})` } : undefined}
+                    stroke={lockColor} strokeWidth="1.5"
+                    className="transition-colors duration-300 relative z-[1]"
+                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
                   >
-                    {!isGuestMode && lockState === 'locked' ? (
+                    {lockActive ? (
                       <>
                         <rect x="3" y="11" width="18" height="11" rx="2" />
                         <path d="M7 11V7a5 5 0 0110 0v4" />
@@ -2288,8 +2326,8 @@ const OdaraScreen = ({
                     )}
                   </svg>
 
-                  {/* GREEN Tron lock-engagement animation (signed-in only) */}
-                  {!isGuestMode && lockFlash && (
+                  {/* GREEN Tron lock-engagement animation (signed-in OR guest local) */}
+                  {(lockFlash || guestLockFlash) && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
@@ -2317,8 +2355,8 @@ const OdaraScreen = ({
                     </span>
                   )}
 
-                  {/* YELLOW Tron unlock animation (signed-in only) */}
-                  {!isGuestMode && unlockFlash && (
+                  {/* YELLOW Tron unlock animation (signed-in OR guest local) */}
+                  {(unlockFlash || guestUnlockFlash) && (
                     <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
                       <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
                         style={{
@@ -2376,14 +2414,27 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Favorite star — always rendered. Signed-in: persists combo.
-                    Guest: visible-but-disabled (saving not wired for guest yet). */}
+                {/* Favorite star — interactive for both signed-in and guest.
+                    Signed-in persists combo via favoriteMap.
+                    Guest writes only to local guestStarredByKey (no Supabase). */}
                 <button
                   type="button"
-                  disabled={isGuestMode}
-                  aria-label={isGuestMode ? 'Favorite (sign in to save)' : 'Favorite'}
+                  aria-label="Favorite"
                   onClick={() => {
-                    if (isGuestMode) return;
+                    if (isGuestMode) {
+                      if (!guestActionKey) return;
+                      const wasStarred = guestStarred;
+                      setGuestStarredByKey(prev => {
+                        const next = { ...prev };
+                        if (wasStarred) delete next[guestActionKey];
+                        else next[guestActionKey] = true;
+                        return next;
+                      });
+                      setGuestStarFlash(true);
+                      window.setTimeout(() => setGuestStarFlash(false), 500);
+                      haptic(wasStarred ? 'selection' : 'success');
+                      return;
+                    }
                     if (!visibleCard) return;
                     const combo: FavoriteCombo = {
                       mainId: visibleCard.fragrance_id,
@@ -2402,18 +2453,19 @@ const OdaraScreen = ({
                     }
                     haptic(isFavorited ? 'light' : 'success');
                   }}
-                  className={`p-0.5 relative ${isGuestMode ? 'cursor-default opacity-50' : ''}`}
+                  className="p-0.5 relative"
                 >
                   <svg
                     width="13" height="13" viewBox="0 0 24 24"
-                    fill={!isGuestMode && isFavorited ? '#eab308' : 'none'}
-                    stroke={!isGuestMode && isFavorited ? '#eab308' : 'currentColor'}
+                    fill={starActive ? '#eab308' : 'none'}
+                    stroke={starActive ? '#eab308' : 'currentColor'}
                     strokeWidth="1.5"
                     className={`transition-all duration-300 ${
-                      !isGuestMode && isFavorited
+                      starActive
                         ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]'
                         : 'text-foreground/40 hover:text-foreground/70'
-                    }`}
+                    } ${guestStarFlash ? 'scale-125' : 'scale-100'}`}
+                    style={{ transitionProperty: 'transform, fill, stroke, filter' }}
                   >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
