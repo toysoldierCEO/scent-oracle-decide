@@ -733,6 +733,7 @@ const OdaraScreen = ({
   // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
   const handleGuestAlternateTap = useCallback((idx: number) => {
     if (selectedAlternateIdx === idx) {
+      haptic('selection');
       // Clear alternate → restore previous main mode + layer index
       const prev = guestPrevMainStateRef.current;
       if (prev) {
