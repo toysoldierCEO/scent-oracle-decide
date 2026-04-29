@@ -2071,7 +2071,7 @@ const OdaraScreen = ({
     selectedAlternateIdx,
     setSelectedAlternateIdx,
     guestSkipHistory,
-    guestLockedByKey,
+    isGuestLocked,
     activeGuestRender,
   ]);
 
