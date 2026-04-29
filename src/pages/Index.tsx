@@ -7,7 +7,7 @@ import { resolveAccessMode } from '@/lib/access-mode';
 import { fetchHomeOracle } from '@/lib/oracle-access';
 // guest-recipe.ts is no longer called directly — get_guest_oracle_home_v6 decides card_type.
 
-const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
+
 
 // --- Auth helpers ---
 function normalizeUser(sessionUser: any): { id: string; email?: string } | null {
@@ -314,7 +314,7 @@ const Index = () => {
   if (!access.isSignedIn && !access.isGuestMode) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-        <span className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/50 mb-4">{ODARA_DEBUG_BUILD}</span>
+        <span className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/50 mb-4">Welcome</span>
         <h1 className="text-xl tracking-[0.4em] font-bold uppercase mb-2">ODARA</h1>
         <p className="text-sm text-muted-foreground mb-8">
           {isSignUp ? 'Create your account' : 'Sign in to access your scent profile'}
