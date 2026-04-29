@@ -2168,7 +2168,9 @@ const OdaraScreen = ({
 
   // (1) Normalized guest action key — current visible guest card only.
   //     Excludes mood/layerIdx/expanded/animation state by design.
-  const guestHero: any = activeGuestRender?.activeHero ?? null;
+  // Star key reads from the visible card so a locked snapshot stays scoped
+  // to whatever the user actually sees.
+  const guestHero: any = visibleGuestRender?.activeHero ?? null;
   const guestHeroId =
     guestHero?.fragrance_id ??
     guestHero?.id ??
