@@ -1979,13 +1979,16 @@ const OdaraScreen = ({
       // Guest locked-card contract: swipe/skip must NOT change the card while
       // guest local lock is engaged. Mirrors signed-in lock semantics.
       {
-        const gh: any = activeGuestRender?.activeHero ?? null;
-        const ghId = gh?.fragrance_id ?? gh?.id ?? gh?.name ?? '';
-        const ghBrand = gh?.brand ?? '';
-        const gKey = `${selectedDate}|${selectedContext}|${ghId}|${ghBrand}`;
-        if (!!guestLockedByKey[gKey]) {
+        const gLockKey = `${selectedDate}|${selectedContext}`;
+        if (!!guestLockedByKey[gLockKey]) {
           actionTaken = 'fail_guest_locked';
-          console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, thresholdPassed: true, actionTaken, activeCardNameAfter, activeCardIdAfter });
+          console.info('ODARA_SWIPE_DOWN_PROOF', {
+            ...baseProof,
+            thresholdPassed: true,
+            actionTaken,
+            activeCardNameAfter,
+            activeCardIdAfter,
+          });
           return;
         }
       }
