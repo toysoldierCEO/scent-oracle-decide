@@ -2058,6 +2058,8 @@ const OdaraScreen = ({
     selectedAlternateIdx,
     setSelectedAlternateIdx,
     guestSkipHistory,
+    guestLockedByKey,
+    guestActionKey,
   ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
