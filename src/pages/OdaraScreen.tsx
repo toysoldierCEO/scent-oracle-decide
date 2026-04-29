@@ -2645,7 +2645,7 @@ const OdaraScreen = ({
                 option.recipe_header (attached to hero by guest-recipe.ts). */}
             {isGuestMode && (() => {
               const rh: any =
-                (activeGuestRender?.activeHero as any)?.recipe_header ??
+                (visibleGuestRender?.activeHero as any)?.recipe_header ??
                 ((activeOracle ?? oracle) as any)?.main_bundle?.recipe_header ??
                 null;
               if (!rh?.text) return null;
