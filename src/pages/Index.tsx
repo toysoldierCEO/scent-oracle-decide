@@ -377,20 +377,8 @@ const Index = () => {
         resolvedTemperature={liveTemperature}
         isGuestMode={access.isGuestMode}
       />
-      {access.isGuestMode && (
-        <button
-          type="button"
-          onClick={() => setRecipeMode((v) => !v)}
-          className={`fixed top-3 right-3 z-50 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] font-medium transition-all duration-200 active:scale-95 backdrop-blur-md ${
-            recipeMode
-              ? 'bg-foreground/15 text-foreground border border-foreground/35'
-              : 'bg-foreground/[0.05] text-foreground/70 border border-foreground/15 hover:text-foreground/95'
-          }`}
-          aria-pressed={recipeMode}
-        >
-          {recipeMode ? 'Recipe · On' : 'Recipe Mode'}
-        </button>
-      )}
+      {/* Recipe Mode button removed — guest home now always uses get_guest_oracle_home_v6
+          which decides standard vs recipe card_type on the backend. */}
     </>
   );
 };
