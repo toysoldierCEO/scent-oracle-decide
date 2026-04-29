@@ -733,8 +733,12 @@ const OdaraScreen = ({
     });
   }, [isGuestMode, activeGuestRender, selectedAlternateIdx]);
 
+  // Single authoritative guest lock boolean — used by every guest mutation handler.
+  const isGuestLocked = isGuestMode && guestLocked;
+
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
+    if (isGuestLocked) return;
     const o: any = oracle ?? activeOracle ?? {};
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
@@ -750,12 +754,13 @@ const OdaraScreen = ({
       // cycle within current mode using backend layers.length (no hard-coded N)
       setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
     }
-  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx]);
+  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx, isGuestLocked]);
 
   // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
   // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
   // alternate is a no-op (no toggle-off). Use the back arrow to undo.
   const handleGuestAlternateTap = useCallback((idx: number) => {
+    if (isGuestLocked) return;
     if (selectedAlternateIdx === idx) {
       // Active alternate tapped again → no-op (matches main Odara behavior).
       return;
@@ -768,7 +773,7 @@ const OdaraScreen = ({
     setSelectedAlternateIdx(idx);
     setGuestLayerExpanded(true);
     haptic('selection');
-  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, isGuestLocked]);
 
   // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
   const handleGuestBack = useCallback((): boolean => {
