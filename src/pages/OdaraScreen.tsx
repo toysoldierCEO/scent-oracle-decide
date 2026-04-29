@@ -734,7 +734,7 @@ const OdaraScreen = ({
 
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
-    const o: any = activeOracle ?? oracle ?? {};
+    const o: any = oracle ?? activeOracle ?? {};
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
       selectedMood: mode,
