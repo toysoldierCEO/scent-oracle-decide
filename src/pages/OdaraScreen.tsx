@@ -666,8 +666,10 @@ const OdaraScreen = ({
   }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.main_bundle?.ui_default_mode, (oracle as any)?.ui_default_mode]);
 
   // ── Guest v5 contract guard + single derivation helper ──
-  // ALL guest JSX must read from `activeGuestRender` only. Do NOT reach back into
-  // payload fields directly elsewhere.
+  // activeGuestRender is the live guest resolver.
+  // visibleGuestRender is the visible guest render source.
+  // When guestLocked is true, visibleGuestRender reads from lockedGuestSnapshot
+  // so the visible scent decision cannot drift.
   const activeGuestRender = useMemo(() => {
     if (!isGuestMode) return null;
     // Prefer the freshest payload — `oracle` (latest prop) before
