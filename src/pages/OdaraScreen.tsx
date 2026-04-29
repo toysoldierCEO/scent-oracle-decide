@@ -356,15 +356,25 @@ interface OdaraScreenProps {
   isGuestMode?: boolean;
 }
 
-/* ── Forecast days ── */
+/* ── Forecast days ──
+ * Local-date parsing only. Never use toISOString() for UI day labels or
+ * selected-day matching — that introduces UTC drift near day boundaries
+ * and makes the card header date and calendar highlight disagree. */
+function fmtLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function buildForecastDays(selectedDate: string) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = fmtLocalDateStr(today);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = fmtLocalDateStr(d);
     return {
       label: dayNames[d.getDay()],
       day: d.getDate(),
