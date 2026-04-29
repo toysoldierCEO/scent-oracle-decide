@@ -730,19 +730,12 @@ const OdaraScreen = ({
     }
   }, [activeOracle, oracle, guestSelectedMood, selectedAlternateIdx]);
 
-  // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
+  // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
+  // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
+  // alternate is a no-op (no toggle-off). Use the back arrow to undo.
   const handleGuestAlternateTap = useCallback((idx: number) => {
     if (selectedAlternateIdx === idx) {
-      haptic('selection');
-      // Clear alternate → restore previous main mode + layer index
-      const prev = guestPrevMainStateRef.current;
-      if (prev) {
-        setGuestSelectedMood(prev.mood);
-        setGuestActiveLayerIdx(prev.idx);
-      }
-      guestPrevMainStateRef.current = null;
-      guestRenderSourceRef.current = 'guest_main_bundle';
-      setSelectedAlternateIdx(null);
+      // Active alternate tapped again → no-op (matches main Odara behavior).
       return;
     }
     // Snapshot main state once (only if not already in alternate state)
