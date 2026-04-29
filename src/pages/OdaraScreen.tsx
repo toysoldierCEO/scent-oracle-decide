@@ -641,7 +641,7 @@ const OdaraScreen = ({
   // card's local star/lock visual state. Returning to the same card during
   // the same session restores the local state.
   const [guestStarredByKey, setGuestStarredByKey] = useState<Record<string, boolean>>({});
-  const [guestLockedByKey, setGuestLockedByKey] = useState<Record<string, boolean>>({});
+  const [guestLocked, setGuestLocked] = useState(false);
   const [guestStarFlash, setGuestStarFlash] = useState(false);
   const [guestLockFlash, setGuestLockFlash] = useState(false);
   const [guestUnlockFlash, setGuestUnlockFlash] = useState(false);
