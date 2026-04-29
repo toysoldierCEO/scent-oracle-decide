@@ -59,7 +59,7 @@ const Index = () => {
   // Compute oracle key — valid when we have a resolvedUserId (signed-in OR guest)
   const oracleKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
-      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}|${recipeMode ? 'recipe' : 'oracle'}`
+      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}`
       : null;
 
   // Debug render log
