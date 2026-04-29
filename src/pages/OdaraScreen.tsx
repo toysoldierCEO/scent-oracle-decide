@@ -2688,12 +2688,12 @@ const OdaraScreen = ({
                     layerModes={guestLayerModes}
                     visibleLayerMode={guestVisibleLayerMode}
                     selectedMood={selectedMode as LayerMood}
-                    onSelectMood={(mood) => handleGuestModeTap(mood as GuestModeKey)}
+                    onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                     selectedRatio={selectedRatio}
                     onSelectRatio={setSelectedRatio}
                     isExpanded={guestLayerExpanded}
                     onToggleExpand={() => setGuestLayerExpanded(v => !v)}
-                    locked={false}
+                    locked={isCardLocked}
                     layerTokens={Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : []}
                   />
                 </div>
@@ -2712,13 +2712,13 @@ const OdaraScreen = ({
                   layerModes={modeResults}
                   visibleLayerMode={visibleModeEntry}
                   selectedMood={selectedMood}
-                  onSelectMood={handleMoodSelect}
+                  onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
                   onSelectRatio={setSelectedRatio}
                   isExpanded={layerExpanded}
                   onToggleExpand={() => setLayerExpanded(!layerExpanded)}
                   lockPulse={lockPulse}
-                  locked={lockState === 'locked'}
+                  locked={isCardLocked}
                   modeLoading={modeLoading}
                   modeErrors={modeErrors}
                   onRetryMood={(mood) => {
@@ -2760,7 +2760,7 @@ const OdaraScreen = ({
                         <button
                           key={`${heroName}-${originalIdx}`}
                           type="button"
-                          onClick={() => handleGuestAlternateTap(originalIdx)}
+                          onClick={() => cardController.actions.promoteAlternate(ab, originalIdx)}
                           className="flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]"
                         >
                           {getDisplayName(heroName, heroBrand)}
@@ -2783,11 +2783,11 @@ const OdaraScreen = ({
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={promotionDisabled ? undefined : () => handlePromoteAlternate(alt)}
+                        onClick={promotionDisabled ? undefined : () => cardController.actions.promoteAlternate(alt)}
                         disabled={promotionDisabled}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
                           text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
-                          ${lockState === 'locked' ? 'opacity-30 pointer-events-none' : ''}`}
+                          ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
                         style={{
                           border: `1px solid ${altColor}44`,
                           background: `${altColor}0A`,
