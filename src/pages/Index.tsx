@@ -28,9 +28,7 @@ const Index = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
-  // Guest Recipe Mode — independent surface fetched from
-  // get_guest_recipe_occasion_queue_v2. Only active when in guest mode.
-  const [recipeMode, setRecipeMode] = useState(false);
+  // Recipe Mode state removed — v6 backend decides card_type ("standard" | "recipe").
 
   // Oracle state
   const [oracle, setOracle] = useState<OracleResult | null>(null);
