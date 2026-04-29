@@ -2330,6 +2330,7 @@ const OdaraScreen = ({
           handlePromoteAlternate(alt);
         }
       },
+      back: () => {
         // Back never modifies the locked decision — the locked card stays
         // visible. We still allow back to be a no-op while locked.
         if (isCardLocked) return;
