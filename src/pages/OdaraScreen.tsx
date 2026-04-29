@@ -778,6 +778,7 @@ const OdaraScreen = ({
   // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
   const handleGuestBack = useCallback((): boolean => {
     if (!isGuestMode) return false;
+    if (isGuestLocked) return true;
     // 1. Skip-history rewind takes priority — walks back through every skipped guest card.
     if (guestSkipHistory.length > 0) {
       const prevIdx = guestSkipHistory[guestSkipHistory.length - 1];
