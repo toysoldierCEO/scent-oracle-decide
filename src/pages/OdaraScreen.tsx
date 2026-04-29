@@ -2782,7 +2782,7 @@ const OdaraScreen = ({
                     isExpanded={guestLayerExpanded}
                     onToggleExpand={() => setGuestLayerExpanded(v => !v)}
                     locked={isCardLocked}
-                    layerTokens={Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : []}
+                    layerTokens={Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : []}
                   />
                 </div>
               );
