@@ -2823,8 +2823,9 @@ const OdaraScreen = ({
                         <button
                           key={`${heroName}-${originalIdx}`}
                           type="button"
-                          onClick={() => cardController.actions.promoteAlternate(ab, originalIdx)}
-                          className="flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]"
+                          onClick={isCardLocked ? undefined : () => cardController.actions.promoteAlternate(ab, originalIdx)}
+                          disabled={isCardLocked}
+                          className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04] ${isCardLocked ? 'opacity-30 pointer-events-none cursor-default' : ''}`}
                         >
                           {getDisplayName(heroName, heroBrand)}
                         </button>
