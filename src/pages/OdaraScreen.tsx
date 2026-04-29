@@ -2171,6 +2171,21 @@ const OdaraScreen = ({
     showBack: isGuestMode ? guestHasRealHistory : hasHistory,
   };
 
+  if (isGuestMode) {
+    console.info('[ODARA_LOCK_DEBUG] render state', {
+      guestActionKey,
+      mapValue: guestLockedByKey?.[guestActionKey],
+      guestLockedForCurrentCard,
+      isCardLocked,
+      actionRailLocked: actionRailState?.locked,
+      lockActive: actionRailState?.locked,
+      activeHeroName: activeGuestRender?.activeHero?.name,
+      activeHeroBrand: activeGuestRender?.activeHero?.brand,
+      selectedDate,
+      selectedContext,
+    });
+  }
+
   // (4) cardController — single behavior contract for both modes.
   //     Each action enforces isCardLocked before delegating to the existing
   //     mode-specific handler. JSX must call these — not the raw handlers.
@@ -2184,7 +2199,22 @@ const OdaraScreen = ({
         if (isGuestMode) {
           if (!guestActionKey) return;
           const wasLocked = guestLockedForCurrentCard;
+          console.info('[ODARA_LOCK_DEBUG] guest lock click BEFORE', {
+            guestActionKey,
+            guestLockedForCurrentCard,
+            mapValueBefore: guestLockedByKey?.[guestActionKey],
+            activeHeroName: activeGuestRender?.activeHero?.name,
+            activeHeroBrand: activeGuestRender?.activeHero?.brand,
+            activeHeroId: activeGuestRender?.activeHero?.fragrance_id || activeGuestRender?.activeHero?.id,
+            selectedDate,
+            selectedContext,
+          });
           setGuestLockedByKey(prev => {
+            console.info('[ODARA_LOCK_DEBUG] guest lock setState', {
+              guestActionKey,
+              wasLocked,
+              willBeLocked: !wasLocked,
+            });
             const next = { ...prev };
             if (wasLocked) delete next[guestActionKey];
             else next[guestActionKey] = true;
@@ -2246,6 +2276,15 @@ const OdaraScreen = ({
         haptic(isFavorited ? 'light' : 'success');
       },
       selectMood: (mood: any) => {
+        if (isGuestMode) {
+          console.info('[ODARA_LOCK_DEBUG] mood click', {
+            mood,
+            isCardLocked,
+            guestActionKey,
+            guestLockedForCurrentCard,
+            actionRailLocked: actionRailState?.locked,
+          });
+        }
         if (isCardLocked) return;
         if (isGuestMode) {
           handleGuestModeTap(mood as GuestModeKey);
@@ -2254,6 +2293,15 @@ const OdaraScreen = ({
         }
       },
       promoteAlternate: (alt: any, idx?: number) => {
+        if (isGuestMode) {
+          console.info('[ODARA_LOCK_DEBUG] alternate click', {
+            altName: alt?.hero?.name ?? alt?.name ?? null,
+            isCardLocked,
+            guestActionKey,
+            guestLockedForCurrentCard,
+            actionRailLocked: actionRailState?.locked,
+          });
+        }
         if (isCardLocked) return;
         if (isGuestMode) {
           if (typeof idx === 'number') handleGuestAlternateTap(idx);
