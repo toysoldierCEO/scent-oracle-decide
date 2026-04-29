@@ -2456,7 +2456,7 @@ const OdaraScreen = ({
                 return (
                 <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button — interactive for both signed-in and guest.
-                    Guest writes only to local guestLockedByKey (no Supabase). */}
+                    Guest writes only to local guestLocked boolean (no Supabase). */}
                 <button
                   type="button"
                   aria-label="Lock"
