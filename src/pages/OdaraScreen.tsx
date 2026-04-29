@@ -1976,6 +1976,19 @@ const OdaraScreen = ({
       window.setTimeout(() => setUnlockFlash(false), 700);
       pulseLock();
     } else if (isGuestMode) {
+      // Guest locked-card contract: swipe/skip must NOT change the card while
+      // guest local lock is engaged. Mirrors signed-in lock semantics.
+      {
+        const gh: any = activeGuestRender?.activeHero ?? null;
+        const ghId = gh?.fragrance_id ?? gh?.id ?? gh?.name ?? '';
+        const ghBrand = gh?.brand ?? '';
+        const gKey = `${selectedDate}|${selectedContext}|${ghId}|${ghBrand}`;
+        if (!!guestLockedByKey[gKey]) {
+          actionTaken = 'fail_guest_locked';
+          console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, thresholdPassed: true, actionTaken, activeCardNameAfter, activeCardIdAfter });
+          return;
+        }
+      }
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
       const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
@@ -2051,6 +2064,8 @@ const OdaraScreen = ({
     selectedAlternateIdx,
     setSelectedAlternateIdx,
     guestSkipHistory,
+    guestLockedByKey,
+    activeGuestRender,
   ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -2123,6 +2138,144 @@ const OdaraScreen = ({
       });
     });
   }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SHARED CARD CONTROLLER BRIDGE
+  // Minimal-diff normalization layer over existing guest/signed-in handlers.
+  // JSX must call cardController.actions instead of the underlying handlers
+  // so the same interaction gates apply to BOTH modes.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // (1) Normalized guest action key — current visible guest card only.
+  //     Excludes mood/layerIdx/expanded/animation state by design.
+  const __guestHero: any = activeGuestRender?.activeHero ?? null;
+  const __guestHeroId = __guestHero?.fragrance_id ?? __guestHero?.id ?? __guestHero?.name ?? '';
+  const __guestHeroBrand = __guestHero?.brand ?? '';
+  const guestActionKey = isGuestMode
+    ? `${selectedDate}|${selectedContext}|${__guestHeroId}|${__guestHeroBrand}`
+    : '';
+
+  // (2) Single normalized lock gate — applies to both modes.
+  const guestLockedForCurrentCard = isGuestMode && !!guestLockedByKey[guestActionKey];
+  const isCardLocked = isGuestMode
+    ? guestLockedForCurrentCard
+    : (lockState === 'locked');
+
+  // (3) Normalized action-rail state.
+  const guestStarredForCurrentCard = isGuestMode && !!guestStarredByKey[guestActionKey];
+  const guestHasRealHistory =
+    isGuestMode && (selectedAlternateIdx !== null || guestSkipHistory.length > 0);
+  const actionRailState = {
+    locked: isCardLocked,
+    starred: isGuestMode ? guestStarredForCurrentCard : isFavorited,
+    showBack: isGuestMode ? guestHasRealHistory : hasHistory,
+  };
+
+  // (4) cardController — single behavior contract for both modes.
+  //     Each action enforces isCardLocked before delegating to the existing
+  //     mode-specific handler. JSX must call these — not the raw handlers.
+  const cardController = {
+    state: {
+      isCardLocked,
+      actionRailState,
+    },
+    actions: {
+      toggleLock: () => {
+        if (isGuestMode) {
+          if (!guestActionKey) return;
+          const wasLocked = guestLockedForCurrentCard;
+          setGuestLockedByKey(prev => {
+            const next = { ...prev };
+            if (wasLocked) delete next[guestActionKey];
+            else next[guestActionKey] = true;
+            return next;
+          });
+          if (wasLocked) {
+            setGuestUnlockFlash(true);
+            window.setTimeout(() => setGuestUnlockFlash(false), 700);
+            haptic('selection');
+          } else {
+            setGuestLockFlash(true);
+            window.setTimeout(() => setGuestLockFlash(false), 700);
+            haptic('success');
+          }
+          return;
+        }
+        // Signed-in: only the unlock half is exposed via tap (lock is engaged
+        // by gestures). Preserve existing behavior.
+        if (lockState === 'locked') {
+          setLockState('neutral');
+          clearLockedSelection();
+          setUnlockFlash(true);
+          window.setTimeout(() => setUnlockFlash(false), 700);
+          pulseLock();
+          haptic('success');
+        }
+      },
+      toggleStar: () => {
+        if (isGuestMode) {
+          if (!guestActionKey) return;
+          const wasStarred = guestStarredForCurrentCard;
+          setGuestStarredByKey(prev => {
+            const next = { ...prev };
+            if (wasStarred) delete next[guestActionKey];
+            else next[guestActionKey] = true;
+            return next;
+          });
+          setGuestStarFlash(true);
+          window.setTimeout(() => setGuestStarFlash(false), 500);
+          haptic(wasStarred ? 'selection' : 'success');
+          return;
+        }
+        if (!visibleCard) return;
+        const combo: FavoriteCombo = {
+          mainId: visibleCard.fragrance_id,
+          layerId: visibleModeEntry?.id ?? null,
+          mood: selectedMood ?? 'balance',
+          ratio: selectedRatio,
+        };
+        if (isFavorited) {
+          setFavoriteMap(prev => {
+            const next = { ...prev };
+            delete next[stateKey];
+            return next;
+          });
+        } else {
+          setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
+        }
+        haptic(isFavorited ? 'light' : 'success');
+      },
+      selectMood: (mood: any) => {
+        if (isCardLocked) return;
+        if (isGuestMode) {
+          handleGuestModeTap(mood as GuestModeKey);
+        } else {
+          handleMoodSelect(mood as LayerMood);
+        }
+      },
+      promoteAlternate: (alt: any, idx?: number) => {
+        if (isCardLocked) return;
+        if (isGuestMode) {
+          if (typeof idx === 'number') handleGuestAlternateTap(idx);
+        } else {
+          handlePromoteAlternate(alt);
+        }
+      },
+      back: () => {
+        // Back never modifies the locked decision — the locked card stays
+        // visible. We still allow back to be a no-op while locked.
+        if (isCardLocked) return;
+        handleBack();
+      },
+      skipOrSwipe: () => {
+        // Locked cards cannot be skipped. Signed-in unlock-via-swipe remains
+        // handled by the existing pointer handler (which still inspects
+        // lockState directly inside its own internals).
+        if (isCardLocked) return;
+        // No direct external invocation here — the pointer handler owns it.
+      },
+    },
+  };
 
   if (isGuestMode) {
     const o: any = oracle ?? {};
@@ -2245,27 +2398,11 @@ const OdaraScreen = ({
                   - Star: always rendered; interactive when signed-in; disabled no-op for guest.
                   - Back: rendered only when there is promotion/history (signed-in OR guest). */}
               {(() => {
-                // Guest back-arrow gating: ONLY based on real card/promotion
-                // history. Mood/layer changes do NOT count as card history.
-                const guestHasHistory =
-                  isGuestMode &&
-                  (guestSkipHistory.length > 0 || selectedAlternateIdx !== null);
-                const showBack = isGuestMode ? guestHasHistory : hasHistory;
-
-                // Guest action key — card-scoped local state. Uses the active
-                // visible guest hero (alternate-aware via activeGuestRender).
-                const guestHero: any = activeGuestRender?.activeHero ?? null;
-                const guestHeroId = guestHero?.fragrance_id ?? guestHero?.id ?? guestHero?.name ?? '';
-                const guestHeroBrand = guestHero?.brand ?? '';
-                const guestActionKey = isGuestMode
-                  ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
-                  : '';
-                const guestStarred = isGuestMode && !!guestStarredByKey[guestActionKey];
-                const guestLocked = isGuestMode && !!guestLockedByKey[guestActionKey];
-
-                // Visual state used by the shared rail
-                const starActive = isGuestMode ? guestStarred : isFavorited;
-                const lockActive = isGuestMode ? guestLocked : (lockState === 'locked');
+                // Action rail consumes the normalized cardController state —
+                // single source of truth for both signed-in and guest.
+                const showBack = actionRailState.showBack;
+                const starActive = actionRailState.starred;
+                const lockActive = actionRailState.locked;
                 const lockColor = lockActive ? '#22c55e' : 'currentColor';
 
                 return (
@@ -2275,36 +2412,7 @@ const OdaraScreen = ({
                 <button
                   type="button"
                   aria-label="Lock"
-                  onClick={() => {
-                    if (isGuestMode) {
-                      if (!guestActionKey) return;
-                      const wasLocked = guestLocked;
-                      setGuestLockedByKey(prev => {
-                        const next = { ...prev };
-                        if (wasLocked) delete next[guestActionKey];
-                        else next[guestActionKey] = true;
-                        return next;
-                      });
-                      if (wasLocked) {
-                        setGuestUnlockFlash(true);
-                        window.setTimeout(() => setGuestUnlockFlash(false), 700);
-                        haptic('selection');
-                      } else {
-                        setGuestLockFlash(true);
-                        window.setTimeout(() => setGuestLockFlash(false), 700);
-                        haptic('success');
-                      }
-                      return;
-                    }
-                    if (lockState === 'locked') {
-                      setLockState('neutral');
-                      clearLockedSelection();
-                      setUnlockFlash(true);
-                      window.setTimeout(() => setUnlockFlash(false), 700);
-                      pulseLock();
-                      haptic('success');
-                    }
-                  }}
+                  onClick={() => cardController.actions.toggleLock()}
                   className="p-0.5 relative"
                 >
                   <svg
@@ -2420,39 +2528,7 @@ const OdaraScreen = ({
                 <button
                   type="button"
                   aria-label="Favorite"
-                  onClick={() => {
-                    if (isGuestMode) {
-                      if (!guestActionKey) return;
-                      const wasStarred = guestStarred;
-                      setGuestStarredByKey(prev => {
-                        const next = { ...prev };
-                        if (wasStarred) delete next[guestActionKey];
-                        else next[guestActionKey] = true;
-                        return next;
-                      });
-                      setGuestStarFlash(true);
-                      window.setTimeout(() => setGuestStarFlash(false), 500);
-                      haptic(wasStarred ? 'selection' : 'success');
-                      return;
-                    }
-                    if (!visibleCard) return;
-                    const combo: FavoriteCombo = {
-                      mainId: visibleCard.fragrance_id,
-                      layerId: visibleModeEntry?.id ?? null,
-                      mood: selectedMood ?? 'balance',
-                      ratio: selectedRatio,
-                    };
-                    if (isFavorited) {
-                      setFavoriteMap(prev => {
-                        const next = { ...prev };
-                        delete next[stateKey];
-                        return next;
-                      });
-                    } else {
-                      setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
-                    }
-                    haptic(isFavorited ? 'light' : 'success');
-                  }}
+                  onClick={() => cardController.actions.toggleStar()}
                   className="p-0.5 relative"
                 >
                   <svg
@@ -2473,7 +2549,7 @@ const OdaraScreen = ({
 
                 {/* Back arrow — history-gated for both signed-in and guest */}
                 {showBack && (
-                  <button onClick={handleBack} className="p-0.5" aria-label="Back">
+                  <button onClick={() => cardController.actions.back()} className="p-0.5" aria-label="Back">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
                       <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
@@ -2627,12 +2703,12 @@ const OdaraScreen = ({
                     layerModes={guestLayerModes}
                     visibleLayerMode={guestVisibleLayerMode}
                     selectedMood={selectedMode as LayerMood}
-                    onSelectMood={(mood) => handleGuestModeTap(mood as GuestModeKey)}
+                    onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                     selectedRatio={selectedRatio}
                     onSelectRatio={setSelectedRatio}
                     isExpanded={guestLayerExpanded}
                     onToggleExpand={() => setGuestLayerExpanded(v => !v)}
-                    locked={false}
+                    locked={isCardLocked}
                     layerTokens={Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : []}
                   />
                 </div>
@@ -2651,13 +2727,13 @@ const OdaraScreen = ({
                   layerModes={modeResults}
                   visibleLayerMode={visibleModeEntry}
                   selectedMood={selectedMood}
-                  onSelectMood={handleMoodSelect}
+                  onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
                   onSelectRatio={setSelectedRatio}
                   isExpanded={layerExpanded}
                   onToggleExpand={() => setLayerExpanded(!layerExpanded)}
                   lockPulse={lockPulse}
-                  locked={lockState === 'locked'}
+                  locked={isCardLocked}
                   modeLoading={modeLoading}
                   modeErrors={modeErrors}
                   onRetryMood={(mood) => {
@@ -2699,7 +2775,7 @@ const OdaraScreen = ({
                         <button
                           key={`${heroName}-${originalIdx}`}
                           type="button"
-                          onClick={() => handleGuestAlternateTap(originalIdx)}
+                          onClick={() => cardController.actions.promoteAlternate(ab, originalIdx)}
                           className="flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]"
                         >
                           {getDisplayName(heroName, heroBrand)}
@@ -2722,11 +2798,11 @@ const OdaraScreen = ({
                     return (
                       <button
                         key={alt.fragrance_id || i}
-                        onClick={promotionDisabled ? undefined : () => handlePromoteAlternate(alt)}
+                        onClick={promotionDisabled ? undefined : () => cardController.actions.promoteAlternate(alt)}
                         disabled={promotionDisabled}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
                           text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
-                          ${lockState === 'locked' ? 'opacity-30 pointer-events-none' : ''}`}
+                          ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
                         style={{
                           border: `1px solid ${altColor}44`,
                           background: `${altColor}0A`,
