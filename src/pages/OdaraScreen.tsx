@@ -2759,8 +2759,8 @@ const OdaraScreen = ({
 
             {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
             {isGuestMode ? (() => {
-              if (!activeGuestRender) return null;
-              const { activeHero, activeLayer, selectedMode, layerModes } = activeGuestRender;
+              if (!visibleGuestRender) return null;
+              const { activeHero, activeLayer, selectedMode, layerModes } = visibleGuestRender;
               if (!activeLayer) return null;
               const guestLayerModes = guestLayerModesToModeSelector(layerModes);
               const guestVisibleLayerMode = guestLayerToModeEntry(activeLayer);
