@@ -2602,11 +2602,20 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* ── Alternatives — guest v5: payload.alternate_bundles ── */}
+            {/* ── Alternatives — guest v6 (alternate_bundles).
+                PHASE 2 PROMOTION MODEL: the active promoted alternate is
+                hidden from the rail (refill behavior); previous hero only
+                returns through the back arrow. ── */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
               const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
               if (altBundles.length === 0) return null;
+              // Filter out the active promoted alternate so it disappears from
+              // the rail; remaining alternates flow forward to fill the row.
+              const visibleBundles = altBundles
+                .map((ab, originalIdx) => ({ ab, originalIdx }))
+                .filter(({ originalIdx }) => originalIdx !== selectedAlternateIdx);
+              if (visibleBundles.length === 0) return null;
               return (
                 <div className="flex flex-col items-center gap-2 mt-3">
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
@@ -2616,20 +2625,15 @@ const OdaraScreen = ({
                     className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
-                    {altBundles.map((ab, i) => {
+                    {visibleBundles.map(({ ab, originalIdx }) => {
                       const heroName = ab?.hero?.name ?? '—';
                       const heroBrand = ab?.hero?.brand ?? '';
-                      const isActive = selectedAlternateIdx === i;
                       return (
                         <button
-                          key={`${heroName}-${i}`}
+                          key={`${heroName}-${originalIdx}`}
                           type="button"
-                          onClick={() => handleGuestAlternateTap(i)}
-                          className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
-                            isActive
-                              ? 'bg-foreground/12 text-foreground border border-foreground/30'
-                              : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
-                          }`}
+                          onClick={() => handleGuestAlternateTap(originalIdx)}
+                          className="flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]"
                         >
                           {getDisplayName(heroName, heroBrand)}
                         </button>
