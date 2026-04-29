@@ -2274,6 +2274,7 @@ const OdaraScreen = ({
                       setUnlockFlash(true);
                       window.setTimeout(() => setUnlockFlash(false), 700);
                       pulseLock();
+                      haptic('success');
                     }
                   }}
                   className="p-0.5 relative"
