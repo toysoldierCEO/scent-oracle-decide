@@ -2151,13 +2151,13 @@ const OdaraScreen = ({
 
   // (1) Normalized guest action key — current visible guest card only.
   //     Excludes mood/layerIdx/expanded/animation state by design.
-  const __guestHero: any = activeGuestRender?.activeHero ?? null;
-  const __guestHeroId =
-    __guestHero?.fragrance_id ??
-    __guestHero?.id ??
-    __guestHero?.name ??
+  const guestHero: any = activeGuestRender?.activeHero ?? null;
+  const guestHeroId =
+    guestHero?.fragrance_id ??
+    guestHero?.id ??
+    guestHero?.name ??
     '';
-  const __guestHeroBrand = __guestHero?.brand ?? '';
+  const guestHeroBrand = guestHero?.brand ?? '';
 
   // Lock = slot-scoped (date + context only). Freezes the decision slot,
   // not the changing hero object.
@@ -2166,7 +2166,7 @@ const OdaraScreen = ({
     : '';
   // Star = card-scoped (date + context + visible hero id + brand).
   const guestStarKey = isGuestMode
-    ? `${selectedDate}|${selectedContext}|${__guestHeroId}|${__guestHeroBrand}`
+    ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
     : '';
 
   // (2) Single normalized lock gate — applies to both modes.
