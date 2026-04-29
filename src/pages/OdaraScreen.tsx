@@ -2383,27 +2383,11 @@ const OdaraScreen = ({
                   - Star: always rendered; interactive when signed-in; disabled no-op for guest.
                   - Back: rendered only when there is promotion/history (signed-in OR guest). */}
               {(() => {
-                // Guest back-arrow gating: ONLY based on real card/promotion
-                // history. Mood/layer changes do NOT count as card history.
-                const guestHasHistory =
-                  isGuestMode &&
-                  (guestSkipHistory.length > 0 || selectedAlternateIdx !== null);
-                const showBack = isGuestMode ? guestHasHistory : hasHistory;
-
-                // Guest action key — card-scoped local state. Uses the active
-                // visible guest hero (alternate-aware via activeGuestRender).
-                const guestHero: any = activeGuestRender?.activeHero ?? null;
-                const guestHeroId = guestHero?.fragrance_id ?? guestHero?.id ?? guestHero?.name ?? '';
-                const guestHeroBrand = guestHero?.brand ?? '';
-                const guestActionKey = isGuestMode
-                  ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
-                  : '';
-                const guestStarred = isGuestMode && !!guestStarredByKey[guestActionKey];
-                const guestLocked = isGuestMode && !!guestLockedByKey[guestActionKey];
-
-                // Visual state used by the shared rail
-                const starActive = isGuestMode ? guestStarred : isFavorited;
-                const lockActive = isGuestMode ? guestLocked : (lockState === 'locked');
+                // Action rail consumes the normalized cardController state —
+                // single source of truth for both signed-in and guest.
+                const showBack = actionRailState.showBack;
+                const starActive = actionRailState.starred;
+                const lockActive = actionRailState.locked;
                 const lockColor = lockActive ? '#22c55e' : 'currentColor';
 
                 return (
