@@ -2149,20 +2149,33 @@ const OdaraScreen = ({
   // (1) Normalized guest action key — current visible guest card only.
   //     Excludes mood/layerIdx/expanded/animation state by design.
   const __guestHero: any = activeGuestRender?.activeHero ?? null;
-  const __guestHeroId = __guestHero?.fragrance_id ?? __guestHero?.id ?? __guestHero?.name ?? '';
+  const __guestHeroId =
+    __guestHero?.fragrance_id ??
+    __guestHero?.id ??
+    __guestHero?.name ??
+    '';
   const __guestHeroBrand = __guestHero?.brand ?? '';
-  const guestActionKey = isGuestMode
+
+  // Lock = slot-scoped (date + context only). Freezes the decision slot,
+  // not the changing hero object.
+  const guestLockKey = isGuestMode
+    ? `${selectedDate}|${selectedContext}`
+    : '';
+  // Star = card-scoped (date + context + visible hero id + brand).
+  const guestStarKey = isGuestMode
     ? `${selectedDate}|${selectedContext}|${__guestHeroId}|${__guestHeroBrand}`
     : '';
 
   // (2) Single normalized lock gate — applies to both modes.
-  const guestLockedForCurrentCard = isGuestMode && !!guestLockedByKey[guestActionKey];
+  const guestLockedForCurrentCard =
+    isGuestMode && !!guestLockedByKey[guestLockKey];
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
     : (lockState === 'locked');
 
   // (3) Normalized action-rail state.
-  const guestStarredForCurrentCard = isGuestMode && !!guestStarredByKey[guestActionKey];
+  const guestStarredForCurrentCard =
+    isGuestMode && !!guestStarredByKey[guestStarKey];
   const guestHasRealHistory =
     isGuestMode && (selectedAlternateIdx !== null || guestSkipHistory.length > 0);
   const actionRailState = {
@@ -2173,14 +2186,16 @@ const OdaraScreen = ({
 
   if (isGuestMode) {
     console.info('[ODARA_LOCK_DEBUG] render state', {
-      guestActionKey,
-      mapValue: guestLockedByKey?.[guestActionKey],
+      guestLockKey,
+      guestStarKey,
+      lockMapValue: guestLockedByKey?.[guestLockKey],
+      starMapValue: guestStarredByKey?.[guestStarKey],
       guestLockedForCurrentCard,
       isCardLocked,
       actionRailLocked: actionRailState?.locked,
-      lockActive: actionRailState?.locked,
       activeHeroName: activeGuestRender?.activeHero?.name,
-      activeHeroBrand: activeGuestRender?.activeHero?.brand,
+      selectedAlternateIdx,
+      guestSelectedMood,
       selectedDate,
       selectedContext,
     });
