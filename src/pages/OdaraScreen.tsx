@@ -1976,6 +1976,13 @@ const OdaraScreen = ({
       window.setTimeout(() => setUnlockFlash(false), 700);
       pulseLock();
     } else if (isGuestMode) {
+      // Guest locked-card contract: swipe/skip must NOT change the card while
+      // guest local lock is engaged. Mirrors signed-in lock semantics.
+      if (isGuestMode && !!guestLockedByKey[guestActionKey]) {
+        actionTaken = 'fail_guest_locked';
+        console.info('ODARA_SWIPE_DOWN_PROOF', { ...baseProof, thresholdPassed: true, actionTaken, activeCardNameAfter, activeCardIdAfter });
+        return;
+      }
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
       const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
