@@ -4,6 +4,7 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
+import { haptic } from "@/lib/haptics";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
