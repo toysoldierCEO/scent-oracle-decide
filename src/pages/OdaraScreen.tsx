@@ -2397,36 +2397,7 @@ const OdaraScreen = ({
                 <button
                   type="button"
                   aria-label="Lock"
-                  onClick={() => {
-                    if (isGuestMode) {
-                      if (!guestActionKey) return;
-                      const wasLocked = guestLocked;
-                      setGuestLockedByKey(prev => {
-                        const next = { ...prev };
-                        if (wasLocked) delete next[guestActionKey];
-                        else next[guestActionKey] = true;
-                        return next;
-                      });
-                      if (wasLocked) {
-                        setGuestUnlockFlash(true);
-                        window.setTimeout(() => setGuestUnlockFlash(false), 700);
-                        haptic('selection');
-                      } else {
-                        setGuestLockFlash(true);
-                        window.setTimeout(() => setGuestLockFlash(false), 700);
-                        haptic('success');
-                      }
-                      return;
-                    }
-                    if (lockState === 'locked') {
-                      setLockState('neutral');
-                      clearLockedSelection();
-                      setUnlockFlash(true);
-                      window.setTimeout(() => setUnlockFlash(false), 700);
-                      pulseLock();
-                      haptic('success');
-                    }
-                  }}
+                  onClick={() => cardController.actions.toggleLock()}
                   className="p-0.5 relative"
                 >
                   <svg
