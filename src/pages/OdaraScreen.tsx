@@ -642,6 +642,10 @@ const OdaraScreen = ({
   // the same session restores the local state.
   const [guestStarredByKey, setGuestStarredByKey] = useState<Record<string, boolean>>({});
   const [guestLocked, setGuestLocked] = useState(false);
+  // Frozen copy of activeGuestRender at the moment the guest lock engaged.
+  // While guestLocked === true, visible guest JSX renders from this snapshot
+  // so the scent decision (hero/layer/mood/tokens) cannot drift.
+  const [lockedGuestSnapshot, setLockedGuestSnapshot] = useState<any | null>(null);
   const [guestStarFlash, setGuestStarFlash] = useState(false);
   const [guestLockFlash, setGuestLockFlash] = useState(false);
   const [guestUnlockFlash, setGuestUnlockFlash] = useState(false);
@@ -655,6 +659,7 @@ const OdaraScreen = ({
     setGuestLayerExpanded(false);
     setGuestActiveLayerIdx(0);
     setGuestLocked(false);
+    setLockedGuestSnapshot(null);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
     const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
     setGuestSelectedMood(safeDef);
@@ -735,6 +740,14 @@ const OdaraScreen = ({
 
   // Single authoritative guest lock boolean — used by every guest mutation handler.
   const isGuestLocked = isGuestMode && guestLocked;
+
+  // Visible guest render: while locked, the JSX must render the frozen
+  // snapshot. When unlocked (or no snapshot yet), fall back to the live
+  // resolver. activeGuestRender remains the live source of truth.
+  const visibleGuestRender =
+    isGuestMode && guestLocked && lockedGuestSnapshot
+      ? lockedGuestSnapshot
+      : activeGuestRender;
 
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
@@ -2155,7 +2168,9 @@ const OdaraScreen = ({
 
   // (1) Normalized guest action key — current visible guest card only.
   //     Excludes mood/layerIdx/expanded/animation state by design.
-  const guestHero: any = activeGuestRender?.activeHero ?? null;
+  // Star key reads from the visible card so a locked snapshot stays scoped
+  // to whatever the user actually sees.
+  const guestHero: any = visibleGuestRender?.activeHero ?? null;
   const guestHeroId =
     guestHero?.fragrance_id ??
     guestHero?.id ??
@@ -2212,18 +2227,28 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          const wasLocked = guestLocked;
-          if (wasLocked) {
-            setGuestLocked(false);
-            setGuestUnlockFlash(true);
-            window.setTimeout(() => setGuestUnlockFlash(false), 700);
-            haptic('selection');
-          } else {
-            setGuestLocked(true);
-            setGuestLockFlash(true);
-            window.setTimeout(() => setGuestLockFlash(false), 700);
-            haptic('success');
+          // Engage-only latch. A second tap while already locked is a no-op
+          // so the lock stays green and the snapshot stays frozen until the
+          // slot (date/context/payload) changes.
+          if (guestLocked) {
+            console.info('[ODARA_LOCK_DEBUG] guest lock click ignored_already_locked', {
+              guestLocked,
+              isCardLocked,
+              selectedAlternateIdx,
+              guestSelectedMood,
+              activeHeroName: visibleGuestRender?.activeHero?.name,
+            });
+            return;
           }
+          if (!activeGuestRender) {
+            console.warn('[ODARA_LOCK_DEBUG] guest lock ignored_no_active_guest_render');
+            return;
+          }
+          setLockedGuestSnapshot(activeGuestRender);
+          setGuestLocked(true);
+          setGuestLockFlash(true);
+          window.setTimeout(() => setGuestLockFlash(false), 700);
+          haptic('success');
           return;
         }
         // Signed-in: only the unlock half is exposed via tap (lock is engaged
@@ -2620,7 +2645,7 @@ const OdaraScreen = ({
                 option.recipe_header (attached to hero by guest-recipe.ts). */}
             {isGuestMode && (() => {
               const rh: any =
-                (activeGuestRender?.activeHero as any)?.recipe_header ??
+                (visibleGuestRender?.activeHero as any)?.recipe_header ??
                 ((activeOracle ?? oracle) as any)?.main_bundle?.recipe_header ??
                 null;
               if (!rh?.text) return null;
@@ -2638,20 +2663,20 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Fragrance name — guest v5: from activeGuestRender.activeHero */}
+            {/* Fragrance name — guest v5: from visibleGuestRender.activeHero */}
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
             >
-              {isGuestMode && activeGuestRender?.activeHero
-                ? getDisplayName(activeGuestRender.activeHero.name, activeGuestRender.activeHero.brand)
+              {isGuestMode && visibleGuestRender?.activeHero
+                ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
                 : getDisplayName(visibleCard.name, visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {isGuestMode && activeGuestRender?.activeHero
-                ? activeGuestRender.activeHero.brand
+              {isGuestMode && visibleGuestRender?.activeHero
+                ? visibleGuestRender.activeHero.brand
                 : visibleCard.brand}
             </span>
 
@@ -2664,8 +2689,8 @@ const OdaraScreen = ({
                 {familyLabel}
               </span>
             ) : (() => {
-              const guestHeroFamily: string | null = activeGuestRender?.activeHero?.family
-                ? String(activeGuestRender.activeHero.family)
+              const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
+                ? String(visibleGuestRender.activeHero.family)
                 : null;
               if (!guestHeroFamily) return null;
               const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
@@ -2706,9 +2731,9 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
+            {/* Accords (signed-in) / Hero tokens (guest v5: from visibleGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
-              const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
+              const tokens: Array<any> = visibleGuestRender?.activeHeroTokens ?? [];
               if (tokens.length === 0) return null;
               return (
                 <div
@@ -2734,8 +2759,8 @@ const OdaraScreen = ({
 
             {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
             {isGuestMode ? (() => {
-              if (!activeGuestRender) return null;
-              const { activeHero, activeLayer, selectedMode, layerModes } = activeGuestRender;
+              if (!visibleGuestRender) return null;
+              const { activeHero, activeLayer, selectedMode, layerModes } = visibleGuestRender;
               if (!activeLayer) return null;
               const guestLayerModes = guestLayerModesToModeSelector(layerModes);
               const guestVisibleLayerMode = guestLayerToModeEntry(activeLayer);
@@ -2757,7 +2782,7 @@ const OdaraScreen = ({
                     isExpanded={guestLayerExpanded}
                     onToggleExpand={() => setGuestLayerExpanded(v => !v)}
                     locked={isCardLocked}
-                    layerTokens={Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : []}
+                    layerTokens={Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : []}
                   />
                 </div>
               );
