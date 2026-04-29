@@ -749,7 +749,7 @@ const OdaraScreen = ({
       // cycle within current mode using backend layers.length (no hard-coded N)
       setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
     }
-  }, [activeOracle, oracle, guestSelectedMood, selectedAlternateIdx]);
+  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx]);
 
   // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
   // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
