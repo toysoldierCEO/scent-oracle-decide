@@ -2124,10 +2124,16 @@ const OdaraScreen = ({
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
 
-        <span className="text-[8px] tracking-[0.15em] uppercase text-muted-foreground/30 mb-2">{ODARA_DEBUG_BUILD}</span>
+        {/* ODARA title — centered on the main card centerline */}
+        <h1
+          className="text-center text-[13px] tracking-[0.42em] font-semibold uppercase text-foreground/90 mt-1 mb-3"
+          style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+        >
+          ODARA
+        </h1>
 
-        {/* Context chips */}
-        <div className="flex gap-1.5 mb-2">
+        {/* Context chips — centered under the ODARA title */}
+        <div className="flex gap-1.5 mb-3 justify-center">
           {CONTEXTS.map(ctx => (
             <button
               key={ctx}
