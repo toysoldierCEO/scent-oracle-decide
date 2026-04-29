@@ -7,7 +7,7 @@ import { resolveAccessMode } from '@/lib/access-mode';
 import { fetchHomeOracle } from '@/lib/oracle-access';
 // guest-recipe.ts is no longer called directly — get_guest_oracle_home_v6 decides card_type.
 
-const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
+
 
 // --- Auth helpers ---
 function normalizeUser(sessionUser: any): { id: string; email?: string } | null {
