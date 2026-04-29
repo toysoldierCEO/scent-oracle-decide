@@ -664,6 +664,16 @@ const OdaraScreen = ({
       (o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' || !!o?.main_bundle?.layer_modes);
     if (!isV5) return null;
 
+    // PHASE 2 STALE PAYLOAD GUARD: if the v6 payload's requested_context or
+    // wear_date does not match the current selection, treat it as stale and
+    // do not render. The fetch-layer requestId guard already discards stale
+    // responses; this is defense-in-depth at the render layer.
+    const payloadCtx = o?.requested_context ?? o?.main_bundle?.requested_context ?? null;
+    const payloadDate = o?.wear_date ?? o?.main_bundle?.wear_date ?? null;
+    if (payloadCtx && payloadCtx !== selectedContext) return null;
+    if (payloadDate && payloadDate !== selectedDate) return null;
+
+
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
       selectedMood: guestSelectedMood,
@@ -686,7 +696,7 @@ const OdaraScreen = ({
       alternates: resolved.alternates,
       renderedFromFullBundle: resolved.renderedFromFullBundle,
     };
-  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, selectedContext, selectedDate]);
 
   useEffect(() => {
     if (!isGuestMode || !activeGuestRender) return;
@@ -730,19 +740,12 @@ const OdaraScreen = ({
     }
   }, [activeOracle, oracle, guestSelectedMood, selectedAlternateIdx]);
 
-  // Guest alternate tap: snapshot main state, switch to alternate; tap-same clears.
+  // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
+  // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
+  // alternate is a no-op (no toggle-off). Use the back arrow to undo.
   const handleGuestAlternateTap = useCallback((idx: number) => {
     if (selectedAlternateIdx === idx) {
-      haptic('selection');
-      // Clear alternate → restore previous main mode + layer index
-      const prev = guestPrevMainStateRef.current;
-      if (prev) {
-        setGuestSelectedMood(prev.mood);
-        setGuestActiveLayerIdx(prev.idx);
-      }
-      guestPrevMainStateRef.current = null;
-      guestRenderSourceRef.current = 'guest_main_bundle';
-      setSelectedAlternateIdx(null);
+      // Active alternate tapped again → no-op (matches main Odara behavior).
       return;
     }
     // Snapshot main state once (only if not already in alternate state)
@@ -2225,44 +2228,12 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: lock → star → back vertical stack — HIDDEN in guest mode (read-only) */}
-              {/* Guest-only lock indicator: gives visible feedback for the
-                  double-tap lock gesture even though the full action stack
-                  is hidden in guest mode. */}
-              {isGuestMode && (
-                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
-                  <div className="p-0.5 relative" aria-label="lock indicator">
-                    <svg
-                      width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke={lockState === 'locked' ? '#22c55e' : 'rgba(255,255,255,0.35)'}
-                      strokeWidth="1.5"
-                      className="transition-colors duration-300 relative z-[1]"
-                    >
-                      {lockState === 'locked' ? (
-                        <>
-                          <rect x="3" y="11" width="18" height="11" rx="2" />
-                          <path d="M7 11V7a5 5 0 0110 0v4" />
-                        </>
-                      ) : (
-                        <>
-                          <rect x="3" y="11" width="18" height="11" rx="2" />
-                          <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                        </>
-                      )}
-                    </svg>
-                    {lockFlash && (
-                      <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
-                        <span className="absolute inset-0 rounded-full"
-                          style={{
-                            background: 'radial-gradient(circle, rgba(34,197,94,0.45) 0%, transparent 70%)',
-                            animation: 'tronBurst 0.6s ease-out forwards',
-                          }}
-                        />
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Right: shared action stack (lock → star → back).
+                  PHASE 2 SHARED PRESENTER: this single rail renders in BOTH
+                  signed-in and guest modes. Guest mode: lock is visually
+                  disabled, star is hidden, back appears only on guest history.
+                  Signed-in: full interactive rail. Removing the previously
+                  duplicated guest-only lock indicator is intentional. */}
               {!isGuestMode && (
               <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button */}
@@ -2641,11 +2612,20 @@ const OdaraScreen = ({
               </div>
             )}
 
-            {/* ── Alternatives — guest v5: payload.alternate_bundles ── */}
+            {/* ── Alternatives — guest v6 (alternate_bundles).
+                PHASE 2 PROMOTION MODEL: the active promoted alternate is
+                hidden from the rail (refill behavior); previous hero only
+                returns through the back arrow. ── */}
             {isGuestMode ? (() => {
               const o: any = activeOracle ?? oracle ?? {};
               const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
               if (altBundles.length === 0) return null;
+              // Filter out the active promoted alternate so it disappears from
+              // the rail; remaining alternates flow forward to fill the row.
+              const visibleBundles = altBundles
+                .map((ab, originalIdx) => ({ ab, originalIdx }))
+                .filter(({ originalIdx }) => originalIdx !== selectedAlternateIdx);
+              if (visibleBundles.length === 0) return null;
               return (
                 <div className="flex flex-col items-center gap-2 mt-3">
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
@@ -2655,20 +2635,15 @@ const OdaraScreen = ({
                     className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
                     style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
-                    {altBundles.map((ab, i) => {
+                    {visibleBundles.map(({ ab, originalIdx }) => {
                       const heroName = ab?.hero?.name ?? '—';
                       const heroBrand = ab?.hero?.brand ?? '';
-                      const isActive = selectedAlternateIdx === i;
                       return (
                         <button
-                          key={`${heroName}-${i}`}
+                          key={`${heroName}-${originalIdx}`}
                           type="button"
-                          onClick={() => handleGuestAlternateTap(i)}
-                          className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 ${
-                            isActive
-                              ? 'bg-foreground/12 text-foreground border border-foreground/30'
-                              : 'text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]'
-                          }`}
+                          onClick={() => handleGuestAlternateTap(originalIdx)}
+                          className="flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04]"
                         >
                           {getDisplayName(heroName, heroBrand)}
                         </button>
