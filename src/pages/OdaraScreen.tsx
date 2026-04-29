@@ -2212,27 +2212,26 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          if (!guestActionKey) return;
+          if (!guestLockKey) return;
           const wasLocked = guestLockedForCurrentCard;
           console.info('[ODARA_LOCK_DEBUG] guest lock click BEFORE', {
-            guestActionKey,
+            guestLockKey,
+            guestStarKey,
             guestLockedForCurrentCard,
-            mapValueBefore: guestLockedByKey?.[guestActionKey],
+            lockMapValueBefore: guestLockedByKey?.[guestLockKey],
             activeHeroName: activeGuestRender?.activeHero?.name,
-            activeHeroBrand: activeGuestRender?.activeHero?.brand,
-            activeHeroId: activeGuestRender?.activeHero?.fragrance_id || activeGuestRender?.activeHero?.id,
             selectedDate,
             selectedContext,
           });
           setGuestLockedByKey(prev => {
             console.info('[ODARA_LOCK_DEBUG] guest lock setState', {
-              guestActionKey,
+              guestLockKey,
               wasLocked,
               willBeLocked: !wasLocked,
             });
             const next = { ...prev };
-            if (wasLocked) delete next[guestActionKey];
-            else next[guestActionKey] = true;
+            if (wasLocked) delete next[guestLockKey];
+            else next[guestLockKey] = true;
             return next;
           });
           if (wasLocked) {
@@ -2259,12 +2258,12 @@ const OdaraScreen = ({
       },
       toggleStar: () => {
         if (isGuestMode) {
-          if (!guestActionKey) return;
+          if (!guestStarKey) return;
           const wasStarred = guestStarredForCurrentCard;
           setGuestStarredByKey(prev => {
             const next = { ...prev };
-            if (wasStarred) delete next[guestActionKey];
-            else next[guestActionKey] = true;
+            if (wasStarred) delete next[guestStarKey];
+            else next[guestStarKey] = true;
             return next;
           });
           setGuestStarFlash(true);
@@ -2295,9 +2294,13 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] mood click', {
             mood,
             isCardLocked,
-            guestActionKey,
+            guestLockKey,
+            guestStarKey,
+            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
+            activeHeroName: activeGuestRender?.activeHero?.name,
+            guestSelectedMood,
           });
         }
         if (isCardLocked) return;
@@ -2312,9 +2315,12 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] alternate click', {
             altName: alt?.hero?.name ?? alt?.name ?? null,
             isCardLocked,
-            guestActionKey,
+            guestLockKey,
+            guestStarKey,
+            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
+            selectedAlternateIdx,
           });
         }
         if (isCardLocked) return;
@@ -2324,7 +2330,6 @@ const OdaraScreen = ({
           handlePromoteAlternate(alt);
         }
       },
-      back: () => {
         // Back never modifies the locked decision — the locked card stays
         // visible. We still allow back to be a no-op while locked.
         if (isCardLocked) return;
