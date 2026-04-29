@@ -641,7 +641,7 @@ const OdaraScreen = ({
   // card's local star/lock visual state. Returning to the same card during
   // the same session restores the local state.
   const [guestStarredByKey, setGuestStarredByKey] = useState<Record<string, boolean>>({});
-  const [guestLockedByKey, setGuestLockedByKey] = useState<Record<string, boolean>>({});
+  const [guestLocked, setGuestLocked] = useState(false);
   const [guestStarFlash, setGuestStarFlash] = useState(false);
   const [guestLockFlash, setGuestLockFlash] = useState(false);
   const [guestUnlockFlash, setGuestUnlockFlash] = useState(false);
@@ -654,6 +654,7 @@ const OdaraScreen = ({
     setGuestSkipHistory([]);
     setGuestLayerExpanded(false);
     setGuestActiveLayerIdx(0);
+    setGuestLocked(false);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
     const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
     setGuestSelectedMood(safeDef);
@@ -732,8 +733,12 @@ const OdaraScreen = ({
     });
   }, [isGuestMode, activeGuestRender, selectedAlternateIdx]);
 
+  // Single authoritative guest lock boolean — used by every guest mutation handler.
+  const isGuestLocked = isGuestMode && guestLocked;
+
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
+    if (isGuestLocked) return;
     const o: any = oracle ?? activeOracle ?? {};
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
@@ -749,12 +754,13 @@ const OdaraScreen = ({
       // cycle within current mode using backend layers.length (no hard-coded N)
       setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
     }
-  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx]);
+  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx, isGuestLocked]);
 
   // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
   // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
   // alternate is a no-op (no toggle-off). Use the back arrow to undo.
   const handleGuestAlternateTap = useCallback((idx: number) => {
+    if (isGuestLocked) return;
     if (selectedAlternateIdx === idx) {
       // Active alternate tapped again → no-op (matches main Odara behavior).
       return;
@@ -767,11 +773,12 @@ const OdaraScreen = ({
     setSelectedAlternateIdx(idx);
     setGuestLayerExpanded(true);
     haptic('selection');
-  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, isGuestLocked]);
 
   // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
   const handleGuestBack = useCallback((): boolean => {
     if (!isGuestMode) return false;
+    if (isGuestLocked) return true;
     // 1. Skip-history rewind takes priority — walks back through every skipped guest card.
     if (guestSkipHistory.length > 0) {
       const prevIdx = guestSkipHistory[guestSkipHistory.length - 1];
@@ -816,7 +823,7 @@ const OdaraScreen = ({
       return true; // consumed
     }
     return false; // let normal back run
-  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle]);
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle, isGuestLocked]);
 
 
   // Lock & gesture state — persisted per day+context
@@ -1978,19 +1985,16 @@ const OdaraScreen = ({
     } else if (isGuestMode) {
       // Guest locked-card contract: swipe/skip must NOT change the card while
       // guest local lock is engaged. Mirrors signed-in lock semantics.
-      {
-        const gLockKey = `${selectedDate}|${selectedContext}`;
-        if (!!guestLockedByKey[gLockKey]) {
-          actionTaken = 'fail_guest_locked';
-          console.info('ODARA_SWIPE_DOWN_PROOF', {
-            ...baseProof,
-            thresholdPassed: true,
-            actionTaken,
-            activeCardNameAfter,
-            activeCardIdAfter,
-          });
-          return;
-        }
+      if (isGuestLocked) {
+        actionTaken = 'fail_guest_locked';
+        console.info('ODARA_SWIPE_DOWN_PROOF', {
+          ...baseProof,
+          thresholdPassed: true,
+          actionTaken,
+          activeCardNameAfter,
+          activeCardIdAfter,
+        });
+        return;
       }
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
@@ -2067,7 +2071,7 @@ const OdaraScreen = ({
     selectedAlternateIdx,
     setSelectedAlternateIdx,
     guestSkipHistory,
-    guestLockedByKey,
+    isGuestLocked,
     activeGuestRender,
   ]);
 
@@ -2159,19 +2163,13 @@ const OdaraScreen = ({
     '';
   const guestHeroBrand = guestHero?.brand ?? '';
 
-  // Lock = slot-scoped (date + context only). Freezes the decision slot,
-  // not the changing hero object.
-  const guestLockKey = isGuestMode
-    ? `${selectedDate}|${selectedContext}`
-    : '';
   // Star = card-scoped (date + context + visible hero id + brand).
   const guestStarKey = isGuestMode
     ? `${selectedDate}|${selectedContext}|${guestHeroId}|${guestHeroBrand}`
     : '';
 
-  // (2) Single normalized lock gate — applies to both modes.
-  const guestLockedForCurrentCard =
-    isGuestMode && !!guestLockedByKey[guestLockKey];
+  // (2) Single normalized lock gate — guest lock is one authoritative boolean.
+  const guestLockedForCurrentCard = isGuestMode && guestLocked;
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
     : (lockState === 'locked');
@@ -2189,9 +2187,8 @@ const OdaraScreen = ({
 
   if (isGuestMode) {
     console.info('[ODARA_LOCK_DEBUG] render state', {
-      guestLockKey,
+      guestLocked,
       guestStarKey,
-      lockMapValue: guestLockedByKey?.[guestLockKey],
       starMapValue: guestStarredByKey?.[guestStarKey],
       guestLockedForCurrentCard,
       isCardLocked,
@@ -2215,33 +2212,14 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          if (!guestLockKey) return;
-          const wasLocked = guestLockedForCurrentCard;
-          console.info('[ODARA_LOCK_DEBUG] guest lock click BEFORE', {
-            guestLockKey,
-            guestStarKey,
-            guestLockedForCurrentCard,
-            lockMapValueBefore: guestLockedByKey?.[guestLockKey],
-            activeHeroName: activeGuestRender?.activeHero?.name,
-            selectedDate,
-            selectedContext,
-          });
-          setGuestLockedByKey(prev => {
-            console.info('[ODARA_LOCK_DEBUG] guest lock setState', {
-              guestLockKey,
-              wasLocked,
-              willBeLocked: !wasLocked,
-            });
-            const next = { ...prev };
-            if (wasLocked) delete next[guestLockKey];
-            else next[guestLockKey] = true;
-            return next;
-          });
+          const wasLocked = guestLocked;
           if (wasLocked) {
+            setGuestLocked(false);
             setGuestUnlockFlash(true);
             window.setTimeout(() => setGuestUnlockFlash(false), 700);
             haptic('selection');
           } else {
+            setGuestLocked(true);
             setGuestLockFlash(true);
             window.setTimeout(() => setGuestLockFlash(false), 700);
             haptic('success');
@@ -2297,9 +2275,8 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] mood click', {
             mood,
             isCardLocked,
-            guestLockKey,
+            guestLocked,
             guestStarKey,
-            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
             activeHeroName: activeGuestRender?.activeHero?.name,
@@ -2318,9 +2295,8 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] alternate click', {
             altName: alt?.hero?.name ?? alt?.name ?? null,
             isCardLocked,
-            guestLockKey,
+            guestLocked,
             guestStarKey,
-            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
             selectedAlternateIdx,
@@ -2480,7 +2456,7 @@ const OdaraScreen = ({
                 return (
                 <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
                 {/* Lock button — interactive for both signed-in and guest.
-                    Guest writes only to local guestLockedByKey (no Supabase). */}
+                    Guest writes only to local guestLocked boolean (no Supabase). */}
                 <button
                   type="button"
                   aria-label="Lock"
