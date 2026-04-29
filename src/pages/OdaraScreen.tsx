@@ -696,7 +696,7 @@ const OdaraScreen = ({
       alternates: resolved.alternates,
       renderedFromFullBundle: resolved.renderedFromFullBundle,
     };
-  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
+  }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, selectedContext, selectedDate]);
 
   useEffect(() => {
     if (!isGuestMode || !activeGuestRender) return;
