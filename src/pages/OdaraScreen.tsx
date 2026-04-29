@@ -165,7 +165,7 @@ interface GuestBottle {
   layer?: any | null;
 }
 
-const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
+
 
 /* ── Fragrance family → color mapping ── */
 const FAMILY_COLORS: Record<string, string> = {
