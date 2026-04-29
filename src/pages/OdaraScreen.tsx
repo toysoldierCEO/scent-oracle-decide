@@ -2275,9 +2275,8 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] mood click', {
             mood,
             isCardLocked,
-            guestLockKey,
+            guestLocked,
             guestStarKey,
-            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
             activeHeroName: activeGuestRender?.activeHero?.name,
@@ -2296,9 +2295,8 @@ const OdaraScreen = ({
           console.info('[ODARA_LOCK_DEBUG] alternate click', {
             altName: alt?.hero?.name ?? alt?.name ?? null,
             isCardLocked,
-            guestLockKey,
+            guestLocked,
             guestStarKey,
-            lockMapValue: guestLockedByKey?.[guestLockKey],
             guestLockedForCurrentCard,
             actionRailLocked: actionRailState?.locked,
             selectedAlternateIdx,
