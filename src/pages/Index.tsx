@@ -5,7 +5,7 @@ import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
 import { resolveAccessMode } from '@/lib/access-mode';
 import { fetchHomeOracle } from '@/lib/oracle-access';
-import { fetchGuestRecipeQueue } from '@/lib/guest-recipe';
+// guest-recipe.ts is no longer called directly — get_guest_oracle_home_v6 decides card_type.
 
 const ODARA_DEBUG_BUILD = 'ODARA_PREMIUM_V2';
 
@@ -28,16 +28,20 @@ const Index = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
-  // Guest Recipe Mode — independent surface fetched from
-  // get_guest_recipe_occasion_queue_v2. Only active when in guest mode.
-  const [recipeMode, setRecipeMode] = useState(false);
+  // Recipe Mode state removed — v6 backend decides card_type ("standard" | "recipe").
 
   // Oracle state
   const [oracle, setOracle] = useState<OracleResult | null>(null);
   const [oracleLoading, setOracleLoading] = useState(false);
   const [oracleError, setOracleError] = useState<string | null>(null);
   const [selectedContext, setSelectedContext] = useState('daily');
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
 
   // Oracle dedupe refs
   const oracleRequestIdRef = useRef(0);
@@ -53,7 +57,7 @@ const Index = () => {
   // Compute oracle key — valid when we have a resolvedUserId (signed-in OR guest)
   const oracleKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
-      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}|${recipeMode ? 'recipe' : 'oracle'}`
+      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}`
       : null;
 
   // Debug render log
@@ -161,26 +165,16 @@ const Index = () => {
       try {
         let data: any;
         let rpcUsed: string;
-        if (access.isGuestMode && recipeMode) {
-          const recipePayload = await fetchGuestRecipeQueue(selectedContext);
-          if (requestId !== oracleRequestIdRef.current) return;
-          if (!recipePayload) {
-            throw new Error('Recipe Mode is unavailable right now.');
-          }
-          data = recipePayload;
-          rpcUsed = 'get_guest_recipe_occasion_queue_v2';
-        } else {
-          const result = await fetchHomeOracle({
-            access,
-            temperature: liveTemperature,
-            context: selectedContext,
-            brand: 'Alexandria Fragrances',
-            wearDate: selectedDate,
-          });
-          if (requestId !== oracleRequestIdRef.current) return;
-          data = result.data;
-          rpcUsed = result.rpcUsed;
-        }
+        const result = await fetchHomeOracle({
+          access,
+          temperature: liveTemperature,
+          context: selectedContext,
+          brand: 'Alexandria Fragrances',
+          wearDate: selectedDate,
+        });
+        if (requestId !== oracleRequestIdRef.current) return;
+        data = result.data;
+        rpcUsed = result.rpcUsed;
 
         console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
         setOracle(data as unknown as OracleResult);
@@ -381,20 +375,8 @@ const Index = () => {
         resolvedTemperature={liveTemperature}
         isGuestMode={access.isGuestMode}
       />
-      {access.isGuestMode && (
-        <button
-          type="button"
-          onClick={() => setRecipeMode((v) => !v)}
-          className={`fixed top-3 right-3 z-50 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] font-medium transition-all duration-200 active:scale-95 backdrop-blur-md ${
-            recipeMode
-              ? 'bg-foreground/15 text-foreground border border-foreground/35'
-              : 'bg-foreground/[0.05] text-foreground/70 border border-foreground/15 hover:text-foreground/95'
-          }`}
-          aria-pressed={recipeMode}
-        >
-          {recipeMode ? 'Recipe · On' : 'Recipe Mode'}
-        </button>
-      )}
+      {/* Recipe Mode button removed — guest home now always uses get_guest_oracle_home_v6
+          which decides standard vs recipe card_type on the backend. */}
     </>
   );
 };

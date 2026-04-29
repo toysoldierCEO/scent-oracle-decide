@@ -24,6 +24,7 @@ export interface FetchHomeOracleResult {
   | 'get_todays_oracle_home_v1'
     | 'get_guest_oracle_home_v1'
     | 'get_guest_oracle_home_v5'
+    | 'get_guest_oracle_home_v6'
     | 'get_signed_in_card_contract_v6'
     | 'get_signed_in_card_contract_v7';
 }
@@ -99,9 +100,9 @@ export async function fetchHomeOracle(
       p_wear_date: wearDate,
     };
     console.log('[Odara][Guest] access mode', { isGuestMode: true });
-    console.log('[Odara][Guest] rpc start', { rpc: 'get_guest_oracle_home_v5', args });
-    const { data, error } = await odaraSupabase.rpc('get_guest_oracle_home_v5' as any, args);
-    logRawHomePayload('get_guest_oracle_home_v5', args, data, error);
+    console.log('[Odara][Guest] rpc start', { rpc: 'get_guest_oracle_home_v6', args });
+    const { data, error } = await odaraSupabase.rpc('get_guest_oracle_home_v6' as any, args);
+    logRawHomePayload('get_guest_oracle_home_v6', args, data, error);
     if (error) {
       console.error('[Odara][Guest] rpc fail', { error });
       throw error;
@@ -109,24 +110,24 @@ export async function fetchHomeOracle(
     const d: any = data ?? {};
     const main = d.main_bundle ?? {};
     const altBundles = Array.isArray(d.alternate_bundles) ? d.alternate_bundles : [];
-    console.log('[Odara][Guest] rpc success');
-    console.log('[Odara][Guest] payload summary', {
+    console.log('[Odara][Guest][v6] payload summary', {
+      card_type: d.card_type ?? null,
       contract: d.guest_mode_contract ?? null,
-      style_key: d.style_key ?? null,
       hero_name: main.hero?.name ?? null,
+      recipe_header: main.recipe_header ?? main.hero?.recipe_header ?? null,
       ui_default_mode: main.ui_default_mode ?? null,
       layer_mode_order: main.layer_mode_order ?? null,
       mode_layer_counts: main.layer_modes
         ? Object.fromEntries(
             Object.entries(main.layer_modes).map(([k, v]: any) => [
               k,
-              Array.isArray(v?.layers) ? v.layers.length : 0,
+              Array.isArray(v?.layers) ? v.layers.length : (v ? 1 : 0),
             ]),
           )
         : null,
       alternate_bundles_count: altBundles.length,
     });
-    return { data, rpcUsed: 'get_guest_oracle_home_v5' };
+    return { data, rpcUsed: 'get_guest_oracle_home_v6' };
   }
 
   if (!access.isSignedIn || !access.resolvedUserId) {
