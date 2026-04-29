@@ -2406,6 +2406,7 @@ const OdaraScreen = ({
                     } else {
                       setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
                     }
+                    haptic(isFavorited ? 'light' : 'success');
                   }}
                   className="p-0.5 relative"
                 >
