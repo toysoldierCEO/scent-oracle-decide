@@ -2731,9 +2731,9 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Accords (signed-in) / Hero tokens (guest v5: from activeGuestRender.activeHeroTokens) */}
+            {/* Accords (signed-in) / Hero tokens (guest v5: from visibleGuestRender.activeHeroTokens) */}
             {isGuestMode ? (() => {
-              const tokens: Array<any> = activeGuestRender?.activeHeroTokens ?? [];
+              const tokens: Array<any> = visibleGuestRender?.activeHeroTokens ?? [];
               if (tokens.length === 0) return null;
               return (
                 <div
