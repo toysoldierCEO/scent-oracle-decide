@@ -752,6 +752,7 @@ const OdaraScreen = ({
     guestRenderSourceRef.current = 'guest_selected_alternate';
     setSelectedAlternateIdx(idx);
     setGuestLayerExpanded(true);
+    haptic('selection');
   }, [selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx]);
 
   // Guest back-button unwind: skip-history → alternate → mode-depth → normal back
