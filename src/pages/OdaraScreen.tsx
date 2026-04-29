@@ -823,7 +823,7 @@ const OdaraScreen = ({
       return true; // consumed
     }
     return false; // let normal back run
-  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle]);
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle, isGuestLocked]);
 
 
   // Lock & gesture state — persisted per day+context
