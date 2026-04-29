@@ -167,26 +167,16 @@ const Index = () => {
       try {
         let data: any;
         let rpcUsed: string;
-        if (access.isGuestMode && recipeMode) {
-          const recipePayload = await fetchGuestRecipeQueue(selectedContext);
-          if (requestId !== oracleRequestIdRef.current) return;
-          if (!recipePayload) {
-            throw new Error('Recipe Mode is unavailable right now.');
-          }
-          data = recipePayload;
-          rpcUsed = 'get_guest_recipe_occasion_queue_v2';
-        } else {
-          const result = await fetchHomeOracle({
-            access,
-            temperature: liveTemperature,
-            context: selectedContext,
-            brand: 'Alexandria Fragrances',
-            wearDate: selectedDate,
-          });
-          if (requestId !== oracleRequestIdRef.current) return;
-          data = result.data;
-          rpcUsed = result.rpcUsed;
-        }
+        const result = await fetchHomeOracle({
+          access,
+          temperature: liveTemperature,
+          context: selectedContext,
+          brand: 'Alexandria Fragrances',
+          wearDate: selectedDate,
+        });
+        if (requestId !== oracleRequestIdRef.current) return;
+        data = result.data;
+        rpcUsed = result.rpcUsed;
 
         console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
         setOracle(data as unknown as OracleResult);
