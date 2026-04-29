@@ -664,6 +664,16 @@ const OdaraScreen = ({
       (o?.guest_mode_contract === 'guest_single_bundle_v3_mode_layers' || !!o?.main_bundle?.layer_modes);
     if (!isV5) return null;
 
+    // PHASE 2 STALE PAYLOAD GUARD: if the v6 payload's requested_context or
+    // wear_date does not match the current selection, treat it as stale and
+    // do not render. The fetch-layer requestId guard already discards stale
+    // responses; this is defense-in-depth at the render layer.
+    const payloadCtx = o?.requested_context ?? o?.main_bundle?.requested_context ?? null;
+    const payloadDate = o?.wear_date ?? o?.main_bundle?.wear_date ?? null;
+    if (payloadCtx && payloadCtx !== selectedContext) return null;
+    if (payloadDate && payloadDate !== selectedDate) return null;
+
+
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
       selectedMood: guestSelectedMood,
