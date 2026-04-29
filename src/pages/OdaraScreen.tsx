@@ -635,6 +635,17 @@ const OdaraScreen = ({
   // popped by the back button to restore the previous guest card.
   const [guestSkipHistory, setGuestSkipHistory] = useState<Array<number | null>>([]);
 
+  // ── Guest-local action state (session-only, no Supabase writes) ──
+  // Card-scoped: keyed by `${date}|${context}|${heroId}|${brand}` so that
+  // navigating to a different visible card does NOT inherit the prior
+  // card's local star/lock visual state. Returning to the same card during
+  // the same session restores the local state.
+  const [guestStarredByKey, setGuestStarredByKey] = useState<Record<string, boolean>>({});
+  const [guestLockedByKey, setGuestLockedByKey] = useState<Record<string, boolean>>({});
+  const [guestStarFlash, setGuestStarFlash] = useState(false);
+  const [guestLockFlash, setGuestLockFlash] = useState(false);
+  const [guestUnlockFlash, setGuestUnlockFlash] = useState(false);
+
   // Reset guest state whenever the slot (date/context) or backend payload changes.
   useEffect(() => {
     guestRenderSourceRef.current = 'guest_main_bundle';
