@@ -741,6 +741,14 @@ const OdaraScreen = ({
   // Single authoritative guest lock boolean — used by every guest mutation handler.
   const isGuestLocked = isGuestMode && guestLocked;
 
+  // Visible guest render: while locked, the JSX must render the frozen
+  // snapshot. When unlocked (or no snapshot yet), fall back to the live
+  // resolver. activeGuestRender remains the live source of truth.
+  const visibleGuestRender =
+    isGuestMode && guestLocked && lockedGuestSnapshot
+      ? lockedGuestSnapshot
+      : activeGuestRender;
+
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
     if (isGuestLocked) return;
