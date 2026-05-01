@@ -2784,6 +2784,7 @@ const OdaraScreen = ({
                     isExpanded={guestLayerExpanded}
                     onToggleExpand={() => setGuestLayerExpanded(v => !v)}
                     locked={isCardLocked}
+                    consumeLockedMoodTap
                     layerTokens={Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : []}
                   />
                 </div>
@@ -2852,6 +2853,11 @@ const OdaraScreen = ({
                           type="button"
                           aria-disabled={isCardLocked || undefined}
                           data-alternate-chip
+                          onPointerDown={(e) => {
+                            if (!isCardLocked) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (isCardLocked) return;

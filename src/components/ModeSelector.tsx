@@ -76,6 +76,11 @@ const ModeSelector = ({
             aria-disabled={isLocked || undefined}
             disabled={isLocked && !consumeLockedTap}
             data-mode-chip
+            onPointerDown={(e) => {
+              if (!isLocked) return;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (!isLocked) onSelectMood(mood);
