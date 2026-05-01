@@ -1788,6 +1788,15 @@ const OdaraScreen = ({
     window.setTimeout(() => setLockPulse(false), 400);
   }, []);
 
+  const unlockGuestCard = useCallback(() => {
+    setGuestLocked(false);
+    setLockedGuestSnapshot(null);
+    setGuestUnlockFlash(true);
+    window.setTimeout(() => setGuestUnlockFlash(false), 700);
+    pulseLock();
+    haptic('success');
+  }, [pulseLock]);
+
   const clearUnlockTimeout = useCallback(() => {
     if (unlockTimeoutRef.current !== null) {
       window.clearTimeout(unlockTimeoutRef.current);
@@ -1990,7 +1999,10 @@ const OdaraScreen = ({
     let activeCardNameAfter: string | null = activeCardNameBefore;
     let activeCardIdAfter: string | null = activeCardIdBefore;
 
-    if (lockState === 'locked') {
+    if (isGuestMode && isGuestLocked) {
+      actionTaken = 'unlock_guest';
+      unlockGuestCard();
+    } else if (lockState === 'locked') {
       actionTaken = 'unlock';
       setLockState('neutral');
       clearLockedSelection();
@@ -1998,19 +2010,6 @@ const OdaraScreen = ({
       window.setTimeout(() => setUnlockFlash(false), 700);
       pulseLock();
     } else if (isGuestMode) {
-      // Guest locked-card contract: swipe/skip must NOT change the card while
-      // guest local lock is engaged. Mirrors signed-in lock semantics.
-      if (isGuestLocked) {
-        actionTaken = 'fail_guest_locked';
-        console.info('ODARA_SWIPE_DOWN_PROOF', {
-          ...baseProof,
-          thresholdPassed: true,
-          actionTaken,
-          activeCardNameAfter,
-          activeCardIdAfter,
-        });
-        return;
-      }
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
       const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
@@ -2075,6 +2074,7 @@ const OdaraScreen = ({
     setLockState,
     clearLockedSelection,
     pulseLock,
+    unlockGuestCard,
     handleSkipLocal,
     isGuestMode,
     visibleCard,
@@ -2229,9 +2229,8 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          // Engage-only latch. A second tap while already locked is a no-op
-          // so the lock stays green and the snapshot stays frozen until the
-          // slot (date/context/payload) changes.
+          // Guest lock is an engage-only latch from the icon. Unlocking is
+          // swipe-down only so the guest card stays read-only and predictable.
           if (guestLocked) {
             console.info('[ODARA_LOCK_DEBUG] guest lock click ignored_already_locked', {
               guestLocked,

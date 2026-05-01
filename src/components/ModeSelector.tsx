@@ -54,6 +54,7 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
         const isSelected = selectedMood === mood;
         const isLoading = loadingMood === mood;
         const hasData = !!mEntry;
+        const isLocked = locked;
 
         // Color: use entry color if available, fallback for unloaded
         const mColor = hasData ? (familyColors[mEntry.family_key] ?? '#888') : '#888';
@@ -61,9 +62,15 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
         return (
           <button
             key={mood}
-            onClick={() => { if (!locked) onSelectMood(mood); }}
+            type="button"
+            disabled={isLocked}
+            data-mode-chip
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isLocked) onSelectMood(mood);
+            }}
             className={`text-[9px] uppercase tracking-[0.12em] py-1 rounded-full transition-all duration-200 text-center ${
-              locked && !isSelected ? 'opacity-30 cursor-default' : ''
+              isLocked && !isSelected ? 'opacity-30 cursor-default' : ''
             } ${
               !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
             } ${
