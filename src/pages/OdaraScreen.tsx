@@ -1839,6 +1839,10 @@ const OdaraScreen = ({
     if (target.closest('button, a, input, textarea, select, [role="button"]')) return;
 
     if (isGuestMode) {
+      const isTouchLikePointer =
+        lastCardPointerTypeRef.current === 'touch' ||
+        lastCardPointerTypeRef.current === 'pen';
+      if (!isTouchLikePointer) return;
       if (guestLocked) return;
       engageGuestLock();
       return;
@@ -1910,6 +1914,7 @@ const OdaraScreen = ({
     fired: boolean;
     pointerId: number | null;
   }>({ active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null });
+  const lastCardPointerTypeRef = useRef<string>('');
 
   // ── SKIP GESTURE LIFECYCLE RESET ──
   // Any pending pointer/gesture state from the prior visible card MUST be
@@ -1925,6 +1930,7 @@ const OdaraScreen = ({
       fired: false,
       pointerId: null,
     };
+    lastCardPointerTypeRef.current = '';
   }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
   // Swipe-down must work when the gesture STARTS on the visible card body,
@@ -1945,6 +1951,7 @@ const OdaraScreen = ({
   const handleCardPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
+    lastCardPointerTypeRef.current = e.pointerType;
     // Capture the pointer so the gesture stays attached to the card shell
     // until pointer up/cancel — prevents the browser/scroll container from
     // stealing vertical motion mid-swipe.
