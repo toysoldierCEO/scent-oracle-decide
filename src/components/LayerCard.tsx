@@ -372,6 +372,7 @@ interface LayerCardProps {
   onToggleExpand: () => void;
   lockPulse?: boolean;
   locked?: boolean;
+  consumeLockedMoodTap?: boolean;
   loadingMood?: LayerMood | null;
   modeLoading?: Record<LayerMood, boolean>;
   modeErrors?: Record<LayerMood, string | null>;
@@ -398,6 +399,7 @@ const LayerCard = ({
   onToggleExpand,
   lockPulse = false,
   locked = false,
+  consumeLockedMoodTap = false,
   loadingMood = null,
   modeLoading,
   modeErrors,
@@ -547,6 +549,7 @@ const LayerCard = ({
           familyColors={FAMILY_COLORS}
           lockPulse={lockPulse}
           locked={locked}
+          consumeLockedTap={consumeLockedMoodTap}
           loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
         />
       </div>

@@ -36,6 +36,7 @@ interface ModeSelectorProps {
   lockPulse?: boolean;
   locked?: boolean;
   loadingMood?: LayerMood | null;
+  consumeLockedTap?: boolean;
 }
 
 /**
@@ -43,7 +44,16 @@ interface ModeSelectorProps {
  * HARD INVARIANT: always renders exactly 4 chips in fixed order.
  * Chips are never removed, filtered, or reordered.
  */
-const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lockPulse = false, locked = false, loadingMood = null }: ModeSelectorProps) => {
+const ModeSelector = ({
+  layerModes,
+  selectedMood,
+  onSelectMood,
+  familyColors,
+  lockPulse = false,
+  locked = false,
+  loadingMood = null,
+  consumeLockedTap = false,
+}: ModeSelectorProps) => {
   return (
     <div
       className="grid grid-cols-4 gap-1.5 w-full"
@@ -63,7 +73,8 @@ const ModeSelector = ({ layerModes, selectedMood, onSelectMood, familyColors, lo
           <button
             key={mood}
             type="button"
-            disabled={isLocked}
+            aria-disabled={isLocked || undefined}
+            disabled={isLocked && !consumeLockedTap}
             data-mode-chip
             onClick={(e) => {
               e.stopPropagation();
