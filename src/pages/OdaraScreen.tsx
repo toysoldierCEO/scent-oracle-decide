@@ -1797,6 +1797,15 @@ const OdaraScreen = ({
     haptic('success');
   }, [pulseLock]);
 
+  const engageGuestLock = useCallback(() => {
+    if (guestLocked || !activeGuestRender) return;
+    setLockedGuestSnapshot(activeGuestRender);
+    setGuestLocked(true);
+    setGuestLockFlash(true);
+    window.setTimeout(() => setGuestLockFlash(false), 700);
+    haptic('success');
+  }, [guestLocked, activeGuestRender]);
+
   const clearUnlockTimeout = useCallback(() => {
     if (unlockTimeoutRef.current !== null) {
       window.clearTimeout(unlockTimeoutRef.current);
@@ -1810,7 +1819,8 @@ const OdaraScreen = ({
 
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
-   *   - double tap on the overall card = like + lock
+   *   - guest: single tap on the main scent-card shell = lock
+   *   - signed-in: double tap on the overall card = like + lock
    *   - single tap on the layer section = expand/collapse
    *     (LayerCard handles its own onClick + stopPropagation)
    *   - swipe-up lock has been REMOVED
@@ -1825,7 +1835,14 @@ const OdaraScreen = ({
     if (target.closest('[data-action-stack]')) return;
     if (target.closest('[data-debug-controls]')) return;
     if (target.closest('[data-layer-section]')) return;
+    if (target.closest('[data-guest-profile-reserved]')) return;
     if (target.closest('button, a, input, textarea, select, [role="button"]')) return;
+
+    if (isGuestMode) {
+      if (guestLocked) return;
+      engageGuestLock();
+      return;
+    }
 
     // Already locked → no-op (use the lock icon to unlock).
     if (lockState === 'locked') return;
@@ -1866,6 +1883,9 @@ const OdaraScreen = ({
     }
   }, [
     visibleCard,
+    isGuestMode,
+    guestLocked,
+    engageGuestLock,
     lockState,
     clearUnlockTimeout,
     setLockState,
@@ -2245,11 +2265,7 @@ const OdaraScreen = ({
             console.warn('[ODARA_LOCK_DEBUG] guest lock ignored_no_active_guest_render');
             return;
           }
-          setLockedGuestSnapshot(activeGuestRender);
-          setGuestLocked(true);
-          setGuestLockFlash(true);
-          window.setTimeout(() => setGuestLockFlash(false), 700);
-          haptic('success');
+          engageGuestLock();
           return;
         }
         // Signed-in: only the unlock half is exposed via tap (lock is engaged
@@ -2669,6 +2685,7 @@ const OdaraScreen = ({
             <h2
               className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+              data-guest-profile-reserved
             >
               {isGuestMode && visibleGuestRender?.activeHero
                 ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
