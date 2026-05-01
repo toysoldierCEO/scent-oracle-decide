@@ -1679,6 +1679,16 @@ const OdaraScreen = ({
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
   }, [visibleCard, selectedDate, selectedContext, visibleModeEntry]);
 
+  const recordGuestLockedSelection = useCallback(() => {
+    if (!activeGuestRender?.activeHero) return;
+    const key = `${selectedDate}:${selectedContext}`;
+    const mainFamily = activeGuestRender.activeHero.family ?? '';
+    const layerFamily = activeGuestRender.activeLayer?.family ?? null;
+    const mainColor = FAMILY_COLORS[mainFamily] ?? '#888';
+    const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
+    setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
+  }, [activeGuestRender, selectedDate, selectedContext]);
+
   const clearLockedSelection = useCallback(() => {
     const key = `${selectedDate}:${selectedContext}`;
     setLockedSelections(prev => {
@@ -1791,20 +1801,22 @@ const OdaraScreen = ({
   const unlockGuestCard = useCallback(() => {
     setGuestLocked(false);
     setLockedGuestSnapshot(null);
+    clearLockedSelection();
     setGuestUnlockFlash(true);
     window.setTimeout(() => setGuestUnlockFlash(false), 700);
     pulseLock();
     haptic('success');
-  }, [pulseLock]);
+  }, [clearLockedSelection, pulseLock]);
 
   const engageGuestLock = useCallback(() => {
     if (guestLocked || !activeGuestRender) return;
     setLockedGuestSnapshot(activeGuestRender);
     setGuestLocked(true);
+    recordGuestLockedSelection();
     setGuestLockFlash(true);
     window.setTimeout(() => setGuestLockFlash(false), 700);
     haptic('success');
-  }, [guestLocked, activeGuestRender]);
+  }, [guestLocked, activeGuestRender, recordGuestLockedSelection]);
 
   const clearUnlockTimeout = useCallback(() => {
     if (unlockTimeoutRef.current !== null) {
