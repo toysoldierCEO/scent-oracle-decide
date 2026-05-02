@@ -405,6 +405,8 @@ type LockState = 'neutral' | 'locked' | 'skipping';
 const SWIPE_DOWN_DISTANCE = 60;     // px of downward travel to trigger
 const SWIPE_DIRECTION_LOCK = 8;     // px before we lock direction
 const SWIPE_HORIZONTAL_TOLERANCE = 1.2; // |dy| must exceed |dx| * this
+const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
+const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
@@ -543,6 +545,12 @@ const OdaraScreen = ({
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
   const forecastDays = buildForecastDays(selectedDate);
+  const [daySwipeOffset, setDaySwipeOffset] = useState(0);
+  const [daySwipeDragging, setDaySwipeDragging] = useState(false);
+  const suppressCardClickRef = useRef(false);
+  const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
+  const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
+  const nextForecastDay = selectedForecastIndex < forecastDays.length - 1 ? forecastDays[selectedForecastIndex + 1] : null;
 
   // ── Queue from get_home_card_queue_v1 ──
   const [queue, setQueue] = useState<DisplayCard[]>([]);
@@ -1321,6 +1329,13 @@ const OdaraScreen = ({
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
+  const getPreviewTone = (dateStr: string) => {
+    const lane = lockedSelections[`${dateStr}:${selectedContext}`] ?? null;
+    return {
+      accent: lane?.mainColor ?? familyColor,
+      glow: lane?.layerColor ?? lane?.mainColor ?? familyColor,
+    };
+  };
 
   // Build layer modes from slot-scoped mood cache — lazy loaded
   // Cache is pre-seeded from oracle.layer_modes on hero load (Effect 2)
@@ -1829,6 +1844,12 @@ const OdaraScreen = ({
     return () => clearUnlockTimeout();
   }, [clearUnlockTimeout]);
 
+  useEffect(() => {
+    setDaySwipeOffset(0);
+    setDaySwipeDragging(false);
+    suppressCardClickRef.current = false;
+  }, [selectedDate]);
+
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
    *   - guest: single tap on the main scent-card shell = lock
@@ -1840,6 +1861,10 @@ const OdaraScreen = ({
    * ────────────────────────────────────────────────────────────── */
   const handleCardClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!visibleCard) return;
+    if (suppressCardClickRef.current) {
+      suppressCardClickRef.current = false;
+      return;
+    }
 
     const target = e.target as HTMLElement;
     // Never treat taps on action stack buttons, layer section, or other
@@ -1911,6 +1936,13 @@ const OdaraScreen = ({
     visibleModeEntry,
   ]);
 
+  const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressCardClickRef.current) return;
+    suppressCardClickRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
   /* ──────────────────────────────────────────────────────────────
    * Swipe-DOWN two-step contract (state-aware):
    *   - lockState === 'locked'  → swipe down UNLOCKS the card
@@ -1943,6 +1975,9 @@ const OdaraScreen = ({
       pointerId: null,
     };
     lastCardPointerTypeRef.current = '';
+    setDaySwipeOffset(0);
+    setDaySwipeDragging(false);
+    suppressCardClickRef.current = false;
   }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
   // Swipe-down must work when the gesture STARTS on the visible card body,
@@ -2017,15 +2052,14 @@ const OdaraScreen = ({
       activeLayerIndex,
     };
     if (s.direction === 'horizontal') {
-      if (Math.abs(dx) >= SWIPE_DOWN_DISTANCE) {
-        s.fired = true;
-        console.info('ODARA_SWIPE_DOWN_PROOF', {
-          ...baseProof,
-          actionTaken: 'ignored_horizontal_dominant',
-          activeCardNameAfter: activeCardNameBefore,
-          activeCardIdAfter: activeCardIdBefore,
-        });
-      }
+      const hasPrevDay = !!prevForecastDay;
+      const hasNextDay = !!nextForecastDay;
+      let clampedDx = Math.max(-DAY_SWIPE_MAX_OFFSET, Math.min(DAY_SWIPE_MAX_OFFSET, dx));
+      if (dx > 0 && !hasPrevDay) clampedDx = Math.min(dx, DAY_SWIPE_MAX_OFFSET * 0.28);
+      if (dx < 0 && !hasNextDay) clampedDx = Math.max(dx, -DAY_SWIPE_MAX_OFFSET * 0.28);
+      setDaySwipeDragging(true);
+      setDaySwipeOffset(clampedDx);
+      if (Math.abs(dx) > 10) suppressCardClickRef.current = true;
       return;
     }
     // vertical
@@ -2127,11 +2161,14 @@ const OdaraScreen = ({
     guestSkipHistory,
     isGuestLocked,
     activeGuestRender,
+    prevForecastDay,
+    nextForecastDay,
   ]);
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const s = swipeRef.current;
     if (s.pointerId !== e.pointerId) return;
+    const didCancel = e.type === 'pointercancel';
     try {
       if (e.currentTarget.releasePointerCapture && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -2139,8 +2176,28 @@ const OdaraScreen = ({
     } catch {
       /* safe release */
     }
+    if (s.direction === 'horizontal') {
+      const dx = e.clientX - s.startX;
+      const targetDate =
+        didCancel
+          ? null
+          : dx <= -DAY_SWIPE_THRESHOLD
+          ? (nextForecastDay?.dateStr ?? null)
+          : dx >= DAY_SWIPE_THRESHOLD
+            ? (prevForecastDay?.dateStr ?? null)
+            : null;
+      setDaySwipeDragging(false);
+      setDaySwipeOffset(0);
+      if (targetDate && targetDate !== selectedDate) {
+        suppressCardClickRef.current = true;
+        haptic('selection');
+        onDateChange(targetDate);
+      }
+      swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
+      return;
+    }
     swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
-  }, []);
+  }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
 
   const visibleAlts = currentCardAlternates;
   const alternatesRendered = currentCardAlternates.length > 0;
@@ -2454,21 +2511,109 @@ const OdaraScreen = ({
 
         {/* ── Unified main card with gestures ── */}
         {!oracleLoading && !oracleError && visibleCard && (
-          <div
-            className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
-            style={{
-              background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
-              border: `1px solid ${tint.border}`,
-              boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-              touchAction: 'none',
-              ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
-            }}
-            onClick={handleCardClick}
-            onPointerDown={handleCardPointerDown}
-            onPointerMove={handleCardPointerMove}
-            onPointerUp={handleCardPointerEnd}
-            onPointerCancel={handleCardPointerEnd}
-          >
+          <div className="relative mt-1 pb-8 overflow-visible" style={{ perspective: '1600px' }}>
+            <div
+              className="pointer-events-none absolute inset-x-[10%] -bottom-4 z-0 h-16 rounded-[999px]"
+              style={{
+                background: `radial-gradient(ellipse at center, ${tint.glow} 0%, rgba(0,0,0,0.38) 46%, transparent 80%)`,
+                filter: 'blur(18px)',
+                opacity: 0.68,
+              }}
+            />
+            <div
+              className="pointer-events-none absolute inset-x-[20%] bottom-[6px] z-0 h-10 rounded-[999px]"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.0) 100%)',
+                filter: 'blur(10px)',
+                opacity: 0.14,
+                transform: 'scaleY(-1)',
+              }}
+            />
+
+            <div
+              className="relative overflow-visible"
+              style={{
+                transform: `translate3d(${daySwipeOffset}px, 0, 0)`,
+                transition: daySwipeDragging ? 'none' : 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)',
+                willChange: 'transform',
+              }}
+            >
+              {prevForecastDay && (() => {
+                const tone = getPreviewTone(prevForecastDay.dateStr);
+                return (
+                  <div
+                    className="pointer-events-none absolute inset-y-[16px] left-[-13%] z-0 w-[84%] overflow-hidden rounded-[22px]"
+                    style={{
+                      background: `linear-gradient(165deg, ${tone.accent}18 0%, rgba(12,10,8,0.94) 74%)`,
+                      border: `1px solid ${tone.accent}33`,
+                      boxShadow: `0 18px 44px rgba(0,0,0,0.42), 0 0 28px ${tone.glow}22`,
+                      opacity: 0.5,
+                      filter: 'blur(3px)',
+                      transform: 'translate3d(0, 16px, 0) scale(0.9) rotateY(18deg)',
+                      transformOrigin: 'right center',
+                      backdropFilter: 'blur(18px)',
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
+                    <div className="relative z-[1] flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-white/30">{prevForecastDay.label}</span>
+                      <span
+                        className="text-[34px] leading-none text-white/42"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                      >
+                        {prevForecastDay.day}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {nextForecastDay && (() => {
+                const tone = getPreviewTone(nextForecastDay.dateStr);
+                return (
+                  <div
+                    className="pointer-events-none absolute inset-y-[16px] right-[-13%] z-0 w-[84%] overflow-hidden rounded-[22px]"
+                    style={{
+                      background: `linear-gradient(165deg, ${tone.accent}18 0%, rgba(12,10,8,0.94) 74%)`,
+                      border: `1px solid ${tone.accent}33`,
+                      boxShadow: `0 18px 44px rgba(0,0,0,0.42), 0 0 28px ${tone.glow}22`,
+                      opacity: 0.5,
+                      filter: 'blur(3px)',
+                      transform: 'translate3d(0, 16px, 0) scale(0.9) rotateY(-18deg)',
+                      transformOrigin: 'left center',
+                      backdropFilter: 'blur(18px)',
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
+                    <div className="relative z-[1] flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-white/30">{nextForecastDay.label}</span>
+                      <span
+                        className="text-[34px] leading-none text-white/42"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                      >
+                        {nextForecastDay.day}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div
+                className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
+                style={{
+                  background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
+                  border: `1px solid ${tint.border}`,
+                  boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
+                  touchAction: 'none',
+                  ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
+                }}
+                onClickCapture={handleCardClickCapture}
+                onClick={handleCardClick}
+                onPointerDown={handleCardPointerDown}
+                onPointerMove={handleCardPointerMove}
+                onPointerUp={handleCardPointerEnd}
+                onPointerCancel={handleCardPointerEnd}
+              >
             {/* Glow orb */}
             <div
               className="absolute -top-16 -right-16 w-52 h-52 rounded-full blur-3xl pointer-events-none"
@@ -2940,6 +3085,8 @@ const OdaraScreen = ({
             ))}
 
 
+              </div>
+            </div>
           </div>
         )}
         {/* ── Weekly navigator + lane tracker ── */}
