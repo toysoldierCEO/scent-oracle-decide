@@ -5,6 +5,8 @@ import LayerCard from "@/components/LayerCard";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
@@ -271,6 +273,18 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
+
+const ODARA_MENU_ITEMS = [
+  { label: 'My Collection', guestRestricted: true },
+  { label: 'Saved', guestRestricted: true },
+  { label: 'Scent History', guestRestricted: true },
+  { label: 'Planner', guestRestricted: true },
+  { label: 'Daisy Chain', guestRestricted: true },
+  { label: 'How Odara Works', guestRestricted: false },
+  { label: 'Feedback', guestRestricted: false },
+  { label: 'Settings', guestRestricted: true },
+  { label: 'Profile / Sign in', guestRestricted: false },
+] as const;
 
 function getDisplayName(name: string | null | undefined, brand?: string | null): string {
   if (!name) return 'Unknown';
@@ -619,6 +633,9 @@ const OdaraScreen = ({
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
   const forecastDays = buildForecastDays(selectedDate);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
@@ -2568,20 +2585,160 @@ const OdaraScreen = ({
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
     : (Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : []);
+  const searchHasQuery = searchQuery.trim().length > 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-      <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
-
-        {/* ODARA title — centered on the main card centerline */}
-        <h1
-          className="text-center text-[13px] tracking-[0.42em] font-semibold uppercase text-foreground/90 mt-1 mb-3"
-          style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+      <Sheet
+        open={menuOpen}
+        onOpenChange={(open) => {
+          setMenuOpen(open);
+          if (open) setSearchOpen(false);
+        }}
+      >
+        <SheetContent
+          side="left"
+          className="w-[86vw] border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-[360px]"
         >
-          ODARA
-        </h1>
+          <SheetHeader className="space-y-1 text-left">
+            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
+              Odara
+            </SheetTitle>
+            <SheetDescription className="text-[12px] text-foreground/48">
+              Quiet tools for the scent world.
+            </SheetDescription>
+          </SheetHeader>
 
-        {/* Context chips — centered under the ODARA title */}
+          <div className="mt-6 flex flex-col gap-1">
+            {ODARA_MENU_ITEMS.map((item) => {
+              const disabledForGuest = isGuestMode && item.guestRestricted;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  disabled={disabledForGuest}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] transition-colors ${
+                    disabledForGuest
+                      ? 'cursor-not-allowed text-foreground/30'
+                      : 'text-foreground/82 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {disabledForGuest && (
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/28">
+                      Sign-in required
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 border-t border-white/8 pt-4">
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="flex w-full items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] text-foreground/82 transition-colors hover:bg-white/[0.04]"
+            >
+              <span>Sign out</span>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={searchOpen}
+        onOpenChange={(open) => {
+          setSearchOpen(open);
+          if (open) setMenuOpen(false);
+          if (!open) setSearchQuery('');
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-md"
+        >
+          <SheetHeader className="space-y-1 text-left">
+            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
+              Search
+            </SheetTitle>
+            <SheetDescription className="text-[12px] text-foreground/48">
+              Search across fragrances, notes, accords, brands, and families.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-5">
+            <Input
+              autoFocus
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search fragrances, notes, accords, brands…"
+              className="h-11 rounded-[16px] border-white/10 bg-white/[0.03] px-4 text-[14px] text-foreground placeholder:text-foreground/34 focus-visible:ring-white/15"
+            />
+          </div>
+
+          <div
+            className="mt-4 rounded-[20px] border border-white/8 bg-white/[0.02] px-4 py-5"
+            style={{ minHeight: '220px' }}
+          >
+            {/* TODO: wire the search sheet to a real Odara search contract when a backend search RPC/query exists. */}
+            {!searchHasQuery ? (
+              <p className="text-[14px] text-foreground/62">
+                Search your scent world.
+              </p>
+            ) : (
+              <p className="text-[14px] text-foreground/52">
+                Nothing found yet. Try a fragrance, brand, note, accord, or family.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
+        <div className="relative mb-3 flex items-center justify-between">
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={() => {
+              setSearchOpen(false);
+              setMenuOpen(true);
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M4 7h16" />
+              <path d="M4 12h16" />
+              <path d="M4 17h16" />
+            </svg>
+          </button>
+
+          <div
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
+            style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+          >
+            ODARA
+          </div>
+
+          <button
+            type="button"
+            aria-label="Open search"
+            onClick={() => {
+              setMenuOpen(false);
+              setSearchOpen(true);
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M16 16l4 4" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Context chips — centered under the top bar */}
         <div className="flex gap-1.5 mb-3 justify-center">
           {CONTEXTS.map(ctx => (
             <button
