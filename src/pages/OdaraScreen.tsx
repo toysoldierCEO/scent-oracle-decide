@@ -14,6 +14,38 @@ import { haptic } from "@/lib/haptics";
 type GuestModeKey = 'balance' | 'bold' | 'smooth' | 'wild';
 const GUEST_DEFAULT_MODE_ORDER: GuestModeKey[] = ['balance', 'bold', 'smooth', 'wild'];
 
+const REASON_CHIP_LABELS = [
+  'Signature',
+  'Rain-Ready',
+  'Cool-Day Warmth',
+  'Warm-Day Fresh',
+  'All-Day Drydown',
+  'Quiet Projection',
+  'Rotation Balance',
+  'Smooth Drydown',
+  'Soft Edge',
+  'Dark Polish',
+  'Deep Drydown',
+] as const;
+
+type ReasonChipLabel = typeof REASON_CHIP_LABELS[number];
+
+const REASON_CHIP_EXPLANATIONS: Record<ReasonChipLabel, string> = {
+  'Signature': 'This sits close to the center of what you consistently reach for.',
+  'Rain-Ready': 'Damp air won’t flatten this one; it keeps its shape when the weather turns wet.',
+  'Cool-Day Warmth': 'Cooler air lets the warmer parts of this scent show up without feeling heavy.',
+  'Warm-Day Fresh': 'Heat can thicken denser scents, so this one wins by staying lighter and cleaner in warm air.',
+  'All-Day Drydown': 'The drydown is the strength here; it stays good long after the opening fades.',
+  'Quiet Projection': 'It stays present without filling the room, which is why it wins today.',
+  'Rotation Balance': 'You’ve leaned one way lately, and this restores balance without feeling random.',
+  'Smooth Drydown': 'The finish is soft and blended, which is the main reason it works today.',
+  'Soft Edge': 'There’s definition here, but it’s rounded enough to stay easy to wear.',
+  'Dark Polish': 'Richer darker notes win here, but they stay refined instead of rough.',
+  'Deep Drydown': 'The later hours are the payoff here; the base gets fuller and more resonant as it wears.',
+};
+
+const REASON_CHIP_LABEL_SET = new Set<string>(REASON_CHIP_LABELS);
+
 type GuestRenderSource =
   | 'guest_main_bundle'
   | 'guest_selected_alternate'
@@ -40,10 +72,37 @@ interface ResolvedGuestCardVM {
   modeLayerStack: any[];
   alternates: any[];
   renderedFromFullBundle: boolean;
+  reasonChipLabel: ReasonChipLabel | null;
+  reasonChipExplanation: string | null;
 }
 
 function isGuestModeKey(value: any): value is GuestModeKey {
   return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
+}
+
+function resolveReasonChip(
+  rawLabel: unknown,
+  rawExplanation: unknown,
+): { label: ReasonChipLabel; explanation: string | null } | null {
+  if (typeof rawLabel !== 'string') return null;
+  const trimmedLabel = rawLabel.trim();
+  if (!REASON_CHIP_LABEL_SET.has(trimmedLabel)) return null;
+  const label = trimmedLabel as ReasonChipLabel;
+  const explanation = typeof rawExplanation === 'string' && rawExplanation.trim().length > 0
+    ? rawExplanation.trim()
+    : REASON_CHIP_EXPLANATIONS[label];
+  return { label, explanation };
+}
+
+function readReasonChipFromSources(
+  ...sources: any[]
+): { label: ReasonChipLabel; explanation: string | null } | null {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const resolved = resolveReasonChip(source.reason_chip_label, source.reason_chip_explanation);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 function resolveGuestCardVM(
@@ -101,6 +160,7 @@ function resolveGuestCardVM(
       : Array.isArray(bundle?.layer?.tokens)
         ? bundle.layer.tokens
         : [];
+  const reasonChip = readReasonChipFromSources(bundle?.hero, bundle, main?.hero, main, payload);
 
   return {
     source: state.source,
@@ -121,6 +181,8 @@ function resolveGuestCardVM(
     modeLayerStack,
     alternates: altBundles,
     renderedFromFullBundle: true,
+    reasonChipLabel: reasonChip?.label ?? null,
+    reasonChipExplanation: reasonChip?.explanation ?? null,
   };
 }
 
@@ -226,6 +288,8 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
 export interface OraclePick {
   fragrance_id: string; name: string; family: string; reason: string;
   brand: string; notes: string[]; accords: string[];
+  reason_chip_label?: string | null;
+  reason_chip_explanation?: string | null;
 }
 
 export interface OracleLayer {
@@ -243,6 +307,8 @@ export interface OracleLayer {
 export interface OracleAlternate {
   fragrance_id: string; name: string; family: string; reason: string;
   brand?: string; notes?: string[]; accords?: string[];
+  reason_chip_label?: string | null;
+  reason_chip_explanation?: string | null;
 }
 
 /** Home hero payload shape from get_todays_oracle_home_v1 / get_guest_oracle_home_v1.
@@ -316,6 +382,8 @@ interface QueueCard {
   collection_status: string;
   is_in_collection: boolean;
   preview: any;
+  reason_chip_label?: string | null;
+  reason_chip_explanation?: string | null;
 }
 
 /** Normalized card for display — shared between hero and queue */
@@ -327,6 +395,8 @@ interface DisplayCard {
   brand: string;
   notes: string[];
   accords: string[];
+  reason_chip_label?: string | null;
+  reason_chip_explanation?: string | null;
   isHero: boolean; // true = oracle hero, false = queue card
 }
 
@@ -492,6 +562,8 @@ function normalizeAlternateRow(row: any): OracleAlternate | null {
     brand,
     notes,
     accords,
+    reason_chip_label: row.reason_chip_label ?? preview.reason_chip_label ?? null,
+    reason_chip_explanation: row.reason_chip_explanation ?? preview.reason_chip_explanation ?? null,
   };
 }
 
@@ -506,6 +578,8 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
     brand: qc.brand ?? '',
     notes: Array.isArray(preview.notes) ? preview.notes : [],
     accords: Array.isArray(preview.accords) ? preview.accords : [],
+    reason_chip_label: qc.reason_chip_label ?? preview.reason_chip_label ?? null,
+    reason_chip_explanation: qc.reason_chip_explanation ?? preview.reason_chip_explanation ?? null,
     isHero: false,
   };
 }
@@ -545,6 +619,7 @@ const OdaraScreen = ({
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
   const forecastDays = buildForecastDays(selectedDate);
+  const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const suppressCardClickRef = useRef(false);
@@ -722,6 +797,8 @@ const OdaraScreen = ({
       modeLayerStack: resolved.modeLayerStack,
       alternates: resolved.alternates,
       renderedFromFullBundle: resolved.renderedFromFullBundle,
+      reasonChipLabel: resolved.reasonChipLabel,
+      reasonChipExplanation: resolved.reasonChipExplanation,
     };
   }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, selectedContext, selectedDate]);
 
@@ -1402,6 +1479,11 @@ const OdaraScreen = ({
         : Array.isArray(o?.hero_tokens) ? o.hero_tokens
         : [])
       : [];
+    const reasonChip = readReasonChipFromSources(
+      isHeroCard ? v6?.hero : null,
+      isHeroCard ? o?.today_pick : null,
+      visibleCard,
+    );
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const visibleLayer = visibleModeEntry;
@@ -1431,6 +1513,8 @@ const OdaraScreen = ({
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
+      reasonChipLabel: reasonChip?.label ?? null,
+      reasonChipExplanation: reasonChip?.explanation ?? null,
     };
   }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion]);
 
@@ -1850,6 +1934,10 @@ const OdaraScreen = ({
     suppressCardClickRef.current = false;
   }, [selectedDate]);
 
+  useEffect(() => {
+    setReasonChipExpanded(false);
+  }, [visibleCard?.fragrance_id, selectedDate, selectedContext, isGuestMode, selectedAlternateIdx]);
+
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
    *   - guest: single tap on the main scent-card shell = lock
@@ -2220,6 +2308,8 @@ const OdaraScreen = ({
       brand: alt.brand ?? '',
       notes: alt.notes ?? [],
       accords: alt.accords ?? [],
+      reason_chip_label: alt.reason_chip_label ?? null,
+      reason_chip_explanation: alt.reason_chip_explanation ?? null,
       isHero: false,
     };
 
@@ -2457,6 +2547,27 @@ const OdaraScreen = ({
       isShowingHeroCard,
     });
   }
+
+  const activeReasonChip = isGuestMode
+    ? (
+      visibleGuestRender?.reasonChipLabel
+        ? {
+            label: visibleGuestRender.reasonChipLabel,
+            explanation: visibleGuestRender.reasonChipExplanation ?? null,
+          }
+        : null
+    )
+    : (
+      activeMainCardRender?.reasonChipLabel
+        ? {
+            label: activeMainCardRender.reasonChipLabel,
+            explanation: activeMainCardRender.reasonChipExplanation ?? null,
+          }
+        : null
+    );
+  const heroRailTokens: Array<any> = isGuestMode
+    ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
+    : (Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : []);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -2888,57 +2999,61 @@ const OdaraScreen = ({
               );
             })()}
 
-            {/* Signed-in hero token rail — sourced from activeMainCardRender.activeHeroTokens */}
-            {!isGuestMode && (() => {
-              const tokens: Array<any> = activeMainCardRender?.activeHeroTokens ?? [];
-              if (tokens.length === 0) return null;
-              return (
+            {(activeReasonChip || heroRailTokens.length > 0) && (
+              <div className="mt-0.5 mb-3">
                 <div
-                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-2 overflow-x-auto justify-start sm:justify-center w-full"
+                  className="flex flex-nowrap items-center gap-1.5 px-3 overflow-x-auto justify-start w-full"
                   style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                 >
-                  {tokens.map((t, i) => (
-                    <span
-                      key={`mhero-tok-${t.token_key ?? 'tok'}-${i}`}
-                      className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                  {activeReasonChip && (
+                    <button
+                      type="button"
+                      data-no-card-swipe
+                      aria-expanded={reasonChipExpanded}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReasonChipExpanded((expanded) => !expanded);
+                      }}
+                      className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
                       style={{
-                        color: t.color_hex || '#aaa',
-                        border: `1px solid ${(t.color_hex || '#888')}55`,
-                        background: `${(t.color_hex || '#888')}10`,
+                        background: 'rgba(9,9,11,0.82)',
+                        border: '1px solid rgba(255,255,255,0.10)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
                       }}
                     >
-                      {t.token_label}
-                    </span>
-                  ))}
-                </div>
-              );
-            })()}
+                      {activeReasonChip.label}
+                    </button>
+                  )}
 
-            {/* Accords (signed-in) / Hero tokens (guest v5: from visibleGuestRender.activeHeroTokens) */}
-            {isGuestMode ? (() => {
-              const tokens: Array<any> = visibleGuestRender?.activeHeroTokens ?? [];
-              if (tokens.length === 0) return null;
-              return (
-                <div
-                  className="flex flex-nowrap items-center gap-1.5 px-3 mb-3 overflow-x-auto justify-start sm:justify-center w-full"
-                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                >
-                  {tokens.map((t, i) => (
-                    <span
-                      key={`hero-tok-${t.token_key ?? 'tok'}-${i}`}
-                      className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
-                      style={{
-                        color: t.color_hex || '#aaa',
-                        border: `1px solid ${(t.color_hex || '#888')}55`,
-                        background: `${(t.color_hex || '#888')}10`,
-                      }}
-                    >
-                      {t.token_label}
-                    </span>
-                  ))}
+                  {heroRailTokens.map((t, i) => {
+                    const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
+                    if (!tokenLabel) return null;
+                    const tokenColor = t?.color_hex || '#888';
+                    return (
+                      <span
+                        key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
+                        className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                        style={{
+                          color: tokenColor,
+                          border: `1px solid ${tokenColor}55`,
+                          background: `${tokenColor}10`,
+                        }}
+                      >
+                        {tokenLabel}
+                      </span>
+                    );
+                  })}
                 </div>
-              );
-            })() : null /* signed-in: hero tokens rendered above from activeMainCardRender.activeHeroTokens; raw "accords:" text removed per v7 contract — backend tokens are the only approved source */}
+
+                {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
+                  <div className="px-3 pt-2">
+                    <p className="text-[12px] leading-[1.5] text-foreground/72">
+                      {activeReasonChip.explanation}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
             {isGuestMode ? (() => {
