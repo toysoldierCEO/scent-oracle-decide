@@ -1190,61 +1190,6 @@ const OdaraScreen = ({
     fragranceDetailInFlightRef.current.set(fragranceId, request);
     return request;
   }, []);
-
-  const fetchFragranceDetails = useCallback(async (fragranceIds: string[]) => {
-    const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
-    const details = new Map<string, FragranceDetail>();
-    const missingIds: string[] = [];
-
-    for (const fragranceId of uniqueIds) {
-      const cached = fragranceDetailCacheRef.current.get(fragranceId);
-      if (cached) {
-        details.set(fragranceId, cached);
-      } else {
-        missingIds.push(fragranceId);
-      }
-    }
-
-    if (missingIds.length === 0) {
-      return details;
-    }
-
-    try {
-      const { data, error } = await odaraSupabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .in('id', missingIds);
-
-      if (error) {
-        return details;
-      }
-
-      let cacheUpdated = false;
-      for (const row of Array.isArray(data) ? data : []) {
-        if (!row?.id) continue;
-        const detail: FragranceDetail = {
-          id: row.id,
-          name: row.name ?? '',
-          brand: row.brand ?? null,
-          family_key: row.family_key ?? null,
-          notes: Array.isArray(row.notes) ? row.notes : [],
-          accords: Array.isArray(row.accords) ? row.accords : [],
-        };
-        fragranceDetailCacheRef.current.set(row.id, detail);
-        details.set(row.id, detail);
-        cacheUpdated = true;
-      }
-
-      if (cacheUpdated) {
-        setFragranceDetailVersion((version) => version + 1);
-      }
-    } catch {
-      return details;
-    }
-
-    return details;
-  }, []);
-
   useEffect(() => {
     if (isGuestMode || !userId) {
       setWardrobeItems(null);
