@@ -1459,7 +1459,6 @@ const OdaraScreen = ({
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
-  const pickAccords = visibleCard?.accords ? normalizeNotes(visibleCard.accords, 4) : [];
   const getPreviewTone = (dateStr: string) => {
     const lane = lockedSelections[`${dateStr}:${selectedContext}`] ?? null;
     return {
@@ -1553,6 +1552,9 @@ const OdaraScreen = ({
       isHeroCard ? o?.today_pick : null,
       visibleCard,
     );
+    const heroFamilyKey = visibleCard.family ?? '';
+    const heroFamilyColor = FAMILY_COLORS[heroFamilyKey] ?? '#888';
+    const heroFamilyLabel = FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase();
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const visibleLayer = visibleModeEntry;
@@ -1581,9 +1583,14 @@ const OdaraScreen = ({
 
     return {
       activeHero: visibleCard,
+      heroFamilyKey,
+      heroFamilyColor,
+      heroFamilyLabel,
       activeHeroTokens: heroTokensSrc,
+      activeReasonChip: reasonChip,
       activeLayer: visibleLayer,
       activeLayerTokens: layerTokens,
+      layerModes: modeResults,
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
@@ -1591,7 +1598,7 @@ const OdaraScreen = ({
       reasonChipLabel: reasonChip?.label ?? null,
       reasonChipExplanation: reasonChip?.explanation ?? null,
     };
-  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion, signedInVisibleAlternates]);
+  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
@@ -2623,6 +2630,11 @@ const OdaraScreen = ({
     });
   }
 
+  const signedInVisibleHero = activeMainCardRender?.activeHero ?? null;
+  const signedInVisibleLayer = activeMainCardRender?.activeLayer ?? null;
+  const signedInVisibleLayerModes = activeMainCardRender?.layerModes ?? modeResults;
+  const signedInHeroFamilyColor = activeMainCardRender?.heroFamilyColor ?? familyColor;
+  const signedInHeroFamilyLabel = activeMainCardRender?.heroFamilyLabel ?? familyLabel;
   const activeReasonChip = isGuestMode
     ? (
       visibleGuestRender?.reasonChipLabel
@@ -2632,14 +2644,7 @@ const OdaraScreen = ({
           }
         : null
     )
-    : (
-      activeMainCardRender?.reasonChipLabel
-        ? {
-            label: activeMainCardRender.reasonChipLabel,
-            explanation: activeMainCardRender.reasonChipExplanation ?? null,
-          }
-        : null
-    );
+    : (activeMainCardRender?.activeReasonChip ?? null);
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
     : (Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : []);
@@ -3179,23 +3184,23 @@ const OdaraScreen = ({
             >
               {isGuestMode && visibleGuestRender?.activeHero
                 ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
-                : getDisplayName(visibleCard.name, visibleCard.brand)}
+                : getDisplayName(signedInVisibleHero?.name ?? visibleCard.name, signedInVisibleHero?.brand ?? visibleCard.brand)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
               {isGuestMode && visibleGuestRender?.activeHero
                 ? visibleGuestRender.activeHero.brand
-                : visibleCard.brand}
+                : (signedInVisibleHero?.brand ?? visibleCard.brand)}
             </span>
 
             {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
             {!isGuestMode ? (
               <span
                 className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                style={{ color: familyColor }}
+                style={{ color: signedInHeroFamilyColor }}
               >
-                {familyLabel}
+                {signedInHeroFamilyLabel}
               </span>
             ) : (() => {
               const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
@@ -3306,13 +3311,13 @@ const OdaraScreen = ({
               // stopPropagation on its expand/collapse trigger.
               <div data-layer-section>
                 <LayerCard
-                  mainName={visibleCard.name}
-                  mainBrand={visibleCard.brand}
-                  mainNotes={visibleCard.notes}
-                  mainFamily={visibleCard.family}
+                  mainName={signedInVisibleHero?.name ?? visibleCard.name}
+                  mainBrand={signedInVisibleHero?.brand ?? visibleCard.brand}
+                  mainNotes={signedInVisibleHero?.notes ?? visibleCard.notes}
+                  mainFamily={signedInVisibleHero?.family ?? visibleCard.family}
                   mainProjection={null}
-                  layerModes={modeResults}
-                  visibleLayerMode={visibleModeEntry}
+                  layerModes={signedInVisibleLayerModes}
+                  visibleLayerMode={signedInVisibleLayer}
                   selectedMood={selectedMood}
                   onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
