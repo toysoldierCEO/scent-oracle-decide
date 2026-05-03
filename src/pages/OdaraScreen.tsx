@@ -298,6 +298,315 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
   return display;
 }
 
+type WardrobeRoleKey =
+  | 'fresh-clean'
+  | 'citrus-bright'
+  | 'woody-everyday'
+  | 'sweet-comfort'
+  | 'tobacco-boozy'
+  | 'oud-amber'
+  | 'dark-leather';
+
+type WardrobeCoverageState = 'filled' | 'partial' | 'open';
+
+interface WardrobeCollectionItem {
+  fragrance_id: string;
+  name: string;
+  brand: string | null;
+  family_key: string | null;
+  notes: string[];
+  accords: string[];
+  projection: number | null;
+  status: string;
+  statusRank: number;
+}
+
+interface WardrobeRoleDefinition {
+  key: WardrobeRoleKey;
+  label: string;
+  color: string;
+  meaning: string;
+  whyItMatters: string;
+  openDirection: string;
+  openUseCase: string;
+  primaryFamilies: string[];
+  partialFamilies: string[];
+}
+
+interface WardrobeRoleCoverage {
+  role: WardrobeRoleDefinition;
+  score: number;
+  coverageState: WardrobeCoverageState;
+  coveredBy: WardrobeCollectionItem | null;
+}
+
+interface WardrobeBalanceSummary {
+  roles: WardrobeRoleCoverage[];
+  collectionSize: number;
+  filledCount: number;
+  partialCount: number;
+  centerTitle: string;
+  centerSubtitle: string | null;
+  introCopy: string;
+  strongestCoverage: WardrobeRoleCoverage | null;
+  openRoles: WardrobeRoleCoverage[];
+  nextBestRole: WardrobeRoleCoverage | null;
+}
+
+const WARDROBE_STATUS_RANK: Record<string, number> = {
+  signature: 0,
+  owned: 1,
+};
+
+const WARDROBE_ROLE_PRIORITY: WardrobeRoleKey[] = [
+  'citrus-bright',
+  'fresh-clean',
+  'woody-everyday',
+  'sweet-comfort',
+  'tobacco-boozy',
+  'oud-amber',
+  'dark-leather',
+];
+
+const WARDROBE_ROLES: WardrobeRoleDefinition[] = [
+  {
+    key: 'fresh-clean',
+    label: 'Fresh / Clean',
+    color: '#88A8B6',
+    meaning: 'A clean easy lane that keeps the wardrobe light on skin and effortless to reach for.',
+    whyItMatters: 'This role gives the wardrobe a reset point for clearer daytime wear and lighter settings.',
+    openDirection: 'Your next best addition should be a clean fresh scent for reset days and easy everyday wear.',
+    openUseCase: 'Useful for reset days, clean daytime wear, and lighter settings.',
+    primaryFamilies: ['fresh-blue', 'fresh-aquatic'],
+    partialFamilies: ['floral-musk', 'woody-clean'],
+  },
+  {
+    key: 'citrus-bright',
+    label: 'Citrus / Bright',
+    color: '#C6B16D',
+    meaning: 'A brighter lane built around lift, clarity, and a cleaner opening in warm air.',
+    whyItMatters: 'This role helps the wardrobe stay alive in heat, daytime wear, and cleaner social settings.',
+    openDirection: 'Your next best addition should be a bright daytime scent for warm weather and reset days.',
+    openUseCase: 'Useful for warm weather, brighter openings, and daytime clarity.',
+    primaryFamilies: ['citrus-cologne', 'citrus-aromatic', 'fresh-citrus'],
+    partialFamilies: ['fresh-blue', 'aromatic-fougere'],
+  },
+  {
+    key: 'woody-everyday',
+    label: 'Woody / Everyday',
+    color: '#8A9D87',
+    meaning: 'A grounded middle lane with structure, versatility, and an easy everyday reach.',
+    whyItMatters: 'This role gives the wardrobe a dependable center that can move across more contexts without strain.',
+    openDirection: 'Your next best addition should be a versatile woody scent that can carry everyday wear with more structure.',
+    openUseCase: 'Useful for daily wear, work settings, and a steadier center of gravity.',
+    primaryFamilies: ['woody-clean', 'aromatic-fougere', 'green-earthy'],
+    partialFamilies: ['earthy-patchouli', 'citrus-aromatic', 'floral-musk'],
+  },
+  {
+    key: 'sweet-comfort',
+    label: 'Sweet / Comfort',
+    color: '#B894B0',
+    meaning: 'A softer comfort lane that brings warmth, roundness, and an easier emotional pull.',
+    whyItMatters: 'This role keeps the wardrobe from feeling all edge or all freshness by adding a calmer comfort register.',
+    openDirection: 'Your next best addition should be a softer comfort scent with warmth and a smoother emotional pull.',
+    openUseCase: 'Useful for comfort wear, evening ease, and softer colder-weather rotation.',
+    primaryFamilies: ['sweet-gourmand'],
+    partialFamilies: ['floral-rich', 'spicy-warm', 'tobacco-boozy'],
+  },
+  {
+    key: 'tobacco-boozy',
+    label: 'Tobacco / Boozy',
+    color: '#A77A63',
+    meaning: 'A richer textured lane with smoke, warmth, and a more social evening character.',
+    whyItMatters: 'This role gives the wardrobe a more relaxed darker register when cleaner lanes feel too restrained.',
+    openDirection: 'Your next best addition should be a richer tobacco-leaning scent for evening depth and a looser social feel.',
+    openUseCase: 'Useful for evenings, cooler air, and a richer social register.',
+    primaryFamilies: ['tobacco-boozy'],
+    partialFamilies: ['spicy-warm', 'dark-leather', 'earthy-patchouli'],
+  },
+  {
+    key: 'oud-amber',
+    label: 'Oud / Amber',
+    color: '#B28B65',
+    meaning: 'A deep resinous lane with warmth, weight, and a more formal darker polish.',
+    whyItMatters: 'This role gives the wardrobe its denser evening base when richer settings call for more gravity.',
+    openDirection: 'Your next best addition should be an ambered evening scent that adds resinous depth without roughness.',
+    openUseCase: 'Useful for colder evenings, dressier settings, and deeper drydowns.',
+    primaryFamilies: ['oud-amber'],
+    partialFamilies: ['sweet-gourmand', 'dark-leather', 'spicy-warm'],
+  },
+  {
+    key: 'dark-leather',
+    label: 'Dark / Leather',
+    color: '#7A665B',
+    meaning: 'A darker lane built on leathered texture, edge, and a more defined after-hours silhouette.',
+    whyItMatters: 'This role gives the wardrobe a sharper darker contour when softer or fresher lanes are not enough.',
+    openDirection: 'Your next best addition should be a darker leathered scent that adds sharper after-hours definition.',
+    openUseCase: 'Useful for after-hours wear, darker texture, and a more defined silhouette.',
+    primaryFamilies: ['dark-leather'],
+    partialFamilies: ['oud-amber', 'tobacco-boozy', 'earthy-patchouli'],
+  },
+] as const;
+
+function getWardrobeRolePriority(roleKey: WardrobeRoleKey): number {
+  const idx = WARDROBE_ROLE_PRIORITY.indexOf(roleKey);
+  return idx === -1 ? WARDROBE_ROLE_PRIORITY.length : idx;
+}
+
+function dedupeWardrobeItems(items: WardrobeCollectionItem[]): WardrobeCollectionItem[] {
+  const byIdentity = new Map<string, WardrobeCollectionItem>();
+  for (const item of items) {
+    const identityKey = `${item.name.trim().toLowerCase()}|${(item.brand ?? '').trim().toLowerCase()}`;
+    const existing = byIdentity.get(identityKey);
+    if (!existing) {
+      byIdentity.set(identityKey, item);
+      continue;
+    }
+    const shouldReplace =
+      item.statusRank < existing.statusRank ||
+      (item.statusRank === existing.statusRank && (item.projection ?? 0) > (existing.projection ?? 0));
+    if (shouldReplace) {
+      byIdentity.set(identityKey, item);
+    }
+  }
+  return Array.from(byIdentity.values());
+}
+
+function getWardrobeRoleScore(role: WardrobeRoleDefinition, item: WardrobeCollectionItem): number {
+  const familyKey = item.family_key ?? '';
+  if (!familyKey) return 0;
+  let base = 0;
+  if (role.primaryFamilies.includes(familyKey)) {
+    base = 1;
+  } else if (role.partialFamilies.includes(familyKey)) {
+    base = 0.56;
+  }
+  if (base === 0) return 0;
+
+  const signatureBoost = item.status === 'signature' ? 0.06 : 0;
+  const projectionBoost = typeof item.projection === 'number'
+    ? Math.max(0, Math.min(item.projection / 40, 0.08))
+    : 0;
+  return Math.min(1.08, base + signatureBoost + projectionBoost);
+}
+
+function pickNextWardrobeRole(roles: WardrobeRoleCoverage[], collectionSize: number): WardrobeRoleCoverage | null {
+  const notFilled = roles.filter((role) => role.coverageState !== 'filled');
+  const primaryOpen = notFilled.filter((role) => role.coverageState === 'open');
+  const candidatePool = primaryOpen.length > 0 ? primaryOpen : notFilled.length > 0 ? notFilled : roles;
+  if (candidatePool.length === 0) return null;
+
+  const smallWardrobePriority = collectionSize <= 3
+    ? ['citrus-bright', 'fresh-clean', 'woody-everyday', 'sweet-comfort', 'tobacco-boozy', 'oud-amber', 'dark-leather']
+    : WARDROBE_ROLE_PRIORITY;
+
+  return [...candidatePool].sort((a, b) => {
+    const aPriority = smallWardrobePriority.indexOf(a.role.key);
+    const bPriority = smallWardrobePriority.indexOf(b.role.key);
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    if (a.coverageState !== b.coverageState) {
+      const aWeight = a.coverageState === 'open' ? 0 : a.coverageState === 'partial' ? 1 : 2;
+      const bWeight = b.coverageState === 'open' ? 0 : b.coverageState === 'partial' ? 1 : 2;
+      return aWeight - bWeight;
+    }
+    return a.score - b.score;
+  })[0] ?? null;
+}
+
+function buildWardrobeBalanceSummary(items: WardrobeCollectionItem[]): WardrobeBalanceSummary {
+  const roles = WARDROBE_ROLES.map((role) => {
+    const contributors = items
+      .map((item) => ({ item, score: getWardrobeRoleScore(role, item) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (a.item.statusRank !== b.item.statusRank) return a.item.statusRank - b.item.statusRank;
+        return (b.item.projection ?? 0) - (a.item.projection ?? 0);
+      });
+
+    const top = contributors[0] ?? null;
+    const score = top?.score ?? 0;
+    const coverageState: WardrobeCoverageState =
+      score >= 0.94 ? 'filled' : score >= 0.45 ? 'partial' : 'open';
+
+    return {
+      role,
+      score,
+      coverageState,
+      coveredBy: top?.item ?? null,
+    } satisfies WardrobeRoleCoverage;
+  });
+
+  const filledCount = roles.filter((role) => role.coverageState === 'filled').length;
+  const partialCount = roles.filter((role) => role.coverageState === 'partial').length;
+  const collectionSize = items.length;
+  const centerTitle = collectionSize <= 3
+    ? 'Focused capsule'
+    : `${filledCount} / ${WARDROBE_ROLES.length} roles covered`;
+  const centerSubtitle = collectionSize <= 3
+    ? `${filledCount} / ${WARDROBE_ROLES.length} roles covered`
+    : partialCount > 0
+      ? `${partialCount} role${partialCount === 1 ? '' : 's'} in overlap`
+      : 'Balanced wardrobe';
+
+  let introCopy = 'Your wardrobe has enough range to show where coverage is settled and where one open role can add balance.';
+  if (collectionSize === 1) {
+    introCopy = 'Your wardrobe has one clear anchor. Odara can still help you wear it with more intention.';
+  } else if (collectionSize >= 2 && collectionSize <= 3) {
+    introCopy = 'Your wardrobe is focused. Odara will map your strongest roles and identify the one addition that would expand it most.';
+  } else if (collectionSize >= 10) {
+    introCopy = 'Your wardrobe has enough range to analyze balance, overlap, and underused lanes.';
+  }
+
+  const strongestCoverage = [...roles]
+    .filter((role) => role.coverageState !== 'open')
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return getWardrobeRolePriority(a.role.key) - getWardrobeRolePriority(b.role.key);
+    })[0] ?? null;
+
+  const openRoles = [...roles]
+    .filter((role) => role.coverageState !== 'filled')
+    .sort((a, b) => {
+      if (a.coverageState !== b.coverageState) {
+        return a.coverageState === 'open' ? -1 : 1;
+      }
+      if (a.score !== b.score) return a.score - b.score;
+      return getWardrobeRolePriority(a.role.key) - getWardrobeRolePriority(b.role.key);
+    });
+
+  return {
+    roles,
+    collectionSize,
+    filledCount,
+    partialCount,
+    centerTitle,
+    centerSubtitle,
+    introCopy,
+    strongestCoverage,
+    openRoles,
+    nextBestRole: pickNextWardrobeRole(roles, collectionSize),
+  };
+}
+
+function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
+  const angleInRadians = (angleInDegrees - 90) * (Math.PI / 180.0);
+  return {
+    x: cx + (radius * Math.cos(angleInRadians)),
+    y: cy + (radius * Math.sin(angleInRadians)),
+  };
+}
+
+function describeArc(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const start = polarToCartesian(cx, cy, radius, endAngle);
+  const end = polarToCartesian(cx, cy, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+  return [
+    'M', start.x, start.y,
+    'A', radius, radius, 0, largeArcFlag, 0, end.x, end.y,
+  ].join(' ');
+}
+
 /* ── Types ── */
 export interface OraclePick {
   fragrance_id: string; name: string; family: string; reason: string;
@@ -398,6 +707,15 @@ interface QueueCard {
   preview: any;
   reason_chip_label?: string | null;
   reason_chip_explanation?: string | null;
+}
+
+interface FragranceDetail {
+  id: string;
+  name: string;
+  brand: string | null;
+  family_key: string | null;
+  notes: string[];
+  accords: string[];
 }
 
 /** Normalized card for display — shared between hero and queue */
@@ -627,6 +945,37 @@ function buildFallbackRailTokens(
   }));
 }
 
+function resolveDisplayCardWithDetails(
+  card: DisplayCard,
+  detail: FragranceDetail | null | undefined,
+): DisplayCard {
+  if (!detail) return card;
+  return {
+    ...card,
+    name: card.name || detail.name || '',
+    brand: card.brand || detail.brand || '',
+    family: card.family || detail.family_key || '',
+    notes: Array.isArray(card.notes) && card.notes.length > 0 ? card.notes : detail.notes,
+    accords: Array.isArray(card.accords) && card.accords.length > 0 ? card.accords : detail.accords,
+  };
+}
+
+function resolveLayerModeWithDetails(
+  layer: NonNullable<LayerModes[LayerMood]> | null | undefined,
+  detail: FragranceDetail | null | undefined,
+): NonNullable<LayerModes[LayerMood]> | null {
+  if (!layer) return null;
+  if (!detail) return layer;
+  return {
+    ...layer,
+    name: layer.name || detail.name || '',
+    brand: layer.brand || detail.brand || '',
+    family_key: layer.family_key || detail.family_key || '',
+    notes: Array.isArray(layer.notes) && layer.notes.length > 0 ? layer.notes : detail.notes,
+    accords: Array.isArray(layer.accords) && layer.accords.length > 0 ? layer.accords : detail.accords,
+  };
+}
+
 /** Convert an OraclePick to a DisplayCard (hero) */
 function heroToDisplay(pick: OraclePick): DisplayCard {
   return {
@@ -666,6 +1015,10 @@ const OdaraScreen = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
+  const [wardrobeLoading, setWardrobeLoading] = useState(false);
+  const [wardrobeItems, setWardrobeItems] = useState<WardrobeCollectionItem[] | null>(null);
+  const [wardrobeUnavailable, setWardrobeUnavailable] = useState(false);
+  const [selectedWardrobeRoleKey, setSelectedWardrobeRoleKey] = useState<WardrobeRoleKey | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const suppressCardClickRef = useRef(false);
@@ -695,6 +1048,9 @@ const OdaraScreen = ({
   const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
   const [currentCardAlternates, setCurrentCardAlternates] = useState<OracleAlternate[]>([]);
   const [currentCardAlternatesOwnerId, setCurrentCardAlternatesOwnerId] = useState<string | null>(null);
+  const fragranceDetailCacheRef = useRef<Map<string, FragranceDetail>>(new Map());
+  const fragranceDetailInFlightRef = useRef<Map<string, Promise<FragranceDetail | null>>>(new Map());
+  const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
 
   const hasHistory = viewHistory.length > 0;
 
@@ -725,14 +1081,235 @@ const OdaraScreen = ({
       const filtered = excludeId
         ? rows.filter(r => r.fragrance_id !== excludeId)
         : rows;
+      const detailMap = await fetchFragranceDetails(filtered.map((row) => row.fragrance_id));
       console.log('[Odara] queue fetch success', filtered.length, 'cards');
-      return filtered.map(queueCardToDisplay);
+      return filtered.map((row) => resolveDisplayCardWithDetails(
+        queueCardToDisplay(row),
+        detailMap.get(row.fragrance_id) ?? null,
+      ));
     } catch (e: any) {
       console.error('[Odara] queue fetch fail', e?.message);
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
-  }, [userId, selectedContext, selectedDate, isGuestMode]);
+  }, [userId, selectedContext, selectedDate, isGuestMode, fetchFragranceDetails]);
+
+  const fetchFragranceDetail = useCallback(async (fragranceId: string) => {
+    if (!fragranceId) return null;
+    const cached = fragranceDetailCacheRef.current.get(fragranceId);
+    if (cached) return cached;
+
+    const inFlight = fragranceDetailInFlightRef.current.get(fragranceId);
+    if (inFlight) return inFlight;
+
+    const request = (async (): Promise<FragranceDetail | null> => {
+      try {
+        const { data, error } = await odaraSupabase
+          .from('fragrances')
+          .select('id, name, brand, family_key, notes, accords')
+          .eq('id', fragranceId)
+          .maybeSingle();
+
+        if (error || !data?.id) {
+          return null;
+        }
+
+        const detail: FragranceDetail = {
+          id: data.id,
+          name: data.name ?? '',
+          brand: data.brand ?? null,
+          family_key: data.family_key ?? null,
+          notes: Array.isArray(data.notes) ? data.notes : [],
+          accords: Array.isArray(data.accords) ? data.accords : [],
+        };
+
+        fragranceDetailCacheRef.current.set(fragranceId, detail);
+        setFragranceDetailVersion((version) => version + 1);
+        return detail;
+      } catch {
+        return null;
+      } finally {
+        fragranceDetailInFlightRef.current.delete(fragranceId);
+      }
+    })();
+
+    fragranceDetailInFlightRef.current.set(fragranceId, request);
+    return request;
+  }, []);
+
+  const fetchFragranceDetails = useCallback(async (fragranceIds: string[]) => {
+    const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
+    const details = new Map<string, FragranceDetail>();
+    const missingIds: string[] = [];
+
+    for (const fragranceId of uniqueIds) {
+      const cached = fragranceDetailCacheRef.current.get(fragranceId);
+      if (cached) {
+        details.set(fragranceId, cached);
+      } else {
+        missingIds.push(fragranceId);
+      }
+    }
+
+    if (missingIds.length === 0) {
+      return details;
+    }
+
+    try {
+      const { data, error } = await odaraSupabase
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .in('id', missingIds);
+
+      if (error) {
+        return details;
+      }
+
+      let cacheUpdated = false;
+      for (const row of Array.isArray(data) ? data : []) {
+        if (!row?.id) continue;
+        const detail: FragranceDetail = {
+          id: row.id,
+          name: row.name ?? '',
+          brand: row.brand ?? null,
+          family_key: row.family_key ?? null,
+          notes: Array.isArray(row.notes) ? row.notes : [],
+          accords: Array.isArray(row.accords) ? row.accords : [],
+        };
+        fragranceDetailCacheRef.current.set(row.id, detail);
+        details.set(row.id, detail);
+        cacheUpdated = true;
+      }
+
+      if (cacheUpdated) {
+        setFragranceDetailVersion((version) => version + 1);
+      }
+    } catch {
+      return details;
+    }
+
+    return details;
+  }, []);
+
+  useEffect(() => {
+    if (isGuestMode || !userId) {
+      setWardrobeItems(null);
+      setWardrobeUnavailable(true);
+      setWardrobeLoading(false);
+      return;
+    }
+
+    let isActive = true;
+
+    const readWardrobe = async () => {
+      setWardrobeLoading(true);
+      setWardrobeUnavailable(false);
+
+      try {
+        const { data: collectionRows, error: collectionError } = await odaraSupabase
+          .from('user_collection')
+          .select('fragrance_id, status')
+          .eq('user_id', userId)
+          .in('status', ['signature', 'owned']);
+
+        if (collectionError) {
+          if (isActive) {
+            setWardrobeItems(null);
+            setWardrobeUnavailable(true);
+          }
+          return;
+        }
+
+        const rawRows = Array.isArray(collectionRows) ? collectionRows : [];
+        if (rawRows.length === 0) {
+          if (isActive) {
+            setWardrobeItems([]);
+            setWardrobeUnavailable(false);
+          }
+          return;
+        }
+
+        const statusByFragranceId = new Map<string, string>();
+        for (const row of rawRows) {
+          const fragranceId = typeof row?.fragrance_id === 'string' ? row.fragrance_id : '';
+          const status = typeof row?.status === 'string' ? row.status : 'owned';
+          if (!fragranceId) continue;
+          const existing = statusByFragranceId.get(fragranceId);
+          if (!existing || (WARDROBE_STATUS_RANK[status] ?? 9) < (WARDROBE_STATUS_RANK[existing] ?? 9)) {
+            statusByFragranceId.set(fragranceId, status);
+          }
+        }
+
+        const fragranceIds = Array.from(statusByFragranceId.keys());
+        if (fragranceIds.length === 0) {
+          if (isActive) {
+            setWardrobeItems([]);
+            setWardrobeUnavailable(false);
+          }
+          return;
+        }
+
+        const { data: fragranceRows, error: fragranceError } = await odaraSupabase
+          .from('fragrances')
+          .select('id, name, brand, family_key, notes, accords, projection')
+          .in('id', fragranceIds);
+
+        if (fragranceError) {
+          if (isActive) {
+            setWardrobeItems(null);
+            setWardrobeUnavailable(true);
+          }
+          return;
+        }
+
+        const fragranceMap = new Map<string, any>();
+        for (const row of Array.isArray(fragranceRows) ? fragranceRows : []) {
+          if (row?.id) fragranceMap.set(row.id, row);
+        }
+
+        const normalizedItems = dedupeWardrobeItems(
+          fragranceIds
+            .map((fragranceId) => {
+              const fragrance = fragranceMap.get(fragranceId);
+              if (!fragrance) return null;
+              const status = statusByFragranceId.get(fragranceId) ?? 'owned';
+              return {
+                fragrance_id: fragrance.id,
+                name: fragrance.name ?? '',
+                brand: fragrance.brand ?? null,
+                family_key: fragrance.family_key ?? null,
+                notes: Array.isArray(fragrance.notes) ? fragrance.notes : [],
+                accords: Array.isArray(fragrance.accords) ? fragrance.accords : [],
+                projection: typeof fragrance.projection === 'number' ? fragrance.projection : null,
+                status,
+                statusRank: WARDROBE_STATUS_RANK[status] ?? 9,
+              } satisfies WardrobeCollectionItem;
+            })
+            .filter((item): item is WardrobeCollectionItem => item !== null)
+        );
+
+        if (isActive) {
+          setWardrobeItems(normalizedItems);
+          setWardrobeUnavailable(false);
+        }
+      } catch {
+        if (isActive) {
+          setWardrobeItems(null);
+          setWardrobeUnavailable(true);
+        }
+      } finally {
+        if (isActive) {
+          setWardrobeLoading(false);
+        }
+      }
+    };
+
+    void readWardrobe();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isGuestMode, userId]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -1125,6 +1702,19 @@ const OdaraScreen = ({
           interaction_type: row.interaction_type ?? mood,
         };
 
+        if (entry.layer_fragrance_id && !entry.layer_name) {
+          const detail = await fetchFragranceDetail(entry.layer_fragrance_id);
+          if (detail?.name) entry.layer_name = detail.name;
+        }
+        if (entry.layer_fragrance_id && (!entry.layer_family || (!entry.layer_notes.length && !entry.layer_accords.length))) {
+          const detail = await fetchFragranceDetail(entry.layer_fragrance_id);
+          if (detail) {
+            if (!entry.layer_family) entry.layer_family = detail.family_key ?? '';
+            if (!entry.layer_notes.length) entry.layer_notes = detail.notes;
+            if (!entry.layer_accords.length) entry.layer_accords = detail.accords;
+          }
+        }
+
         moodCacheRef.current.set(moodKey, entry);
         console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
         setLayerDebugSource(`rpc:${mood}`);
@@ -1148,7 +1738,7 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode]);
+  }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode, fetchFragranceDetail]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
     // GUEST MODE: source alternates directly from raw payload — no signed-in RPC.
@@ -1528,6 +2118,27 @@ const OdaraScreen = ({
     void fetchMoodForCard(visibleCard.fragrance_id, mood);
   }, [isGuestMode, visibleCard?.fragrance_id, signedInVisibleIsHeroCard, selectedMood, slotPrefix, fetchMoodForCard]);
 
+  useEffect(() => {
+    if (isGuestMode) return;
+
+    const visibleHeroNeedsDetail = !!visibleCard?.fragrance_id
+      && (!Array.isArray(visibleCard.notes) || visibleCard.notes.length === 0)
+      && (!Array.isArray(visibleCard.accords) || visibleCard.accords.length === 0);
+    if (visibleHeroNeedsDetail) {
+      void fetchFragranceDetail(visibleCard!.fragrance_id);
+    }
+
+    const visibleLayerId = visibleModeEntry?.id ?? null;
+    const visibleLayerHasTokens = Array.isArray((visibleModeEntry as any)?.tokens) && (visibleModeEntry as any).tokens.length > 0;
+    const visibleLayerNeedsDetail = !!visibleLayerId
+      && !visibleLayerHasTokens
+      && (!Array.isArray(visibleModeEntry?.notes) || visibleModeEntry.notes.length === 0)
+      && (!Array.isArray(visibleModeEntry?.accords) || visibleModeEntry.accords.length === 0);
+    if (visibleLayerNeedsDetail) {
+      void fetchFragranceDetail(visibleLayerId!);
+    }
+  }, [isGuestMode, visibleCard, visibleModeEntry, fetchFragranceDetail]);
+
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
     if (isGuestMode || !visibleCard) return null;
@@ -1538,6 +2149,9 @@ const OdaraScreen = ({
     const heroId = (v6?.hero?.fragrance_id ?? o?.today_pick?.fragrance_id) ?? null;
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
+    const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
+    const resolvedHero = resolveDisplayCardWithDetails(visibleCard, heroDetail);
+
     // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
     const heroTokensFromPayload: any[] = isHeroCard
       ? (Array.isArray(v6?.hero_tokens) ? v6.hero_tokens
@@ -1546,18 +2160,24 @@ const OdaraScreen = ({
       : [];
     const heroTokensSrc: any[] = heroTokensFromPayload.length > 0
       ? heroTokensFromPayload
-      : buildFallbackRailTokens(visibleCard.accords, visibleCard.notes);
+      : buildFallbackRailTokens(resolvedHero.accords, resolvedHero.notes);
     const reasonChip = readReasonChipFromSources(
       isHeroCard ? v6?.hero : null,
       isHeroCard ? o?.today_pick : null,
-      visibleCard,
+      resolvedHero,
     );
-    const heroFamilyKey = visibleCard.family ?? '';
+    const heroFamilyKey = resolvedHero.family ?? '';
     const heroFamilyColor = FAMILY_COLORS[heroFamilyKey] ?? '#888';
     const heroFamilyLabel = FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase();
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
-    const visibleLayer = visibleModeEntry;
+    const visibleLayerDetail = visibleModeEntry?.id
+      ? (fragranceDetailCacheRef.current.get(visibleModeEntry.id) ?? null)
+      : null;
+    const visibleLayer = resolveLayerModeWithDetails(visibleModeEntry, visibleLayerDetail);
+
+    const layerFamilyKey = visibleLayer?.family_key ?? '';
+    const layerFamilyLabel = layerFamilyKey ? (FAMILY_LABELS[layerFamilyKey] ?? layerFamilyKey.toUpperCase()) : '';
 
     // Layer tokens — visibleLayer.tokens FIRST (per-layer in the stack),
     // then payload.layer_tokens (balance hero fallback only), then [].
@@ -1582,13 +2202,15 @@ const OdaraScreen = ({
     }
 
     return {
-      activeHero: visibleCard,
+      activeHero: resolvedHero,
       heroFamilyKey,
       heroFamilyColor,
       heroFamilyLabel,
       activeHeroTokens: heroTokensSrc,
       activeReasonChip: reasonChip,
       activeLayer: visibleLayer,
+      activeLayerFamilyKey: layerFamilyKey,
+      activeLayerFamilyLabel: layerFamilyLabel,
       activeLayerTokens: layerTokens,
       layerModes: modeResults,
       selectedMode: selectedMood,
@@ -1598,7 +2220,7 @@ const OdaraScreen = ({
       reasonChipLabel: reasonChip?.label ?? null,
       reasonChipExplanation: reasonChip?.explanation ?? null,
     };
-  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates]);
+  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
@@ -2648,7 +3270,94 @@ const OdaraScreen = ({
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
     : (Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : []);
+  const wardrobeSummary = useMemo(
+    () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
+      ? buildWardrobeBalanceSummary(wardrobeItems)
+      : null,
+    [wardrobeItems]
+  );
+  const selectedWardrobeRole = useMemo(
+    () => wardrobeSummary?.roles.find((role) => role.role.key === selectedWardrobeRoleKey) ?? null,
+    [wardrobeSummary, selectedWardrobeRoleKey]
+  );
+  const wardrobePreviewOpenRoles = wardrobeSummary?.openRoles.slice(0, 2) ?? [];
   const searchHasQuery = searchQuery.trim().length > 0;
+
+  const wardrobeChart = wardrobeSummary ? (() => {
+    const size = 244;
+    const center = size / 2;
+    const radius = 84;
+    const strokeWidth = 20;
+    const gapDegrees = 7;
+    const segmentSpan = (360 - (gapDegrees * wardrobeSummary.roles.length)) / wardrobeSummary.roles.length;
+
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+        <defs>
+          <filter id="wardrobe-segment-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {wardrobeSummary.roles.map((entry, index) => {
+          const startAngle = -90 + (index * (segmentSpan + gapDegrees));
+          const endAngle = startAngle + segmentSpan;
+          const overlayMultiplier =
+            entry.coverageState === 'filled' ? 1 : entry.coverageState === 'partial' ? 0.62 : 0;
+          const overlayEndAngle = startAngle + (segmentSpan * overlayMultiplier);
+
+          return (
+            <g
+              key={entry.role.key}
+              role="button"
+              tabIndex={0}
+              aria-label={entry.role.label}
+              className="cursor-pointer outline-none"
+              onClick={() => setSelectedWardrobeRoleKey(entry.role.key)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedWardrobeRoleKey(entry.role.key);
+                }
+              }}
+            >
+              <path
+                d={describeArc(center, center, radius, startAngle, endAngle)}
+                fill="none"
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+              {overlayMultiplier > 0 && (
+                <path
+                  d={describeArc(center, center, radius, startAngle, overlayEndAngle)}
+                  fill="none"
+                  stroke={entry.role.color}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeOpacity={entry.coverageState === 'filled' ? 0.92 : 0.56}
+                  filter="url(#wardrobe-segment-glow)"
+                />
+              )}
+            </g>
+          );
+        })}
+
+        <circle
+          cx={center}
+          cy={center}
+          r={60}
+          fill="rgba(9,9,11,0.86)"
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth="1"
+        />
+      </svg>
+    );
+  })() : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -2707,6 +3416,83 @@ const OdaraScreen = ({
               <span>Sign out</span>
             </button>
           </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={!!selectedWardrobeRole}
+        onOpenChange={(open) => {
+          if (!open) setSelectedWardrobeRoleKey(null);
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="border-white/10 bg-[#11100e]/95 px-5 pt-6 pb-7 text-foreground backdrop-blur-2xl"
+        >
+          {selectedWardrobeRole && (
+            <>
+              <SheetHeader className="space-y-2 text-left">
+                <SheetTitle className="text-[20px] font-normal text-foreground" style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}>
+                  {selectedWardrobeRole.role.label}
+                </SheetTitle>
+                <SheetDescription className="text-[13px] leading-[1.55] text-foreground/56">
+                  {selectedWardrobeRole.role.meaning}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-5 space-y-4">
+                <div
+                  className="rounded-[20px] px-4 py-4"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/42">
+                      {selectedWardrobeRole.coverageState === 'filled'
+                        ? 'Covered'
+                        : selectedWardrobeRole.coverageState === 'partial'
+                          ? 'Partial coverage'
+                          : 'Open role'}
+                    </span>
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{
+                        background: selectedWardrobeRole.role.color,
+                        opacity: selectedWardrobeRole.coverageState === 'open' ? 0.28 : selectedWardrobeRole.coverageState === 'partial' ? 0.58 : 0.92,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[15px] leading-[1.55] text-foreground/82">
+                    {selectedWardrobeRole.coveredBy
+                      ? `${selectedWardrobeRole.coverageState === 'filled' ? 'Covered by' : 'Partly held by'} ${getDisplayName(selectedWardrobeRole.coveredBy.name, selectedWardrobeRole.coveredBy.brand)}.`
+                      : 'No owned scent is holding this role yet.'}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">
+                    Why it matters
+                  </span>
+                  <p className="text-[14px] leading-[1.65] text-foreground/72">
+                    {selectedWardrobeRole.role.whyItMatters}
+                  </p>
+                </div>
+
+                {selectedWardrobeRole.coverageState !== 'filled' && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">
+                      Next addition direction
+                    </span>
+                    <p className="text-[14px] leading-[1.65] text-foreground/72">
+                      {selectedWardrobeRole.role.openDirection}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
@@ -3491,6 +4277,146 @@ const OdaraScreen = ({
             })}
           </div>
         </div>
+
+        <section
+          className="mt-3.5 rounded-[24px] px-4 py-4"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(8,8,10,0.92) 100%)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            boxShadow: '0 20px 48px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.04)',
+            backdropFilter: 'blur(24px)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3
+                className="text-[24px] leading-[1.04] text-foreground"
+                style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+              >
+                Wardrobe Balance
+              </h3>
+              <p className="mt-1 text-[13px] leading-[1.6] text-foreground/54 max-w-[28rem]">
+                {wardrobeSummary?.introCopy ?? 'Add a few scents to reveal your wardrobe balance.'}
+              </p>
+            </div>
+            {wardrobeSummary && (
+              <span className="mt-1 text-[10px] uppercase tracking-[0.16em] text-foreground/34">
+                Capsule map
+              </span>
+            )}
+          </div>
+
+          {wardrobeLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12">
+              <div className="h-8 w-8 rounded-full border border-white/14 border-t-white/46 animate-spin" />
+              <p className="text-[13px] text-foreground/48">
+                Mapping wardrobe balance…
+              </p>
+            </div>
+          ) : wardrobeSummary ? (
+            <div className="mt-4">
+              <div className="flex flex-col items-center gap-3">
+                <div className="relative flex h-[244px] w-[244px] items-center justify-center">
+                  {wardrobeChart}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
+                    <span
+                      className="text-[24px] leading-[1.08] text-foreground"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                    >
+                      {wardrobeSummary.centerTitle}
+                    </span>
+                    {wardrobeSummary.centerSubtitle && (
+                      <span className="mt-1 text-[11px] uppercase tracking-[0.12em] text-foreground/42">
+                        {wardrobeSummary.centerSubtitle}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid w-full gap-3 pt-1 md:grid-cols-3">
+                  <div
+                    className="rounded-[18px] px-4 py-3"
+                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
+                      Strongest Coverage
+                    </span>
+                    {wardrobeSummary.strongestCoverage ? (
+                      <>
+                        <p className="mt-2 text-[15px] text-foreground/82">
+                          {wardrobeSummary.strongestCoverage.role.label}
+                        </p>
+                        <p className="mt-1 text-[13px] leading-[1.55] text-foreground/54">
+                          Covered by {getDisplayName(
+                            wardrobeSummary.strongestCoverage.coveredBy?.name ?? '',
+                            wardrobeSummary.strongestCoverage.coveredBy?.brand ?? null
+                          )}.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-[13px] leading-[1.55] text-foreground/48">
+                        Coverage will resolve once a few owned scents are in place.
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    className="rounded-[18px] px-4 py-3"
+                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
+                      Open Roles
+                    </span>
+                    {wardrobePreviewOpenRoles.length > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        {wardrobePreviewOpenRoles.map((role) => (
+                          <button
+                            key={role.role.key}
+                            type="button"
+                            onClick={() => setSelectedWardrobeRoleKey(role.role.key)}
+                            className="w-full rounded-[14px] px-3 py-2 text-left transition-colors hover:bg-white/[0.03]"
+                          >
+                            <p className="text-[14px] text-foreground/80">{role.role.label}</p>
+                            <p className="mt-1 text-[12px] leading-[1.5] text-foreground/50">
+                              {role.role.openUseCase}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[13px] leading-[1.55] text-foreground/48">
+                        Coverage is settled across all seven roles.
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    className="rounded-[18px] px-4 py-3"
+                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
+                      Next Best Addition
+                    </span>
+                    <p className="mt-2 text-[13px] leading-[1.6] text-foreground/58">
+                      {wardrobeSummary.nextBestRole?.role.openDirection ?? 'Coverage is already broad enough that the next move can stay personal rather than structural.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="mt-4 rounded-[20px] px-4 py-8 text-center"
+              style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <p className="text-[14px] leading-[1.65] text-foreground/52">
+                {wardrobeUnavailable || isGuestMode
+                  ? 'Add a few scents to reveal your wardrobe balance.'
+                  : 'Add a few scents to reveal your wardrobe balance.'}
+              </p>
+            </div>
+          )}
+        </section>
 
         {/* Sign out */}
         <button
