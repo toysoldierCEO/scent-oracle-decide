@@ -598,6 +598,35 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
   };
 }
 
+function buildFallbackRailTokens(
+  accords: string[] | null | undefined,
+  notes: string[] | null | undefined,
+): any[] {
+  const labels = [
+    ...normalizeNotes(Array.isArray(accords) ? accords : [], 4),
+    ...normalizeNotes(Array.isArray(notes) ? notes : [], 4),
+  ];
+  const uniqueLabels: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLabel of labels) {
+    const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueLabels.push(label);
+    if (uniqueLabels.length >= 4) break;
+  }
+
+  return uniqueLabels.map((label, idx) => ({
+    token_key: `fallback_${idx}_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+    token_label: label,
+    label,
+    color_hex: '#b8b0a4',
+  }));
+}
+
 /** Convert an OraclePick to a DisplayCard (hero) */
 function heroToDisplay(pick: OraclePick): DisplayCard {
   return {
@@ -665,6 +694,7 @@ const OdaraScreen = ({
   // Key: `${date}|${context}|${fragranceId}` → OracleAlternate[]
   const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
   const [currentCardAlternates, setCurrentCardAlternates] = useState<OracleAlternate[]>([]);
+  const [currentCardAlternatesOwnerId, setCurrentCardAlternatesOwnerId] = useState<string | null>(null);
 
   const hasHistory = viewHistory.length > 0;
 
@@ -1210,6 +1240,7 @@ const OdaraScreen = ({
     setActiveOracle(null);
     setLayerDebugSource('clearing');
     setCurrentCardAlternates([]);
+    setCurrentCardAlternatesOwnerId(null);
     setQueue([]);
     setQueuePointer(0);
     setViewHistory([]);
@@ -1267,6 +1298,8 @@ const OdaraScreen = ({
     // viewHistory is NOT cleared here — slot changes clear it in Effect 1 above
     setPromotedAltId(null);
     setLayerExpanded(false);
+    setCurrentCardAlternates([]);
+    setCurrentCardAlternatesOwnerId(null);
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
 
@@ -1380,16 +1413,20 @@ const OdaraScreen = ({
   useEffect(() => {
     if (!visibleCard) {
       setCurrentCardAlternates([]);
+      setCurrentCardAlternatesOwnerId(null);
       return;
     }
 
     const capturedSlot = stateKey;
+    const capturedCardId = visibleCard.fragrance_id;
     let isActive = true;
     setCurrentCardAlternates([]);
+    setCurrentCardAlternatesOwnerId(null);
 
     resolveAlternatesForCard(visibleCard).then((alternates) => {
       if (isActive && activeSlotRef.current === capturedSlot) {
         setCurrentCardAlternates(alternates);
+        setCurrentCardAlternatesOwnerId(capturedCardId);
       }
     });
 
@@ -1453,6 +1490,9 @@ const OdaraScreen = ({
   //   layer → visibleLayer.tokens ?? payload.layer_tokens (balance only) ?? []
   // ────────────────────────────────────────────────────────────────────
   const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
+  const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (activeOracle as any)?.today_pick?.fragrance_id ?? (oracle as any)?.today_pick?.fragrance_id ?? null;
+  const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
+  const signedInVisibleAlternates = currentCardAlternatesOwnerId === visibleCard?.fragrance_id ? currentCardAlternates : [];
 
   // First-paint mode results — derived directly from v6 layer_modes (preview
   // stack) instead of the slot-scoped mood cache. The cache is still used as
@@ -1460,6 +1500,7 @@ const OdaraScreen = ({
   const modeResults: LayerModes = useMemo(() => {
     const lm: any = v6Payload?.layer_modes ?? (activeOracle as any)?.layer_modes ?? null;
     const fromV6 = (mood: LayerMood) => {
+      if (!signedInVisibleIsHeroCard) return null;
       const block = lm?.[mood] ?? null;
       if (!block) return null;
       const idx = signedInLayerIdxByMood[mood] ?? 0;
@@ -1477,8 +1518,16 @@ const OdaraScreen = ({
     };
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion]);
+  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard]);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
+
+  useEffect(() => {
+    if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
+    const mood = selectedMood ?? 'balance';
+    const moodKey = `${slotPrefix}|${visibleCard.fragrance_id}|${mood}`;
+    if (moodCacheRef.current.has(moodKey)) return;
+    void fetchMoodForCard(visibleCard.fragrance_id, mood);
+  }, [isGuestMode, visibleCard?.fragrance_id, signedInVisibleIsHeroCard, selectedMood, slotPrefix, fetchMoodForCard]);
 
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
@@ -1491,11 +1540,14 @@ const OdaraScreen = ({
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
     // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
-    const heroTokensSrc: any[] = isHeroCard
+    const heroTokensFromPayload: any[] = isHeroCard
       ? (Array.isArray(v6?.hero_tokens) ? v6.hero_tokens
         : Array.isArray(o?.hero_tokens) ? o.hero_tokens
         : [])
       : [];
+    const heroTokensSrc: any[] = heroTokensFromPayload.length > 0
+      ? heroTokensFromPayload
+      : buildFallbackRailTokens(visibleCard.accords, visibleCard.notes);
     const reasonChip = readReasonChipFromSources(
       isHeroCard ? v6?.hero : null,
       isHeroCard ? o?.today_pick : null,
@@ -1512,7 +1564,7 @@ const OdaraScreen = ({
     const stackIdx = signedInLayerIdxByMood[selectedMood] ?? 0;
     const stackPick: any = stackArr.length > 0 ? stackArr[stackIdx % stackArr.length] : stackBlock;
     let layerTokens: any[] = [];
-    if (Array.isArray(stackPick?.tokens) && stackPick.tokens.length > 0) {
+    if (isHeroCard && Array.isArray(stackPick?.tokens) && stackPick.tokens.length > 0) {
       layerTokens = stackPick.tokens;
     } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(v6?.layer_tokens)) {
       layerTokens = v6.layer_tokens;
@@ -1520,6 +1572,11 @@ const OdaraScreen = ({
       layerTokens = o.layer_tokens;
     } else if (Array.isArray((visibleLayer as any)?.tokens)) {
       layerTokens = (visibleLayer as any).tokens;
+    } else if (visibleLayer) {
+      layerTokens = buildFallbackRailTokens(
+        Array.isArray((visibleLayer as any)?.accords) ? (visibleLayer as any).accords : [],
+        Array.isArray((visibleLayer as any)?.notes) ? (visibleLayer as any).notes : [],
+      );
     }
 
     return {
@@ -1530,10 +1587,11 @@ const OdaraScreen = ({
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
+      activeAlternates: signedInVisibleAlternates,
       reasonChipLabel: reasonChip?.label ?? null,
       reasonChipExplanation: reasonChip?.explanation ?? null,
     };
-  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion]);
+  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, lockState, moodCacheVersion, signedInVisibleAlternates]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
@@ -1683,10 +1741,10 @@ const OdaraScreen = ({
       },
       selectedMode: activeMainCardRender?.selectedMode ?? selectedMood,
       activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
-      alternateCount: Array.isArray((activeOracle as any)?.alternates) ? (activeOracle as any).alternates.length : 0,
+      alternateCount: signedInVisibleAlternates.length,
       modeKeys: ['balance', 'bold', 'smooth', 'wild'].filter(k => !!(modeResults as any)[k]),
     };
-  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood]);
+  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood, signedInVisibleAlternates.length]);
 
   useEffect(() => {
     const vm = activeCardVM;
@@ -2304,8 +2362,8 @@ const OdaraScreen = ({
     swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
   }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
 
-  const visibleAlts = currentCardAlternates;
-  const alternatesRendered = currentCardAlternates.length > 0;
+  const visibleAlts = isGuestMode ? [] : (activeMainCardRender?.activeAlternates ?? []);
+  const alternatesRendered = visibleAlts.length > 0;
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
