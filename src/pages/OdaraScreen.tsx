@@ -1064,6 +1064,43 @@ function resolveQueuedHeroDisplayWithDetails(
   };
 }
 
+function mergeQueuedHeroCardSources(
+  ...cards: Array<DisplayCard | null | undefined>
+): DisplayCard | null {
+  const sources = cards.filter(Boolean) as DisplayCard[];
+  if (sources.length === 0) return null;
+
+  const base = sources[0];
+  let bestAccords = sanitizeTokenSource(base.accords);
+  let bestNotes = sanitizeTokenSource(base.notes);
+  let bestTokenCount = buildFallbackRailTokens(bestAccords, bestNotes).length;
+
+  for (const source of sources.slice(1)) {
+    const accords = sanitizeTokenSource(source.accords);
+    const notes = sanitizeTokenSource(source.notes);
+    const tokenCount = buildFallbackRailTokens(accords, notes).length;
+    if (tokenCount > bestTokenCount) {
+      bestAccords = accords;
+      bestNotes = notes;
+      bestTokenCount = tokenCount;
+    }
+  }
+
+  const resolvedReasonChip = readReasonChipFromSources(...sources);
+
+  return {
+    ...base,
+    name: sources.find((source) => source.name)?.name ?? '',
+    brand: sources.find((source) => source.brand)?.brand ?? '',
+    family: sources.find((source) => typeof source.family === 'string' && source.family.trim().length > 0)?.family ?? '',
+    reason: sources.find((source) => source.reason)?.reason ?? '',
+    notes: bestNotes,
+    accords: bestAccords,
+    reason_chip_label: resolvedReasonChip?.label ?? null,
+    reason_chip_explanation: resolvedReasonChip?.explanation ?? null,
+  };
+}
+
 function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard | null | undefined) {
   if (!a || !b) return false;
   return (
@@ -2327,8 +2364,18 @@ const OdaraScreen = ({
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
     const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
+    const queuedHeroSnapshot = !isHeroCard
+      ? (queue.find((card) => card.fragrance_id === visibleCard.fragrance_id) ?? null)
+      : null;
+    const queuedHeroSettled = !isHeroCard
+      ? (signedInQueuedHeroRef.current.get(visibleCard.fragrance_id) ?? null)
+      : null;
     const queuedHeroSource = !isHeroCard
-      ? (signedInQueuedHeroRef.current.get(visibleCard.fragrance_id) ?? visibleCard)
+      ? (mergeQueuedHeroCardSources(
+          queuedHeroSettled,
+          visibleCard,
+          queuedHeroSnapshot,
+        ) ?? visibleCard)
       : visibleCard;
     const resolvedHero = isHeroCard
       ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
@@ -2346,6 +2393,7 @@ const OdaraScreen = ({
     const reasonChip = readReasonChipFromSources(
       isHeroCard ? v6?.hero : null,
       isHeroCard ? o?.today_pick : null,
+      !isHeroCard ? queuedHeroSource : null,
       resolvedHero,
     );
     const heroFamilyKey = resolvedHero.family ?? '';
@@ -2420,7 +2468,7 @@ const OdaraScreen = ({
       reasonChipExplanation: reasonChip?.explanation ?? null,
       queuedSurfacesReady: layerSurfacesReady,
     };
-  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
