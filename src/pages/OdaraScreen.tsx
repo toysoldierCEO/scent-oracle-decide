@@ -1062,6 +1062,22 @@ function resolveQueuedHeroDisplayWithDetails(
   };
 }
 
+function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard | null | undefined) {
+  if (!a || !b) return false;
+  return (
+    a.fragrance_id === b.fragrance_id &&
+    a.name === b.name &&
+    a.brand === b.brand &&
+    a.family === b.family &&
+    a.reason_chip_label === b.reason_chip_label &&
+    a.reason_chip_explanation === b.reason_chip_explanation &&
+    a.notes.length === b.notes.length &&
+    a.notes.every((note, idx) => note === b.notes[idx]) &&
+    a.accords.length === b.accords.length &&
+    a.accords.every((accord, idx) => accord === b.accords[idx])
+  );
+}
+
 function resolveLayerModeWithDetails(
   layer: NonNullable<LayerModes[LayerMood]> | null | undefined,
   detail: FragranceDetail | null | undefined,
@@ -1166,9 +1182,25 @@ const OdaraScreen = ({
   const [currentCardAlternatesOwnerId, setCurrentCardAlternatesOwnerId] = useState<string | null>(null);
   const fragranceDetailCacheRef = useRef<Map<string, FragranceDetail>>(new Map());
   const fragranceDetailInFlightRef = useRef<Map<string, Promise<FragranceDetail | null>>>(new Map());
+  const signedInQueuedHeroRef = useRef<Map<string, DisplayCard>>(new Map());
+  const [signedInQueuedHeroVersion, setSignedInQueuedHeroVersion] = useState(0);
   const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
 
   const hasHistory = viewHistory.length > 0;
+
+  const commitSignedInQueuedHero = useCallback((card: DisplayCard, detail: FragranceDetail | null | undefined) => {
+    if (isGuestMode || card.isHero) {
+      return card;
+    }
+
+    const resolved = resolveQueuedHeroDisplayWithDetails(card, detail);
+    const previous = signedInQueuedHeroRef.current.get(card.fragrance_id);
+    if (!areSameDisplayCards(previous, resolved)) {
+      signedInQueuedHeroRef.current.set(card.fragrance_id, resolved);
+      setSignedInQueuedHeroVersion((version) => version + 1);
+    }
+    return resolved;
+  }, [isGuestMode]);
 
   const fetchFragranceDetails = useCallback(async (fragranceIds: string[]) => {
     const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
@@ -1253,16 +1285,19 @@ const OdaraScreen = ({
         : rows;
       const detailMap = await fetchFragranceDetails(filtered.map((row) => row.fragrance_id));
       console.log('[Odara] queue fetch success', filtered.length, 'cards');
-      return filtered.map((row) => resolveQueuedHeroDisplayWithDetails(
-        queueCardToDisplay(row),
-        detailMap.get(row.fragrance_id) ?? null,
-      ));
+      return filtered.map((row) => {
+        const resolvedCard = resolveQueuedHeroDisplayWithDetails(
+          queueCardToDisplay(row),
+          detailMap.get(row.fragrance_id) ?? null,
+        );
+        return commitSignedInQueuedHero(resolvedCard, detailMap.get(row.fragrance_id) ?? null);
+      });
     } catch (e: any) {
       console.error('[Odara] queue fetch fail', e?.message);
       setQueueError(e?.message ?? 'Queue fetch failed');
       return [];
     }
-  }, [userId, selectedContext, selectedDate, isGuestMode, fetchFragranceDetails]);
+  }, [userId, selectedContext, selectedDate, isGuestMode, fetchFragranceDetails, commitSignedInQueuedHero]);
 
   const fetchFragranceDetail = useCallback(async (fragranceId: string) => {
     if (!fragranceId) return null;
@@ -2250,7 +2285,15 @@ const OdaraScreen = ({
     const visibleHeroNeedsDetail = !!visibleCard?.fragrance_id
       && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id);
     if (visibleHeroNeedsDetail) {
-      void fetchFragranceDetail(visibleCard!.fragrance_id);
+      void fetchFragranceDetail(visibleCard!.fragrance_id).then((detail) => {
+        if (!detail || !visibleCard || visibleCard.isHero) return;
+        commitSignedInQueuedHero(visibleCard, detail);
+      });
+    } else if (visibleCard && !visibleCard.isHero) {
+      const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
+      if (heroDetail) {
+        commitSignedInQueuedHero(visibleCard, heroDetail);
+      }
     }
 
     const visibleLayerId = visibleModeEntry?.id ?? null;
@@ -2259,7 +2302,7 @@ const OdaraScreen = ({
     if (visibleLayerNeedsDetail) {
       void fetchFragranceDetail(visibleLayerId!);
     }
-  }, [isGuestMode, visibleCard, visibleModeEntry, fetchFragranceDetail, fragranceDetailVersion]);
+  }, [isGuestMode, visibleCard, visibleModeEntry, fetchFragranceDetail, fragranceDetailVersion, commitSignedInQueuedHero]);
 
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
@@ -2272,9 +2315,12 @@ const OdaraScreen = ({
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
     const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
+    const queuedHeroSource = !isHeroCard
+      ? (signedInQueuedHeroRef.current.get(visibleCard.fragrance_id) ?? visibleCard)
+      : visibleCard;
     const resolvedHero = isHeroCard
       ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
-      : resolveQueuedHeroDisplayWithDetails(visibleCard, heroDetail);
+      : resolveQueuedHeroDisplayWithDetails(queuedHeroSource, heroDetail);
 
     // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
     const heroTokensFromPayload: any[] = isHeroCard
@@ -2362,7 +2408,7 @@ const OdaraScreen = ({
       reasonChipExplanation: reasonChip?.explanation ?? null,
       queuedSurfacesReady: layerSurfacesReady,
     };
-  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion]);
+  }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
