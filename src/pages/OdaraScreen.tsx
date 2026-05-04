@@ -1239,6 +1239,44 @@ function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard |
   );
 }
 
+function normalizeFragranceIdentityText(value: string | null | undefined) {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function isSameFragranceIdentity(
+  a: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+  b: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+) {
+  if (!a || !b) return false;
+
+  const aId = a.fragrance_id ?? a.id ?? null;
+  const bId = b.fragrance_id ?? b.id ?? null;
+  if (aId && bId) return aId === bId;
+
+  const aName = normalizeFragranceIdentityText(a.name);
+  const bName = normalizeFragranceIdentityText(b.name);
+  const aBrand = normalizeFragranceIdentityText(a.brand);
+  const bBrand = normalizeFragranceIdentityText(b.brand);
+
+  return !!aName && !!bName && !!aBrand && !!bBrand && aName === bName && aBrand === bBrand;
+}
+
+function pickFirstUniqueDisplayCard(
+  candidates: Array<DisplayCard | null | undefined>,
+  against: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+) {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (!isSameFragranceIdentity(candidate, against)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function resolveLayerModeWithDetails(
   layer: NonNullable<LayerModes[LayerMood]> | null | undefined,
   detail: FragranceDetail | null | undefined,
@@ -1463,6 +1501,25 @@ function toLayerModeFromDisplayCard(
     placement_hint: '',
     spray_guidance: '',
   } as any;
+}
+
+function findFirstUniqueLayerModeCandidate(
+  layerBlock: any,
+  mood: LayerMood,
+  against: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+): { index: number; layer: NonNullable<LayerModes[LayerMood]> } | null {
+  if (!layerBlock) return null;
+
+  const stack = Array.isArray(layerBlock.layers) ? layerBlock.layers : [layerBlock];
+  for (let index = 0; index < stack.length; index += 1) {
+    const candidate = v6LayerToLayerMode(stack[index], mood);
+    if (!candidate) continue;
+    if (!isSameFragranceIdentity(candidate, against)) {
+      return { index, layer: candidate };
+    }
+  }
+
+  return null;
 }
 
 const OdaraScreen = ({
@@ -2774,19 +2831,6 @@ const OdaraScreen = ({
     const resolvedHero = isHeroCard
       ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
       : resolveQueuedHeroDisplayWithDetails(queuedHeroSource, heroDetail);
-    const reasonChip = readReasonChipFromSources(
-      isHeroCard ? v6?.hero : null,
-      isHeroCard ? o?.today_pick : null,
-      !isHeroCard ? queuedHeroSource : null,
-      resolvedHero,
-    );
-    const heroFamilyKey = resolvedHero.family ?? '';
-    const heroFamilyColorForDisplay = heroFamilyKey
-      ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
-      : '#888';
-    const heroFamilyLabelForDisplay = heroFamilyKey
-      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
-      : '';
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const forcedLayerMode = signedInForcedLayerCarryCard
@@ -2797,56 +2841,120 @@ const OdaraScreen = ({
       ? (fragranceDetailCacheRef.current.get(layerSource.id) ?? null)
       : null;
     const resolvedLayer = resolveLayerModeWithDetails(layerSource, visibleLayerDetail);
+
+    let finalHero = resolvedHero;
+    let finalHeroSource = !isHeroCard ? queuedHeroSource : resolvedHero;
+    let finalLayer = resolvedLayer;
+    const duplicateResolution = {
+      kind: 'none' as 'none' | 'replace-main' | 'switch-layer' | 'single-scent',
+      replacementMain: null as DisplayCard | null,
+      preferredLayerIndex: null as number | null,
+    };
+
+    if (resolvedLayer && isSameFragranceIdentity(resolvedHero, resolvedLayer)) {
+      if (signedInForcedLayerCarryCard) {
+        const replacementMain = pickFirstUniqueDisplayCard(queue, resolvedLayer);
+        if (replacementMain) {
+          const replacementMainDetail = fragranceDetailCacheRef.current.get(replacementMain.fragrance_id) ?? null;
+          const replacementMainSettled = signedInQueuedHeroRef.current.get(replacementMain.fragrance_id) ?? replacementMain;
+          finalHeroSource = mergeQueuedHeroCardSources(replacementMainSettled, replacementMain) ?? replacementMain;
+          finalHero = resolveQueuedHeroDisplayWithDetails(finalHeroSource, replacementMainDetail);
+          duplicateResolution.kind = 'replace-main';
+          duplicateResolution.replacementMain = replacementMain;
+        } else {
+          finalLayer = null;
+          duplicateResolution.kind = 'single-scent';
+        }
+      } else {
+        const uniqueLayerCandidate = isHeroCard
+          ? findFirstUniqueLayerModeCandidate((v6?.layer_modes ?? null)?.[selectedMood] ?? null, selectedMood, resolvedHero)
+          : null;
+        if (uniqueLayerCandidate) {
+          const uniqueLayerDetail = uniqueLayerCandidate.layer.id
+            ? (fragranceDetailCacheRef.current.get(uniqueLayerCandidate.layer.id) ?? null)
+            : null;
+          finalLayer = resolveLayerModeWithDetails(uniqueLayerCandidate.layer, uniqueLayerDetail);
+          duplicateResolution.kind = 'switch-layer';
+          duplicateResolution.preferredLayerIndex = uniqueLayerCandidate.index;
+        } else {
+          finalLayer = null;
+          duplicateResolution.kind = 'single-scent';
+        }
+      }
+    }
+
+    const resolvedCurrentCardIsHeroCard = !!heroId && finalHero.fragrance_id === heroId;
+    const reasonChip = duplicateResolution.kind === 'replace-main'
+      ? readReasonChipFromSources(finalHeroSource, finalHero)
+      : readReasonChipFromSources(
+          isHeroCard ? v6?.hero : null,
+          isHeroCard ? o?.today_pick : null,
+          !isHeroCard ? queuedHeroSource : null,
+          finalHero,
+        );
+    const heroFamilyKey = finalHero.family ?? '';
+    const heroFamilyColorForDisplay = heroFamilyKey
+      ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
+      : '#888';
+    const heroFamilyLabelForDisplay = heroFamilyKey
+      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
+      : '';
+    const finalLayerDetail = finalLayer?.id
+      ? (fragranceDetailCacheRef.current.get(finalLayer.id) ?? null)
+      : null;
     const sharedHeroLayerKeys = buildSharedTokenKeySet(
-      resolvedHero.notes,
-      resolvedHero.accords,
-      resolvedLayer?.notes ?? [],
-      resolvedLayer?.accords ?? [],
+      finalHero.notes,
+      finalHero.accords,
+      finalLayer?.notes ?? [],
+      finalLayer?.accords ?? [],
     );
     const heroTokensSrc: any[] = buildSemanticSurfaceTokens(
-      resolvedHero.notes,
-      resolvedHero.accords,
+      finalHero.notes,
+      finalHero.accords,
       sharedHeroLayerKeys,
       4,
     );
 
-    const layerTokens: any[] = resolvedLayer
+    const layerTokens: any[] = finalLayer
       ? buildSemanticSurfaceTokens(
-          Array.isArray((resolvedLayer as any)?.notes) ? (resolvedLayer as any).notes : [],
-          Array.isArray((resolvedLayer as any)?.accords) ? (resolvedLayer as any).accords : [],
+          Array.isArray((finalLayer as any)?.notes) ? (finalLayer as any).notes : [],
+          Array.isArray((finalLayer as any)?.accords) ? (finalLayer as any).accords : [],
           sharedHeroLayerKeys,
           4,
         )
       : [];
-    const layerFamilyKey = resolvedLayer?.family_key ?? '';
+    const layerFamilyKey = finalLayer?.family_key ?? '';
     const layerHasFamily = layerFamilyKey.trim().length > 0;
     const layerHasTokens = layerTokens.length > 0;
-    const layerSurfaceSettled = isHeroCard || (!!resolvedLayer && (!!visibleLayerDetail || (layerHasFamily && layerHasTokens)));
-    const layerSurfacesReady = isHeroCard || layerSurfaceSettled;
+    const layerSurfaceSettled = resolvedCurrentCardIsHeroCard || (!!finalLayer && (!!finalLayerDetail || (layerHasFamily && layerHasTokens)));
+    const layerSurfacesReady = resolvedCurrentCardIsHeroCard || layerSurfaceSettled;
     const layerFamilyKeyForDisplay = layerSurfacesReady ? layerFamilyKey : '';
     const layerFamilyLabel = layerFamilyKeyForDisplay ? (FAMILY_LABELS[layerFamilyKeyForDisplay] ?? layerFamilyKeyForDisplay.toUpperCase()) : '';
 
-    const visibleLayer = resolvedLayer
+    const visibleLayer = finalLayer
       ? {
-          ...resolvedLayer,
-          family_key: layerSurfacesReady ? resolvedLayer.family_key : '',
-          notes: layerSurfacesReady ? resolvedLayer.notes : [],
-          accords: layerSurfacesReady ? resolvedLayer.accords : [],
+          ...finalLayer,
+          family_key: layerSurfacesReady ? finalLayer.family_key : '',
+          notes: layerSurfacesReady ? finalLayer.notes : [],
+          accords: layerSurfacesReady ? finalLayer.accords : [],
         }
       : null;
+    const finalAlternates = finalHero.fragrance_id === visibleCard.fragrance_id
+      ? signedInVisibleAlternates
+      : [];
 
     const resolvedCurrentCard = {
-      fragrance_id: resolvedHero.fragrance_id,
-      name: resolvedHero.name,
-      brand: resolvedHero.brand,
+      fragrance_id: finalHero.fragrance_id,
+      name: finalHero.name,
+      brand: finalHero.brand,
       family: heroFamilyKey,
       familyLabel: heroFamilyLabelForDisplay,
       familyColor: heroFamilyColorForDisplay,
-      reason_chip_label: reasonChip?.label ?? resolvedHero.reason_chip_label ?? null,
-      reason_chip_explanation: reasonChip?.explanation ?? resolvedHero.reason_chip_explanation ?? null,
-      notes: resolvedHero.notes,
-      accords: resolvedHero.accords,
-      hero: resolvedHero,
+      reason_chip_label: reasonChip?.label ?? finalHero.reason_chip_label ?? null,
+      reason_chip_explanation: reasonChip?.explanation ?? finalHero.reason_chip_explanation ?? null,
+      notes: finalHero.notes,
+      accords: finalHero.accords,
+      hero: finalHero,
       heroTokens: heroTokensSrc,
       reasonChip,
       layer: visibleLayer,
@@ -2854,14 +2962,14 @@ const OdaraScreen = ({
       layerFamilyLabel: layerFamilyLabel,
       layerTokens: layerSurfacesReady ? layerTokens : [],
       layerModes: modeResults,
-      alternates: signedInVisibleAlternates,
+      alternates: finalAlternates,
       selectedMode: selectedMood,
-      visibleCardId: visibleCard.fragrance_id,
-      isHeroCard,
+      visibleCardId: finalHero.fragrance_id,
+      isHeroCard: resolvedCurrentCardIsHeroCard,
     };
 
     return {
-      activeHero: resolvedHero,
+      activeHero: finalHero,
       heroFamilyKey,
       heroFamilyColor: heroFamilyColorForDisplay,
       heroFamilyLabel: heroFamilyLabelForDisplay,
@@ -2873,15 +2981,66 @@ const OdaraScreen = ({
       activeLayerTokens: layerSurfacesReady ? layerTokens : [],
       layerModes: modeResults,
       selectedMode: selectedMood,
-      visibleCardId: visibleCard.fragrance_id,
+      visibleCardId: finalHero.fragrance_id,
       isLocked: lockState === 'locked',
-      activeAlternates: signedInVisibleAlternates,
+      activeAlternates: finalAlternates,
       reasonChipLabel: reasonChip?.label ?? null,
       reasonChipExplanation: reasonChip?.explanation ?? null,
       queuedSurfacesReady: layerSurfacesReady,
+      duplicateResolution,
       resolvedCurrentCard,
     };
   }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard]);
+
+  useEffect(() => {
+    if (isGuestMode || !activeMainCardRender || !visibleCard) return;
+
+    const duplicateResolution = (activeMainCardRender as any).duplicateResolution as
+      | { kind: 'none' | 'replace-main' | 'switch-layer' | 'single-scent'; replacementMain?: DisplayCard | null; preferredLayerIndex?: number | null }
+      | undefined;
+
+    if (!duplicateResolution || duplicateResolution.kind === 'none') return;
+
+    if (duplicateResolution.kind === 'replace-main') {
+      const replacementMain = duplicateResolution.replacementMain ?? null;
+      if (replacementMain && !isSameFragranceIdentity(replacementMain, visibleCard)) {
+        setVisibleCard(replacementMain);
+        setPromotedAltId(null);
+      }
+      return;
+    }
+
+    if (duplicateResolution.kind === 'switch-layer') {
+      const preferredLayerIndex = duplicateResolution.preferredLayerIndex ?? null;
+      const currentLayerIndex = signedInLayerIdxByMood[selectedMood] ?? 0;
+      if (preferredLayerIndex !== null && preferredLayerIndex !== currentLayerIndex) {
+        setSignedInLayerIdxByMood((prev) => ({ ...prev, [selectedMood]: preferredLayerIndex }));
+      }
+      return;
+    }
+
+    if (signedInForcedLayerCarryCard) {
+      setSignedInForcedLayerCarryCard(null);
+    }
+
+    if (lockState === 'locked') {
+      updateSignedInDayState(currentDateKey, (current) => (
+        current.lockedLayerCard
+          ? { ...current, lockedLayerCard: null }
+          : current
+      ));
+    }
+  }, [
+    isGuestMode,
+    activeMainCardRender,
+    visibleCard,
+    signedInLayerIdxByMood,
+    selectedMood,
+    signedInForcedLayerCarryCard,
+    lockState,
+    currentDateKey,
+    updateSignedInDayState,
+  ]);
 
   // ── DEBUG PROOF — signed-in v7 contract ──
   useEffect(() => {
@@ -3135,13 +3294,14 @@ const OdaraScreen = ({
 
   // Helper: record/clear locked selection for weekly lanes
   const recordLockedSelection = useCallback(() => {
-    if (!visibleCard) return;
+    const resolvedHeroFamily = activeMainCardRender?.activeHero?.family ?? visibleCard?.family ?? '';
+    if (!resolvedHeroFamily) return;
     const key = `${selectedDate}:${selectedContext}`;
-    const mainColor = FAMILY_COLORS[visibleCard.family] ?? '#888';
-    const layerFamily = visibleModeEntry?.family_key ?? null;
+    const mainColor = FAMILY_COLORS[resolvedHeroFamily] ?? '#888';
+    const layerFamily = activeMainCardRender?.activeLayer?.family_key ?? null;
     const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
-  }, [visibleCard, selectedDate, selectedContext, visibleModeEntry]);
+  }, [activeMainCardRender, visibleCard?.family, selectedDate, selectedContext]);
 
   const recordGuestLockedSelection = useCallback(() => {
     if (!activeGuestRender?.activeHero) return;
@@ -3414,14 +3574,16 @@ const OdaraScreen = ({
 
     // NOTE: backend "like" persistence is not yet wired — when it lands,
     // call it here alongside onAccept. Lock persistence runs through onAccept.
-    const visibleLayerId = visibleModeEntry?.id ?? null;
+    const visibleHeroId = activeMainCardRender?.resolvedCurrentCard?.fragrance_id ?? visibleCard.fragrance_id;
+    const visibleLayerId = activeMainCardRender?.activeLayer?.id ?? null;
     try {
-      await onAccept(visibleCard.fragrance_id, visibleLayerId);
+      await onAccept(visibleHeroId, visibleLayerId);
     } catch (err) {
       console.warn('[Odara] onAccept failed after double-tap lock', err);
     }
   }, [
     visibleCard,
+    activeMainCardRender,
     isGuestMode,
     guestLocked,
     engageGuestLock,
@@ -3431,7 +3593,6 @@ const OdaraScreen = ({
     recordLockedSelection,
     pulseLock,
     onAccept,
-    visibleModeEntry,
   ]);
 
   const handleCardClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -3869,8 +4030,8 @@ const OdaraScreen = ({
         }
         if (!visibleCard) return;
         const combo: FavoriteCombo = {
-          mainId: visibleCard.fragrance_id,
-          layerId: visibleModeEntry?.id ?? null,
+          mainId: activeMainCardRender?.resolvedCurrentCard?.fragrance_id ?? visibleCard.fragrance_id,
+          layerId: activeMainCardRender?.activeLayer?.id ?? null,
           mood: selectedMood ?? 'balance',
           ratio: selectedRatio,
         };
