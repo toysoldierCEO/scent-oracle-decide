@@ -3369,9 +3369,6 @@ const OdaraScreen = ({
     swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
   }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
 
-  const visibleAlts = isGuestMode ? [] : (signedInResolvedCurrentCard?.alternates ?? []);
-  const alternatesRendered = visibleAlts.length > 0;
-
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
 
@@ -3683,6 +3680,8 @@ const OdaraScreen = ({
   const signedInVisibleHero = signedInResolvedCurrentCard?.hero ?? null;
   const signedInVisibleLayer = signedInResolvedCurrentCard?.layer ?? null;
   const signedInVisibleLayerModes = signedInResolvedCurrentCard?.layerModes ?? modeResults;
+  const visibleAlts = isGuestMode ? [] : (signedInResolvedCurrentCard?.alternates ?? []);
+  const alternatesRendered = visibleAlts.length > 0;
   const signedInHeroFamilyColor = signedInHeroRail?.familyColor ?? '#888';
   const signedInHeroFamilyLabel = signedInHeroRail?.familyLabel ?? '';
   const activeReasonChip = isGuestMode
