@@ -4116,6 +4116,80 @@ const OdaraScreen = ({
     });
   }
 
+  const guestResolvedCurrentCard = useMemo(() => {
+    if (!isGuestMode || !visibleGuestRender?.activeHero) return null;
+
+    const hero: any = visibleGuestRender.activeHero ?? null;
+    const heroFamilyKey = typeof hero?.family === 'string' ? hero.family : '';
+    const heroFamilyLabel = heroFamilyKey
+      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
+      : '';
+    const heroFamilyColor = heroFamilyKey
+      ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
+      : '#888';
+    const heroNotes = sanitizeTokenSource(hero?.notes);
+    const heroAccords = sanitizeTokenSource(hero?.accords);
+    const heroTokens = (Array.isArray(visibleGuestRender.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
+      .filter((token: any) => {
+        const label = token?.token_label ?? token?.label ?? token?.name ?? '';
+        return typeof label === 'string' && label.trim().length > 0;
+      });
+    const layer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
+    const layerTokens = (Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : [])
+      .filter((token: any) => {
+        const label = token?.token_label ?? token?.label ?? token?.name ?? '';
+        return typeof label === 'string' && label.trim().length > 0;
+      });
+    const layerFamilyKey = layer?.family_key ?? '';
+    const layerFamilyLabel = layerFamilyKey
+      ? (FAMILY_LABELS[layerFamilyKey] ?? layerFamilyKey.toUpperCase())
+      : '';
+    const reasonChip = visibleGuestRender.reasonChipLabel
+      ? {
+          label: visibleGuestRender.reasonChipLabel,
+          explanation: visibleGuestRender.reasonChipExplanation ?? null,
+        }
+      : null;
+    const guestAlternates = (Array.isArray(visibleGuestRender.alternates) ? visibleGuestRender.alternates : [])
+      .map((bundle: any, originalIdx: number) => {
+        const altHero = bundle?.hero ?? null;
+        const altFamily = typeof altHero?.family === 'string' ? altHero.family : '';
+        return {
+          key: `guest-alt-${originalIdx}-${altHero?.fragrance_id ?? altHero?.name ?? 'unknown'}`,
+          label: getDisplayName(altHero?.name ?? '', altHero?.brand ?? null),
+          family: altFamily,
+          source: 'guest' as const,
+          alternate: bundle,
+          originalIdx,
+        };
+      })
+      .filter((item) => item.label && item.originalIdx !== selectedAlternateIdx);
+
+    return {
+      fragrance_id: hero?.fragrance_id ?? hero?.id ?? null,
+      name: hero?.name ?? '',
+      brand: hero?.brand ?? '',
+      family: heroFamilyKey,
+      familyLabel: heroFamilyLabel,
+      familyColor: heroFamilyColor,
+      notes: heroNotes,
+      accords: heroAccords,
+      layer,
+      layerFamilyKey,
+      layerFamilyLabel,
+      layerTokens,
+      layerModes: guestLayerModesToModeSelector(visibleGuestRender.layerModes),
+      alternates: guestAlternates,
+      selectedMode: visibleGuestRender.selectedMode,
+      resolvedHeroRail: {
+        familyLabel: heroFamilyLabel,
+        familyColor: heroFamilyColor,
+        reasonChip,
+        tokens: heroTokens,
+      },
+    };
+  }, [isGuestMode, visibleGuestRender, selectedAlternateIdx]);
+
   const signedInResolvedCurrentCard = useMemo(() => {
     if (isGuestMode || !activeMainCardRender?.resolvedCurrentCard) return null;
 
@@ -4161,13 +4235,16 @@ const OdaraScreen = ({
     };
   }, [isGuestMode, activeMainCardRender]);
 
-  const signedInHeroRail = useMemo(() => {
-    if (isGuestMode || !signedInResolvedCurrentCard) return null;
-    return signedInResolvedCurrentCard.resolvedHeroRail ?? null;
-  }, [isGuestMode, signedInResolvedCurrentCard]);
-
   const signedInVisibleLayer = signedInResolvedCurrentCard?.layer ?? null;
   const signedInVisibleLayerModes = signedInResolvedCurrentCard?.layerModes ?? modeResults;
+  const visibleResolvedCurrentCard = isGuestMode ? guestResolvedCurrentCard : signedInResolvedCurrentCard;
+  const visibleResolvedHeroRail = visibleResolvedCurrentCard?.resolvedHeroRail ?? null;
+  const visibleResolvedLayer = isGuestMode
+    ? (guestResolvedCurrentCard?.layer ?? null)
+    : signedInVisibleLayer;
+  const visibleResolvedLayerModes = isGuestMode
+    ? (guestResolvedCurrentCard?.layerModes ?? { balance: null, bold: null, smooth: null, wild: null })
+    : signedInVisibleLayerModes;
   const signedInCurrentHeroCarryCard = useMemo(
     () => toDisplayCardFromResolvedCurrentCard(signedInResolvedCurrentCard),
     [signedInResolvedCurrentCard]
@@ -4176,23 +4253,27 @@ const OdaraScreen = ({
     () => toDisplayCardFromLayerMode(signedInVisibleLayer),
     [signedInVisibleLayer]
   );
-  const visibleAlts = isGuestMode ? [] : (signedInResolvedCurrentCard?.alternates ?? []);
-  const alternatesRendered = visibleAlts.length > 0;
-  const signedInHeroFamilyColor = signedInHeroRail?.familyColor ?? '#888';
-  const signedInHeroFamilyLabel = signedInHeroRail?.familyLabel ?? '';
-  const activeReasonChip = isGuestMode
-    ? (
-      visibleGuestRender?.reasonChipLabel
-        ? {
-            label: visibleGuestRender.reasonChipLabel,
-            explanation: visibleGuestRender.reasonChipExplanation ?? null,
-          }
-        : null
-    )
-    : (signedInHeroRail?.reasonChip ?? null);
-  const heroRailTokens: Array<any> = isGuestMode
-    ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
-    : (signedInHeroRail?.tokens ?? []);
+  const visibleAlternateRailItems = useMemo(() => {
+    if (isGuestMode) {
+      return Array.isArray(guestResolvedCurrentCard?.alternates) ? guestResolvedCurrentCard.alternates : [];
+    }
+
+    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt, index) => ({
+      key: alt.fragrance_id || `signed-in-alt-${index}`,
+      label: getDisplayName(alt.name, alt.brand ?? null),
+      family: alt.family ?? '',
+      source: 'signed_in' as const,
+      alternate: alt,
+      disabled: !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_'),
+    }));
+  }, [isGuestMode, guestResolvedCurrentCard, signedInResolvedCurrentCard]);
+  const alternatesRendered = visibleAlternateRailItems.length > 0;
+  const visibleHeroFamilyColor = visibleResolvedHeroRail?.familyColor ?? '#888';
+  const visibleHeroFamilyLabel = visibleResolvedHeroRail?.familyLabel ?? '';
+  const activeReasonChip = visibleResolvedHeroRail?.reasonChip ?? null;
+  const heroRailTokens: Array<any> = Array.isArray(visibleResolvedHeroRail?.tokens)
+    ? visibleResolvedHeroRail.tokens
+    : [];
   const signedInCarryoverSelectedCard = resolveCarryoverSelectedCard(signedInDayState);
   const signedInHeroCarryColor = signedInCarryoverSelectedCard?.family
     ? (FAMILY_COLORS[signedInCarryoverSelectedCard.family] ?? '#888')
@@ -5104,50 +5185,29 @@ const OdaraScreen = ({
                 );
               })()}
 
-              {/* Fragrance name — guest v5: from visibleGuestRender.activeHero */}
+              {/* Fragrance name */}
               <h2
                 className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
                 style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                 data-guest-profile-reserved
               >
-                {isGuestMode && visibleGuestRender?.activeHero
-                  ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
-                  : getDisplayName(signedInResolvedCurrentCard?.name ?? '', signedInResolvedCurrentCard?.brand ?? null)}
+                {getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}
               </h2>
 
               {/* Brand */}
               <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-                {isGuestMode && visibleGuestRender?.activeHero
-                  ? visibleGuestRender.activeHero.brand
-                  : (signedInResolvedCurrentCard?.brand ?? '')}
+                {visibleResolvedCurrentCard?.brand ?? ''}
               </span>
 
-              {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
-              {!isGuestMode ? (
-                signedInHeroFamilyLabel ? (
-                  <span
-                    className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                    style={{ color: signedInHeroFamilyColor }}
-                  >
-                    {signedInHeroFamilyLabel}
-                  </span>
-                ) : null
-              ) : (() => {
-                const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
-                  ? String(visibleGuestRender.activeHero.family)
-                  : null;
-                if (!guestHeroFamily) return null;
-                const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
-                const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
-                return (
-                  <span
-                    className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                    style={{ color: guestHeroFamilyColor }}
-                  >
-                    {guestHeroFamily}
-                  </span>
-                );
-              })()}
+              {/* Family label */}
+              {visibleHeroFamilyLabel ? (
+                <span
+                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                  style={{ color: visibleHeroFamilyColor }}
+                >
+                  {visibleHeroFamilyLabel}
+                </span>
+              ) : null}
 
               {(activeReasonChip || heroRailTokens.length > 0) && (
                 <div className="mt-0.5 mb-3 w-full">
@@ -5208,139 +5268,81 @@ const OdaraScreen = ({
               )}
             </div>
 
-            {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
-            {isGuestMode ? (() => {
-              if (!visibleGuestRender) return null;
-              const { activeHero, activeLayer, selectedMode, layerModes } = visibleGuestRender;
-              if (!activeLayer) return null;
-              const guestLayerModes = guestLayerModesToModeSelector(layerModes);
-              const guestVisibleLayerMode = guestLayerToModeEntry(activeLayer);
-
-              return (
-                <div data-layer-section>
-                  <LayerCard
-                    mainName={activeHero?.name ?? ''}
-                    mainBrand={activeHero?.brand ?? null}
-                    mainNotes={Array.isArray(activeHero?.notes) ? activeHero.notes : null}
-                    mainFamily={activeHero?.family ?? null}
-                    mainProjection={typeof activeHero?.projection === 'number' ? activeHero.projection : null}
-                    layerModes={guestLayerModes}
-                    visibleLayerMode={guestVisibleLayerMode}
-                    selectedMood={selectedMode as LayerMood}
-                    onSelectMood={(mood) => cardController.actions.selectMood(mood)}
-                    selectedRatio={selectedRatio}
-                    onSelectRatio={setSelectedRatio}
-                    isExpanded={guestLayerExpanded}
-                    onToggleExpand={() => setGuestLayerExpanded(v => !v)}
-                    locked={isCardLocked}
-                    consumeLockedMoodTap
-                    layerTokens={Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : []}
-                  />
-                </div>
-              );
-            })() : (
-              // Mark the layer section so the card-level double-tap handler
-              // ignores taps that land inside it. LayerCard already calls
-              // stopPropagation on its expand/collapse trigger.
+            {/* ── Layer card — shared layout contract for signed-in and guest. ── */}
+            {visibleResolvedLayer ? (
               <div
                 data-layer-section
                 className="rounded-[22px] transition-all duration-300"
-                style={signedInLayerCarrySurfaceStyle}
+                style={!isGuestMode ? signedInLayerCarrySurfaceStyle : undefined}
               >
                 <LayerCard
-                  mainName={signedInResolvedCurrentCard?.name ?? ''}
-                  mainBrand={signedInResolvedCurrentCard?.brand ?? null}
-                  mainNotes={signedInResolvedCurrentCard?.notes ?? []}
-                  mainFamily={signedInResolvedCurrentCard?.family ?? null}
-                  mainProjection={null}
-                  layerModes={signedInVisibleLayerModes}
-                  visibleLayerMode={signedInVisibleLayer}
-                  selectedMood={selectedMood}
+                  mainName={visibleResolvedCurrentCard?.name ?? ''}
+                  mainBrand={visibleResolvedCurrentCard?.brand ?? null}
+                  mainNotes={visibleResolvedCurrentCard?.notes ?? []}
+                  mainFamily={visibleResolvedCurrentCard?.family ?? null}
+                  mainProjection={isGuestMode
+                    ? (typeof visibleGuestRender?.activeHero?.projection === 'number' ? visibleGuestRender.activeHero.projection : null)
+                    : null}
+                  layerModes={visibleResolvedLayerModes}
+                  visibleLayerMode={visibleResolvedLayer}
+                  selectedMood={(visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood}
                   onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
                   onSelectRatio={setSelectedRatio}
-                  isExpanded={layerExpanded}
-                  onToggleExpand={() => setLayerExpanded(!layerExpanded)}
-                  lockPulse={lockPulse}
+                  isExpanded={isGuestMode ? guestLayerExpanded : layerExpanded}
+                  onToggleExpand={() => {
+                    if (isGuestMode) {
+                      setGuestLayerExpanded((value) => !value);
+                    } else {
+                      setLayerExpanded((value) => !value);
+                    }
+                  }}
+                  lockPulse={!isGuestMode ? lockPulse : undefined}
                   locked={isCardLocked}
-                  modeLoading={modeLoading}
-                  modeErrors={modeErrors}
-                  onRetryMood={(mood) => {
+                  consumeLockedMoodTap={isGuestMode || undefined}
+                  modeLoading={!isGuestMode ? modeLoading : undefined}
+                  modeErrors={!isGuestMode ? modeErrors : undefined}
+                  onRetryMood={!isGuestMode ? ((mood) => {
                     const currentCardId = signedInResolvedCurrentCard?.fragrance_id;
                     if (!currentCardId) return;
                     void fetchMoodForCard(currentCardId, mood, true);
-                  }}
-                  layerTokens={signedInResolvedCurrentCard?.layerTokens ?? null}
+                  }) : undefined}
+                  layerTokens={visibleResolvedCurrentCard?.layerTokens ?? null}
                   showLegacyAccordsText={false}
                 />
               </div>
-            )}
+            ) : null}
 
-            {/* ── Alternatives — guest v6 (alternate_bundles).
-                PHASE 2 PROMOTION MODEL: the active promoted alternate is
-                hidden from the rail (refill behavior); previous hero only
-                returns through the back arrow. ── */}
-            {isGuestMode ? (() => {
-              const o: any = activeOracle ?? oracle ?? {};
-              const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
-              if (altBundles.length === 0) return null;
-              // Filter out the active promoted alternate so it disappears from
-              // the rail; remaining alternates flow forward to fill the row.
-              const visibleBundles = altBundles
-                .map((ab, originalIdx) => ({ ab, originalIdx }))
-                .filter(({ originalIdx }) => originalIdx !== selectedAlternateIdx);
-              if (visibleBundles.length === 0) return null;
-              return (
-                <div className="flex flex-col items-center gap-2 mt-3">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
-                    Alternatives
-                  </span>
-                  <div
-                    className="flex flex-nowrap gap-2 w-full overflow-x-auto pb-1 px-3 justify-start sm:justify-center"
-                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                  >
-                    {visibleBundles.map(({ ab, originalIdx }) => {
-                      const heroName = ab?.hero?.name ?? '—';
-                      const heroBrand = ab?.hero?.brand ?? '';
-                      return (
-                        <button
-                          key={`${heroName}-${originalIdx}`}
-                          type="button"
-                          aria-disabled={isCardLocked || undefined}
-                          data-alternate-chip
-                          onPointerDown={(e) => {
-                            if (!isCardLocked) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isCardLocked) return;
-                            cardController.actions.promoteAlternate(ab, originalIdx);
-                          }}
-                          className={`flex-shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-95 text-foreground/70 hover:text-foreground/95 border border-foreground/15 bg-foreground/[0.04] ${isCardLocked ? 'opacity-30 cursor-default' : ''}`}
-                        >
-                          {getDisplayName(heroName, heroBrand)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })() : (alternatesRendered && (
+            {/* ── Alternatives — shared rail for signed-in and guest. ── */}
+            {alternatesRendered && (
               <div className="flex flex-col items-center gap-2 mt-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                   Alternatives
                 </span>
                 <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                  {visibleAlts.map((alt, i) => {
-                    const altColor = FAMILY_COLORS[alt.family] ?? '#888';
-                    const isSyntheticId = !alt.fragrance_id || alt.fragrance_id.startsWith('__guest_alt_');
-                    const promotionDisabled = isGuestMode || isSyntheticId;
+                  {visibleAlternateRailItems.map((item, index) => {
+                    const altColor = FAMILY_COLORS[item.family] ?? '#888';
+                    const promotionDisabled = !!item.disabled;
                     return (
                       <button
-                        key={alt.fragrance_id || i}
-                        onClick={promotionDisabled ? undefined : () => cardController.actions.promoteAlternate(alt)}
+                        key={item.key || index}
+                        type="button"
+                        aria-disabled={promotionDisabled || isCardLocked || undefined}
+                        data-alternate-chip
+                        onPointerDown={(e) => {
+                          if (!isCardLocked) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isCardLocked || promotionDisabled) return;
+                          if (item.source === 'guest') {
+                            cardController.actions.promoteAlternate(item.alternate, item.originalIdx);
+                          } else {
+                            cardController.actions.promoteAlternate(item.alternate);
+                          }
+                        }}
                         disabled={promotionDisabled}
                         className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
                           text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
@@ -5350,13 +5352,13 @@ const OdaraScreen = ({
                           background: `${altColor}0A`,
                         }}
                       >
-                        {getDisplayName(alt.name)}
+                        {item.label}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            ))}
+            )}
 
             {!isGuestMode && (
               <div className="mt-4 flex items-center justify-center gap-5">
