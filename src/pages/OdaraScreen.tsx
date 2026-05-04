@@ -3440,11 +3440,35 @@ const OdaraScreen = ({
     });
   }
 
-  const signedInVisibleHero = activeMainCardRender?.activeHero ?? null;
+  const signedInHeroRender = useMemo(() => {
+    if (isGuestMode || !activeMainCardRender?.activeHero) return null;
+
+    const familyLabel = typeof activeMainCardRender.heroFamilyLabel === 'string'
+      ? activeMainCardRender.heroFamilyLabel.trim()
+      : '';
+    const tokens = (Array.isArray(activeMainCardRender.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : [])
+      .filter((token: any) => {
+        const label = token?.token_label ?? token?.label ?? token?.name ?? '';
+        return typeof label === 'string' && label.trim().length > 0;
+      });
+    const reasonChip = activeMainCardRender.activeReasonChip?.label
+      ? activeMainCardRender.activeReasonChip
+      : null;
+
+    return {
+      hero: activeMainCardRender.activeHero,
+      familyLabel,
+      familyColor: activeMainCardRender.heroFamilyColor ?? '#888',
+      reasonChip,
+      tokens,
+    };
+  }, [isGuestMode, activeMainCardRender]);
+
+  const signedInVisibleHero = signedInHeroRender?.hero ?? activeMainCardRender?.activeHero ?? null;
   const signedInVisibleLayer = activeMainCardRender?.activeLayer ?? null;
   const signedInVisibleLayerModes = activeMainCardRender?.layerModes ?? modeResults;
-  const signedInHeroFamilyColor = activeMainCardRender?.heroFamilyColor ?? familyColor;
-  const signedInHeroFamilyLabel = activeMainCardRender?.heroFamilyLabel ?? familyLabel;
+  const signedInHeroFamilyColor = signedInHeroRender?.familyColor ?? '#888';
+  const signedInHeroFamilyLabel = signedInHeroRender?.familyLabel ?? '';
   const activeReasonChip = isGuestMode
     ? (
       visibleGuestRender?.reasonChipLabel
@@ -3454,10 +3478,10 @@ const OdaraScreen = ({
           }
         : null
     )
-    : (activeMainCardRender?.activeReasonChip ?? null);
+    : (signedInHeroRender?.reasonChip ?? null);
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
-    : (Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : []);
+    : (signedInHeroRender?.tokens ?? []);
   const wardrobeSummary = useMemo(
     () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
       ? buildWardrobeBalanceSummary(wardrobeItems)
@@ -4170,12 +4194,14 @@ const OdaraScreen = ({
 
             {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
             {!isGuestMode ? (
-              <span
-                className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                style={{ color: signedInHeroFamilyColor }}
-              >
-                {signedInHeroFamilyLabel}
-              </span>
+              signedInHeroFamilyLabel ? (
+                <span
+                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                  style={{ color: signedInHeroFamilyColor }}
+                >
+                  {signedInHeroFamilyLabel}
+                </span>
+              ) : null
             ) : (() => {
               const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
                 ? String(visibleGuestRender.activeHero.family)
