@@ -796,6 +796,12 @@ function getDateLabel(dateStr: string) {
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
+function getPreviousDateKey(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  return fmtLocalDateStr(d);
+}
+
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
@@ -1276,9 +1282,6 @@ type LockedLaneInfo = { mainColor: string; layerColor: string | null };
 type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
 
 /** Persisted lock state per day+context */
-type LockStateMap = Record<string, LockState>; // key = "dateStr:context"
-
-/** Persisted favorite combo per day+context */
 type FavoriteCombo = {
   mainId: string;
   layerId: string | null;
@@ -1286,6 +1289,63 @@ type FavoriteCombo = {
   ratio: string;
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
+
+type SignedInDayState = {
+  lockState: LockState;
+  carryoverMode: SignedInCarryoverTarget;
+  carryoverHeroCard: DisplayCard | null;
+  carryoverLayerCard: DisplayCard | null;
+  lockedCard: DisplayCard | null;
+  lockedMood: LayerMood;
+  lockedPromotedAltId: string | null;
+};
+
+type SignedInDayStateMap = Record<string, SignedInDayState>; // key = "dateStr"
+
+function createDefaultSignedInDayState(): SignedInDayState {
+  return {
+    lockState: 'neutral',
+    carryoverMode: 'off',
+    carryoverHeroCard: null,
+    carryoverLayerCard: null,
+    lockedCard: null,
+    lockedMood: 'balance',
+    lockedPromotedAltId: null,
+  };
+}
+
+function toDisplayCardFromResolvedCurrentCard(card: any | null | undefined): DisplayCard | null {
+  if (!card?.fragrance_id || !card?.name) return null;
+  return {
+    fragrance_id: card.fragrance_id,
+    name: card.name ?? '',
+    family: card.family ?? '',
+    reason: card.reason ?? '',
+    brand: card.brand ?? '',
+    notes: Array.isArray(card.notes) ? card.notes : [],
+    accords: Array.isArray(card.accords) ? card.accords : [],
+    reason_chip_label: card.reason_chip_label ?? null,
+    reason_chip_explanation: card.reason_chip_explanation ?? null,
+    isHero: !!card.isHeroCard,
+  };
+}
+
+function toDisplayCardFromLayerMode(layer: any | null | undefined): DisplayCard | null {
+  const fragranceId = layer?.id ?? layer?.fragrance_id ?? layer?.layer_fragrance_id ?? null;
+  if (!fragranceId || !layer?.name) return null;
+  return {
+    fragrance_id: fragranceId,
+    name: layer.name ?? '',
+    family: layer.family_key ?? layer.family ?? '',
+    reason: layer.reason ?? layer.why_it_works ?? '',
+    brand: layer.brand ?? layer.layer_brand ?? '',
+    notes: Array.isArray(layer.notes) ? layer.notes : [],
+    accords: Array.isArray(layer.accords) ? layer.accords : [],
+    reason_chip_label: null,
+    reason_chip_explanation: null,
+    isHero: false,
+  };
+}
 
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
@@ -1864,14 +1924,36 @@ const OdaraScreen = ({
     return false; // let normal back run
   }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle, isGuestLocked]);
 
-
-  // Lock & gesture state — persisted per day+context
-  const [lockStateMap, setLockStateMap] = useState<LockStateMap>({});
+  // Lock + carryover state — persisted per signed-in calendar day
+  const [signedInDayStateMap, setSignedInDayStateMap] = useState<SignedInDayStateMap>({});
+  const currentDateKey = selectedDate;
+  const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
   const stateKey = `${selectedDate}:${selectedContext}`;
-  const lockState: LockState = lockStateMap[stateKey] ?? 'neutral';
+  const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
+  const lockState: LockState = signedInDayState.lockState;
   const setLockState = useCallback((ls: LockState) => {
-    setLockStateMap(prev => ({ ...prev, [stateKey]: ls }));
-  }, [stateKey]);
+    setSignedInDayStateMap(prev => {
+      const current = prev[currentDateKey] ?? createDefaultSignedInDayState();
+      const next: SignedInDayState = ls === 'locked'
+        ? { ...current, lockState: ls }
+        : {
+            ...current,
+            lockState: ls,
+            lockedCard: null,
+            lockedMood: 'balance',
+            lockedPromotedAltId: null,
+          };
+      if (
+        current.lockState === next.lockState &&
+        current.lockedCard === next.lockedCard &&
+        current.lockedMood === next.lockedMood &&
+        current.lockedPromotedAltId === next.lockedPromotedAltId
+      ) {
+        return prev;
+      }
+      return { ...prev, [currentDateKey]: next };
+    });
+  }, [currentDateKey]);
 
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
@@ -1888,8 +1970,29 @@ const OdaraScreen = ({
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
-  const [signedInCarryoverTarget, setSignedInCarryoverTarget] = useState<SignedInCarryoverTarget>('off');
+  const signedInCarryoverTarget = signedInDayState.carryoverMode;
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
+  const updateSignedInDayState = useCallback((
+    key: string,
+    updater: (current: SignedInDayState) => SignedInDayState,
+  ) => {
+    setSignedInDayStateMap(prev => {
+      const current = prev[key] ?? createDefaultSignedInDayState();
+      const next = updater(current);
+      if (
+        current.lockState === next.lockState &&
+        current.carryoverMode === next.carryoverMode &&
+        current.lockedMood === next.lockedMood &&
+        current.lockedPromotedAltId === next.lockedPromotedAltId &&
+        areSameDisplayCards(current.carryoverHeroCard, next.carryoverHeroCard) &&
+        areSameDisplayCards(current.carryoverLayerCard, next.carryoverLayerCard) &&
+        areSameDisplayCards(current.lockedCard, next.lockedCard)
+      ) {
+        return prev;
+      }
+      return { ...prev, [key]: next };
+    });
+  }, []);
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
   const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
@@ -2138,11 +2241,15 @@ const OdaraScreen = ({
   // Stable ref for fetchQueue so effects don't re-fire on reference change
   const fetchQueueRef = useRef(fetchQueue);
   fetchQueueRef.current = fetchQueue;
+  const signedInDayStateMapRef = useRef(signedInDayStateMap);
+  signedInDayStateMapRef.current = signedInDayStateMap;
 
   // ── Slot-change request guard ──
   // Tracks the current slot so stale async responses are ignored
   const activeSlotRef = useRef(stateKey);
   activeSlotRef.current = stateKey;
+  const committedSignedInSlotRef = useRef(stateKey);
+  const slotChangedSinceLastCommit = committedSignedInSlotRef.current !== stateKey;
 
   // Track previous slot to detect actual slot changes
   const prevSlotRef = useRef(stateKey);
@@ -2172,6 +2279,10 @@ const OdaraScreen = ({
     moodCacheRef.current.clear();
     moodInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
+  }, [stateKey]);
+
+  useEffect(() => {
+    committedSignedInSlotRef.current = stateKey;
   }, [stateKey]);
 
   // Effect 2: Hydrate card when oracle data arrives — hero-first contract
@@ -2225,13 +2336,31 @@ const OdaraScreen = ({
     // 2) Set oracle
     setActiveOracle(oracle);
 
+    const dayStateMap = signedInDayStateMapRef.current;
+    const currentDayState = dayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
+    const previousDayState = dayStateMap[previousDateKey] ?? createDefaultSignedInDayState();
+
     // 3) Initialize from v6 contract: ui_default_mode + reset all mode indexes to 0
     const v6 = (oracle as any)?.__v6 ?? null;
     const v6DefaultMood: LayerMood = (() => {
       const def = v6?.ui_default_mode ?? normalized.defaultMode;
       return (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : normalized.defaultMode;
     })();
-    const initialMood: LayerMood = v6DefaultMood;
+    const carriedCard = previousDayState
+      ? (
+          previousDayState.carryoverMode === 'hero'
+            ? previousDayState.carryoverHeroCard
+            : previousDayState.carryoverMode === 'layer'
+              ? previousDayState.carryoverLayerCard
+              : null
+        )
+      : null;
+    const initialVisibleCard = currentDayState.lockState === 'locked' && currentDayState.lockedCard
+      ? currentDayState.lockedCard
+      : (carriedCard ?? heroToDisplay(oracle.today_pick));
+    const initialMood: LayerMood = currentDayState.lockState === 'locked'
+      ? (currentDayState.lockedMood ?? v6DefaultMood)
+      : v6DefaultMood;
     setSelectedMood(initialMood);
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
@@ -2242,9 +2371,20 @@ const OdaraScreen = ({
     });
 
     if (oracle.today_pick) {
-      const hero = heroToDisplay(oracle.today_pick);
-      setVisibleCard(hero);
-      console.log('[Odara] applying oracle home for slot', capturedSlot, 'hero:', oracle.today_pick.fragrance_id);
+      setVisibleCard(initialVisibleCard);
+      setPromotedAltId(currentDayState.lockState === 'locked' ? currentDayState.lockedPromotedAltId : null);
+      console.log(
+        '[Odara] applying oracle home for slot',
+        capturedSlot,
+        {
+          hero: oracle.today_pick.fragrance_id,
+          initialVisibleId: initialVisibleCard?.fragrance_id ?? null,
+          usedCarryover: carriedCard?.fragrance_id ?? null,
+          restoredLockedCard: currentDayState.lockState === 'locked'
+            ? (currentDayState.lockedCard?.fragrance_id ?? null)
+            : null,
+        }
+      );
 
       // 4) Pre-seed mood cache from normalized payload for hero card
       const slotPfx = `${selectedDate}|${selectedContext}`;
@@ -2313,7 +2453,7 @@ const OdaraScreen = ({
       setMoodCacheVersion(v => v + 1);
 
       // 5) Queue fetch is BACKGROUND — never blocks hero render
-      fetchQueueRef.current(oracle.today_pick.fragrance_id).then(q => {
+      fetchQueueRef.current(initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id).then(q => {
         if (activeSlotRef.current !== capturedSlot) return;
         setQueue(q);
         setQueuePointer(0);
@@ -2325,7 +2465,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracle, stateKey]);
+  }, [oracle, stateKey, currentDateKey, previousDateKey]);
 
   // No eager modes fetch — moods load lazily on user tap
 
@@ -3036,17 +3176,12 @@ const OdaraScreen = ({
   }, [clearCarryoverPulseTimeout]);
 
   useEffect(() => {
-    if (isGuestMode) return;
-    setSignedInCarryoverTarget('off');
-    setSignedInCarryoverPulseTarget(null);
-    clearCarryoverPulseTimeout();
-  }, [isGuestMode, visibleCard?.fragrance_id, clearCarryoverPulseTimeout]);
-
-  useEffect(() => {
     setDaySwipeOffset(0);
     setDaySwipeDragging(false);
     suppressCardClickRef.current = false;
-  }, [selectedDate]);
+    setSignedInCarryoverPulseTarget(null);
+    clearCarryoverPulseTimeout();
+  }, [selectedDate, clearCarryoverPulseTimeout]);
 
   useEffect(() => {
     setReasonChipExpanded(false);
@@ -3711,6 +3846,14 @@ const OdaraScreen = ({
 
   const signedInVisibleLayer = signedInResolvedCurrentCard?.layer ?? null;
   const signedInVisibleLayerModes = signedInResolvedCurrentCard?.layerModes ?? modeResults;
+  const signedInCurrentHeroCarryCard = useMemo(
+    () => toDisplayCardFromResolvedCurrentCard(signedInResolvedCurrentCard),
+    [signedInResolvedCurrentCard]
+  );
+  const signedInCurrentLayerCarryCard = useMemo(
+    () => toDisplayCardFromLayerMode(signedInVisibleLayer),
+    [signedInVisibleLayer]
+  );
   const visibleAlts = isGuestMode ? [] : (signedInResolvedCurrentCard?.alternates ?? []);
   const alternatesRendered = visibleAlts.length > 0;
   const signedInHeroFamilyColor = signedInHeroRail?.familyColor ?? '#888';
@@ -3728,13 +3871,17 @@ const OdaraScreen = ({
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
     : (signedInHeroRail?.tokens ?? []);
-  const signedInHeroCarryColor = signedInResolvedCurrentCard?.familyColor
-    ?? (signedInResolvedCurrentCard?.family ? (FAMILY_COLORS[signedInResolvedCurrentCard.family] ?? '#888') : '#888');
-  const signedInLayerCarryColor = signedInResolvedCurrentCard?.layerFamilyKey
-    ? (FAMILY_COLORS[signedInResolvedCurrentCard.layerFamilyKey] ?? '#888')
-    : (signedInVisibleLayer?.family_key ? (FAMILY_COLORS[signedInVisibleLayer.family_key] ?? '#888') : '#888');
+  const signedInHeroCarryColor = signedInDayState.carryoverHeroCard?.family
+    ? (FAMILY_COLORS[signedInDayState.carryoverHeroCard.family] ?? '#888')
+    : (signedInResolvedCurrentCard?.familyColor
+      ?? (signedInResolvedCurrentCard?.family ? (FAMILY_COLORS[signedInResolvedCurrentCard.family] ?? '#888') : '#888'));
+  const signedInLayerCarryColor = signedInDayState.carryoverLayerCard?.family
+    ? (FAMILY_COLORS[signedInDayState.carryoverLayerCard.family] ?? '#888')
+    : (signedInResolvedCurrentCard?.layerFamilyKey
+      ? (FAMILY_COLORS[signedInResolvedCurrentCard.layerFamilyKey] ?? '#888')
+      : (signedInVisibleLayer?.family_key ? (FAMILY_COLORS[signedInVisibleLayer.family_key] ?? '#888') : '#888'));
   const signedInCarryoverVisualTarget: SignedInCarryoverTarget =
-    signedInCarryoverTarget === 'layer' && signedInVisibleLayer
+    signedInCarryoverTarget === 'layer' && signedInDayState.carryoverLayerCard
       ? 'layer'
       : signedInCarryoverTarget === 'hero'
         ? 'hero'
@@ -3744,8 +3891,14 @@ const OdaraScreen = ({
     : signedInCarryoverVisualTarget === 'layer'
       ? signedInLayerCarryColor
       : null;
-  const signedInHeroCarryActive = !isGuestMode && signedInCarryoverVisualTarget === 'hero';
-  const signedInLayerCarryActive = !isGuestMode && signedInCarryoverVisualTarget === 'layer';
+  const signedInHeroCarryActive = !isGuestMode
+    && signedInCarryoverVisualTarget === 'hero'
+    && !!signedInCurrentHeroCarryCard?.fragrance_id
+    && signedInCurrentHeroCarryCard.fragrance_id === signedInDayState.carryoverHeroCard?.fragrance_id;
+  const signedInLayerCarryActive = !isGuestMode
+    && signedInCarryoverVisualTarget === 'layer'
+    && !!signedInCurrentLayerCarryCard?.fragrance_id
+    && signedInCurrentLayerCarryCard.fragrance_id === signedInDayState.carryoverLayerCard?.fragrance_id;
   const signedInHeroCarryPulsing = signedInCarryoverPulseTarget === 'hero';
   const signedInLayerCarryPulsing = signedInCarryoverPulseTarget === 'layer';
   const signedInHeroCarrySurfaceStyle = !isGuestMode && (signedInHeroCarryActive || signedInHeroCarryPulsing)
@@ -3775,18 +3928,87 @@ const OdaraScreen = ({
         background: 'rgba(255,255,255,0.035)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       };
+  useEffect(() => {
+    if (isGuestMode) return;
+    if (slotChangedSinceLastCommit) return;
+    updateSignedInDayState(currentDateKey, (current) => {
+      let next = current;
+
+      if (lockState === 'locked' && signedInCurrentHeroCarryCard) {
+        next = {
+          ...next,
+          lockedCard: signedInCurrentHeroCarryCard,
+          lockedMood: selectedMood,
+          lockedPromotedAltId: promotedAltId,
+        };
+      }
+
+      if (
+        current.carryoverMode === 'hero' &&
+        current.carryoverHeroCard?.fragrance_id &&
+        signedInCurrentHeroCarryCard &&
+        current.carryoverHeroCard.fragrance_id === signedInCurrentHeroCarryCard.fragrance_id
+      ) {
+        next = {
+          ...next,
+          carryoverHeroCard: signedInCurrentHeroCarryCard,
+        };
+      }
+
+      if (
+        current.carryoverMode === 'layer' &&
+        current.carryoverLayerCard?.fragrance_id &&
+        signedInCurrentLayerCarryCard &&
+        current.carryoverLayerCard.fragrance_id === signedInCurrentLayerCarryCard.fragrance_id
+      ) {
+        next = {
+          ...next,
+          carryoverLayerCard: signedInCurrentLayerCarryCard,
+        };
+      }
+
+      return next;
+    });
+  }, [
+    isGuestMode,
+    currentDateKey,
+    slotChangedSinceLastCommit,
+    updateSignedInDayState,
+    lockState,
+    signedInCurrentHeroCarryCard,
+    signedInCurrentLayerCarryCard,
+    selectedMood,
+    promotedAltId,
+  ]);
   const handleSignedInCarryoverToggle = useCallback(() => {
     if (isGuestMode) return;
-    const hasLayer = !!signedInVisibleLayer;
+    const hasLayer = !!signedInCurrentLayerCarryCard;
     const nextTarget: SignedInCarryoverTarget = signedInCarryoverTarget === 'off'
       ? 'hero'
       : signedInCarryoverTarget === 'hero'
         ? (hasLayer ? 'layer' : 'off')
         : 'off';
-    setSignedInCarryoverTarget(nextTarget);
+    updateSignedInDayState(currentDateKey, (current) => ({
+      ...current,
+      carryoverMode: nextTarget,
+      carryoverHeroCard: nextTarget === 'hero'
+        ? (signedInCurrentHeroCarryCard ?? current.carryoverHeroCard)
+        : current.carryoverHeroCard,
+      carryoverLayerCard: nextTarget === 'layer'
+        ? (signedInCurrentLayerCarryCard ?? current.carryoverLayerCard)
+        : current.carryoverLayerCard,
+    }));
     triggerSignedInCarryoverPulse(nextTarget === 'off' ? null : nextTarget);
     haptic('selection');
-  }, [isGuestMode, signedInVisibleLayer, signedInCarryoverTarget, triggerSignedInCarryoverPulse]);
+  }, [
+    isGuestMode,
+    signedInCurrentHeroCarryCard,
+    signedInCurrentLayerCarryCard,
+    signedInCarryoverTarget,
+    currentDateKey,
+    triggerSignedInCarryoverPulse,
+    updateSignedInDayState,
+  ]);
   const wardrobeSummary = useMemo(
     () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
       ? buildWardrobeBalanceSummary(wardrobeItems)
@@ -4790,11 +5012,9 @@ const OdaraScreen = ({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <circle cx="7" cy="12" r="2.2" />
-                    <circle cx="17" cy="7" r="2.2" />
-                    <circle cx="17" cy="17" r="2.2" />
-                    <path d="M8.9 10.9l5.2-2.8" />
-                    <path d="M8.9 13.1l5.2 2.8" />
+                    <path d="M10 14l-1.6 1.6a3 3 0 0 1-4.2-4.2l3.2-3.2a3 3 0 0 1 4.2 0" />
+                    <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
+                    <path d="M9 15l6-6" />
                   </svg>
                 </button>
               </div>
