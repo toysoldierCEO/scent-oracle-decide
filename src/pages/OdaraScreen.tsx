@@ -798,6 +798,7 @@ function getDateLabel(dateStr: string) {
 
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
+type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
 
 /* ── Gesture constants ──
  * Card approval is a double-tap (click-based).
@@ -1887,6 +1888,8 @@ const OdaraScreen = ({
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
+  const [signedInCarryoverTarget, setSignedInCarryoverTarget] = useState<SignedInCarryoverTarget>('off');
+  const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
   const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
@@ -2355,6 +2358,7 @@ const OdaraScreen = ({
   // double tap on card = like + lock
   const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const unlockTimeoutRef = useRef<number | null>(null);
+  const carryoverPulseTimeoutRef = useRef<number | null>(null);
   const DOUBLE_TAP_MS = 320;
   const DOUBLE_TAP_DIST = 32;
 
@@ -3006,9 +3010,37 @@ const OdaraScreen = ({
     }
   }, []);
 
+  const clearCarryoverPulseTimeout = useCallback(() => {
+    if (carryoverPulseTimeoutRef.current !== null) {
+      window.clearTimeout(carryoverPulseTimeoutRef.current);
+      carryoverPulseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const triggerSignedInCarryoverPulse = useCallback((target: Exclude<SignedInCarryoverTarget, 'off'> | null) => {
+    clearCarryoverPulseTimeout();
+    setSignedInCarryoverPulseTarget(target);
+    if (!target) return;
+    carryoverPulseTimeoutRef.current = window.setTimeout(() => {
+      setSignedInCarryoverPulseTarget((current) => (current === target ? null : current));
+      carryoverPulseTimeoutRef.current = null;
+    }, 700);
+  }, [clearCarryoverPulseTimeout]);
+
   useEffect(() => {
     return () => clearUnlockTimeout();
   }, [clearUnlockTimeout]);
+
+  useEffect(() => {
+    return () => clearCarryoverPulseTimeout();
+  }, [clearCarryoverPulseTimeout]);
+
+  useEffect(() => {
+    if (isGuestMode) return;
+    setSignedInCarryoverTarget('off');
+    setSignedInCarryoverPulseTarget(null);
+    clearCarryoverPulseTimeout();
+  }, [isGuestMode, visibleCard?.fragrance_id, clearCarryoverPulseTimeout]);
 
   useEffect(() => {
     setDaySwipeOffset(0);
@@ -3680,7 +3712,6 @@ const OdaraScreen = ({
     return signedInResolvedCurrentCard.resolvedHeroRail ?? null;
   }, [isGuestMode, signedInResolvedCurrentCard]);
 
-  const signedInVisibleHero = signedInResolvedCurrentCard?.hero ?? null;
   const signedInVisibleLayer = signedInResolvedCurrentCard?.layer ?? null;
   const signedInVisibleLayerModes = signedInResolvedCurrentCard?.layerModes ?? modeResults;
   const signedInHeroFamilyColor = signedInHeroRail?.familyColor ?? '#888';
@@ -3698,6 +3729,65 @@ const OdaraScreen = ({
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
     : (signedInHeroRail?.tokens ?? []);
+  const signedInHeroCarryColor = signedInResolvedCurrentCard?.familyColor
+    ?? (signedInResolvedCurrentCard?.family ? (FAMILY_COLORS[signedInResolvedCurrentCard.family] ?? '#888') : '#888');
+  const signedInLayerCarryColor = signedInResolvedCurrentCard?.layerFamilyKey
+    ? (FAMILY_COLORS[signedInResolvedCurrentCard.layerFamilyKey] ?? '#888')
+    : (signedInVisibleLayer?.family_key ? (FAMILY_COLORS[signedInVisibleLayer.family_key] ?? '#888') : '#888');
+  const signedInCarryoverVisualTarget: SignedInCarryoverTarget =
+    signedInCarryoverTarget === 'layer' && signedInVisibleLayer
+      ? 'layer'
+      : signedInCarryoverTarget === 'hero'
+        ? 'hero'
+        : 'off';
+  const signedInCarryoverColor = signedInCarryoverVisualTarget === 'hero'
+    ? signedInHeroCarryColor
+    : signedInCarryoverVisualTarget === 'layer'
+      ? signedInLayerCarryColor
+      : null;
+  const signedInHeroCarryActive = !isGuestMode && signedInCarryoverVisualTarget === 'hero';
+  const signedInLayerCarryActive = !isGuestMode && signedInCarryoverVisualTarget === 'layer';
+  const signedInHeroCarryPulsing = signedInCarryoverPulseTarget === 'hero';
+  const signedInLayerCarryPulsing = signedInCarryoverPulseTarget === 'layer';
+  const signedInHeroCarrySurfaceStyle = !isGuestMode && (signedInHeroCarryActive || signedInHeroCarryPulsing)
+    ? {
+        background: `${signedInHeroCarryColor}${signedInHeroCarryPulsing ? '14' : '0F'}`,
+        boxShadow: signedInHeroCarryPulsing
+          ? `inset 0 0 0 1px ${signedInHeroCarryColor}30, 0 16px 36px ${signedInHeroCarryColor}22`
+          : `inset 0 0 0 1px ${signedInHeroCarryColor}22, 0 10px 24px ${signedInHeroCarryColor}14`,
+      }
+    : undefined;
+  const signedInLayerCarrySurfaceStyle = !isGuestMode && (signedInLayerCarryActive || signedInLayerCarryPulsing)
+    ? {
+        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '14' : '0E'}`,
+        boxShadow: signedInLayerCarryPulsing
+          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30, 0 18px 40px ${signedInLayerCarryColor}20`
+          : `inset 0 0 0 1px ${signedInLayerCarryColor}22, 0 10px 26px ${signedInLayerCarryColor}14`,
+      }
+    : undefined;
+  const signedInCarryoverButtonStyle = signedInCarryoverColor
+    ? {
+        color: signedInCarryoverColor,
+        background: `${signedInCarryoverColor}16`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px ${signedInCarryoverColor}18`,
+      }
+    : {
+        color: 'rgba(255,255,255,0.62)',
+        background: 'rgba(255,255,255,0.035)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+      };
+  const handleSignedInCarryoverToggle = useCallback(() => {
+    if (isGuestMode) return;
+    const hasLayer = !!signedInVisibleLayer;
+    const nextTarget: SignedInCarryoverTarget = signedInCarryoverTarget === 'off'
+      ? 'hero'
+      : signedInCarryoverTarget === 'hero'
+        ? (hasLayer ? 'layer' : 'off')
+        : 'off';
+    setSignedInCarryoverTarget(nextTarget);
+    triggerSignedInCarryoverPulse(nextTarget === 'off' ? null : nextTarget);
+    haptic('selection');
+  }, [isGuestMode, signedInVisibleLayer, signedInCarryoverTarget, triggerSignedInCarryoverPulse]);
   const wardrobeSummary = useMemo(
     () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
       ? buildWardrobeBalanceSummary(wardrobeItems)
@@ -4322,30 +4412,31 @@ const OdaraScreen = ({
                   )}
                 </button>
 
-                {/* Favorite star — interactive for both signed-in and guest.
-                    Signed-in persists combo via favoriteMap.
-                    Guest writes only to local guestStarredByKey (no Supabase). */}
-                <button
-                  type="button"
-                  aria-label="Favorite"
-                  onClick={() => cardController.actions.toggleStar()}
-                  className="p-0.5 relative"
-                >
-                  <svg
-                    width="13" height="13" viewBox="0 0 24 24"
-                    fill={starActive ? '#eab308' : 'none'}
-                    stroke={starActive ? '#eab308' : 'currentColor'}
-                    strokeWidth="1.5"
-                    className={`transition-all duration-300 ${
-                      starActive
-                        ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]'
-                        : 'text-foreground/40 hover:text-foreground/70'
-                    } ${guestStarFlash ? 'scale-125' : 'scale-100'}`}
-                    style={{ transitionProperty: 'transform, fill, stroke, filter' }}
+                {isGuestMode && (
+                  /* Favorite star — guest only in the top rail.
+                     Signed-in favorite moves to the bottom action row. */
+                  <button
+                    type="button"
+                    aria-label="Favorite"
+                    onClick={() => cardController.actions.toggleStar()}
+                    className="p-0.5 relative"
                   >
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </button>
+                    <svg
+                      width="13" height="13" viewBox="0 0 24 24"
+                      fill={starActive ? '#eab308' : 'none'}
+                      stroke={starActive ? '#eab308' : 'currentColor'}
+                      strokeWidth="1.5"
+                      className={`transition-all duration-300 ${
+                        starActive
+                          ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]'
+                          : 'text-foreground/40 hover:text-foreground/70'
+                      } ${guestStarFlash ? 'scale-125' : 'scale-100'}`}
+                      style={{ transitionProperty: 'transform, fill, stroke, filter' }}
+                    >
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </button>
+                )}
 
                 {/* Back arrow — history-gated for both signed-in and guest */}
                 {showBack && (
@@ -4360,138 +4451,145 @@ const OdaraScreen = ({
               })()}
             </div>
 
-            {/* Source badge for queue cards */}
-            {!isHeroStyle && (
-              <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
-                from queue
-              </span>
-            )}
-
-            {/* Recipe header — Guest Recipe Mode only. Rendered above hero
-                title in quotes using backend-provided color_hex. Source:
-                option.recipe_header (attached to hero by guest-recipe.ts). */}
-            {isGuestMode && (() => {
-              const rh: any =
-                (visibleGuestRender?.activeHero as any)?.recipe_header ??
-                ((activeOracle ?? oracle) as any)?.main_bundle?.recipe_header ??
-                null;
-              if (!rh?.text) return null;
-              const color = typeof rh.color_hex === 'string' && rh.color_hex.startsWith('#')
-                ? rh.color_hex
-                : undefined;
-              return (
-                <div
-                  className="text-center mt-1 mb-1 text-[12px] uppercase tracking-[0.22em] font-medium"
-                  style={color ? { color } : undefined}
-                  data-recipe-header
-                >
-                  {rh.text}
-                </div>
-              );
-            })()}
-
-            {/* Fragrance name — guest v5: from visibleGuestRender.activeHero */}
-            <h2
-              className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
-              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-              data-guest-profile-reserved
+            <div
+              className={isGuestMode
+                ? "relative flex w-full flex-col items-center"
+                : "relative flex w-full flex-col items-center rounded-[20px] px-3 pt-1 pb-1 transition-all duration-300"}
+              style={signedInHeroCarrySurfaceStyle}
             >
-              {isGuestMode && visibleGuestRender?.activeHero
-                ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
-                : getDisplayName(signedInResolvedCurrentCard?.name ?? '', signedInResolvedCurrentCard?.brand ?? null)}
-            </h2>
-
-            {/* Brand */}
-            <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-              {isGuestMode && visibleGuestRender?.activeHero
-                ? visibleGuestRender.activeHero.brand
-                : (signedInResolvedCurrentCard?.brand ?? '')}
-            </span>
-
-            {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
-            {!isGuestMode ? (
-              signedInHeroFamilyLabel ? (
-                <span
-                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                  style={{ color: signedInHeroFamilyColor }}
-                >
-                  {signedInHeroFamilyLabel}
+              {/* Source badge for queue cards */}
+              {!isHeroStyle && (
+                <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
+                  from queue
                 </span>
-              ) : null
-            ) : (() => {
-              const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
-                ? String(visibleGuestRender.activeHero.family)
-                : null;
-              if (!guestHeroFamily) return null;
-              const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
-              const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
-              return (
-                <span
-                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                  style={{ color: guestHeroFamilyColor }}
-                >
-                  {guestHeroFamily}
-                </span>
-              );
-            })()}
+              )}
 
-            {(activeReasonChip || heroRailTokens.length > 0) && (
-              <div className="mt-0.5 mb-3">
-                <div
-                  className="flex flex-nowrap items-center gap-1.5 px-3 overflow-x-auto justify-start w-full"
-                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                >
-                  {activeReasonChip && (
-                    <button
-                      type="button"
-                      data-no-card-swipe
-                      aria-expanded={reasonChipExpanded}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReasonChipExpanded((expanded) => !expanded);
-                      }}
-                      className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
-                      style={{
-                        background: 'rgba(9,9,11,0.82)',
-                        border: '1px solid rgba(255,255,255,0.10)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-                      }}
-                    >
-                      {activeReasonChip.label}
-                    </button>
-                  )}
+              {/* Recipe header — Guest Recipe Mode only. Rendered above hero
+                  title in quotes using backend-provided color_hex. Source:
+                  option.recipe_header (attached to hero by guest-recipe.ts). */}
+              {isGuestMode && (() => {
+                const rh: any =
+                  (visibleGuestRender?.activeHero as any)?.recipe_header ??
+                  ((activeOracle ?? oracle) as any)?.main_bundle?.recipe_header ??
+                  null;
+                if (!rh?.text) return null;
+                const color = typeof rh.color_hex === 'string' && rh.color_hex.startsWith('#')
+                  ? rh.color_hex
+                  : undefined;
+                return (
+                  <div
+                    className="text-center mt-1 mb-1 text-[12px] uppercase tracking-[0.22em] font-medium"
+                    style={color ? { color } : undefined}
+                    data-recipe-header
+                  >
+                    {rh.text}
+                  </div>
+                );
+              })()}
 
-                  {heroRailTokens.map((t, i) => {
-                    const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
-                    if (!tokenLabel) return null;
-                    const tokenColor = t?.color_hex || '#888';
-                    const isSharedToken = !!t?.is_shared;
-                    return (
-                      <span
-                        key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
-                        className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+              {/* Fragrance name — guest v5: from visibleGuestRender.activeHero */}
+              <h2
+                className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
+                style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                data-guest-profile-reserved
+              >
+                {isGuestMode && visibleGuestRender?.activeHero
+                  ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
+                  : getDisplayName(signedInResolvedCurrentCard?.name ?? '', signedInResolvedCurrentCard?.brand ?? null)}
+              </h2>
+
+              {/* Brand */}
+              <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
+                {isGuestMode && visibleGuestRender?.activeHero
+                  ? visibleGuestRender.activeHero.brand
+                  : (signedInResolvedCurrentCard?.brand ?? '')}
+              </span>
+
+              {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
+              {!isGuestMode ? (
+                signedInHeroFamilyLabel ? (
+                  <span
+                    className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                    style={{ color: signedInHeroFamilyColor }}
+                  >
+                    {signedInHeroFamilyLabel}
+                  </span>
+                ) : null
+              ) : (() => {
+                const guestHeroFamily: string | null = visibleGuestRender?.activeHero?.family
+                  ? String(visibleGuestRender.activeHero.family)
+                  : null;
+                if (!guestHeroFamily) return null;
+                const fam = guestHeroFamily as keyof typeof FAMILY_COLORS;
+                const guestHeroFamilyColor = FAMILY_COLORS[fam] ?? '#aaa';
+                return (
+                  <span
+                    className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
+                    style={{ color: guestHeroFamilyColor }}
+                  >
+                    {guestHeroFamily}
+                  </span>
+                );
+              })()}
+
+              {(activeReasonChip || heroRailTokens.length > 0) && (
+                <div className="mt-0.5 mb-3 w-full">
+                  <div
+                    className="flex flex-nowrap items-center gap-1.5 px-3 overflow-x-auto justify-start w-full"
+                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {activeReasonChip && (
+                      <button
+                        type="button"
+                        data-no-card-swipe
+                        aria-expanded={reasonChipExpanded}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReasonChipExpanded((expanded) => !expanded);
+                        }}
+                        className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
                         style={{
-                          color: tokenColor,
-                          border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
-                          background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
-                          boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
+                          background: 'rgba(9,9,11,0.82)',
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
                         }}
                       >
-                        {tokenLabel}
-                      </span>
-                    );
-                  })}
-                </div>
+                        {activeReasonChip.label}
+                      </button>
+                    )}
 
-                {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
-                  <div className="px-3 pt-2">
-                    <p className="text-[12px] leading-[1.5] text-foreground/72">
-                      {activeReasonChip.explanation}
-                    </p>
+                    {heroRailTokens.map((t, i) => {
+                      const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
+                      if (!tokenLabel) return null;
+                      const tokenColor = t?.color_hex || '#888';
+                      const isSharedToken = !!t?.is_shared;
+                      return (
+                        <span
+                          key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
+                          className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
+                          style={{
+                            color: tokenColor,
+                            border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
+                            background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
+                            boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
+                          }}
+                        >
+                          {tokenLabel}
+                        </span>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
+                    <div className="px-3 pt-2">
+                      <p className="text-[12px] leading-[1.5] text-foreground/72">
+                        {activeReasonChip.explanation}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* ── Layer card — signed-in and guest both render through LayerCard. ── */}
             {isGuestMode ? (() => {
@@ -4527,7 +4625,11 @@ const OdaraScreen = ({
               // Mark the layer section so the card-level double-tap handler
               // ignores taps that land inside it. LayerCard already calls
               // stopPropagation on its expand/collapse trigger.
-              <div data-layer-section>
+              <div
+                data-layer-section
+                className="rounded-[22px] transition-all duration-300"
+                style={signedInLayerCarrySurfaceStyle}
+              >
                 <LayerCard
                   mainName={signedInResolvedCurrentCard?.name ?? ''}
                   mainBrand={signedInResolvedCurrentCard?.brand ?? null}
@@ -4638,6 +4740,66 @@ const OdaraScreen = ({
                 </div>
               </div>
             ))}
+
+            {!isGuestMode && (
+              <div className="mt-4 flex items-center justify-center gap-5">
+                <button
+                  type="button"
+                  aria-label="Favorite"
+                  aria-pressed={isFavorited}
+                  onClick={() => cardController.actions.toggleStar()}
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                  style={{
+                    color: isFavorited ? '#eab308' : 'rgba(255,255,255,0.62)',
+                    background: isFavorited ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
+                    boxShadow: isFavorited
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(234,179,8,0.14)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  }}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill={isFavorited ? '#eab308' : 'none'}
+                    stroke={isFavorited ? '#eab308' : 'currentColor'}
+                    strokeWidth="1.55"
+                    className="transition-all duration-300"
+                    style={{
+                      filter: isFavorited ? 'drop-shadow(0 0 5px rgba(234,179,8,0.38))' : undefined,
+                    }}
+                  >
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  aria-label="Carry to next day"
+                  aria-pressed={signedInCarryoverVisualTarget !== 'off'}
+                  onClick={handleSignedInCarryoverToggle}
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                  style={signedInCarryoverButtonStyle}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.65"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="7" cy="12" r="2.2" />
+                    <circle cx="17" cy="7" r="2.2" />
+                    <circle cx="17" cy="17" r="2.2" />
+                    <path d="M8.9 10.9l5.2-2.8" />
+                    <path d="M8.9 13.1l5.2 2.8" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
 
               </div>
