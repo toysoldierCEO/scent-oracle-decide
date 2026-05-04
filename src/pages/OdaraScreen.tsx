@@ -916,13 +916,36 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
   };
 }
 
+function sanitizeTokenSource(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) normalized.push(trimmed);
+      continue;
+    }
+
+    if (value && typeof value === 'object') {
+      const candidate = (value as any)?.token_label ?? (value as any)?.label ?? (value as any)?.name ?? null;
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim();
+        if (trimmed) normalized.push(trimmed);
+      }
+    }
+  }
+
+  return normalized;
+}
+
 function buildFallbackRailTokens(
   accords: string[] | null | undefined,
   notes: string[] | null | undefined,
 ): any[] {
   const labels = [
-    ...normalizeNotes(Array.isArray(accords) ? accords : [], 4),
-    ...normalizeNotes(Array.isArray(notes) ? notes : [], 4),
+    ...normalizeNotes(sanitizeTokenSource(accords), 4),
+    ...normalizeNotes(sanitizeTokenSource(notes), 4),
   ];
   const uniqueLabels: string[] = [];
   const seen = new Set<string>();
@@ -945,18 +968,66 @@ function buildFallbackRailTokens(
   }));
 }
 
+function hasRenderableRailTokens(
+  accords: string[] | null | undefined,
+  notes: string[] | null | undefined,
+): boolean {
+  return buildFallbackRailTokens(accords, notes).length > 0;
+}
+
+function pickPreferredRailSource(
+  currentAccords: string[] | null | undefined,
+  currentNotes: string[] | null | undefined,
+  detailAccords: string[] | null | undefined,
+  detailNotes: string[] | null | undefined,
+) {
+  const currentAccordsSanitized = sanitizeTokenSource(currentAccords);
+  const currentNotesSanitized = sanitizeTokenSource(currentNotes);
+  const detailAccordsSanitized = sanitizeTokenSource(detailAccords);
+  const detailNotesSanitized = sanitizeTokenSource(detailNotes);
+
+  const currentTokenCount = buildFallbackRailTokens(currentAccordsSanitized, currentNotesSanitized).length;
+  const detailTokenCount = buildFallbackRailTokens(detailAccordsSanitized, detailNotesSanitized).length;
+
+  if (detailTokenCount > currentTokenCount) {
+    return {
+      accords: detailAccordsSanitized,
+      notes: detailNotesSanitized,
+    };
+  }
+
+  return {
+    accords: currentAccordsSanitized,
+    notes: currentNotesSanitized,
+  };
+}
+
 function resolveDisplayCardWithDetails(
   card: DisplayCard,
   detail: FragranceDetail | null | undefined,
 ): DisplayCard {
-  if (!detail) return card;
+  const cardNotes = sanitizeTokenSource(card.notes);
+  const cardAccords = sanitizeTokenSource(card.accords);
+  if (!detail) {
+    return {
+      ...card,
+      notes: cardNotes,
+      accords: cardAccords,
+    };
+  }
+  const preferredRail = pickPreferredRailSource(
+    cardAccords,
+    cardNotes,
+    detail.accords,
+    detail.notes,
+  );
   return {
     ...card,
     name: card.name || detail.name || '',
     brand: card.brand || detail.brand || '',
     family: card.family || detail.family_key || '',
-    notes: Array.isArray(card.notes) && card.notes.length > 0 ? card.notes : detail.notes,
-    accords: Array.isArray(card.accords) && card.accords.length > 0 ? card.accords : detail.accords,
+    notes: preferredRail.notes,
+    accords: preferredRail.accords,
   };
 }
 
@@ -965,14 +1036,28 @@ function resolveLayerModeWithDetails(
   detail: FragranceDetail | null | undefined,
 ): NonNullable<LayerModes[LayerMood]> | null {
   if (!layer) return null;
-  if (!detail) return layer;
+  const layerNotes = sanitizeTokenSource(layer.notes);
+  const layerAccords = sanitizeTokenSource(layer.accords);
+  if (!detail) {
+    return {
+      ...layer,
+      notes: layerNotes,
+      accords: layerAccords,
+    };
+  }
+  const preferredRail = pickPreferredRailSource(
+    layerAccords,
+    layerNotes,
+    detail.accords,
+    detail.notes,
+  );
   return {
     ...layer,
     name: layer.name || detail.name || '',
     brand: layer.brand || detail.brand || '',
     family_key: layer.family_key || detail.family_key || '',
-    notes: Array.isArray(layer.notes) && layer.notes.length > 0 ? layer.notes : detail.notes,
-    accords: Array.isArray(layer.accords) && layer.accords.length > 0 ? layer.accords : detail.accords,
+    notes: preferredRail.notes,
+    accords: preferredRail.accords,
   };
 }
 
@@ -1706,12 +1791,24 @@ const OdaraScreen = ({
           const detail = await fetchFragranceDetail(entry.layer_fragrance_id);
           if (detail?.name) entry.layer_name = detail.name;
         }
-        if (entry.layer_fragrance_id && (!entry.layer_family || (!entry.layer_notes.length && !entry.layer_accords.length))) {
+        if (
+          entry.layer_fragrance_id &&
+          (
+            !entry.layer_family ||
+            !hasRenderableRailTokens(entry.layer_accords, entry.layer_notes)
+          )
+        ) {
           const detail = await fetchFragranceDetail(entry.layer_fragrance_id);
           if (detail) {
             if (!entry.layer_family) entry.layer_family = detail.family_key ?? '';
-            if (!entry.layer_notes.length) entry.layer_notes = detail.notes;
-            if (!entry.layer_accords.length) entry.layer_accords = detail.accords;
+            const preferredRail = pickPreferredRailSource(
+              entry.layer_accords,
+              entry.layer_notes,
+              detail.accords,
+              detail.notes,
+            );
+            entry.layer_notes = preferredRail.notes;
+            entry.layer_accords = preferredRail.accords;
           }
         }
 
@@ -2109,7 +2206,6 @@ const OdaraScreen = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard]);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
-
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
     const mood = selectedMood ?? 'balance';
@@ -2122,22 +2218,18 @@ const OdaraScreen = ({
     if (isGuestMode) return;
 
     const visibleHeroNeedsDetail = !!visibleCard?.fragrance_id
-      && (!Array.isArray(visibleCard.notes) || visibleCard.notes.length === 0)
-      && (!Array.isArray(visibleCard.accords) || visibleCard.accords.length === 0);
+      && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id);
     if (visibleHeroNeedsDetail) {
       void fetchFragranceDetail(visibleCard!.fragrance_id);
     }
 
     const visibleLayerId = visibleModeEntry?.id ?? null;
-    const visibleLayerHasTokens = Array.isArray((visibleModeEntry as any)?.tokens) && (visibleModeEntry as any).tokens.length > 0;
     const visibleLayerNeedsDetail = !!visibleLayerId
-      && !visibleLayerHasTokens
-      && (!Array.isArray(visibleModeEntry?.notes) || visibleModeEntry.notes.length === 0)
-      && (!Array.isArray(visibleModeEntry?.accords) || visibleModeEntry.accords.length === 0);
+      && !fragranceDetailCacheRef.current.has(visibleLayerId);
     if (visibleLayerNeedsDetail) {
       void fetchFragranceDetail(visibleLayerId!);
     }
-  }, [isGuestMode, visibleCard, visibleModeEntry, fetchFragranceDetail]);
+  }, [isGuestMode, visibleCard, visibleModeEntry, fetchFragranceDetail, fragranceDetailVersion]);
 
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
@@ -2167,17 +2259,17 @@ const OdaraScreen = ({
       resolvedHero,
     );
     const heroFamilyKey = resolvedHero.family ?? '';
-    const heroFamilyColor = FAMILY_COLORS[heroFamilyKey] ?? '#888';
-    const heroFamilyLabel = FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase();
+    const heroFallbackTokens = buildFallbackRailTokens(resolvedHero.accords, resolvedHero.notes);
+    const heroHasFamily = heroFamilyKey.trim().length > 0;
+    const heroHasTokens = heroTokensFromPayload.length > 0 || heroFallbackTokens.length > 0;
+    const heroSurfaceSettled = isHeroCard || !!heroDetail || (heroHasFamily && heroHasTokens);
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const visibleLayerDetail = visibleModeEntry?.id
       ? (fragranceDetailCacheRef.current.get(visibleModeEntry.id) ?? null)
       : null;
-    const visibleLayer = resolveLayerModeWithDetails(visibleModeEntry, visibleLayerDetail);
-
-    const layerFamilyKey = visibleLayer?.family_key ?? '';
-    const layerFamilyLabel = layerFamilyKey ? (FAMILY_LABELS[layerFamilyKey] ?? layerFamilyKey.toUpperCase()) : '';
+    const resolvedLayer = resolveLayerModeWithDetails(visibleModeEntry, visibleLayerDetail);
+    const resolvedLayerId = visibleModeEntry?.id ?? null;
 
     // Layer tokens — visibleLayer.tokens FIRST (per-layer in the stack),
     // then payload.layer_tokens (balance hero fallback only), then [].
@@ -2192,33 +2284,57 @@ const OdaraScreen = ({
       layerTokens = v6.layer_tokens;
     } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
       layerTokens = o.layer_tokens;
-    } else if (Array.isArray((visibleLayer as any)?.tokens)) {
-      layerTokens = (visibleLayer as any).tokens;
-    } else if (visibleLayer) {
+    } else if (Array.isArray((resolvedLayer as any)?.tokens) && (resolvedLayer as any).tokens.length > 0) {
+      layerTokens = (resolvedLayer as any).tokens;
+    } else if (resolvedLayer) {
       layerTokens = buildFallbackRailTokens(
-        Array.isArray((visibleLayer as any)?.accords) ? (visibleLayer as any).accords : [],
-        Array.isArray((visibleLayer as any)?.notes) ? (visibleLayer as any).notes : [],
+        Array.isArray((resolvedLayer as any)?.accords) ? (resolvedLayer as any).accords : [],
+        Array.isArray((resolvedLayer as any)?.notes) ? (resolvedLayer as any).notes : [],
       );
     }
+    const layerFamilyKey = resolvedLayer?.family_key ?? '';
+    const layerHasFamily = layerFamilyKey.trim().length > 0;
+    const layerHasTokens = layerTokens.length > 0;
+    const layerSurfaceSettled = isHeroCard || (!!resolvedLayer && (!!visibleLayerDetail || (layerHasFamily && layerHasTokens)));
+    const queuedSurfacesReady = isHeroCard || (heroSurfaceSettled && layerSurfaceSettled);
+    const layerFamilyKeyForDisplay = queuedSurfacesReady ? layerFamilyKey : '';
+    const layerFamilyLabel = layerFamilyKeyForDisplay ? (FAMILY_LABELS[layerFamilyKeyForDisplay] ?? layerFamilyKeyForDisplay.toUpperCase()) : '';
+
+    const visibleLayer = resolvedLayer
+      ? {
+          ...resolvedLayer,
+          family_key: queuedSurfacesReady ? resolvedLayer.family_key : '',
+          notes: queuedSurfacesReady ? resolvedLayer.notes : [],
+          accords: queuedSurfacesReady ? resolvedLayer.accords : [],
+        }
+      : null;
+    const heroFamilyKeyForDisplay = queuedSurfacesReady ? heroFamilyKey : '';
+    const heroFamilyColorForDisplay = heroFamilyKeyForDisplay
+      ? (FAMILY_COLORS[heroFamilyKeyForDisplay] ?? '#888')
+      : '#888';
+    const heroFamilyLabelForDisplay = heroFamilyKeyForDisplay
+      ? (FAMILY_LABELS[heroFamilyKeyForDisplay] ?? heroFamilyKeyForDisplay.toUpperCase())
+      : '';
 
     return {
       activeHero: resolvedHero,
-      heroFamilyKey,
-      heroFamilyColor,
-      heroFamilyLabel,
-      activeHeroTokens: heroTokensSrc,
-      activeReasonChip: reasonChip,
+      heroFamilyKey: heroFamilyKeyForDisplay,
+      heroFamilyColor: heroFamilyColorForDisplay,
+      heroFamilyLabel: heroFamilyLabelForDisplay,
+      activeHeroTokens: queuedSurfacesReady ? heroTokensSrc : [],
+      activeReasonChip: queuedSurfacesReady ? reasonChip : null,
       activeLayer: visibleLayer,
-      activeLayerFamilyKey: layerFamilyKey,
+      activeLayerFamilyKey: layerFamilyKeyForDisplay,
       activeLayerFamilyLabel: layerFamilyLabel,
-      activeLayerTokens: layerTokens,
+      activeLayerTokens: queuedSurfacesReady ? layerTokens : [],
       layerModes: modeResults,
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
       activeAlternates: signedInVisibleAlternates,
-      reasonChipLabel: reasonChip?.label ?? null,
-      reasonChipExplanation: reasonChip?.explanation ?? null,
+      reasonChipLabel: queuedSurfacesReady ? (reasonChip?.label ?? null) : null,
+      reasonChipExplanation: queuedSurfacesReady ? (reasonChip?.explanation ?? null) : null,
+      queuedSurfacesReady,
     };
   }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion]);
 
