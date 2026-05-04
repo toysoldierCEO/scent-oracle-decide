@@ -1031,6 +1031,37 @@ function resolveDisplayCardWithDetails(
   };
 }
 
+function resolveQueuedHeroDisplayWithDetails(
+  card: DisplayCard,
+  detail: FragranceDetail | null | undefined,
+): DisplayCard {
+  const previewNotes = sanitizeTokenSource(card.notes);
+  const previewAccords = sanitizeTokenSource(card.accords);
+  const previewTokens = buildFallbackRailTokens(previewAccords, previewNotes);
+
+  if (!detail) {
+    return {
+      ...card,
+      notes: previewNotes,
+      accords: previewAccords,
+    };
+  }
+
+  const detailNotes = sanitizeTokenSource(detail.notes);
+  const detailAccords = sanitizeTokenSource(detail.accords);
+  const detailTokens = buildFallbackRailTokens(detailAccords, detailNotes);
+  const useDetailRail = detailTokens.length > 0 || previewTokens.length === 0;
+
+  return {
+    ...card,
+    name: card.name || detail.name || '',
+    brand: card.brand || detail.brand || '',
+    family: detail.family_key || card.family || '',
+    notes: useDetailRail ? detailNotes : previewNotes,
+    accords: useDetailRail ? detailAccords : previewAccords,
+  };
+}
+
 function resolveLayerModeWithDetails(
   layer: NonNullable<LayerModes[LayerMood]> | null | undefined,
   detail: FragranceDetail | null | undefined,
@@ -1222,7 +1253,7 @@ const OdaraScreen = ({
         : rows;
       const detailMap = await fetchFragranceDetails(filtered.map((row) => row.fragrance_id));
       console.log('[Odara] queue fetch success', filtered.length, 'cards');
-      return filtered.map((row) => resolveDisplayCardWithDetails(
+      return filtered.map((row) => resolveQueuedHeroDisplayWithDetails(
         queueCardToDisplay(row),
         detailMap.get(row.fragrance_id) ?? null,
       ));
@@ -2241,7 +2272,9 @@ const OdaraScreen = ({
     const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
 
     const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
-    const resolvedHero = resolveDisplayCardWithDetails(visibleCard, heroDetail);
+    const resolvedHero = isHeroCard
+      ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
+      : resolveQueuedHeroDisplayWithDetails(visibleCard, heroDetail);
 
     // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
     const heroTokensFromPayload: any[] = isHeroCard
@@ -2258,17 +2291,18 @@ const OdaraScreen = ({
       resolvedHero,
     );
     const heroFamilyKey = resolvedHero.family ?? '';
-    const heroFallbackTokens = buildFallbackRailTokens(resolvedHero.accords, resolvedHero.notes);
-    const heroHasFamily = heroFamilyKey.trim().length > 0;
-    const heroHasTokens = heroTokensFromPayload.length > 0 || heroFallbackTokens.length > 0;
-    const heroSurfaceSettled = isHeroCard || !!heroDetail || (heroHasFamily && heroHasTokens);
+    const heroFamilyColorForDisplay = heroFamilyKey
+      ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
+      : '#888';
+    const heroFamilyLabelForDisplay = heroFamilyKey
+      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
+      : '';
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const visibleLayerDetail = visibleModeEntry?.id
       ? (fragranceDetailCacheRef.current.get(visibleModeEntry.id) ?? null)
       : null;
     const resolvedLayer = resolveLayerModeWithDetails(visibleModeEntry, visibleLayerDetail);
-    const resolvedLayerId = visibleModeEntry?.id ?? null;
 
     // Layer tokens — visibleLayer.tokens FIRST (per-layer in the stack),
     // then payload.layer_tokens (balance hero fallback only), then [].
@@ -2295,45 +2329,38 @@ const OdaraScreen = ({
     const layerHasFamily = layerFamilyKey.trim().length > 0;
     const layerHasTokens = layerTokens.length > 0;
     const layerSurfaceSettled = isHeroCard || (!!resolvedLayer && (!!visibleLayerDetail || (layerHasFamily && layerHasTokens)));
-    const queuedSurfacesReady = isHeroCard || (heroSurfaceSettled && layerSurfaceSettled);
-    const layerFamilyKeyForDisplay = queuedSurfacesReady ? layerFamilyKey : '';
+    const layerSurfacesReady = isHeroCard || layerSurfaceSettled;
+    const layerFamilyKeyForDisplay = layerSurfacesReady ? layerFamilyKey : '';
     const layerFamilyLabel = layerFamilyKeyForDisplay ? (FAMILY_LABELS[layerFamilyKeyForDisplay] ?? layerFamilyKeyForDisplay.toUpperCase()) : '';
 
     const visibleLayer = resolvedLayer
       ? {
           ...resolvedLayer,
-          family_key: queuedSurfacesReady ? resolvedLayer.family_key : '',
-          notes: queuedSurfacesReady ? resolvedLayer.notes : [],
-          accords: queuedSurfacesReady ? resolvedLayer.accords : [],
+          family_key: layerSurfacesReady ? resolvedLayer.family_key : '',
+          notes: layerSurfacesReady ? resolvedLayer.notes : [],
+          accords: layerSurfacesReady ? resolvedLayer.accords : [],
         }
       : null;
-    const heroFamilyKeyForDisplay = queuedSurfacesReady ? heroFamilyKey : '';
-    const heroFamilyColorForDisplay = heroFamilyKeyForDisplay
-      ? (FAMILY_COLORS[heroFamilyKeyForDisplay] ?? '#888')
-      : '#888';
-    const heroFamilyLabelForDisplay = heroFamilyKeyForDisplay
-      ? (FAMILY_LABELS[heroFamilyKeyForDisplay] ?? heroFamilyKeyForDisplay.toUpperCase())
-      : '';
 
     return {
       activeHero: resolvedHero,
-      heroFamilyKey: heroFamilyKeyForDisplay,
+      heroFamilyKey,
       heroFamilyColor: heroFamilyColorForDisplay,
       heroFamilyLabel: heroFamilyLabelForDisplay,
-      activeHeroTokens: queuedSurfacesReady ? heroTokensSrc : [],
-      activeReasonChip: queuedSurfacesReady ? reasonChip : null,
+      activeHeroTokens: heroTokensSrc,
+      activeReasonChip: reasonChip,
       activeLayer: visibleLayer,
       activeLayerFamilyKey: layerFamilyKeyForDisplay,
       activeLayerFamilyLabel: layerFamilyLabel,
-      activeLayerTokens: queuedSurfacesReady ? layerTokens : [],
+      activeLayerTokens: layerSurfacesReady ? layerTokens : [],
       layerModes: modeResults,
       selectedMode: selectedMood,
       visibleCardId: visibleCard.fragrance_id,
       isLocked: lockState === 'locked',
       activeAlternates: signedInVisibleAlternates,
-      reasonChipLabel: queuedSurfacesReady ? (reasonChip?.label ?? null) : null,
-      reasonChipExplanation: queuedSurfacesReady ? (reasonChip?.explanation ?? null) : null,
-      queuedSurfacesReady,
+      reasonChipLabel: reasonChip?.label ?? null,
+      reasonChipExplanation: reasonChip?.explanation ?? null,
+      queuedSurfacesReady: layerSurfacesReady,
     };
   }, [isGuestMode, visibleCard, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion]);
 
