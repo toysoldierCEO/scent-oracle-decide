@@ -2045,6 +2045,7 @@ const OdaraScreen = ({
   // Lock + carryover state — persisted per signed-in calendar day
   const [signedInDayStateMap, setSignedInDayStateMap] = useState<SignedInDayStateMap>({});
   const [signedInForcedLayerCarryCard, setSignedInForcedLayerCarryCard] = useState<DisplayCard | null>(null);
+  const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
   const stateKey = `${selectedDate}:${selectedContext}`;
@@ -2403,6 +2404,7 @@ const OdaraScreen = ({
     setSelectedMood('balance');
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
     setSignedInForcedLayerCarryCard(null);
+    setSignedInResolvedDayDecisionSource('oracle');
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
     moodCacheRef.current.clear();
@@ -2425,6 +2427,7 @@ const OdaraScreen = ({
       setQueue([]);
       setQueuePointer(0);
       setSignedInForcedLayerCarryCard(null);
+      setSignedInResolvedDayDecisionSource('oracle');
       return;
     }
 
@@ -2499,6 +2502,7 @@ const OdaraScreen = ({
     if (oracle.today_pick) {
       setVisibleCard(initialVisibleCard);
       setSignedInForcedLayerCarryCard(initialForcedLayerCarryCard);
+      setSignedInResolvedDayDecisionSource(resolvedDayDecision.source);
       setPromotedAltId(resolvedDayDecision.promotedAltId);
       console.log(
         '[Odara] applying oracle home for slot',
@@ -4095,11 +4099,19 @@ const OdaraScreen = ({
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
+    if (lockState === 'locked') return;
     if (hasStoredSignedInDayState && signedInCarryoverOrigin !== 'inherited') return;
 
-    const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
-    const previousSelectedCard = resolveCarryoverSelectedCard(previousDayState);
-    if (!previousSelectedCard) {
+    let inheritedSource: SignedInCarryoverTarget = 'off';
+    let inheritedSelectedCard: DisplayCard | null = null;
+
+    if (signedInResolvedDayDecisionSource === 'carryover-main') {
+      inheritedSource = 'layer';
+      inheritedSelectedCard = signedInCurrentLayerCarryCard;
+    } else if (signedInResolvedDayDecisionSource === 'carryover-layer') {
+      inheritedSource = 'hero';
+      inheritedSelectedCard = signedInCurrentHeroCarryCard;
+    } else {
       if (signedInCarryoverOrigin === 'inherited') {
         updateSignedInDayState(currentDateKey, (current) => ({
           ...current,
@@ -4112,24 +4124,7 @@ const OdaraScreen = ({
       return;
     }
 
-    let inheritedSource: SignedInCarryoverTarget = 'off';
-    let inheritedSelectedCard: DisplayCard | null = null;
-
-    if (
-      signedInCurrentHeroCarryCard?.fragrance_id &&
-      previousSelectedCard.fragrance_id === signedInCurrentHeroCarryCard.fragrance_id
-    ) {
-      inheritedSource = 'layer';
-      inheritedSelectedCard = signedInCurrentLayerCarryCard;
-    } else if (
-      signedInCurrentLayerCarryCard?.fragrance_id &&
-      previousSelectedCard.fragrance_id === signedInCurrentLayerCarryCard.fragrance_id
-    ) {
-      inheritedSource = 'hero';
-      inheritedSelectedCard = signedInCurrentHeroCarryCard;
-    }
-
-    if (inheritedSource === 'off' || !inheritedSelectedCard) return;
+    if (!inheritedSelectedCard) return;
 
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
@@ -4147,9 +4142,10 @@ const OdaraScreen = ({
   }, [
     isGuestMode,
     slotChangedSinceLastCommit,
+    lockState,
     hasStoredSignedInDayState,
     signedInCarryoverOrigin,
-    previousDateKey,
+    signedInResolvedDayDecisionSource,
     currentDateKey,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
