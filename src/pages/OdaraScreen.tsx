@@ -4345,6 +4345,7 @@ const OdaraScreen = ({
                     void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
                   }}
                   layerTokens={activeMainCardRender?.activeLayerTokens ?? null}
+                  showLegacyAccordsText={false}
                 />
               </div>
             )}

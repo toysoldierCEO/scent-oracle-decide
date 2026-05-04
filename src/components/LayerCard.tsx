@@ -381,6 +381,7 @@ interface LayerCardProps {
    *  Rendered between the layer family chip and the mode row to match the locked
    *  layer order (name → brand → family → tokens → mode row → why it works). */
   layerTokens?: Array<any> | null;
+  showLegacyAccordsText?: boolean;
 }
 
 const LayerCard = ({
@@ -405,6 +406,7 @@ const LayerCard = ({
   modeErrors,
   onRetryMood,
   layerTokens = null,
+  showLegacyAccordsText = true,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
@@ -486,7 +488,7 @@ const LayerCard = ({
             </div>
           )}
 
-          {(() => {
+          {showLegacyAccordsText && (() => {
             const layerNotes = activeModeEntry.notes ?? [];
             const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
             const displayNotes = normalizeNotes(layerNotes, 3);
