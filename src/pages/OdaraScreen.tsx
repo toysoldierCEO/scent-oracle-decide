@@ -970,6 +970,121 @@ function buildFallbackRailTokens(
   }));
 }
 
+const SEMANTIC_TOKEN_COLORS = {
+  spice: '#D4713B',
+  citrus: '#F4D35E',
+  woody: '#7FAF8E',
+  amber: '#D4A373',
+  leather: '#8B5E3C',
+  gourmand: '#C77DFF',
+  floral: '#D4839E',
+  clean: '#C4A0B9',
+  tobacco: '#8B5E3C',
+  green: '#6B8E6B',
+  aquatic: '#5BC0DE',
+  fruity: '#E38BA8',
+  default: '#B8B0A4',
+} as const;
+
+const SEMANTIC_TOKEN_MATCHERS: Array<{ color: keyof typeof SEMANTIC_TOKEN_COLORS; pattern: RegExp }> = [
+  { color: 'spice', pattern: /cardamom|pepper|cinnamon|saffron|clove|nutmeg|ginger|anise|spice/i },
+  { color: 'citrus', pattern: /bergamot|lemon|lime|grapefruit|orange|mandarin|citron|yuzu|citrus/i },
+  { color: 'woody', pattern: /oud|agarwood|patchouli|vetiver|cedar|sandalwood|cashmeran|guaiac|wood/i },
+  { color: 'amber', pattern: /amber|resin|incense|labdanum|benzoin|myrrh|olibanum/i },
+  { color: 'leather', pattern: /leather|suede/i },
+  { color: 'gourmand', pattern: /vanilla|caramel|praline|coffee|cocoa|chocolate|tonka|sugar|gourmand/i },
+  { color: 'floral', pattern: /rose|jasmine|iris|lily|neroli|orange blossom|tuberose|violet|floral/i },
+  { color: 'clean', pattern: /musk|aldehyde|soap|soapy|laundry|clean/i },
+  { color: 'tobacco', pattern: /tobacco|smoke|smoky|birch tar|tar/i },
+  { color: 'green', pattern: /green|herb|herbal|aromatic|lavender|rosemary|sage|basil|mint|fougere/i },
+  { color: 'aquatic', pattern: /aquatic|marine|ozonic|ocean|sea|water|fresh|rain/i },
+  { color: 'fruity', pattern: /apple|pear|peach|plum|berry|berries|fig|fruit|fruity|pineapple|mango|cherry/i },
+];
+
+function normalizeSemanticTokenLabel(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const normalized = normalizeNotes([trimmed], 1)[0] ?? trimmed.toLowerCase();
+  return normalized.trim().toLowerCase();
+}
+
+function resolveSemanticTokenColor(label: string): string {
+  const normalized = normalizeSemanticTokenLabel(label);
+  const matched = SEMANTIC_TOKEN_MATCHERS.find(({ pattern }) => pattern.test(normalized));
+  return matched ? SEMANTIC_TOKEN_COLORS[matched.color] : SEMANTIC_TOKEN_COLORS.default;
+}
+
+function resolvePreferredDisplayLabels(
+  notes: string[] | null | undefined,
+  accords: string[] | null | undefined,
+  max = 8,
+): string[] {
+  const noteLabels = sanitizeTokenSource(notes);
+  if (noteLabels.length > 0) {
+    return normalizeNotes(noteLabels, max);
+  }
+
+  const accordLabels = sanitizeTokenSource(accords);
+  if (accordLabels.length > 0) {
+    return normalizeNotes(accordLabels, max);
+  }
+
+  return [];
+}
+
+function buildSharedTokenKeySet(
+  heroNotes: string[] | null | undefined,
+  heroAccords: string[] | null | undefined,
+  layerNotes: string[] | null | undefined,
+  layerAccords: string[] | null | undefined,
+): Set<string> {
+  const heroLabels = resolvePreferredDisplayLabels(heroNotes, heroAccords, 8);
+  const layerLabels = resolvePreferredDisplayLabels(layerNotes, layerAccords, 8);
+  const layerKeys = new Set(layerLabels.map(normalizeSemanticTokenLabel).filter(Boolean));
+
+  return new Set(
+    heroLabels
+      .map(normalizeSemanticTokenLabel)
+      .filter((key) => key && layerKeys.has(key)),
+  );
+}
+
+function buildSemanticSurfaceTokens(
+  notes: string[] | null | undefined,
+  accords: string[] | null | undefined,
+  sharedKeys: Set<string> = new Set(),
+  max = 4,
+): any[] {
+  const labels = resolvePreferredDisplayLabels(notes, accords, 8);
+  const orderedKeys = new Set<string>();
+  const sharedLabels: string[] = [];
+  const uniqueLabels: string[] = [];
+
+  for (const rawLabel of labels) {
+    const trimmed = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+    if (!trimmed) continue;
+    const key = normalizeSemanticTokenLabel(trimmed);
+    if (!key || orderedKeys.has(key)) continue;
+    orderedKeys.add(key);
+    if (sharedKeys.has(key)) {
+      sharedLabels.push(trimmed);
+    } else {
+      uniqueLabels.push(trimmed);
+    }
+  }
+
+  return [...sharedLabels, ...uniqueLabels].slice(0, max).map((label, idx) => {
+    const key = normalizeSemanticTokenLabel(label);
+    return {
+      token_key: `semantic_${idx}_${key.replace(/[^a-z0-9]+/g, '_')}`,
+      token_label: label,
+      label,
+      color_hex: resolveSemanticTokenColor(label),
+      is_shared: sharedKeys.has(key),
+    };
+  });
+}
+
 function hasRenderableRailTokens(
   accords: string[] | null | undefined,
   notes: string[] | null | undefined,
@@ -2380,16 +2495,6 @@ const OdaraScreen = ({
     const resolvedHero = isHeroCard
       ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
       : resolveQueuedHeroDisplayWithDetails(queuedHeroSource, heroDetail);
-
-    // Hero tokens — payload.hero_tokens (v6) or legacy o.hero_tokens.
-    const heroTokensFromPayload: any[] = isHeroCard
-      ? (Array.isArray(v6?.hero_tokens) ? v6.hero_tokens
-        : Array.isArray(o?.hero_tokens) ? o.hero_tokens
-        : [])
-      : [];
-    const heroTokensSrc: any[] = heroTokensFromPayload.length > 0
-      ? heroTokensFromPayload
-      : buildFallbackRailTokens(resolvedHero.accords, resolvedHero.notes);
     const reasonChip = readReasonChipFromSources(
       isHeroCard ? v6?.hero : null,
       isHeroCard ? o?.today_pick : null,
@@ -2409,28 +2514,27 @@ const OdaraScreen = ({
       ? (fragranceDetailCacheRef.current.get(visibleModeEntry.id) ?? null)
       : null;
     const resolvedLayer = resolveLayerModeWithDetails(visibleModeEntry, visibleLayerDetail);
+    const sharedHeroLayerKeys = buildSharedTokenKeySet(
+      resolvedHero.notes,
+      resolvedHero.accords,
+      resolvedLayer?.notes ?? [],
+      resolvedLayer?.accords ?? [],
+    );
+    const heroTokensSrc: any[] = buildSemanticSurfaceTokens(
+      resolvedHero.notes,
+      resolvedHero.accords,
+      sharedHeroLayerKeys,
+      4,
+    );
 
-    // Layer tokens — visibleLayer.tokens FIRST (per-layer in the stack),
-    // then payload.layer_tokens (balance hero fallback only), then [].
-    const stackBlock: any = v6?.layer_modes?.[selectedMood] ?? null;
-    const stackArr: any[] = Array.isArray(stackBlock?.layers) ? stackBlock.layers : [];
-    const stackIdx = signedInLayerIdxByMood[selectedMood] ?? 0;
-    const stackPick: any = stackArr.length > 0 ? stackArr[stackIdx % stackArr.length] : stackBlock;
-    let layerTokens: any[] = [];
-    if (isHeroCard && Array.isArray(stackPick?.tokens) && stackPick.tokens.length > 0) {
-      layerTokens = stackPick.tokens;
-    } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(v6?.layer_tokens)) {
-      layerTokens = v6.layer_tokens;
-    } else if (isHeroCard && selectedMood === 'balance' && Array.isArray(o?.layer_tokens)) {
-      layerTokens = o.layer_tokens;
-    } else if (Array.isArray((resolvedLayer as any)?.tokens) && (resolvedLayer as any).tokens.length > 0) {
-      layerTokens = (resolvedLayer as any).tokens;
-    } else if (resolvedLayer) {
-      layerTokens = buildFallbackRailTokens(
-        Array.isArray((resolvedLayer as any)?.accords) ? (resolvedLayer as any).accords : [],
-        Array.isArray((resolvedLayer as any)?.notes) ? (resolvedLayer as any).notes : [],
-      );
-    }
+    const layerTokens: any[] = resolvedLayer
+      ? buildSemanticSurfaceTokens(
+          Array.isArray((resolvedLayer as any)?.notes) ? (resolvedLayer as any).notes : [],
+          Array.isArray((resolvedLayer as any)?.accords) ? (resolvedLayer as any).accords : [],
+          sharedHeroLayerKeys,
+          4,
+        )
+      : [];
     const layerFamilyKey = resolvedLayer?.family_key ?? '';
     const layerHasFamily = layerFamilyKey.trim().length > 0;
     const layerHasTokens = layerTokens.length > 0;
@@ -2447,6 +2551,31 @@ const OdaraScreen = ({
           accords: layerSurfacesReady ? resolvedLayer.accords : [],
         }
       : null;
+
+    const resolvedCurrentCard = {
+      fragrance_id: resolvedHero.fragrance_id,
+      name: resolvedHero.name,
+      brand: resolvedHero.brand,
+      family: heroFamilyKey,
+      familyLabel: heroFamilyLabelForDisplay,
+      familyColor: heroFamilyColorForDisplay,
+      reason_chip_label: reasonChip?.label ?? resolvedHero.reason_chip_label ?? null,
+      reason_chip_explanation: reasonChip?.explanation ?? resolvedHero.reason_chip_explanation ?? null,
+      notes: resolvedHero.notes,
+      accords: resolvedHero.accords,
+      hero: resolvedHero,
+      heroTokens: heroTokensSrc,
+      reasonChip,
+      layer: visibleLayer,
+      layerFamilyKey: layerFamilyKeyForDisplay,
+      layerFamilyLabel: layerFamilyLabel,
+      layerTokens: layerSurfacesReady ? layerTokens : [],
+      layerModes: modeResults,
+      alternates: signedInVisibleAlternates,
+      selectedMode: selectedMood,
+      visibleCardId: visibleCard.fragrance_id,
+      isHeroCard,
+    };
 
     return {
       activeHero: resolvedHero,
@@ -2467,6 +2596,7 @@ const OdaraScreen = ({
       reasonChipLabel: reasonChip?.label ?? null,
       reasonChipExplanation: reasonChip?.explanation ?? null,
       queuedSurfacesReady: layerSurfacesReady,
+      resolvedCurrentCard,
     };
   }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion]);
 
@@ -3239,7 +3369,7 @@ const OdaraScreen = ({
     swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
   }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
 
-  const visibleAlts = isGuestMode ? [] : (activeMainCardRender?.activeAlternates ?? []);
+  const visibleAlts = isGuestMode ? [] : (signedInResolvedCurrentCard?.alternates ?? []);
   const alternatesRendered = visibleAlts.length > 0;
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
@@ -3500,35 +3630,61 @@ const OdaraScreen = ({
     });
   }
 
-  const signedInHeroRender = useMemo(() => {
-    if (isGuestMode || !activeMainCardRender?.activeHero) return null;
+  const signedInResolvedCurrentCard = useMemo(() => {
+    if (isGuestMode || !activeMainCardRender?.resolvedCurrentCard) return null;
 
-    const familyLabel = typeof activeMainCardRender.heroFamilyLabel === 'string'
-      ? activeMainCardRender.heroFamilyLabel.trim()
-      : '';
-    const tokens = (Array.isArray(activeMainCardRender.activeHeroTokens) ? activeMainCardRender.activeHeroTokens : [])
+    const current = activeMainCardRender.resolvedCurrentCard;
+    const familyLabel = typeof current.familyLabel === 'string' && current.familyLabel.trim().length > 0
+      ? current.familyLabel.trim()
+      : (current.family ? (FAMILY_LABELS[current.family] ?? current.family.toUpperCase()) : '');
+    const normalizedNotes = sanitizeTokenSource(current.notes);
+    const normalizedAccords = sanitizeTokenSource(current.accords);
+    const layerTokens = (Array.isArray(current.layerTokens) ? current.layerTokens : [])
       .filter((token: any) => {
         const label = token?.token_label ?? token?.label ?? token?.name ?? '';
         return typeof label === 'string' && label.trim().length > 0;
       });
-    const reasonChip = activeMainCardRender.activeReasonChip?.label
-      ? activeMainCardRender.activeReasonChip
-      : null;
+    const resolvedHeroRailReasonChip = current.isHeroCard
+      ? (
+          resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation)
+          ?? current.reasonChip
+          ?? null
+        )
+      : resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation);
+    const resolvedHeroRailTokenSource = Array.isArray(current.heroTokens) && current.heroTokens.length > 0
+      ? current.heroTokens
+      : buildSemanticSurfaceTokens(normalizedNotes, normalizedAccords, new Set(), 4);
+    const resolvedHeroRailTokens = resolvedHeroRailTokenSource.filter((token: any) => {
+      const label = token?.token_label ?? token?.label ?? token?.name ?? '';
+      return typeof label === 'string' && label.trim().length > 0;
+    });
 
     return {
-      hero: activeMainCardRender.activeHero,
+      ...current,
+      notes: normalizedNotes,
+      accords: normalizedAccords,
       familyLabel,
-      familyColor: activeMainCardRender.heroFamilyColor ?? '#888',
-      reasonChip,
-      tokens,
+      layerTokens,
+      alternates: Array.isArray(current.alternates) ? current.alternates : [],
+      resolvedHeroRail: {
+        familyLabel,
+        familyColor: current.familyColor ?? '#888',
+        reasonChip: resolvedHeroRailReasonChip,
+        tokens: resolvedHeroRailTokens,
+      },
     };
   }, [isGuestMode, activeMainCardRender]);
 
-  const signedInVisibleHero = signedInHeroRender?.hero ?? activeMainCardRender?.activeHero ?? null;
-  const signedInVisibleLayer = activeMainCardRender?.activeLayer ?? null;
-  const signedInVisibleLayerModes = activeMainCardRender?.layerModes ?? modeResults;
-  const signedInHeroFamilyColor = signedInHeroRender?.familyColor ?? '#888';
-  const signedInHeroFamilyLabel = signedInHeroRender?.familyLabel ?? '';
+  const signedInHeroRail = useMemo(() => {
+    if (isGuestMode || !signedInResolvedCurrentCard) return null;
+    return signedInResolvedCurrentCard.resolvedHeroRail ?? null;
+  }, [isGuestMode, signedInResolvedCurrentCard]);
+
+  const signedInVisibleHero = signedInResolvedCurrentCard?.hero ?? null;
+  const signedInVisibleLayer = signedInResolvedCurrentCard?.layer ?? null;
+  const signedInVisibleLayerModes = signedInResolvedCurrentCard?.layerModes ?? modeResults;
+  const signedInHeroFamilyColor = signedInHeroRail?.familyColor ?? '#888';
+  const signedInHeroFamilyLabel = signedInHeroRail?.familyLabel ?? '';
   const activeReasonChip = isGuestMode
     ? (
       visibleGuestRender?.reasonChipLabel
@@ -3538,10 +3694,10 @@ const OdaraScreen = ({
           }
         : null
     )
-    : (signedInHeroRender?.reasonChip ?? null);
+    : (signedInHeroRail?.reasonChip ?? null);
   const heroRailTokens: Array<any> = isGuestMode
     ? (Array.isArray(visibleGuestRender?.activeHeroTokens) ? visibleGuestRender.activeHeroTokens : [])
-    : (signedInHeroRender?.tokens ?? []);
+    : (signedInHeroRail?.tokens ?? []);
   const wardrobeSummary = useMemo(
     () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
       ? buildWardrobeBalanceSummary(wardrobeItems)
@@ -4242,14 +4398,14 @@ const OdaraScreen = ({
             >
               {isGuestMode && visibleGuestRender?.activeHero
                 ? getDisplayName(visibleGuestRender.activeHero.name, visibleGuestRender.activeHero.brand)
-                : getDisplayName(signedInVisibleHero?.name ?? visibleCard.name, signedInVisibleHero?.brand ?? visibleCard.brand)}
+                : getDisplayName(signedInResolvedCurrentCard?.name ?? '', signedInResolvedCurrentCard?.brand ?? null)}
             </h2>
 
             {/* Brand */}
             <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
               {isGuestMode && visibleGuestRender?.activeHero
                 ? visibleGuestRender.activeHero.brand
-                : (signedInVisibleHero?.brand ?? visibleCard.brand)}
+                : (signedInResolvedCurrentCard?.brand ?? '')}
             </span>
 
             {/* Family label — signed-in: derived label; guest v5: backend family verbatim */}
@@ -4309,14 +4465,16 @@ const OdaraScreen = ({
                     const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
                     if (!tokenLabel) return null;
                     const tokenColor = t?.color_hex || '#888';
+                    const isSharedToken = !!t?.is_shared;
                     return (
                       <span
                         key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
                         className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
                         style={{
                           color: tokenColor,
-                          border: `1px solid ${tokenColor}55`,
-                          background: `${tokenColor}10`,
+                          border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
+                          background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
+                          boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
                         }}
                       >
                         {tokenLabel}
@@ -4371,10 +4529,10 @@ const OdaraScreen = ({
               // stopPropagation on its expand/collapse trigger.
               <div data-layer-section>
                 <LayerCard
-                  mainName={signedInVisibleHero?.name ?? visibleCard.name}
-                  mainBrand={signedInVisibleHero?.brand ?? visibleCard.brand}
-                  mainNotes={signedInVisibleHero?.notes ?? visibleCard.notes}
-                  mainFamily={signedInVisibleHero?.family ?? visibleCard.family}
+                  mainName={signedInResolvedCurrentCard?.name ?? ''}
+                  mainBrand={signedInResolvedCurrentCard?.brand ?? null}
+                  mainNotes={signedInResolvedCurrentCard?.notes ?? []}
+                  mainFamily={signedInResolvedCurrentCard?.family ?? null}
                   mainProjection={null}
                   layerModes={signedInVisibleLayerModes}
                   visibleLayerMode={signedInVisibleLayer}
@@ -4389,10 +4547,11 @@ const OdaraScreen = ({
                   modeLoading={modeLoading}
                   modeErrors={modeErrors}
                   onRetryMood={(mood) => {
-                    if (!visibleCard) return;
-                    void fetchMoodForCard(visibleCard.fragrance_id, mood, true);
+                    const currentCardId = signedInResolvedCurrentCard?.fragrance_id;
+                    if (!currentCardId) return;
+                    void fetchMoodForCard(currentCardId, mood, true);
                   }}
-                  layerTokens={activeMainCardRender?.activeLayerTokens ?? null}
+                  layerTokens={signedInResolvedCurrentCard?.layerTokens ?? null}
                   showLegacyAccordsText={false}
                 />
               </div>

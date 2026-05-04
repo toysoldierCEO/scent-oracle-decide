@@ -478,8 +478,9 @@ const LayerCard = ({
                   className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
                   style={{
                     color: t?.color_hex || '#aaa',
-                    border: `1px solid ${(t?.color_hex || '#888')}44`,
-                    background: `${(t?.color_hex || '#888')}0A`,
+                    border: `1px solid ${(t?.color_hex || '#888')}${t?.is_shared ? '88' : '44'}`,
+                    background: `${(t?.color_hex || '#888')}${t?.is_shared ? '16' : '0A'}`,
+                    boxShadow: t?.is_shared ? `inset 0 0 0 1px ${(t?.color_hex || '#888')}22` : undefined,
                   }}
                 >
                   {t?.token_label}
