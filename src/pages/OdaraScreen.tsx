@@ -705,6 +705,8 @@ interface QueueCard {
   collection_status: string;
   is_in_collection: boolean;
   preview: any;
+  notes?: string[] | null;
+  accords?: string[] | null;
   reason_chip_label?: string | null;
   reason_chip_explanation?: string | null;
 }
@@ -908,8 +910,8 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
     family: qc.family_key ?? '',
     reason: qc.why_this ?? '',
     brand: qc.brand ?? '',
-    notes: Array.isArray(preview.notes) ? preview.notes : [],
-    accords: Array.isArray(preview.accords) ? preview.accords : [],
+    notes: Array.isArray(qc.notes) ? qc.notes : Array.isArray(preview.notes) ? preview.notes : [],
+    accords: Array.isArray(qc.accords) ? qc.accords : Array.isArray(preview.accords) ? preview.accords : [],
     reason_chip_label: qc.reason_chip_label ?? preview.reason_chip_label ?? null,
     reason_chip_explanation: qc.reason_chip_explanation ?? preview.reason_chip_explanation ?? null,
     isHero: false,
@@ -1193,8 +1195,18 @@ const OdaraScreen = ({
       return card;
     }
 
-    const resolved = resolveQueuedHeroDisplayWithDetails(card, detail);
     const previous = signedInQueuedHeroRef.current.get(card.fragrance_id);
+    const mergedCard = previous
+      ? {
+          ...card,
+          family: card.family || previous.family,
+          notes: card.notes.length > 0 ? card.notes : previous.notes,
+          accords: card.accords.length > 0 ? card.accords : previous.accords,
+          reason_chip_label: card.reason_chip_label ?? previous.reason_chip_label ?? null,
+          reason_chip_explanation: card.reason_chip_explanation ?? previous.reason_chip_explanation ?? null,
+        }
+      : card;
+    const resolved = resolveQueuedHeroDisplayWithDetails(mergedCard, detail);
     if (!areSameDisplayCards(previous, resolved)) {
       signedInQueuedHeroRef.current.set(card.fragrance_id, resolved);
       setSignedInQueuedHeroVersion((version) => version + 1);
