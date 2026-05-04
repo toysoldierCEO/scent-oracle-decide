@@ -1293,6 +1293,7 @@ type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 type SignedInDayState = {
   lockState: LockState;
   carryoverMode: SignedInCarryoverTarget;
+  carryoverOrigin: 'manual' | 'inherited' | null;
   carryoverNextDayRole: 'main' | 'layer' | null;
   carryoverSelectedCard: DisplayCard | null;
   carryoverHeroCard: DisplayCard | null;
@@ -1316,6 +1317,7 @@ function createDefaultSignedInDayState(): SignedInDayState {
   return {
     lockState: 'neutral',
     carryoverMode: 'off',
+    carryoverOrigin: null,
     carryoverNextDayRole: null,
     carryoverSelectedCard: null,
     carryoverHeroCard: null,
@@ -1348,6 +1350,7 @@ function resolveCarryoverNextDayRole(source: SignedInCarryoverTarget): 'main' | 
 
 function resolveSignedInDayDecision(
   currentDayState: SignedInDayState,
+  hasCurrentDayState: boolean,
   previousDayState: SignedInDayState,
   oraclePick: OraclePick | null | undefined,
   defaultMood: LayerMood,
@@ -1360,6 +1363,16 @@ function resolveSignedInDayDecision(
       selectedMood: currentDayState.lockedMood ?? defaultMood,
       promotedAltId: currentDayState.lockedPromotedAltId,
       source: 'locked',
+    };
+  }
+
+  if (hasCurrentDayState && currentDayState.carryoverMode === 'off') {
+    return {
+      visibleCard: oraclePick ? heroToDisplay(oraclePick) : null,
+      forcedLayerCarryCard: null,
+      selectedMood: defaultMood,
+      promotedAltId: null,
+      source: 'oracle',
     };
   }
 
@@ -2035,6 +2048,7 @@ const OdaraScreen = ({
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
   const stateKey = `${selectedDate}:${selectedContext}`;
+  const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDateKey);
   const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
   const lockState: LockState = signedInDayState.lockState;
   const setLockState = useCallback((ls: LockState) => {
@@ -2079,7 +2093,9 @@ const OdaraScreen = ({
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
   const signedInCarryoverTarget = signedInDayState.carryoverMode;
+  const signedInCarryoverOrigin = signedInDayState.carryoverOrigin;
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
+  const [signedInCarryoverCloseFlash, setSignedInCarryoverCloseFlash] = useState(false);
   const updateSignedInDayState = useCallback((
     key: string,
     updater: (current: SignedInDayState) => SignedInDayState,
@@ -2090,6 +2106,7 @@ const OdaraScreen = ({
       if (
         current.lockState === next.lockState &&
         current.carryoverMode === next.carryoverMode &&
+        current.carryoverOrigin === next.carryoverOrigin &&
         current.carryoverNextDayRole === next.carryoverNextDayRole &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId &&
@@ -2450,6 +2467,7 @@ const OdaraScreen = ({
     setActiveOracle(oracle);
 
     const dayStateMap = signedInDayStateMapRef.current;
+    const hasCurrentDayState = Object.prototype.hasOwnProperty.call(dayStateMap, currentDateKey);
     const currentDayState = dayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
     const previousDayState = dayStateMap[previousDateKey] ?? createDefaultSignedInDayState();
 
@@ -2461,6 +2479,7 @@ const OdaraScreen = ({
     })();
     const resolvedDayDecision = resolveSignedInDayDecision(
       currentDayState,
+      hasCurrentDayState,
       previousDayState,
       oracle.today_pick,
       v6DefaultMood,
@@ -2610,6 +2629,7 @@ const OdaraScreen = ({
   const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const unlockTimeoutRef = useRef<number | null>(null);
   const carryoverPulseTimeoutRef = useRef<number | null>(null);
+  const carryoverCloseFlashTimeoutRef = useRef<number | null>(null);
   const DOUBLE_TAP_MS = 320;
   const DOUBLE_TAP_DIST = 32;
 
@@ -3272,6 +3292,13 @@ const OdaraScreen = ({
     }
   }, []);
 
+  const clearCarryoverCloseFlashTimeout = useCallback(() => {
+    if (carryoverCloseFlashTimeoutRef.current !== null) {
+      window.clearTimeout(carryoverCloseFlashTimeoutRef.current);
+      carryoverCloseFlashTimeoutRef.current = null;
+    }
+  }, []);
+
   const triggerSignedInCarryoverPulse = useCallback((target: Exclude<SignedInCarryoverTarget, 'off'> | null) => {
     clearCarryoverPulseTimeout();
     setSignedInCarryoverPulseTarget(target);
@@ -3282,6 +3309,15 @@ const OdaraScreen = ({
     }, 700);
   }, [clearCarryoverPulseTimeout]);
 
+  const triggerSignedInCarryoverCloseFlash = useCallback(() => {
+    clearCarryoverCloseFlashTimeout();
+    setSignedInCarryoverCloseFlash(true);
+    carryoverCloseFlashTimeoutRef.current = window.setTimeout(() => {
+      setSignedInCarryoverCloseFlash(false);
+      carryoverCloseFlashTimeoutRef.current = null;
+    }, 520);
+  }, [clearCarryoverCloseFlashTimeout]);
+
   useEffect(() => {
     return () => clearUnlockTimeout();
   }, [clearUnlockTimeout]);
@@ -3291,12 +3327,18 @@ const OdaraScreen = ({
   }, [clearCarryoverPulseTimeout]);
 
   useEffect(() => {
+    return () => clearCarryoverCloseFlashTimeout();
+  }, [clearCarryoverCloseFlashTimeout]);
+
+  useEffect(() => {
     setDaySwipeOffset(0);
     setDaySwipeDragging(false);
     suppressCardClickRef.current = false;
     setSignedInCarryoverPulseTarget(null);
     clearCarryoverPulseTimeout();
-  }, [selectedDate, clearCarryoverPulseTimeout]);
+    setSignedInCarryoverCloseFlash(false);
+    clearCarryoverCloseFlashTimeout();
+  }, [selectedDate, clearCarryoverPulseTimeout, clearCarryoverCloseFlashTimeout]);
 
   useEffect(() => {
     setReasonChipExpanded(false);
@@ -4033,7 +4075,13 @@ const OdaraScreen = ({
           : `inset 0 0 0 1px ${signedInLayerCarryColor}22, 0 10px 26px ${signedInLayerCarryColor}14`,
       }
     : undefined;
-  const signedInCarryoverButtonStyle = signedInCarryoverColor
+  const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
+    ? {
+        color: '#ef4444',
+        background: 'rgba(239,68,68,0.14)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px rgba(239,68,68,0.20)',
+      }
+    : signedInCarryoverColor
     ? {
         color: signedInCarryoverColor,
         background: `${signedInCarryoverColor}16`,
@@ -4044,6 +4092,69 @@ const OdaraScreen = ({
         background: 'rgba(255,255,255,0.035)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       };
+  useEffect(() => {
+    if (isGuestMode) return;
+    if (slotChangedSinceLastCommit) return;
+    if (hasStoredSignedInDayState && signedInCarryoverOrigin !== 'inherited') return;
+
+    const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
+    const previousSelectedCard = resolveCarryoverSelectedCard(previousDayState);
+    if (!previousSelectedCard) {
+      if (signedInCarryoverOrigin === 'inherited') {
+        updateSignedInDayState(currentDateKey, (current) => ({
+          ...current,
+          carryoverMode: 'off',
+          carryoverOrigin: null,
+          carryoverNextDayRole: null,
+          carryoverSelectedCard: null,
+        }));
+      }
+      return;
+    }
+
+    let inheritedSource: SignedInCarryoverTarget = 'off';
+    let inheritedSelectedCard: DisplayCard | null = null;
+
+    if (
+      signedInCurrentHeroCarryCard?.fragrance_id &&
+      previousSelectedCard.fragrance_id === signedInCurrentHeroCarryCard.fragrance_id
+    ) {
+      inheritedSource = 'layer';
+      inheritedSelectedCard = signedInCurrentLayerCarryCard;
+    } else if (
+      signedInCurrentLayerCarryCard?.fragrance_id &&
+      previousSelectedCard.fragrance_id === signedInCurrentLayerCarryCard.fragrance_id
+    ) {
+      inheritedSource = 'hero';
+      inheritedSelectedCard = signedInCurrentHeroCarryCard;
+    }
+
+    if (inheritedSource === 'off' || !inheritedSelectedCard) return;
+
+    updateSignedInDayState(currentDateKey, (current) => ({
+      ...current,
+      carryoverMode: inheritedSource,
+      carryoverOrigin: 'inherited',
+      carryoverNextDayRole: resolveCarryoverNextDayRole(inheritedSource),
+      carryoverSelectedCard: inheritedSelectedCard,
+      carryoverHeroCard: inheritedSource === 'hero'
+        ? (signedInCurrentHeroCarryCard ?? current.carryoverHeroCard)
+        : current.carryoverHeroCard,
+      carryoverLayerCard: inheritedSource === 'layer'
+        ? (signedInCurrentLayerCarryCard ?? current.carryoverLayerCard)
+        : current.carryoverLayerCard,
+    }));
+  }, [
+    isGuestMode,
+    slotChangedSinceLastCommit,
+    hasStoredSignedInDayState,
+    signedInCarryoverOrigin,
+    previousDateKey,
+    currentDateKey,
+    signedInCurrentHeroCarryCard,
+    signedInCurrentLayerCarryCard,
+    updateSignedInDayState,
+  ]);
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
@@ -4060,12 +4171,7 @@ const OdaraScreen = ({
         };
       }
 
-      if (
-        current.carryoverMode === 'hero' &&
-        current.carryoverSelectedCard?.fragrance_id &&
-        signedInCurrentHeroCarryCard &&
-        current.carryoverSelectedCard.fragrance_id === signedInCurrentHeroCarryCard.fragrance_id
-      ) {
+      if (current.carryoverMode === 'hero' && signedInCurrentHeroCarryCard) {
         next = {
           ...next,
           carryoverSelectedCard: signedInCurrentHeroCarryCard,
@@ -4073,12 +4179,7 @@ const OdaraScreen = ({
         };
       }
 
-      if (
-        current.carryoverMode === 'layer' &&
-        current.carryoverSelectedCard?.fragrance_id &&
-        signedInCurrentLayerCarryCard &&
-        current.carryoverSelectedCard.fragrance_id === signedInCurrentLayerCarryCard.fragrance_id
-      ) {
+      if (current.carryoverMode === 'layer' && signedInCurrentLayerCarryCard) {
         next = {
           ...next,
           carryoverSelectedCard: signedInCurrentLayerCarryCard,
@@ -4104,18 +4205,22 @@ const OdaraScreen = ({
     const hasLayer = !!signedInCurrentLayerCarryCard;
     const nextTarget: SignedInCarryoverTarget = signedInCarryoverTarget === 'off'
       ? 'hero'
-      : signedInCarryoverTarget === 'hero'
-        ? (hasLayer ? 'layer' : 'off')
-        : 'off';
+      : signedInCarryoverOrigin === 'inherited'
+        ? 'off'
+        : signedInCarryoverTarget === 'hero'
+          ? (hasLayer ? 'layer' : 'off')
+          : 'off';
     const nextSelectedCard = nextTarget === 'hero'
       ? signedInCurrentHeroCarryCard
       : nextTarget === 'layer'
         ? signedInCurrentLayerCarryCard
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
+    const turningOff = signedInCarryoverTarget !== 'off' && nextTarget === 'off';
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
       carryoverMode: nextTarget,
+      carryoverOrigin: nextTarget === 'off' ? null : 'manual',
       carryoverNextDayRole: nextDayRole,
       carryoverSelectedCard: nextSelectedCard,
       carryoverHeroCard: nextTarget === 'hero'
@@ -4125,15 +4230,22 @@ const OdaraScreen = ({
         ? (signedInCurrentLayerCarryCard ?? current.carryoverLayerCard)
         : current.carryoverLayerCard,
     }));
-    triggerSignedInCarryoverPulse(nextTarget === 'off' ? null : nextTarget);
+    if (turningOff) {
+      triggerSignedInCarryoverPulse(null);
+      triggerSignedInCarryoverCloseFlash();
+    } else {
+      triggerSignedInCarryoverPulse(nextTarget === 'off' ? null : nextTarget);
+    }
     haptic('selection');
   }, [
     isGuestMode,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
     signedInCarryoverTarget,
+    signedInCarryoverOrigin,
     currentDateKey,
     triggerSignedInCarryoverPulse,
+    triggerSignedInCarryoverCloseFlash,
     updateSignedInDayState,
   ]);
   const wardrobeSummary = useMemo(
