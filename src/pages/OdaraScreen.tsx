@@ -5873,8 +5873,11 @@ const OdaraScreen = ({
                 type="button"
                 aria-label="Favorite"
                 aria-pressed={bottomStarActive}
-                onClick={() => cardController.actions.toggleStar()}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                onClick={() => {
+                  cardController.actions.toggleStar();
+                  setFavoriteLabelTick((t) => t + 1);
+                }}
+                className="relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
                   ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
@@ -5899,6 +5902,11 @@ const OdaraScreen = ({
                 >
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
+                <ActionMicroLabel
+                  triggerKey={favoriteLabelTick || null}
+                  text="Favorite"
+                  color={bottomStarActive ? '#eab308' : undefined}
+                />
               </button>
 
               {(() => {
