@@ -5210,55 +5210,73 @@ const OdaraScreen = ({
         </SheetContent>
       </Sheet>
 
-      <Sheet
-        open={searchOpen}
-        onOpenChange={(open) => {
-          setSearchOpen(open);
-          if (open) setMenuOpen(false);
-          if (!open) setSearchQuery('');
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-md"
+      {searchOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center px-4 pt-6 animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Search"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSearchOpen(false);
+              setSearchQuery('');
+            }
+          }}
         >
-          <SheetHeader className="space-y-1 text-left">
-            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
-              Search
-            </SheetTitle>
-            <SheetDescription className="text-[12px] text-foreground/48">
-              Search across fragrances, notes, accords, brands, and families.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-5">
-            <Input
-              autoFocus
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search fragrances, notes, accords, brands…"
-              className="h-11 rounded-[16px] border-white/10 bg-white/[0.03] px-4 text-[14px] text-foreground placeholder:text-foreground/34 focus-visible:ring-white/15"
-            />
-          </div>
-
+          {/* Dim + blur backdrop — card stays visible underneath */}
           <div
-            className="mt-4 rounded-[20px] border border-white/8 bg-white/[0.02] px-4 py-5"
-            style={{ minHeight: '220px' }}
+            className="absolute inset-0 bg-black/55 backdrop-blur-md"
+            aria-hidden="true"
+          />
+
+          {/* Floating search panel */}
+          <div
+            className="relative w-full max-w-md rounded-[22px] border border-white/10 bg-[#11100e]/85 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)] px-4 pt-4 pb-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* TODO: wire the search sheet to a real Odara search contract when a backend search RPC/query exists. */}
-            {!searchHasQuery ? (
-              <p className="text-[14px] text-foreground/62">
-                Search your scent world.
-              </p>
-            ) : (
-              <p className="text-[14px] text-foreground/52">
-                Nothing found yet. Try a fragrance, brand, note, accord, or family.
-              </p>
-            )}
+            <div className="flex items-center gap-2">
+              <Input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search fragrances, notes, accords, brands…"
+                className="h-11 flex-1 rounded-[14px] border-white/10 bg-white/[0.04] px-4 text-[14px] text-foreground placeholder:text-foreground/34 focus-visible:ring-white/15"
+              />
+              <button
+                type="button"
+                aria-label="Close search"
+                onClick={() => {
+                  setSearchOpen(false);
+                  setSearchQuery('');
+                }}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M6 6l12 12" />
+                  <path d="M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.02] px-4 py-4"
+              style={{ minHeight: '160px', maxHeight: '46vh', overflowY: 'auto' }}
+            >
+              {/* TODO: wire the search overlay to a real Odara search contract when a backend search RPC/query exists. */}
+              {!searchHasQuery ? (
+                <p className="text-[13px] text-foreground/62">
+                  Search your scent world.
+                </p>
+              ) : (
+                <p className="text-[13px] text-foreground/52">
+                  Nothing found yet. Try a fragrance, brand, note, accord, or family.
+                </p>
+              )}
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      )}
 
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
         <div className="relative mb-3 flex items-center justify-between">
