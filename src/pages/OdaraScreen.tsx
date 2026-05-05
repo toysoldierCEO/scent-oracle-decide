@@ -1537,10 +1537,6 @@ const OdaraScreen = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
-  const [wardrobeLoading, setWardrobeLoading] = useState(false);
-  const [wardrobeItems, setWardrobeItems] = useState<WardrobeCollectionItem[] | null>(null);
-  const [wardrobeUnavailable, setWardrobeUnavailable] = useState(false);
-  const [selectedWardrobeRoleKey, setSelectedWardrobeRoleKey] = useState<WardrobeRoleKey | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const suppressCardClickRef = useRef(false);
@@ -1741,125 +1737,6 @@ const OdaraScreen = ({
     fragranceDetailInFlightRef.current.set(fragranceId, request);
     return request;
   }, []);
-  useEffect(() => {
-    if (isGuestMode || !userId) {
-      setWardrobeItems(null);
-      setWardrobeUnavailable(true);
-      setWardrobeLoading(false);
-      return;
-    }
-
-    let isActive = true;
-
-    const readWardrobe = async () => {
-      setWardrobeLoading(true);
-      setWardrobeUnavailable(false);
-
-      try {
-        const { data: collectionRows, error: collectionError } = await odaraSupabase
-          .from('user_collection')
-          .select('fragrance_id, status')
-          .eq('user_id', userId)
-          .in('status', ['signature', 'owned']);
-
-        if (collectionError) {
-          if (isActive) {
-            setWardrobeItems(null);
-            setWardrobeUnavailable(true);
-          }
-          return;
-        }
-
-        const rawRows = Array.isArray(collectionRows) ? collectionRows : [];
-        if (rawRows.length === 0) {
-          if (isActive) {
-            setWardrobeItems([]);
-            setWardrobeUnavailable(false);
-          }
-          return;
-        }
-
-        const statusByFragranceId = new Map<string, string>();
-        for (const row of rawRows) {
-          const fragranceId = typeof row?.fragrance_id === 'string' ? row.fragrance_id : '';
-          const status = typeof row?.status === 'string' ? row.status : 'owned';
-          if (!fragranceId) continue;
-          const existing = statusByFragranceId.get(fragranceId);
-          if (!existing || (WARDROBE_STATUS_RANK[status] ?? 9) < (WARDROBE_STATUS_RANK[existing] ?? 9)) {
-            statusByFragranceId.set(fragranceId, status);
-          }
-        }
-
-        const fragranceIds = Array.from(statusByFragranceId.keys());
-        if (fragranceIds.length === 0) {
-          if (isActive) {
-            setWardrobeItems([]);
-            setWardrobeUnavailable(false);
-          }
-          return;
-        }
-
-        const { data: fragranceRows, error: fragranceError } = await odaraSupabase
-          .from('fragrances')
-          .select('id, name, brand, family_key, notes, accords, projection')
-          .in('id', fragranceIds);
-
-        if (fragranceError) {
-          if (isActive) {
-            setWardrobeItems(null);
-            setWardrobeUnavailable(true);
-          }
-          return;
-        }
-
-        const fragranceMap = new Map<string, any>();
-        for (const row of Array.isArray(fragranceRows) ? fragranceRows : []) {
-          if (row?.id) fragranceMap.set(row.id, row);
-        }
-
-        const normalizedItems = dedupeWardrobeItems(
-          fragranceIds
-            .map((fragranceId) => {
-              const fragrance = fragranceMap.get(fragranceId);
-              if (!fragrance) return null;
-              const status = statusByFragranceId.get(fragranceId) ?? 'owned';
-              return {
-                fragrance_id: fragrance.id,
-                name: fragrance.name ?? '',
-                brand: fragrance.brand ?? null,
-                family_key: fragrance.family_key ?? null,
-                notes: Array.isArray(fragrance.notes) ? fragrance.notes : [],
-                accords: Array.isArray(fragrance.accords) ? fragrance.accords : [],
-                projection: typeof fragrance.projection === 'number' ? fragrance.projection : null,
-                status,
-                statusRank: WARDROBE_STATUS_RANK[status] ?? 9,
-              } satisfies WardrobeCollectionItem;
-            })
-            .filter((item): item is WardrobeCollectionItem => item !== null)
-        );
-
-        if (isActive) {
-          setWardrobeItems(normalizedItems);
-          setWardrobeUnavailable(false);
-        }
-      } catch {
-        if (isActive) {
-          setWardrobeItems(null);
-          setWardrobeUnavailable(true);
-        }
-      } finally {
-        if (isActive) {
-          setWardrobeLoading(false);
-        }
-      }
-    };
-
-    void readWardrobe();
-
-    return () => {
-      isActive = false;
-    };
-  }, [isGuestMode, userId]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -4338,6 +4215,14 @@ const OdaraScreen = ({
         background: 'rgba(255,255,255,0.035)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       };
+  const bottomStarActive = actionRailState.starred;
+  const bottomCarryoverButtonStyle = isGuestMode
+    ? {
+        color: 'rgba(255,255,255,0.56)',
+        background: 'rgba(255,255,255,0.03)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+      }
+    : signedInCarryoverButtonStyle;
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
@@ -4486,94 +4371,7 @@ const OdaraScreen = ({
     triggerSignedInCarryoverCloseFlash,
     updateSignedInDayState,
   ]);
-  const wardrobeSummary = useMemo(
-    () => Array.isArray(wardrobeItems) && wardrobeItems.length > 0
-      ? buildWardrobeBalanceSummary(wardrobeItems)
-      : null,
-    [wardrobeItems]
-  );
-  const selectedWardrobeRole = useMemo(
-    () => wardrobeSummary?.roles.find((role) => role.role.key === selectedWardrobeRoleKey) ?? null,
-    [wardrobeSummary, selectedWardrobeRoleKey]
-  );
-  const wardrobePreviewOpenRoles = wardrobeSummary?.openRoles.slice(0, 2) ?? [];
   const searchHasQuery = searchQuery.trim().length > 0;
-
-  const wardrobeChart = wardrobeSummary ? (() => {
-    const size = 244;
-    const center = size / 2;
-    const radius = 84;
-    const strokeWidth = 20;
-    const gapDegrees = 7;
-    const segmentSpan = (360 - (gapDegrees * wardrobeSummary.roles.length)) / wardrobeSummary.roles.length;
-
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
-        <defs>
-          <filter id="wardrobe-segment-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {wardrobeSummary.roles.map((entry, index) => {
-          const startAngle = -90 + (index * (segmentSpan + gapDegrees));
-          const endAngle = startAngle + segmentSpan;
-          const overlayMultiplier =
-            entry.coverageState === 'filled' ? 1 : entry.coverageState === 'partial' ? 0.62 : 0;
-          const overlayEndAngle = startAngle + (segmentSpan * overlayMultiplier);
-
-          return (
-            <g
-              key={entry.role.key}
-              role="button"
-              tabIndex={0}
-              aria-label={entry.role.label}
-              className="cursor-pointer outline-none"
-              onClick={() => setSelectedWardrobeRoleKey(entry.role.key)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  setSelectedWardrobeRoleKey(entry.role.key);
-                }
-              }}
-            >
-              <path
-                d={describeArc(center, center, radius, startAngle, endAngle)}
-                fill="none"
-                stroke="rgba(255,255,255,0.08)"
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-              />
-              {overlayMultiplier > 0 && (
-                <path
-                  d={describeArc(center, center, radius, startAngle, overlayEndAngle)}
-                  fill="none"
-                  stroke={entry.role.color}
-                  strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeOpacity={entry.coverageState === 'filled' ? 0.92 : 0.56}
-                  filter="url(#wardrobe-segment-glow)"
-                />
-              )}
-            </g>
-          );
-        })}
-
-        <circle
-          cx={center}
-          cy={center}
-          r={60}
-          fill="rgba(9,9,11,0.86)"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth="1"
-        />
-      </svg>
-    );
-  })() : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -4632,83 +4430,6 @@ const OdaraScreen = ({
               <span>Sign out</span>
             </button>
           </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet
-        open={!!selectedWardrobeRole}
-        onOpenChange={(open) => {
-          if (!open) setSelectedWardrobeRoleKey(null);
-        }}
-      >
-        <SheetContent
-          side="bottom"
-          className="border-white/10 bg-[#11100e]/95 px-5 pt-6 pb-7 text-foreground backdrop-blur-2xl"
-        >
-          {selectedWardrobeRole && (
-            <>
-              <SheetHeader className="space-y-2 text-left">
-                <SheetTitle className="text-[20px] font-normal text-foreground" style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}>
-                  {selectedWardrobeRole.role.label}
-                </SheetTitle>
-                <SheetDescription className="text-[13px] leading-[1.55] text-foreground/56">
-                  {selectedWardrobeRole.role.meaning}
-                </SheetDescription>
-              </SheetHeader>
-
-              <div className="mt-5 space-y-4">
-                <div
-                  className="rounded-[20px] px-4 py-4"
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/42">
-                      {selectedWardrobeRole.coverageState === 'filled'
-                        ? 'Covered'
-                        : selectedWardrobeRole.coverageState === 'partial'
-                          ? 'Partial coverage'
-                          : 'Open role'}
-                    </span>
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{
-                        background: selectedWardrobeRole.role.color,
-                        opacity: selectedWardrobeRole.coverageState === 'open' ? 0.28 : selectedWardrobeRole.coverageState === 'partial' ? 0.58 : 0.92,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-2 text-[15px] leading-[1.55] text-foreground/82">
-                    {selectedWardrobeRole.coveredBy
-                      ? `${selectedWardrobeRole.coverageState === 'filled' ? 'Covered by' : 'Partly held by'} ${getDisplayName(selectedWardrobeRole.coveredBy.name, selectedWardrobeRole.coveredBy.brand)}.`
-                      : 'No owned scent is holding this role yet.'}
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">
-                    Why it matters
-                  </span>
-                  <p className="text-[14px] leading-[1.65] text-foreground/72">
-                    {selectedWardrobeRole.role.whyItMatters}
-                  </p>
-                </div>
-
-                {selectedWardrobeRole.coverageState !== 'filled' && (
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/40">
-                      Next addition direction
-                    </span>
-                    <p className="text-[14px] leading-[1.65] text-foreground/72">
-                      {selectedWardrobeRole.role.openDirection}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
         </SheetContent>
       </Sheet>
 
@@ -4979,16 +4700,14 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: SHARED action stack (lock → star → back).
+              {/* Right: SHARED action stack (lock → back).
                   Single rail used by BOTH signed-in and guest modes.
                   - Lock: interactive when signed-in; visually disabled no-op for guest.
-                  - Star: always rendered; interactive when signed-in; disabled no-op for guest.
                   - Back: rendered only when there is promotion/history (signed-in OR guest). */}
               {(() => {
                 // Action rail consumes the normalized cardController state —
                 // single source of truth for both signed-in and guest.
                 const showBack = actionRailState.showBack;
-                const starActive = actionRailState.starred;
                 const lockActive = actionRailState.locked;
                 const lockColor = lockActive ? '#22c55e' : 'currentColor';
 
@@ -5109,33 +4828,6 @@ const OdaraScreen = ({
                     </span>
                   )}
                 </button>
-
-                {isGuestMode && (
-                  /* Favorite star — guest only in the top rail.
-                     Signed-in favorite moves to the bottom action row. */
-                  <button
-                    type="button"
-                    aria-label="Favorite"
-                    onClick={() => cardController.actions.toggleStar()}
-                    className="p-0.5 relative"
-                  >
-                    <svg
-                      width="13" height="13" viewBox="0 0 24 24"
-                      fill={starActive ? '#eab308' : 'none'}
-                      stroke={starActive ? '#eab308' : 'currentColor'}
-                      strokeWidth="1.5"
-                      className={`transition-all duration-300 ${
-                        starActive
-                          ? 'drop-shadow-[0_0_4px_rgba(234,179,8,0.6)]'
-                          : 'text-foreground/40 hover:text-foreground/70'
-                      } ${guestStarFlash ? 'scale-125' : 'scale-100'}`}
-                      style={{ transitionProperty: 'transform, fill, stroke, filter' }}
-                    >
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                  </button>
-                )}
-
                 {/* Back arrow — history-gated for both signed-in and guest */}
                 {showBack && (
                   <button onClick={() => cardController.actions.back()} className="p-0.5" aria-label="Back">
@@ -5313,110 +5005,123 @@ const OdaraScreen = ({
               </div>
             ) : null}
 
-            {/* ── Alternatives — shared rail for signed-in and guest. ── */}
-            {alternatesRendered && (
-              <div className="flex flex-col items-center gap-2 mt-1">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
-                  Alternatives
-                </span>
-                <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                  {visibleAlternateRailItems.map((item, index) => {
-                    const altColor = FAMILY_COLORS[item.family] ?? '#888';
-                    const promotionDisabled = !!item.disabled;
-                    return (
-                      <button
-                        key={item.key || index}
-                        type="button"
-                        aria-disabled={promotionDisabled || isCardLocked || undefined}
-                        data-alternate-chip
-                        onPointerDown={(e) => {
-                          if (!isCardLocked) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isCardLocked || promotionDisabled) return;
-                          if (item.source === 'guest') {
-                            cardController.actions.promoteAlternate(item.alternate, item.originalIdx);
-                          } else {
-                            cardController.actions.promoteAlternate(item.alternate);
-                          }
-                        }}
-                        disabled={promotionDisabled}
-                        className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
-                          text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
-                          ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
-                        style={{
-                          border: `1px solid ${altColor}44`,
-                          background: `${altColor}0A`,
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
+            <div
+              className="mt-1 flex w-full flex-col items-center gap-3 pb-1"
+              data-card-footer-shell
+            >
+              {/* ── Alternatives — shared rail for signed-in and guest. ── */}
+              {alternatesRendered && (
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
+                    Alternatives
+                  </span>
+                  <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                    {visibleAlternateRailItems.map((item, index) => {
+                      const altColor = FAMILY_COLORS[item.family] ?? '#888';
+                      const promotionDisabled = !!item.disabled;
+                      return (
+                        <button
+                          key={item.key || index}
+                          type="button"
+                          aria-disabled={promotionDisabled || isCardLocked || undefined}
+                          data-alternate-chip
+                          onPointerDown={(e) => {
+                            if (!isCardLocked) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isCardLocked || promotionDisabled) return;
+                            if (item.source === 'guest') {
+                              cardController.actions.promoteAlternate(item.alternate, item.originalIdx);
+                            } else {
+                              cardController.actions.promoteAlternate(item.alternate);
+                            }
+                          }}
+                          disabled={promotionDisabled}
+                          className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
+                            text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
+                            ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
+                          style={{
+                            border: `1px solid ${altColor}44`,
+                            background: `${altColor}0A`,
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!isGuestMode && (
-              <div className="mt-4 flex items-center justify-center gap-5">
-                <button
-                  type="button"
-                  aria-label="Favorite"
-                  aria-pressed={isFavorited}
-                  onClick={() => cardController.actions.toggleStar()}
-                  className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+              <div
+                className="flex min-h-10 w-full items-center justify-center gap-5"
+                data-shared-bottom-action-row
+                role="group"
+                aria-label="Card actions"
+              >
+              <button
+                type="button"
+                aria-label="Favorite"
+                aria-pressed={bottomStarActive}
+                onClick={() => cardController.actions.toggleStar()}
+                className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                style={{
+                  color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
+                  background: bottomStarActive ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
+                  boxShadow: bottomStarActive
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(234,179,8,0.14)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                }}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill={bottomStarActive ? '#eab308' : 'none'}
+                  stroke={bottomStarActive ? '#eab308' : 'currentColor'}
+                  strokeWidth="1.55"
+                  className="transition-all duration-300"
                   style={{
-                    color: isFavorited ? '#eab308' : 'rgba(255,255,255,0.62)',
-                    background: isFavorited ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
-                    boxShadow: isFavorited
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(234,179,8,0.14)'
-                      : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                    filter: bottomStarActive ? 'drop-shadow(0 0 5px rgba(234,179,8,0.38))' : undefined,
+                    transform: isGuestMode && guestStarFlash ? 'scale(1.12)' : undefined,
                   }}
                 >
-                  <svg
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill={isFavorited ? '#eab308' : 'none'}
-                    stroke={isFavorited ? '#eab308' : 'currentColor'}
-                    strokeWidth="1.55"
-                    className="transition-all duration-300"
-                    style={{
-                      filter: isFavorited ? 'drop-shadow(0 0 5px rgba(234,179,8,0.38))' : undefined,
-                    }}
-                  >
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </button>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </button>
 
-                <button
-                  type="button"
-                  aria-label="Carry to next day"
-                  aria-pressed={signedInCarryoverVisualTarget !== 'off'}
-                  onClick={handleSignedInCarryoverToggle}
-                  className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
-                  style={signedInCarryoverButtonStyle}
+              <button
+                type="button"
+                aria-label="Carry to next day"
+                aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
+                aria-disabled={isGuestMode || undefined}
+                onClick={isGuestMode ? undefined : handleSignedInCarryoverToggle}
+                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
+                style={{
+                  ...bottomCarryoverButtonStyle,
+                  cursor: isGuestMode ? 'default' : 'pointer',
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.65"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.65"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M10 14l-1.6 1.6a3 3 0 0 1-4.2-4.2l3.2-3.2a3 3 0 0 1 4.2 0" />
-                    <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
-                    <path d="M9 15l6-6" />
-                  </svg>
-                </button>
-              </div>
-            )}
+                  <path d="M10 14l-1.6 1.6a3 3 0 0 1-4.2-4.2l3.2-3.2a3 3 0 0 1 4.2 0" />
+                  <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
+                  <path d="M9 15l6-6" />
+                </svg>
+              </button>
+            </div>
+            </div>
 
 
               </div>
@@ -5490,147 +5195,6 @@ const OdaraScreen = ({
             })}
           </div>
         </div>
-
-        <section
-          className="mt-3.5 rounded-[24px] px-4 py-4"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(8,8,10,0.92) 100%)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            boxShadow: '0 20px 48px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.04)',
-            backdropFilter: 'blur(24px)',
-          }}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3
-                className="text-[24px] leading-[1.04] text-foreground"
-                style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-              >
-                Wardrobe Balance
-              </h3>
-              <p className="mt-1 text-[13px] leading-[1.6] text-foreground/54 max-w-[28rem]">
-                {wardrobeSummary?.introCopy ?? 'Add a few scents to reveal your wardrobe balance.'}
-              </p>
-            </div>
-            {wardrobeSummary && (
-              <span className="mt-1 text-[10px] uppercase tracking-[0.16em] text-foreground/34">
-                Capsule map
-              </span>
-            )}
-          </div>
-
-          {wardrobeLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12">
-              <div className="h-8 w-8 rounded-full border border-white/14 border-t-white/46 animate-spin" />
-              <p className="text-[13px] text-foreground/48">
-                Mapping wardrobe balance…
-              </p>
-            </div>
-          ) : wardrobeSummary ? (
-            <div className="mt-4">
-              <div className="flex flex-col items-center gap-3">
-                <div className="relative flex h-[244px] w-[244px] items-center justify-center">
-                  {wardrobeChart}
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
-                    <span
-                      className="text-[24px] leading-[1.08] text-foreground"
-                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                    >
-                      {wardrobeSummary.centerTitle}
-                    </span>
-                    {wardrobeSummary.centerSubtitle && (
-                      <span className="mt-1 text-[11px] uppercase tracking-[0.12em] text-foreground/42">
-                        {wardrobeSummary.centerSubtitle}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid w-full gap-3 pt-1 md:grid-cols-3">
-                  <div
-                    className="rounded-[18px] px-4 py-3"
-                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  >
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
-                      Strongest Coverage
-                    </span>
-                    {wardrobeSummary.strongestCoverage ? (
-                      <>
-                        <p className="mt-2 text-[15px] text-foreground/82">
-                          {wardrobeSummary.strongestCoverage.role.label}
-                        </p>
-                        <p className="mt-1 text-[13px] leading-[1.55] text-foreground/54">
-                          Covered by {getDisplayName(
-                            wardrobeSummary.strongestCoverage.coveredBy?.name ?? '',
-                            wardrobeSummary.strongestCoverage.coveredBy?.brand ?? null
-                          )}.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-2 text-[13px] leading-[1.55] text-foreground/48">
-                        Coverage will resolve once a few owned scents are in place.
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className="rounded-[18px] px-4 py-3"
-                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  >
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
-                      Open Roles
-                    </span>
-                    {wardrobePreviewOpenRoles.length > 0 ? (
-                      <div className="mt-2 space-y-2">
-                        {wardrobePreviewOpenRoles.map((role) => (
-                          <button
-                            key={role.role.key}
-                            type="button"
-                            onClick={() => setSelectedWardrobeRoleKey(role.role.key)}
-                            className="w-full rounded-[14px] px-3 py-2 text-left transition-colors hover:bg-white/[0.03]"
-                          >
-                            <p className="text-[14px] text-foreground/80">{role.role.label}</p>
-                            <p className="mt-1 text-[12px] leading-[1.5] text-foreground/50">
-                              {role.role.openUseCase}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-[13px] leading-[1.55] text-foreground/48">
-                        Coverage is settled across all seven roles.
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className="rounded-[18px] px-4 py-3"
-                    style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  >
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/38">
-                      Next Best Addition
-                    </span>
-                    <p className="mt-2 text-[13px] leading-[1.6] text-foreground/58">
-                      {wardrobeSummary.nextBestRole?.role.openDirection ?? 'Coverage is already broad enough that the next move can stay personal rather than structural.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="mt-4 rounded-[20px] px-4 py-8 text-center"
-              style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <p className="text-[14px] leading-[1.65] text-foreground/52">
-                {wardrobeUnavailable || isGuestMode
-                  ? 'Add a few scents to reveal your wardrobe balance.'
-                  : 'Add a few scents to reveal your wardrobe balance.'}
-              </p>
-            </div>
-          )}
-        </section>
-
         {/* Sign out */}
         <button
           onClick={onSignOut}
