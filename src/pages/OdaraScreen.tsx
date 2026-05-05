@@ -8,7 +8,7 @@ import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
-import { Input } from "@/components/ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
