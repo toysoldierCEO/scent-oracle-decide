@@ -5,6 +5,7 @@ import LayerCard from "@/components/LayerCard";
 import TemperatureReadout from "@/components/card-system/TemperatureReadout";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
 import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
+import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
@@ -2378,6 +2379,9 @@ const OdaraScreen = ({
   // Heart manages its own label inside HeartReactionButton.
   const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
   const [daisyLabelTick, setDaisyLabelTick] = useState(0);
+  const [daisyLabelText, setDaisyLabelText] = useState<string | null>(null);
+  const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const daisyButtonRef = useRef<HTMLButtonElement | null>(null);
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
@@ -5489,15 +5493,17 @@ const OdaraScreen = ({
                 }}
               />
             )}
-            {/* Top row: temp left · centered date · action stack right */}
-            <div className="flex items-start justify-between mb-1.5 relative z-10">
-              {/* Left: temperature — instrument reading */}
-              <div className="flex flex-col items-start min-w-[52px] -mt-0.5">
+            {/* Top row: temp left · centered date · action stack right.
+                Temperature/date/lock form ONE quiet metadata row — same
+                opacity, mirrored horizontal inset, balanced visual weight. */}
+            <div className="flex items-center justify-between mb-1.5 relative z-10 px-0.5">
+              {/* Left: temperature — instrument reading (digital, but quiet). */}
+              <div className="flex items-center min-w-[52px]">
                 <TemperatureReadout value={resolvedTemperature} />
               </div>
 
               {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-1" style={{ fontFamily: "'Geist Mono', monospace" }}>
+              <span className="text-[14px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 {getDateLabel(selectedDate)}
               </span>
 
@@ -5520,11 +5526,11 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Lock"
                   onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation"
+                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation text-foreground/70"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg
-                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke={lockColor} strokeWidth="1.5"
                     className="transition-colors duration-300 relative z-[1]"
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
@@ -5872,6 +5878,7 @@ const OdaraScreen = ({
                 aria-label="Card actions"
               >
               <button
+                ref={favoriteButtonRef}
                 type="button"
                 aria-label="Favorite"
                 aria-pressed={bottomStarActive}
@@ -5904,9 +5911,10 @@ const OdaraScreen = ({
                 >
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <ActionMicroLabel
+                <FloatingActionLabel
                   triggerKey={favoriteLabelTick || null}
                   text="Favorite"
+                  anchorRef={favoriteButtonRef}
                   color={bottomStarActive ? '#eab308' : undefined}
                 />
               </button>
@@ -5930,12 +5938,18 @@ const OdaraScreen = ({
               })()}
 
               <button
+                ref={daisyButtonRef}
                 type="button"
                 aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || undefined}
                 onClick={isGuestMode ? undefined : () => {
+                  // Determine the label BEFORE state flip:
+                  // current target 'off' -> next is daisy active -> "Daisy Chain"
+                  // current target non-off -> next will turn off -> "Off"
+                  const nextLabel = signedInCarryoverVisualTarget === 'off' ? 'Daisy Chain' : 'Off';
                   handleSignedInCarryoverToggle();
+                  setDaisyLabelText(nextLabel);
                   setDaisyLabelTick((t) => t + 1);
                 }}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
@@ -5959,9 +5973,11 @@ const OdaraScreen = ({
                   <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
                   <path d="M9 15l6-6" />
                 </svg>
-                <ActionMicroLabel
+                <FloatingActionLabel
                   triggerKey={daisyLabelTick || null}
-                  text="Daisy Chain"
+                  text={daisyLabelText}
+                  anchorRef={daisyButtonRef}
+                  color={daisyLabelText === 'Off' ? '#ef4444' : undefined}
                 />
               </button>
             </div>

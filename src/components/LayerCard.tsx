@@ -445,9 +445,9 @@ const LayerCard = ({
       style={{
         background: `linear-gradient(135deg, ${layerTint.material}, ${layerTint.bg}), rgba(6,6,8,0.92)`,
         border: `1px solid ${layerTint.border}`,
-        // Single refined surface — soft centered glow only, no offset shadow
-        // that would read as a duplicate "shelf" card underneath.
-        boxShadow: `0 0 18px ${layerTint.glow}`,
+        // ONE clean refined surface — no offset shadow, no outer glow,
+        // no pseudo-shelf. Border + inner sheen is sufficient depth.
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04)`,
         backdropFilter: 'blur(24px)',
         pointerEvents: 'auto',
       }}

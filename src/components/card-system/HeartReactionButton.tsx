@@ -6,6 +6,7 @@ import {
   HEART_LIKE_COLOR,
   HEART_LOVE_COLOR,
 } from './tokens';
+import FloatingActionLabel from './FloatingActionLabel';
 
 export type HeartState = 0 | 1 | 2; // 0 = none, 1 = like, 2 = love
 
@@ -31,12 +32,9 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
   disabled,
 }) => {
   const [flashAt, setFlashAt] = useState<number>(0);
+  const [labelTick, setLabelTick] = useState(0);
   const [labelText, setLabelText] = useState<string | null>(null);
-  const labelTimer = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (labelTimer.current) window.clearTimeout(labelTimer.current);
-  }, []);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const liked = state >= 1;
   const loved = state === 2;
@@ -49,21 +47,22 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
     setFlashAt(Date.now());
     onHaptic?.(next === 2 ? 'medium' : 'light');
 
-    // Floating micro-label
     if (next === 1) setLabelText('Like');
     else if (next === 2) setLabelText('Love');
-    else setLabelText(null);
-
-    if (labelTimer.current) window.clearTimeout(labelTimer.current);
-    if (next !== 0) {
-      labelTimer.current = window.setTimeout(() => setLabelText(null), 1100);
-    }
+    else setLabelText('Off');
+    setLabelTick((t) => t + 1);
   };
 
   const flashing = flashAt && Date.now() - flashAt < 320;
+  const labelColor = labelText === 'Love'
+    ? HEART_LOVE_COLOR
+    : labelText === 'Like'
+    ? HEART_LIKE_COLOR
+    : undefined;
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={loved ? 'Loved' : liked ? 'Liked' : 'Like'}
       aria-pressed={liked}
@@ -103,24 +102,15 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
         </svg>
       </span>
 
-      {/* Floating micro-label — appears just BELOW the button, fades out */}
-      {labelText && (
-        <span
-          key={labelText + flashAt}
-          className="pointer-events-none absolute left-1/2 -bottom-6 -translate-x-1/2 whitespace-nowrap text-[9.5px] uppercase tracking-[0.2em] px-2 py-[2px] rounded-full"
-          style={{
-            color: heartColor ?? 'rgba(255,255,255,0.85)',
-            background: 'rgba(10,10,12,0.78)',
-            border: `1px solid ${heartColor ?? 'rgba(255,255,255,0.12)'}55`,
-            backdropFilter: 'blur(10px)',
-            animation: 'actionLabelPop 1100ms cubic-bezier(0.2,0,0,1) forwards',
-          }}
-        >
-          {labelText}
-        </span>
-      )}
+      <FloatingActionLabel
+        triggerKey={labelTick || null}
+        text={labelText}
+        anchorRef={buttonRef}
+        color={labelColor}
+      />
     </button>
   );
 };
 
 export default HeartReactionButton;
+
