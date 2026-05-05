@@ -1124,6 +1124,20 @@ function hasRenderableRailTokens(
   return buildFallbackRailTokens(accords, notes).length > 0;
 }
 
+function hasResolvedFamilyValue(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function displayCardNeedsDetailHydration(card: DisplayCard | null | undefined): boolean {
+  if (!card) return false;
+  return !hasResolvedFamilyValue(card.family) || !hasRenderableRailTokens(card.accords, card.notes);
+}
+
+function layerModeNeedsDetailHydration(layer: NonNullable<LayerModes[LayerMood]> | null | undefined): boolean {
+  if (!layer) return false;
+  return !hasResolvedFamilyValue(layer.family_key) || !hasRenderableRailTokens(layer.accords, layer.notes);
+}
+
 function pickPreferredRailSource(
   currentAccords: string[] | null | undefined,
   currentNotes: string[] | null | undefined,
@@ -1721,7 +1735,12 @@ const OdaraScreen = ({
           return [];
         }
         const seededQueue = queueRowsToDisplay((data as unknown as QueueCard[]) ?? [], excludeId);
-        const detailMap = await fetchFragranceDetails(seededQueue.map((row) => row.fragrance_id));
+        const detailIds = seededQueue
+          .filter((row) => displayCardNeedsDetailHydration(row))
+          .map((row) => row.fragrance_id);
+        const detailMap = detailIds.length > 0
+          ? await fetchFragranceDetails(detailIds)
+          : new Map<string, FragranceDetail>();
         console.log('[Odara] queue fetch success', seededQueue.length, 'cards');
         return seededQueue.map((row) => {
           const resolvedCard = resolveQueuedHeroDisplayWithDetails(
@@ -2602,6 +2621,12 @@ const OdaraScreen = ({
       return;
     }
 
+    if (!isGuestMode && signedInVisibleIsHeroCard) {
+      setCurrentCardAlternates(signedInPayloadAlternates);
+      setCurrentCardAlternatesOwnerId(visibleCard.fragrance_id);
+      return;
+    }
+
     const capturedSlot = stateKey;
     const capturedCardId = visibleCard.fragrance_id;
     let isActive = true;
@@ -2618,7 +2643,7 @@ const OdaraScreen = ({
     return () => {
       isActive = false;
     };
-  }, [visibleCard, resolveAlternatesForCard, stateKey]);
+  }, [visibleCard, resolveAlternatesForCard, stateKey, isGuestMode, signedInVisibleIsHeroCard, signedInPayloadAlternates]);
 
   // Double-tap detector ref (replaces old swipe-gesture system).
   // double tap on card = like + lock
@@ -2678,7 +2703,22 @@ const OdaraScreen = ({
   const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
   const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (activeOracle as any)?.today_pick?.fragrance_id ?? (oracle as any)?.today_pick?.fragrance_id ?? null;
   const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
-  const signedInVisibleAlternates = currentCardAlternatesOwnerId === visibleCard?.fragrance_id ? currentCardAlternates : [];
+  const signedInPayloadAlternates = useMemo(() => {
+    if (isGuestMode) return [];
+    const raw = Array.isArray(v6Payload?.alternates)
+      ? v6Payload.alternates
+      : Array.isArray((activeOracle as any)?.alternates)
+        ? (activeOracle as any).alternates
+        : Array.isArray((oracle as any)?.alternates)
+          ? (oracle as any).alternates
+          : [];
+    return raw
+      .map((row: any) => normalizeAlternateRow(row))
+      .filter((alt): alt is OracleAlternate => !!alt);
+  }, [isGuestMode, v6Payload, activeOracle, oracle]);
+  const signedInVisibleAlternates = signedInVisibleIsHeroCard
+    ? signedInPayloadAlternates
+    : (currentCardAlternatesOwnerId === visibleCard?.fragrance_id ? currentCardAlternates : []);
 
   // First-paint mode results — derived directly from v6 layer_modes (preview
   // stack) instead of the slot-scoped mood cache. The cache is still used as
@@ -2718,7 +2758,8 @@ const OdaraScreen = ({
     if (isGuestMode) return;
 
     const visibleHeroNeedsDetail = !!visibleCard?.fragrance_id
-      && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id);
+      && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id)
+      && displayCardNeedsDetailHydration(visibleCard);
     if (visibleHeroNeedsDetail) {
       void fetchFragranceDetail(visibleCard!.fragrance_id).then((detail) => {
         if (!detail || !visibleCard || visibleCard.isHero) return;
@@ -2734,7 +2775,7 @@ const OdaraScreen = ({
     const visibleLayerId = signedInForcedLayerCarryCard?.fragrance_id ?? visibleModeEntry?.id ?? null;
     const visibleLayerNeedsDetail = !!visibleLayerId
       && !fragranceDetailCacheRef.current.has(visibleLayerId);
-    if (visibleLayerNeedsDetail) {
+    if (visibleLayerNeedsDetail && layerModeNeedsDetailHydration(visibleModeEntry ?? (signedInForcedLayerCarryCard ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood) : null))) {
       void fetchFragranceDetail(visibleLayerId!);
     }
   }, [isGuestMode, visibleCard, visibleModeEntry, signedInForcedLayerCarryCard, fetchFragranceDetail, fragranceDetailVersion, commitSignedInQueuedHero]);
