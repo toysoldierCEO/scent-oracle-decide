@@ -5850,7 +5850,7 @@ const OdaraScreen = ({
               )}
 
               <div
-                className="flex min-h-10 w-full items-center justify-center gap-5"
+                className="flex min-h-10 w-full items-center justify-center gap-10"
                 data-shared-bottom-action-row
                 role="group"
                 aria-label="Card actions"
@@ -5886,6 +5886,80 @@ const OdaraScreen = ({
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
               </button>
+
+              {(() => {
+                const heartKey = visibleCard
+                  ? `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}`
+                  : '';
+                const heartState: 0 | 1 | 2 = heartKey ? (heartStateByKey[heartKey] ?? 0) : 0;
+                const liked = heartState >= 1;
+                const loved = heartState === 2;
+                const heartColor = '#ef4444';
+                const handleHeart = () => {
+                  if (!heartKey) return;
+                  setHeartStateByKey(prev => {
+                    const cur = prev[heartKey] ?? 0;
+                    const next: 0 | 1 | 2 = cur === 0 ? 1 : cur === 1 ? 2 : 0;
+                    return { ...prev, [heartKey]: next };
+                  });
+                  setHeartFlash(true);
+                  window.setTimeout(() => setHeartFlash(false), 320);
+                  haptic(loved ? 'selection' : 'success');
+                };
+                return (
+                  <button
+                    type="button"
+                    aria-label={loved ? 'Loved' : liked ? 'Liked' : 'Like'}
+                    aria-pressed={liked}
+                    onClick={handleHeart}
+                    className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95 relative"
+                    style={{
+                      ...sharedBottomActionButtonStyle,
+                      color: liked ? heartColor : 'rgba(255,255,255,0.62)',
+                      background: liked ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.035)',
+                      boxShadow: liked
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(239,68,68,0.14)'
+                        : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                    }}
+                  >
+                    <span
+                      className="relative inline-block transition-transform duration-300"
+                      style={{
+                        width: 16, height: 16,
+                        transform: heartFlash ? 'scale(1.18)' : 'scale(1)',
+                      }}
+                    >
+                      {/* Secondary smaller heart for "loved" state — offset top-left, contained */}
+                      {loved && (
+                        <svg
+                          width="11" height="11" viewBox="0 0 24 24"
+                          fill={heartColor} stroke={heartColor} strokeWidth="1.6"
+                          className="absolute"
+                          style={{
+                            top: -3, left: -4,
+                            filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.5))',
+                            transition: 'opacity 220ms ease-out, transform 220ms ease-out',
+                          }}
+                        >
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                      )}
+                      <svg
+                        width="16" height="16" viewBox="0 0 24 24"
+                        fill={liked ? heartColor : 'none'}
+                        stroke={liked ? heartColor : 'currentColor'}
+                        strokeWidth="1.55"
+                        className="absolute inset-0 transition-all duration-300"
+                        style={{
+                          filter: liked ? 'drop-shadow(0 0 5px rgba(239,68,68,0.38))' : undefined,
+                        }}
+                      >
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                      </svg>
+                    </span>
+                  </button>
+                );
+              })()}
 
               <button
                 type="button"
