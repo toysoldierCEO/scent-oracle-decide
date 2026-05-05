@@ -925,6 +925,31 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
   };
 }
 
+function normalizeQueueCardRow(row: any): QueueCard | null {
+  if (!row || typeof row !== 'object') return null;
+
+  const preview = row.preview ?? {};
+  const fragranceId = row.fragrance_id ?? preview.fragrance_id ?? null;
+  if (typeof fragranceId !== 'string' || fragranceId.trim().length === 0) return null;
+
+  return {
+    queue_rank: typeof row.queue_rank === 'number' ? row.queue_rank : 0,
+    fragrance_id: fragranceId,
+    name: row.name ?? preview.name ?? '',
+    brand: row.brand ?? preview.brand ?? '',
+    family_key: row.family_key ?? row.family ?? preview.family_key ?? '',
+    source: row.source ?? preview.source ?? '',
+    why_this: row.why_this ?? preview.why_this ?? '',
+    collection_status: row.collection_status ?? preview.collection_status ?? '',
+    is_in_collection: row.is_in_collection ?? preview.is_in_collection ?? false,
+    preview,
+    notes: Array.isArray(row.notes) ? row.notes : null,
+    accords: Array.isArray(row.accords) ? row.accords : null,
+    reason_chip_label: row.reason_chip_label ?? preview.reason_chip_label ?? null,
+    reason_chip_explanation: row.reason_chip_explanation ?? preview.reason_chip_explanation ?? null,
+  };
+}
+
 function sanitizeTokenSource(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
   const normalized: string[] = [];
@@ -1568,6 +1593,7 @@ const OdaraScreen = ({
   const [currentCardAlternatesOwnerId, setCurrentCardAlternatesOwnerId] = useState<string | null>(null);
   const fragranceDetailCacheRef = useRef<Map<string, FragranceDetail>>(new Map());
   const fragranceDetailInFlightRef = useRef<Map<string, Promise<FragranceDetail | null>>>(new Map());
+  const queueFetchInFlightRef = useRef<Map<string, Promise<DisplayCard[]>>>(new Map());
   const signedInQueuedHeroRef = useRef<Map<string, DisplayCard>>(new Map());
   const [signedInQueuedHeroVersion, setSignedInQueuedHeroVersion] = useState(0);
   const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
@@ -1652,6 +1678,14 @@ const OdaraScreen = ({
     return details;
   }, []);
 
+  const queueRowsToDisplay = useCallback((rowsInput: any[], excludeId?: string) => {
+    const normalizedRows = (Array.isArray(rowsInput) ? rowsInput : [])
+      .map(normalizeQueueCardRow)
+      .filter((row): row is QueueCard => !!row && (!excludeId || row.fragrance_id !== excludeId));
+
+    return normalizedRows.map((row) => commitSignedInQueuedHero(queueCardToDisplay(row), null));
+  }, [commitSignedInQueuedHero]);
+
   // Fetch queue from backend — background only, never blocks hero.
   // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
@@ -1659,41 +1693,53 @@ const OdaraScreen = ({
       console.log('[Odara][Guest] queue fetch skipped (read-only)');
       return [];
     }
-    console.log('[Odara] queue fetch start');
-    try {
-      setQueueError(null);
-      const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
-        p_user: userId,
-        p_context: selectedContext,
-        p_temperature: resolvedTemperature,
-        p_brand: 'Alexandria Fragrances',
-        p_wear_date: selectedDate,
-        p_limit: 12,
-      });
-      if (error) {
-        console.error('[Odara] queue fetch fail', error.message);
-        setQueueError(error.message);
-        return [];
-      }
-      const rows = (data as unknown as QueueCard[]) ?? [];
-      const filtered = excludeId
-        ? rows.filter(r => r.fragrance_id !== excludeId)
-        : rows;
-      const detailMap = await fetchFragranceDetails(filtered.map((row) => row.fragrance_id));
-      console.log('[Odara] queue fetch success', filtered.length, 'cards');
-      return filtered.map((row) => {
-        const resolvedCard = resolveQueuedHeroDisplayWithDetails(
-          queueCardToDisplay(row),
-          detailMap.get(row.fragrance_id) ?? null,
-        );
-        return commitSignedInQueuedHero(resolvedCard, detailMap.get(row.fragrance_id) ?? null);
-      });
-    } catch (e: any) {
-      console.error('[Odara] queue fetch fail', e?.message);
-      setQueueError(e?.message ?? 'Queue fetch failed');
-      return [];
+    const requestKey = `${stateKey}|${excludeId ?? '(none)'}`;
+    const inFlight = queueFetchInFlightRef.current.get(requestKey);
+    if (inFlight) {
+      console.log('[Odara] queue fetch reuse', requestKey);
+      return inFlight;
     }
-  }, [userId, selectedContext, selectedDate, isGuestMode, fetchFragranceDetails, commitSignedInQueuedHero]);
+
+    console.log('[Odara] queue fetch start', requestKey);
+    setQueueError(null);
+
+    const request = (async () => {
+      try {
+        const { data, error } = await odaraSupabase.rpc('get_home_card_queue_v1' as any, {
+          p_user: userId,
+          p_context: selectedContext,
+          p_temperature: resolvedTemperature,
+          p_brand: 'Alexandria Fragrances',
+          p_wear_date: selectedDate,
+          p_limit: 12,
+        });
+        if (error) {
+          console.error('[Odara] queue fetch fail', error.message);
+          setQueueError(error.message);
+          return [];
+        }
+        const seededQueue = queueRowsToDisplay((data as unknown as QueueCard[]) ?? [], excludeId);
+        const detailMap = await fetchFragranceDetails(seededQueue.map((row) => row.fragrance_id));
+        console.log('[Odara] queue fetch success', seededQueue.length, 'cards');
+        return seededQueue.map((row) => {
+          const resolvedCard = resolveQueuedHeroDisplayWithDetails(
+            row,
+            detailMap.get(row.fragrance_id) ?? null,
+          );
+          return commitSignedInQueuedHero(resolvedCard, detailMap.get(row.fragrance_id) ?? null);
+        });
+      } catch (e: any) {
+        console.error('[Odara] queue fetch fail', e?.message);
+        setQueueError(e?.message ?? 'Queue fetch failed');
+        return [];
+      } finally {
+        queueFetchInFlightRef.current.delete(requestKey);
+      }
+    })();
+
+    queueFetchInFlightRef.current.set(requestKey, request);
+    return request;
+  }, [userId, selectedContext, selectedDate, resolvedTemperature, isGuestMode, stateKey, queueRowsToDisplay, fetchFragranceDetails, commitSignedInQueuedHero]);
 
   const fetchFragranceDetail = useCallback(async (fragranceId: string) => {
     if (!fragranceId) return null;
@@ -2344,6 +2390,7 @@ const OdaraScreen = ({
     moodCacheRef.current.clear();
     moodInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
+    queueFetchInFlightRef.current.clear();
   }, [stateKey]);
 
   useEffect(() => {
@@ -2520,12 +2567,23 @@ const OdaraScreen = ({
 
       setMoodCacheVersion(v => v + 1);
 
-      // 5) Queue fetch is BACKGROUND — never blocks hero render
-      fetchQueueRef.current(initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id).then(q => {
-        if (activeSlotRef.current !== capturedSlot) return;
-        setQueue(q);
+      // 5) Seed queue immediately from the signed-in v7 contract when present.
+      // This prevents an early skip from launching a second identical queue RPC
+      // while the background queue load is still racing.
+      const seededQueue = queueRowsToDisplay(
+        Array.isArray(v6?.queue) ? v6.queue : [],
+        initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id,
+      );
+      if (seededQueue.length > 0) {
+        setQueue(seededQueue);
         setQueuePointer(0);
-      });
+      } else {
+        fetchQueueRef.current(initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id).then(q => {
+          if (activeSlotRef.current !== capturedSlot) return;
+          setQueue(q);
+          setQueuePointer(0);
+        });
+      }
     } else {
       setVisibleCard(null);
       setLayerDebugSource('none');
@@ -2533,7 +2591,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracle, stateKey, currentDateKey, previousDateKey]);
+  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay]);
 
   // No eager modes fetch — moods load lazily on user tap
 
