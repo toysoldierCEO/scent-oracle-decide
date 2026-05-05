@@ -2700,9 +2700,7 @@ const OdaraScreen = ({
   //   hero  → payload.hero_tokens
   //   layer → visibleLayer.tokens ?? payload.layer_tokens (balance only) ?? []
   // ────────────────────────────────────────────────────────────────────
-  const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
-  const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (activeOracle as any)?.today_pick?.fragrance_id ?? (oracle as any)?.today_pick?.fragrance_id ?? null;
-  const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
+  // (moved above) v6Payload, signedInHeroId, signedInVisibleIsHeroCard
   const signedInPayloadAlternates = useMemo(() => {
     if (isGuestMode) return [];
     const raw = Array.isArray(v6Payload?.alternates)
