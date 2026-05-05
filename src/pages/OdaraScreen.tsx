@@ -3486,7 +3486,7 @@ const OdaraScreen = ({
 
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
-   *   - guest: single tap on the main scent-card shell = lock
+   *   - guest: double tap on the main scent-card shell = lock
    *   - signed-in: double tap on the overall card = like + lock
    *   - single tap on the layer section = expand/collapse
    *     (LayerCard handles its own onClick + stopPropagation)
@@ -3509,25 +3509,32 @@ const OdaraScreen = ({
     if (target.closest('[data-guest-profile-reserved]')) return;
     if (target.closest('button, a, input, textarea, select, [role="button"]')) return;
 
-    if (isGuestMode) {
-      const isTouchLikePointer =
-        lastCardPointerTypeRef.current === 'touch' ||
-        lastCardPointerTypeRef.current === 'pen';
-      if (!isTouchLikePointer) return;
-      if (guestLocked) return;
-      engageGuestLock();
-      return;
-    }
-
-    // Already locked → no-op (use the lock icon to unlock).
-    if (lockState === 'locked') return;
-
     const now = Date.now();
     const last = lastTapRef.current;
     const dx = e.clientX - last.x;
     const dy = e.clientY - last.y;
     const within = (now - last.time) <= DOUBLE_TAP_MS &&
       Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
+
+    if (isGuestMode) {
+      const isTouchLikePointer =
+        lastCardPointerTypeRef.current === 'touch' ||
+        lastCardPointerTypeRef.current === 'pen';
+      if (!isTouchLikePointer) return;
+      if (guestLocked) return;
+
+      if (!within) {
+        lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
+        return;
+      }
+
+      lastTapRef.current = { time: 0, x: 0, y: 0 };
+      engageGuestLock();
+      return;
+    }
+
+    // Already locked → no-op (use the lock icon to unlock).
+    if (lockState === 'locked') return;
 
     if (!within) {
       lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
