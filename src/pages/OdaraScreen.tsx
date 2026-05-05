@@ -5526,11 +5526,11 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Lock"
                   onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation"
+                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation text-foreground/70"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg
-                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke={lockColor} strokeWidth="1.5"
                     className="transition-colors duration-300 relative z-[1]"
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
