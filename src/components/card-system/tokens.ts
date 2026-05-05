@@ -11,7 +11,7 @@
  * index.css and gives a refined digital-clock look without the cheap
  * 7-segment calculator aesthetic. */
 export const DIGITAL_READOUT_FONT_STACK =
-  "'Share Tech Mono', 'JetBrains Mono', 'SF Mono', 'IBM Plex Mono', 'Geist Mono', ui-monospace, monospace";
+  "'DSEG7 Classic', 'Share Tech Mono', 'JetBrains Mono', 'SF Mono', 'IBM Plex Mono', ui-monospace, monospace";
 
 /* Action row — keeps star, heart, infinity visually identical and evenly spaced. */
 export const CARD_ACTION_BUTTON_SIZE_PX = 40;        // h-10 / w-10

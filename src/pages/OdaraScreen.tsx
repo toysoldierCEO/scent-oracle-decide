@@ -4,10 +4,11 @@ import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import TemperatureReadout from "@/components/card-system/TemperatureReadout";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
+import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
-import { Input } from "@/components/ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
@@ -2373,6 +2374,10 @@ const OdaraScreen = ({
   // 0 = empty, 1 = liked (single heart), 2 = loved (double heart).
   const [heartStateByKey, setHeartStateByKey] = useState<Record<string, 0 | 1 | 2>>({});
   const [heartFlash, setHeartFlash] = useState(false);
+  // Micro-label triggers for the bottom action row (Favorite / Daisy Chain).
+  // Heart manages its own label inside HeartReactionButton.
+  const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
+  const [daisyLabelTick, setDaisyLabelTick] = useState(0);
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
@@ -4954,10 +4959,12 @@ const OdaraScreen = ({
     : undefined;
   const signedInLayerCarrySurfaceStyle = !isGuestMode && (signedInLayerCarryActive || signedInLayerCarryPulsing)
     ? {
-        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '14' : '0E'}`,
+        // Single refined surface — inset ring only, no offset shadow that
+        // would read as a duplicate "shelf" card underneath the LayerCard.
+        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '12' : '0A'}`,
         boxShadow: signedInLayerCarryPulsing
-          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30, 0 18px 40px ${signedInLayerCarryColor}20`
-          : `inset 0 0 0 1px ${signedInLayerCarryColor}22, 0 10px 26px ${signedInLayerCarryColor}14`,
+          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30`
+          : `inset 0 0 0 1px ${signedInLayerCarryColor}1F`,
       }
     : undefined;
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
@@ -5210,76 +5217,9 @@ const OdaraScreen = ({
         </SheetContent>
       </Sheet>
 
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center px-4 pt-6 animate-in fade-in duration-150"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Search"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSearchOpen(false);
-              setSearchQuery('');
-            }
-          }}
-        >
-          {/* Dim + blur backdrop — card stays visible underneath */}
-          <div
-            className="absolute inset-0 bg-black/55 backdrop-blur-md"
-            aria-hidden="true"
-          />
-
-          {/* Floating search panel */}
-          <div
-            className="relative w-full max-w-md rounded-[22px] border border-white/10 bg-[#11100e]/85 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)] px-4 pt-4 pb-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2">
-              <Input
-                autoFocus
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search fragrances, notes, accords, brands…"
-                className="h-11 flex-1 rounded-[14px] border-white/10 bg-white/[0.04] px-4 text-[14px] text-foreground placeholder:text-foreground/34 focus-visible:ring-white/15"
-              />
-              <button
-                type="button"
-                aria-label="Close search"
-                onClick={() => {
-                  setSearchOpen(false);
-                  setSearchQuery('');
-                }}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <path d="M6 6l12 12" />
-                  <path d="M18 6L6 18" />
-                </svg>
-              </button>
-            </div>
-
-            <div
-              className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.02] px-4 py-4"
-              style={{ minHeight: '160px', maxHeight: '46vh', overflowY: 'auto' }}
-            >
-              {/* TODO: wire the search overlay to a real Odara search contract when a backend search RPC/query exists. */}
-              {!searchHasQuery ? (
-                <p className="text-[13px] text-foreground/62">
-                  Search your scent world.
-                </p>
-              ) : (
-                <p className="text-[13px] text-foreground/52">
-                  Nothing found yet. Try a fragrance, brand, note, accord, or family.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
-        <div className="relative mb-3 flex items-center justify-between">
+        {/* Top bar — chrome-less icons, inline expanding search. */}
+        <div className="relative mb-3 flex items-center justify-between min-h-[40px]">
           <button
             type="button"
             aria-label="Open menu"
@@ -5287,37 +5227,105 @@ const OdaraScreen = ({
               setSearchOpen(false);
               setMenuOpen(true);
             }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
               <path d="M4 7h16" />
               <path d="M4 12h16" />
               <path d="M4 17h16" />
             </svg>
           </button>
 
-          <div
-            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
-            style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
-          >
-            ODARA
-          </div>
+          {/* Centered ODARA wordmark — hidden when search is expanded so the
+              expanding field has room without colliding with the title. */}
+          {!searchOpen && (
+            <div
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
+              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+            >
+              ODARA
+            </div>
+          )}
 
-          <button
-            type="button"
-            aria-label="Open search"
-            onClick={() => {
-              setMenuOpen(false);
-              setSearchOpen(true);
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+          {/* Inline expanding search — same top-bar region.
+              Card / state remain untouched underneath. */}
+          <div
+            className="flex items-center justify-end overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
+            style={{ width: searchOpen ? 'calc(100% - 56px)' : '40px' }}
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="M16 16l4 4" />
-            </svg>
-          </button>
+            {!searchOpen ? (
+              <button
+                type="button"
+                aria-label="Open search"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setSearchOpen(true);
+                }}
+                className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M16 16l4 4" />
+                </svg>
+              </button>
+            ) : (
+              <div
+                className="flex w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 h-10 backdrop-blur-xl"
+                style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/55">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M16 16l4 4" />
+                </svg>
+                <input
+                  autoFocus
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search fragrances, notes, accords…"
+                  className="h-9 flex-1 min-w-0 bg-transparent text-[13px] text-foreground placeholder:text-foreground/34 outline-none"
+                />
+                <button
+                  type="button"
+                  aria-label="Close search"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchQuery('');
+                  }}
+                  className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-foreground/55 hover:text-foreground/95"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M6 6l12 12" />
+                    <path d="M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Inline search results — appear DIRECTLY UNDER the search bar.
+            Lightweight, scrollable, integrated into the same screen. */}
+        {searchOpen && (
+          <div
+            className="mb-3 rounded-[16px] border border-white/8 bg-white/[0.02] backdrop-blur-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
+            style={{ maxHeight: '40vh', overflowY: 'auto' }}
+          >
+            {/* TODO: wire to real Odara search contract when a backend search RPC exists. */}
+            {searchHasQuery ? (
+              <p className="text-[12.5px] text-foreground/52">
+                Nothing found yet. Try a fragrance, brand, note, accord, or family.
+              </p>
+            ) : (
+              <p className="text-[12.5px] text-foreground/55">
+                Search your scent world.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Context chips — centered under the top bar */}
         <div className="flex gap-1.5 mb-3 justify-center">
@@ -5512,7 +5520,7 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Lock"
                   onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-11 h-11 -m-[15px] touch-manipulation"
+                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg
@@ -5867,8 +5875,11 @@ const OdaraScreen = ({
                 type="button"
                 aria-label="Favorite"
                 aria-pressed={bottomStarActive}
-                onClick={() => cardController.actions.toggleStar()}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                onClick={() => {
+                  cardController.actions.toggleStar();
+                  setFavoriteLabelTick((t) => t + 1);
+                }}
+                className="relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
                   ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
@@ -5893,6 +5904,11 @@ const OdaraScreen = ({
                 >
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
+                <ActionMicroLabel
+                  triggerKey={favoriteLabelTick || null}
+                  text="Favorite"
+                  color={bottomStarActive ? '#eab308' : undefined}
+                />
               </button>
 
               {(() => {
@@ -5915,11 +5931,14 @@ const OdaraScreen = ({
 
               <button
                 type="button"
-                aria-label="Carry to next day"
+                aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || undefined}
-                onClick={isGuestMode ? undefined : handleSignedInCarryoverToggle}
-                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
+                onClick={isGuestMode ? undefined : () => {
+                  handleSignedInCarryoverToggle();
+                  setDaisyLabelTick((t) => t + 1);
+                }}
+                className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
                 style={{
                   ...sharedBottomActionButtonStyle,
                   ...bottomCarryoverButtonStyle,
@@ -5940,6 +5959,10 @@ const OdaraScreen = ({
                   <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
                   <path d="M9 15l6-6" />
                 </svg>
+                <ActionMicroLabel
+                  triggerKey={daisyLabelTick || null}
+                  text="Daisy Chain"
+                />
               </button>
             </div>
             </div>

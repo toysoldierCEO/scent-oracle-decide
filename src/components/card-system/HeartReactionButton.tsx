@@ -103,17 +103,17 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
         </svg>
       </span>
 
-      {/* Floating micro-label — appears just above the button, fades out */}
+      {/* Floating micro-label — appears just BELOW the button, fades out */}
       {labelText && (
         <span
           key={labelText + flashAt}
-          className="pointer-events-none absolute left-1/2 -top-6 -translate-x-1/2 whitespace-nowrap text-[10px] uppercase tracking-[0.18em] px-2 py-[2px] rounded-full"
+          className="pointer-events-none absolute left-1/2 -bottom-6 -translate-x-1/2 whitespace-nowrap text-[9.5px] uppercase tracking-[0.2em] px-2 py-[2px] rounded-full"
           style={{
             color: heartColor ?? 'rgba(255,255,255,0.85)',
             background: 'rgba(10,10,12,0.78)',
             border: `1px solid ${heartColor ?? 'rgba(255,255,255,0.12)'}55`,
             backdropFilter: 'blur(10px)',
-            animation: 'heartLabelPop 1100ms cubic-bezier(0.2,0,0,1) forwards',
+            animation: 'actionLabelPop 1100ms cubic-bezier(0.2,0,0,1) forwards',
           }}
         >
           {labelText}
