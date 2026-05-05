@@ -73,6 +73,7 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
   return createPortal(
     <span
       key={renderKey}
+      data-floating-action-label
       className="pointer-events-none fixed whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-[3px] rounded-full"
       style={{
         left: pos.x,
