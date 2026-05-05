@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
+import TemperatureReadout from "@/components/card-system/TemperatureReadout";
+import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
