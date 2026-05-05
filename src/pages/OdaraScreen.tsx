@@ -1686,6 +1686,8 @@ const OdaraScreen = ({
     return normalizedRows.map((row) => commitSignedInQueuedHero(queueCardToDisplay(row), null));
   }, [commitSignedInQueuedHero]);
 
+  const stateKey = `${selectedDate}:${selectedContext}`;
+
   // Fetch queue from backend — background only, never blocks hero.
   // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
