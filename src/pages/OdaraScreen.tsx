@@ -2379,6 +2379,12 @@ const OdaraScreen = ({
   // Heart manages its own label inside HeartReactionButton.
   const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
   const [daisyLabelTick, setDaisyLabelTick] = useState(0);
+  const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const daisyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const daisyLabelText = (() => {
+    // 'off' state shows "Off"; otherwise "Daisy Chain"
+    return null as string | null;
+  })();
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
