@@ -1369,6 +1369,7 @@ type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 
 type SignedInDayState = {
   lockState: LockState;
+  daisyChainEnabled: boolean | null;
   carryoverMode: SignedInCarryoverTarget;
   carryoverOrigin: 'manual' | 'inherited' | null;
   carryoverNextDayRole: 'main' | 'layer' | null;
@@ -1393,6 +1394,7 @@ type SignedInResolvedDayDecision = {
 function createDefaultSignedInDayState(): SignedInDayState {
   return {
     lockState: 'neutral',
+    daisyChainEnabled: null,
     carryoverMode: 'off',
     carryoverOrigin: null,
     carryoverNextDayRole: null,
@@ -1407,7 +1409,7 @@ function createDefaultSignedInDayState(): SignedInDayState {
 }
 
 function resolveCarryoverSelectedCard(dayState: SignedInDayState | null | undefined): DisplayCard | null {
-  if (!dayState || dayState.carryoverMode === 'off') return null;
+  if (!dayState || dayState.daisyChainEnabled !== true || dayState.carryoverMode === 'off') return null;
   return dayState.carryoverSelectedCard
     ?? (
       dayState.carryoverMode === 'hero'
@@ -1443,7 +1445,7 @@ function resolveSignedInDayDecision(
     };
   }
 
-  if (hasCurrentDayState && currentDayState.carryoverMode === 'off') {
+  if (hasCurrentDayState && currentDayState.daisyChainEnabled === false) {
     return {
       visibleCard: oraclePick ? heroToDisplay(oraclePick) : null,
       forcedLayerCarryCard: null,
@@ -1454,8 +1456,10 @@ function resolveSignedInDayDecision(
   }
 
   const previousSelectedCard = resolveCarryoverSelectedCard(previousDayState);
-  const previousNextDayRole = previousDayState?.carryoverNextDayRole
-    ?? resolveCarryoverNextDayRole(previousDayState?.carryoverMode ?? 'off');
+  const previousNextDayRole = previousDayState?.daisyChainEnabled === true
+    ? (previousDayState?.carryoverNextDayRole
+      ?? resolveCarryoverNextDayRole(previousDayState?.carryoverMode ?? 'off'))
+    : null;
 
   if (previousSelectedCard && previousNextDayRole === 'main') {
     return {
@@ -2105,6 +2109,7 @@ const OdaraScreen = ({
       const next = updater(current);
       if (
         current.lockState === next.lockState &&
+        current.daisyChainEnabled === next.daisyChainEnabled &&
         current.carryoverMode === next.carryoverMode &&
         current.carryoverOrigin === next.carryoverOrigin &&
         current.carryoverNextDayRole === next.carryoverNextDayRole &&
@@ -4245,6 +4250,7 @@ const OdaraScreen = ({
   const signedInResolvedSequelState = useMemo(() => {
     if (isGuestMode) {
       return {
+        enabled: false,
         mode: 'off' as SignedInCarryoverTarget,
         origin: null as SignedInDayState['carryoverOrigin'],
         selectedCard: null as DisplayCard | null,
@@ -4252,16 +4258,17 @@ const OdaraScreen = ({
       };
     }
 
+    const enabled = signedInDayState.daisyChainEnabled === true;
     const mode = signedInDayState.carryoverMode;
     const origin = signedInDayState.carryoverOrigin;
-    const selectedCard = mode === 'hero'
+    const selectedCard = enabled && mode === 'hero'
       ? (
           signedInCurrentHeroCarryCard
           ?? signedInDayState.carryoverHeroCard
           ?? signedInDayState.carryoverSelectedCard
           ?? null
         )
-      : mode === 'layer'
+      : enabled && mode === 'layer'
         ? (
             signedInCurrentLayerCarryCard
             ?? signedInDayState.carryoverLayerCard
@@ -4271,10 +4278,11 @@ const OdaraScreen = ({
         : null;
 
     return {
+      enabled,
       mode,
       origin,
       selectedCard,
-      visualTarget: (mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
+      visualTarget: (enabled && mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
     };
   }, [
     isGuestMode,
@@ -4372,7 +4380,8 @@ const OdaraScreen = ({
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
     if (lockState === 'locked') return;
-    if (hasStoredSignedInDayState && signedInCarryoverOrigin !== 'inherited') return;
+    if (hasStoredSignedInDayState && signedInDayState.daisyChainEnabled === false) return;
+    if (hasStoredSignedInDayState && signedInCarryoverOrigin === 'manual') return;
 
     let inheritedSource: SignedInCarryoverTarget = 'off';
     let inheritedSelectedCard: DisplayCard | null = null;
@@ -4387,10 +4396,13 @@ const OdaraScreen = ({
       if (signedInCarryoverOrigin === 'inherited') {
         updateSignedInDayState(currentDateKey, (current) => ({
           ...current,
+          daisyChainEnabled: null,
           carryoverMode: 'off',
           carryoverOrigin: null,
           carryoverNextDayRole: null,
           carryoverSelectedCard: null,
+          carryoverHeroCard: null,
+          carryoverLayerCard: null,
         }));
       }
       return;
@@ -4400,6 +4412,7 @@ const OdaraScreen = ({
 
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
+      daisyChainEnabled: true,
       carryoverMode: inheritedSource,
       carryoverOrigin: 'inherited',
       carryoverNextDayRole: resolveCarryoverNextDayRole(inheritedSource),
@@ -4416,6 +4429,7 @@ const OdaraScreen = ({
     slotChangedSinceLastCommit,
     lockState,
     hasStoredSignedInDayState,
+    signedInDayState.daisyChainEnabled,
     signedInCarryoverOrigin,
     signedInResolvedDayDecisionSource,
     currentDateKey,
@@ -4471,7 +4485,7 @@ const OdaraScreen = ({
   const handleSignedInCarryoverToggle = useCallback(() => {
     if (isGuestMode) return;
     const hasLayer = !!signedInCurrentLayerCarryCard;
-    const nextTarget: SignedInCarryoverTarget = signedInResolvedSequelState.mode === 'off'
+    const nextTarget: SignedInCarryoverTarget = !signedInResolvedSequelState.enabled
       ? 'hero'
       : signedInResolvedSequelState.origin === 'inherited'
         ? 'off'
@@ -4484,19 +4498,20 @@ const OdaraScreen = ({
         ? signedInCurrentLayerCarryCard
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
-    const turningOff = signedInResolvedSequelState.mode !== 'off' && nextTarget === 'off';
+    const turningOff = signedInResolvedSequelState.enabled && nextTarget === 'off';
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
+      daisyChainEnabled: nextTarget === 'off' ? false : true,
       carryoverMode: nextTarget,
       carryoverOrigin: nextTarget === 'off' ? null : 'manual',
       carryoverNextDayRole: nextDayRole,
       carryoverSelectedCard: nextSelectedCard,
       carryoverHeroCard: nextTarget === 'hero'
         ? (signedInCurrentHeroCarryCard ?? current.carryoverHeroCard)
-        : current.carryoverHeroCard,
+        : nextTarget === 'off' ? null : current.carryoverHeroCard,
       carryoverLayerCard: nextTarget === 'layer'
         ? (signedInCurrentLayerCarryCard ?? current.carryoverLayerCard)
-        : current.carryoverLayerCard,
+        : nextTarget === 'off' ? null : current.carryoverLayerCard,
     }));
     if (turningOff) {
       triggerSignedInCarryoverPulse(null);
