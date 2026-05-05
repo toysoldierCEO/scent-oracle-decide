@@ -29,7 +29,7 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
   text,
   anchorRef,
   color,
-  duration = 1100,
+  duration = 1400,
   offsetY = 8,
 }) => {
   const [visibleText, setVisibleText] = useState<string | null>(null);
@@ -82,7 +82,7 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
         background: 'rgba(10,10,12,0.82)',
         border: `1px solid ${color ?? 'rgba(255,255,255,0.14)'}55`,
         backdropFilter: 'blur(10px)',
-        animation: 'actionLabelPop 1100ms cubic-bezier(0.2,0,0,1) forwards',
+        animation: `actionLabelPop ${duration}ms cubic-bezier(0.2,0,0,1) forwards`,
       }}
     >
       {visibleText}

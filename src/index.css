@@ -116,10 +116,12 @@
   100% { opacity: 0; transform: translate(-50%, -8px) scale(0.95); }
 }
 
-/* Action micro-label — appears UNDER the tapped action button. */
+/* Action micro-label — appears UNDER the tapped action button.
+   Holds at full opacity for most of the duration so the label is
+   reliably perceivable instead of flashing past. */
 @keyframes actionLabelPop {
   0%   { opacity: 0; transform: translate(-50%, -4px) scale(0.85); }
-  18%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  78%  { opacity: 1; transform: translate(-50%, 2px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, 8px) scale(0.95); }
+  12%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  85%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
 }
