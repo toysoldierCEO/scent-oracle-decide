@@ -5929,11 +5929,14 @@ const OdaraScreen = ({
 
               <button
                 type="button"
-                aria-label="Carry to next day"
+                aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || undefined}
-                onClick={isGuestMode ? undefined : handleSignedInCarryoverToggle}
-                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
+                onClick={isGuestMode ? undefined : () => {
+                  handleSignedInCarryoverToggle();
+                  setDaisyLabelTick((t) => t + 1);
+                }}
+                className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
                 style={{
                   ...sharedBottomActionButtonStyle,
                   ...bottomCarryoverButtonStyle,
@@ -5954,6 +5957,10 @@ const OdaraScreen = ({
                   <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
                   <path d="M9 15l6-6" />
                 </svg>
+                <ActionMicroLabel
+                  triggerKey={daisyLabelTick || null}
+                  text="Daisy Chain"
+                />
               </button>
             </div>
             </div>
