@@ -51,6 +51,7 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
     recompute();
     setVisibleText(text);
     setRenderKey((k) => k + 1);
+    console.log('[FloatingActionLabel] show', { text, triggerKey, anchor: anchorRef.current });
     const id = window.setTimeout(() => setVisibleText(null), duration);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
