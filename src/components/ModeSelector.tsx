@@ -85,7 +85,7 @@ const ModeSelector = ({
               e.stopPropagation();
               if (!isLocked) onSelectMood(mood);
             }}
-            className={`text-[9px] uppercase tracking-[0.12em] py-1 rounded-full transition-all duration-200 text-center ${
+            className={`flex items-center justify-center text-[9px] uppercase tracking-[0.14em] h-6 px-3 rounded-full transition-all duration-200 text-center ${
               isLocked && !isSelected ? 'opacity-30 cursor-default' : ''
             } ${
               !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
