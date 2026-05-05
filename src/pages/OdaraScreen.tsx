@@ -5518,7 +5518,7 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Lock"
                   onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-11 h-11 -m-[15px] touch-manipulation"
+                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg
