@@ -5493,15 +5493,17 @@ const OdaraScreen = ({
                 }}
               />
             )}
-            {/* Top row: temp left · centered date · action stack right */}
-            <div className="flex items-start justify-between mb-1.5 relative z-10">
-              {/* Left: temperature — instrument reading */}
-              <div className="flex flex-col items-start min-w-[52px] -mt-0.5">
+            {/* Top row: temp left · centered date · action stack right.
+                Temperature/date/lock form ONE quiet metadata row — same
+                opacity, mirrored horizontal inset, balanced visual weight. */}
+            <div className="flex items-center justify-between mb-1.5 relative z-10 px-0.5">
+              {/* Left: temperature — instrument reading (digital, but quiet). */}
+              <div className="flex items-center min-w-[52px]">
                 <TemperatureReadout value={resolvedTemperature} />
               </div>
 
               {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-1" style={{ fontFamily: "'Geist Mono', monospace" }}>
+              <span className="text-[14px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 {getDateLabel(selectedDate)}
               </span>
 
