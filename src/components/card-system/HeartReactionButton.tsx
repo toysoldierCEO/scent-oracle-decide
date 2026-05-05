@@ -6,6 +6,7 @@ import {
   HEART_LIKE_COLOR,
   HEART_LOVE_COLOR,
 } from './tokens';
+import FloatingActionLabel from './FloatingActionLabel';
 
 export type HeartState = 0 | 1 | 2; // 0 = none, 1 = like, 2 = love
 
