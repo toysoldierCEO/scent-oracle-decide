@@ -5936,12 +5936,18 @@ const OdaraScreen = ({
               })()}
 
               <button
+                ref={daisyButtonRef}
                 type="button"
                 aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || undefined}
                 onClick={isGuestMode ? undefined : () => {
+                  // Determine the label BEFORE state flip:
+                  // current target 'off' -> next is daisy active -> "Daisy Chain"
+                  // current target non-off -> next will turn off -> "Off"
+                  const nextLabel = signedInCarryoverVisualTarget === 'off' ? 'Daisy Chain' : 'Off';
                   handleSignedInCarryoverToggle();
+                  setDaisyLabelText(nextLabel);
                   setDaisyLabelTick((t) => t + 1);
                 }}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
@@ -5965,9 +5971,11 @@ const OdaraScreen = ({
                   <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
                   <path d="M9 15l6-6" />
                 </svg>
-                <ActionMicroLabel
+                <FloatingActionLabel
                   triggerKey={daisyLabelTick || null}
-                  text="Daisy Chain"
+                  text={daisyLabelText}
+                  anchorRef={daisyButtonRef}
+                  color={daisyLabelText === 'Off' ? '#ef4444' : undefined}
                 />
               </button>
             </div>
