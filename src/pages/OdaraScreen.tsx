@@ -4959,10 +4959,12 @@ const OdaraScreen = ({
     : undefined;
   const signedInLayerCarrySurfaceStyle = !isGuestMode && (signedInLayerCarryActive || signedInLayerCarryPulsing)
     ? {
-        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '14' : '0E'}`,
+        // Single refined surface — inset ring only, no offset shadow that
+        // would read as a duplicate "shelf" card underneath the LayerCard.
+        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '12' : '0A'}`,
         boxShadow: signedInLayerCarryPulsing
-          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30, 0 18px 40px ${signedInLayerCarryColor}20`
-          : `inset 0 0 0 1px ${signedInLayerCarryColor}22, 0 10px 26px ${signedInLayerCarryColor}14`,
+          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30`
+          : `inset 0 0 0 1px ${signedInLayerCarryColor}1F`,
       }
     : undefined;
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
