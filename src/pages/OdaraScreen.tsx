@@ -2367,6 +2367,10 @@ const OdaraScreen = ({
 
   // Favorite state — persisted per day+context
   const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
+  // Heart state — local/visual only. Per-card key (date|context|heroId).
+  // 0 = empty, 1 = liked (single heart), 2 = loved (double heart).
+  const [heartStateByKey, setHeartStateByKey] = useState<Record<string, 0 | 1 | 2>>({});
+  const [heartFlash, setHeartFlash] = useState(false);
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
