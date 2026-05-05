@@ -20,13 +20,14 @@ const TemperatureReadout: React.FC<TemperatureReadoutProps> = ({ value, classNam
     <span
       data-temperature-readout
       className={
-        'leading-none text-foreground/85 ' +
-        (className ?? 'text-[26px] tracking-[0.04em] font-normal')
+        'leading-none text-foreground/90 ' +
+        (className ?? 'text-[24px] tracking-[0.02em] font-normal')
       }
       style={{
         fontFamily: DIGITAL_READOUT_FONT_STACK,
         fontVariantNumeric: 'tabular-nums',
-        textShadow: '0 0 10px rgba(255,255,255,0.10), 0 0 22px rgba(255,255,255,0.04)',
+        textShadow:
+          '0 0 8px rgba(255,255,255,0.12), 0 0 18px rgba(255,255,255,0.05)',
       }}
     >
       {value}°
