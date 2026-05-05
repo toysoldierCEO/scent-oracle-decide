@@ -2074,7 +2074,6 @@ const OdaraScreen = ({
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
-  const signedInCarryoverTarget = signedInDayState.carryoverMode;
   const signedInCarryoverOrigin = signedInDayState.carryoverOrigin;
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
   const [signedInCarryoverCloseFlash, setSignedInCarryoverCloseFlash] = useState(false);
@@ -3877,9 +3876,14 @@ const OdaraScreen = ({
 
   // (2) Single normalized lock gate — guest lock is one authoritative boolean.
   const guestLockedForCurrentCard = isGuestMode && guestLocked;
+  const signedInResolvedLockActive = !isGuestMode && (
+    signedInDayState.lockState === 'locked'
+    || signedInResolvedDayDecisionSource === 'locked'
+    || activeMainCardRender?.isLocked === true
+  );
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
-    : (lockState === 'locked');
+    : signedInResolvedLockActive;
 
   // (3) Normalized action-rail state.
   const guestStarredForCurrentCard =
@@ -4189,6 +4193,46 @@ const OdaraScreen = ({
     () => toDisplayCardFromLayerMode(signedInVisibleLayer),
     [signedInVisibleLayer]
   );
+  const signedInResolvedSequelState = useMemo(() => {
+    if (isGuestMode) {
+      return {
+        mode: 'off' as SignedInCarryoverTarget,
+        origin: null as SignedInDayState['carryoverOrigin'],
+        selectedCard: null as DisplayCard | null,
+        visualTarget: 'off' as SignedInCarryoverTarget,
+      };
+    }
+
+    const mode = signedInDayState.carryoverMode;
+    const origin = signedInDayState.carryoverOrigin;
+    const selectedCard = mode === 'hero'
+      ? (
+          signedInCurrentHeroCarryCard
+          ?? signedInDayState.carryoverHeroCard
+          ?? signedInDayState.carryoverSelectedCard
+          ?? null
+        )
+      : mode === 'layer'
+        ? (
+            signedInCurrentLayerCarryCard
+            ?? signedInDayState.carryoverLayerCard
+            ?? signedInDayState.carryoverSelectedCard
+            ?? null
+          )
+        : null;
+
+    return {
+      mode,
+      origin,
+      selectedCard,
+      visualTarget: mode !== 'off' && selectedCard ? mode : 'off',
+    };
+  }, [
+    isGuestMode,
+    signedInDayState,
+    signedInCurrentHeroCarryCard,
+    signedInCurrentLayerCarryCard,
+  ]);
   const visibleAlternateRailItems = useMemo(() => {
     if (isGuestMode) {
       return Array.isArray(guestResolvedCurrentCard?.alternates) ? guestResolvedCurrentCard.alternates : [];
@@ -4210,7 +4254,7 @@ const OdaraScreen = ({
   const heroRailTokens: Array<any> = Array.isArray(visibleResolvedHeroRail?.tokens)
     ? visibleResolvedHeroRail.tokens
     : [];
-  const signedInCarryoverSelectedCard = resolveCarryoverSelectedCard(signedInDayState);
+  const signedInCarryoverSelectedCard = signedInResolvedSequelState.selectedCard;
   const signedInHeroCarryColor = signedInCarryoverSelectedCard?.family
     ? (FAMILY_COLORS[signedInCarryoverSelectedCard.family] ?? '#888')
     : (signedInResolvedCurrentCard?.familyColor
@@ -4220,12 +4264,7 @@ const OdaraScreen = ({
     : (signedInResolvedCurrentCard?.layerFamilyKey
       ? (FAMILY_COLORS[signedInResolvedCurrentCard.layerFamilyKey] ?? '#888')
       : (signedInVisibleLayer?.family_key ? (FAMILY_COLORS[signedInVisibleLayer.family_key] ?? '#888') : '#888'));
-  const signedInCarryoverVisualTarget: SignedInCarryoverTarget =
-    signedInCarryoverTarget === 'layer' && signedInCarryoverSelectedCard
-      ? 'layer'
-      : signedInCarryoverTarget === 'hero' && signedInCarryoverSelectedCard
-        ? 'hero'
-        : 'off';
+  const signedInCarryoverVisualTarget: SignedInCarryoverTarget = signedInResolvedSequelState.visualTarget;
   const signedInCarryoverColor = signedInCarryoverVisualTarget === 'hero'
     ? signedInHeroCarryColor
     : signedInCarryoverVisualTarget === 'layer'
@@ -4383,11 +4422,11 @@ const OdaraScreen = ({
   const handleSignedInCarryoverToggle = useCallback(() => {
     if (isGuestMode) return;
     const hasLayer = !!signedInCurrentLayerCarryCard;
-    const nextTarget: SignedInCarryoverTarget = signedInCarryoverTarget === 'off'
+    const nextTarget: SignedInCarryoverTarget = signedInResolvedSequelState.mode === 'off'
       ? 'hero'
-      : signedInCarryoverOrigin === 'inherited'
+      : signedInResolvedSequelState.origin === 'inherited'
         ? 'off'
-        : signedInCarryoverTarget === 'hero'
+        : signedInResolvedSequelState.mode === 'hero'
           ? (hasLayer ? 'layer' : 'off')
           : 'off';
     const nextSelectedCard = nextTarget === 'hero'
@@ -4396,7 +4435,7 @@ const OdaraScreen = ({
         ? signedInCurrentLayerCarryCard
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
-    const turningOff = signedInCarryoverTarget !== 'off' && nextTarget === 'off';
+    const turningOff = signedInResolvedSequelState.mode !== 'off' && nextTarget === 'off';
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
       carryoverMode: nextTarget,
@@ -4421,8 +4460,7 @@ const OdaraScreen = ({
     isGuestMode,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
-    signedInCarryoverTarget,
-    signedInCarryoverOrigin,
+    signedInResolvedSequelState,
     currentDateKey,
     triggerSignedInCarryoverPulse,
     triggerSignedInCarryoverCloseFlash,
