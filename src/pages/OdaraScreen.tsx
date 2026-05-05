@@ -4248,6 +4248,7 @@ const OdaraScreen = ({
       el.closest('[data-debug-controls]') ||
       el.closest('[data-mode-chip]') ||
       el.closest('[data-alternate-chip]') ||
+      el.closest('[data-layer-section]') ||
       el.closest('[data-no-card-swipe]') ||
       el.closest('button, a, input, textarea, select, [role="button"]')
     );
