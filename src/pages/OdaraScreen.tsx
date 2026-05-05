@@ -1392,6 +1392,7 @@ type SignedInDayState = {
   carryoverLayerCard: DisplayCard | null;
   lockedCard: DisplayCard | null;
   lockedLayerCard: DisplayCard | null;
+  lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
 };
@@ -1414,6 +1415,14 @@ type SignedInVerifiedPredecessorBaton = {
   excludedPreviousCard: DisplayCard | null;
 };
 
+type SignedInResolvedLockTruth = {
+  lockedCard: DisplayCard;
+  lockedLayerCard: DisplayCard | null;
+  lockedContext: string | null;
+  lockedMood: LayerMood;
+  lockedPromotedAltId: string | null;
+};
+
 const ODARA_SIGNED_IN_DAY_MEMORY_TABLE = 'odara_signed_in_day_memory';
 
 function createDefaultSignedInDayState(): SignedInDayState {
@@ -1430,6 +1439,7 @@ function createDefaultSignedInDayState(): SignedInDayState {
     carryoverLayerCard: null,
     lockedCard: null,
     lockedLayerCard: null,
+    lockedContext: null,
     lockedMood: 'balance',
     lockedPromotedAltId: null,
   };
@@ -1455,6 +1465,10 @@ function normalizePersistedMood(value: unknown): LayerMood {
   return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild'
     ? value
     : 'balance';
+}
+
+function normalizePersistedLockedContext(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
 function toPersistedDisplayCard(card: DisplayCard | null | undefined) {
@@ -1514,6 +1528,7 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     carryoverLayerCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverLayerCard) : null,
     lockedCard,
     lockedLayerCard,
+    lockedContext: normalizedLockState === 'locked' ? normalizePersistedLockedContext(state.lockedContext) : null,
     lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
   };
@@ -1547,6 +1562,7 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
       : null,
     lockedCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedCard) : null,
     lockedLayerCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedLayerCard) : null,
+    lockedContext: lockState === 'locked' ? normalizePersistedLockedContext(raw.lockedContext) : null,
     lockedMood: lockState === 'locked' ? normalizePersistedMood(raw.lockedMood) : 'balance',
     lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
       ? raw.lockedPromotedAltId
@@ -1625,6 +1641,20 @@ function resolveVerifiedPredecessorBaton(
   };
 }
 
+function resolveSignedInLockedTruth(
+  dayState: SignedInDayState | null | undefined,
+): SignedInResolvedLockTruth | null {
+  if (!dayState || dayState.lockState !== 'locked' || !dayState.lockedCard) return null;
+
+  return {
+    lockedCard: dayState.lockedCard,
+    lockedLayerCard: dayState.lockedLayerCard ?? null,
+    lockedContext: normalizePersistedLockedContext(dayState.lockedContext),
+    lockedMood: normalizePersistedMood(dayState.lockedMood),
+    lockedPromotedAltId: dayState.lockedPromotedAltId ?? null,
+  };
+}
+
 function resolveSignedInDayDecision(
   currentDayState: SignedInDayState,
   hasCurrentDayState: boolean,
@@ -1632,13 +1662,13 @@ function resolveSignedInDayDecision(
   oraclePick: OraclePick | null | undefined,
   defaultMood: LayerMood,
 ): SignedInResolvedDayDecision {
-  const lockedVisibleCard = currentDayState.lockState === 'locked' ? currentDayState.lockedCard : null;
-  if (lockedVisibleCard) {
+  const lockedTruth = resolveSignedInLockedTruth(currentDayState);
+  if (lockedTruth) {
     return {
-      visibleCard: lockedVisibleCard,
-      forcedLayerCarryCard: currentDayState.lockedLayerCard,
-      selectedMood: currentDayState.lockedMood ?? defaultMood,
-      promotedAltId: currentDayState.lockedPromotedAltId,
+      visibleCard: lockedTruth.lockedCard,
+      forcedLayerCarryCard: lockedTruth.lockedLayerCard,
+      selectedMood: lockedTruth.lockedMood ?? defaultMood,
+      promotedAltId: lockedTruth.lockedPromotedAltId,
       source: 'locked',
     };
   }
@@ -2267,6 +2297,7 @@ const OdaraScreen = ({
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
   const visibleWeekDateKeys = useMemo(() => forecastDays.map((fd) => fd.dateStr), [forecastDays]);
   const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
+  const forecastLaneContexts = useMemo(() => ['daily', 'work', 'hangout', 'date'] as const, []);
   const signedInWeekHydrationDateKeys = useMemo(() => {
     if (visibleWeekDateKeys.length === 0) return [];
     return Array.from(new Set([getPreviousDateKey(visibleWeekDateKeys[0]), ...visibleWeekDateKeys]));
@@ -2286,6 +2317,10 @@ const OdaraScreen = ({
     }
     return resolveVerifiedPredecessorBaton(signedInPreviousDayState);
   }, [isGuestMode, signedInResolvedDayDecisionSource, signedInPreviousDayState]);
+  const signedInResolvedLockTruth = useMemo(
+    () => (isGuestMode ? null : resolveSignedInLockedTruth(signedInDayState)),
+    [isGuestMode, signedInDayState]
+  );
   const lockState: LockState = signedInDayState.lockState;
   const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
   const signedInWeekMemoryRequestIdRef = useRef(0);
@@ -2302,6 +2337,7 @@ const OdaraScreen = ({
             lockState: ls,
             lockedCard: null,
             lockedLayerCard: null,
+            lockedContext: null,
             lockedMood: 'balance',
             lockedPromotedAltId: null,
           };
@@ -2309,6 +2345,7 @@ const OdaraScreen = ({
         current.lockState === next.lockState &&
         current.lockedCard === next.lockedCard &&
         current.lockedLayerCard === next.lockedLayerCard &&
+        current.lockedContext === next.lockedContext &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId
       ) {
@@ -2336,6 +2373,25 @@ const OdaraScreen = ({
   const signedInCarryoverOrigin = signedInDayState.carryoverOrigin;
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
   const [signedInCarryoverCloseFlash, setSignedInCarryoverCloseFlash] = useState(false);
+  const signedInLockedLaneByDate = useMemo(() => {
+    if (isGuestMode) return {} as Record<string, { mainColor: string; layerColor: string | null; lockedContext: string | null }>;
+
+    return Object.fromEntries(
+      Object.entries(signedInDayStateMap).flatMap(([dateKey, dayState]) => {
+        const lockTruth = resolveSignedInLockedTruth(dayState);
+        if (!lockTruth) return [];
+
+        const mainColor = lockTruth.lockedCard.family
+          ? (FAMILY_COLORS[lockTruth.lockedCard.family] ?? '#888')
+          : '#888';
+        const layerColor = lockTruth.lockedLayerCard?.family
+          ? (FAMILY_COLORS[lockTruth.lockedLayerCard.family] ?? '#888')
+          : null;
+
+        return [[dateKey, { mainColor, layerColor, lockedContext: lockTruth.lockedContext }]];
+      })
+    );
+  }, [isGuestMode, signedInDayStateMap]);
   const updateSignedInDayState = useCallback((
     key: string,
     updater: (current: SignedInDayState) => SignedInDayState,
@@ -2349,6 +2405,7 @@ const OdaraScreen = ({
         current.carryoverMode === next.carryoverMode &&
         current.carryoverOrigin === next.carryoverOrigin &&
         current.carryoverNextDayRole === next.carryoverNextDayRole &&
+        current.lockedContext === next.lockedContext &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId &&
         areSameDisplayCards(current.carryoverSelectedCard, next.carryoverSelectedCard) &&
@@ -3156,7 +3213,9 @@ const OdaraScreen = ({
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const getPreviewTone = (dateStr: string) => {
-    const lane = lockedSelections[`${dateStr}:${selectedContext}`] ?? null;
+    const lane = isGuestMode
+      ? (lockedSelections[`${dateStr}:${selectedContext}`] ?? null)
+      : (signedInLockedLaneByDate[dateStr] ?? null);
     return {
       accent: lane?.mainColor ?? familyColor,
       glow: lane?.layerColor ?? lane?.mainColor ?? familyColor,
@@ -4479,11 +4538,7 @@ const OdaraScreen = ({
 
   // (2) Single normalized lock gate — guest lock is one authoritative boolean.
   const guestLockedForCurrentCard = isGuestMode && guestLocked;
-  const signedInResolvedLockActive = !isGuestMode && (
-    signedInDayState.lockState === 'locked'
-    || signedInResolvedDayDecisionSource === 'locked'
-    || activeMainCardRender?.isLocked === true
-  );
+  const signedInResolvedLockActive = !isGuestMode && !!signedInResolvedLockTruth;
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
     : signedInResolvedLockActive;
@@ -5003,6 +5058,7 @@ const OdaraScreen = ({
           ...next,
           lockedCard: signedInCurrentHeroCarryCard,
           lockedLayerCard: signedInCurrentLayerCarryCard,
+          lockedContext: selectedContext,
           lockedMood: selectedMood,
           lockedPromotedAltId: promotedAltId,
         };
@@ -5866,11 +5922,19 @@ const OdaraScreen = ({
         >
           <div className="flex w-full justify-between">
             {forecastDays.map((fd, i) => {
-              const LANE_CONTEXTS = ['daily', 'work', 'hangout', 'date'] as const;
-              const dayLanes = LANE_CONTEXTS.map(ctx => {
-                const key = `${fd.dateStr}:${ctx}`;
-                return lockedSelections[key] ?? null;
-              });
+              const dayLanes = isGuestMode
+                ? forecastLaneContexts.map(ctx => {
+                    const key = `${fd.dateStr}:${ctx}`;
+                    return lockedSelections[key] ?? null;
+                  })
+                : forecastLaneContexts.map((ctx) => {
+                    const lane = signedInLockedLaneByDate[fd.dateStr] ?? null;
+                    if (!lane) return null;
+                    const laneContext = lane.lockedContext ?? selectedContext;
+                    return laneContext === ctx
+                      ? { mainColor: lane.mainColor, layerColor: lane.layerColor }
+                      : null;
+                  });
               const hasAnyLane = dayLanes.some(Boolean);
 
               return (
