@@ -117,11 +117,11 @@
 }
 
 /* Action micro-label — appears UNDER the tapped action button.
-   Holds at full opacity for most of the duration so the label is
-   reliably perceivable instead of flashing past. */
+   Long hold band so the label is reliably perceivable across taps,
+   re-renders, and screenshot capture timing. */
 @keyframes actionLabelPop {
   0%   { opacity: 0; transform: translate(-50%, -4px) scale(0.85); }
-  12%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  85%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  6%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  92%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
 }
