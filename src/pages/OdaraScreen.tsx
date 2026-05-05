@@ -4274,13 +4274,11 @@ const OdaraScreen = ({
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       };
   const bottomStarActive = actionRailState.starred;
-  const bottomCarryoverButtonStyle = isGuestMode
-    ? {
-        color: 'rgba(255,255,255,0.56)',
-        background: 'rgba(255,255,255,0.03)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-      }
-    : signedInCarryoverButtonStyle;
+  const sharedBottomActionButtonStyle = {
+    border: '1px solid rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(12px)',
+  } as const;
+  const bottomCarryoverButtonStyle = signedInCarryoverButtonStyle;
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
@@ -5127,6 +5125,7 @@ const OdaraScreen = ({
                 onClick={() => cardController.actions.toggleStar()}
                 className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
+                  ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
                   background: bottomStarActive ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
                   boxShadow: bottomStarActive
@@ -5159,6 +5158,7 @@ const OdaraScreen = ({
                 onClick={isGuestMode ? undefined : handleSignedInCarryoverToggle}
                 className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
                 style={{
+                  ...sharedBottomActionButtonStyle,
                   ...bottomCarryoverButtonStyle,
                   cursor: isGuestMode ? 'default' : 'pointer',
                 }}

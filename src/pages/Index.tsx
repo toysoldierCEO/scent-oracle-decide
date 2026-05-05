@@ -18,8 +18,16 @@ function sameUser(a: { id: string; email?: string } | null, b: { id: string; ema
   return (a?.id ?? null) === (b?.id ?? null) && (a?.email ?? null) === (b?.email ?? null);
 }
 
+function todayLocalKey(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 const Index = () => {
-  const { getTemperature } = useWeather();
+  const { getTemperature, currentTemperature, weatherLoading } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -47,6 +55,7 @@ const Index = () => {
   const oracleRequestIdRef = useRef(0);
   const oracleInFlightKeyRef = useRef<string | null>(null);
   const oracleSuccessKeyRef = useRef<string | null>(null);
+  const oracleTemperatureBySlotRef = useRef<Record<string, number>>({});
 
   // Live temperature from weather hook — used for both UI and RPC
   const liveTemperature = getTemperature(selectedDate);
@@ -54,11 +63,24 @@ const Index = () => {
   // ── Normalized access mode — single source of truth ──
   const access = resolveAccessMode(user, guestMode);
 
-  // Compute oracle key — valid when we have a resolvedUserId (signed-in OR guest)
-  const oracleKey =
+  const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
-      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}|${liveTemperature}`
+      ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}`
       : null;
+  const isSelectedDateToday = selectedDate === todayLocalKey();
+  const shouldDelaySignedInOracleForWeather =
+    !access.isGuestMode
+    && isSelectedDateToday
+    && currentTemperature == null
+    && weatherLoading;
+  const stableOracleTemperature = oracleSlotKey
+    ? (oracleTemperatureBySlotRef.current[oracleSlotKey] ?? liveTemperature)
+    : liveTemperature;
+
+  // Compute oracle key — valid when we have a resolvedUserId (signed-in OR guest)
+  const oracleKey = oracleSlotKey
+    ? `${oracleSlotKey}|${stableOracleTemperature}`
+    : null;
 
   // Debug render log
   console.log('[Odara] render summary', {
@@ -67,7 +89,10 @@ const Index = () => {
     isGuestMode: access.isGuestMode,
     resolvedUserId: access.resolvedUserId,
     canWrite: access.canWrite,
+    oracleSlotKey,
     oracleKey,
+    liveTemperature,
+    stableOracleTemperature,
     oracleLoading,
     hasOracle: !!oracle,
     oracleError,
@@ -105,6 +130,12 @@ const Index = () => {
     // For signed-in users, wait for authReady. For guests, proceed immediately.
     if (!access.isGuestMode && !authReady) return;
 
+    if (shouldDelaySignedInOracleForWeather) {
+      setOracleLoading(true);
+      setOracleError(null);
+      return;
+    }
+
     if (!oracleKey) {
       setOracle(null);
       setOracleLoading(false);
@@ -121,17 +152,23 @@ const Index = () => {
     }
 
     // Dedupe: already satisfied for this key
-    if (oracleSuccessKeyRef.current === oracleKey && oracle && !oracleError) {
+    if (oracleSuccessKeyRef.current === oracleKey) {
       console.log('[Odara] oracle launch skipped satisfied', { oracleKey });
       return;
     }
 
     // Launch
     const requestId = ++oracleRequestIdRef.current;
+    const requestTemperature = stableOracleTemperature;
+    if (oracleSlotKey && oracleTemperatureBySlotRef.current[oracleSlotKey] == null) {
+      oracleTemperatureBySlotRef.current[oracleSlotKey] = requestTemperature;
+    }
     oracleInFlightKeyRef.current = oracleKey;
 
     console.log('[Odara] oracle launch', {
       oracleKey,
+      oracleSlotKey,
+      requestTemperature,
       requestId,
       isGuestMode: access.isGuestMode,
     });
@@ -167,7 +204,7 @@ const Index = () => {
         let rpcUsed: string;
         const result = await fetchHomeOracle({
           access,
-          temperature: liveTemperature,
+          temperature: requestTemperature,
           context: selectedContext,
           brand: 'Alexandria Fragrances',
           wearDate: selectedDate,
@@ -198,7 +235,7 @@ const Index = () => {
         oracleInFlightKeyRef.current = null;
       }
     })();
-  }, [authReady, oracleKey, access.isGuestMode]);
+  }, [authReady, oracleKey, oracleSlotKey, stableOracleTemperature, shouldDelaySignedInOracleForWeather, access.isGuestMode, selectedContext, selectedDate]);
 
   // Accept / Skip RPCs — guarded by canWrite
   const handleAccept = useCallback(async (fragranceId: string, layerFragranceId: string | null = null) => {
@@ -220,7 +257,7 @@ const Index = () => {
     } else {
       console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     }
-  }, [user, access.canWrite, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access.canWrite, selectedContext, selectedDate]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
     if (!access.canWrite || !user) {
@@ -247,13 +284,13 @@ const Index = () => {
 
     const { data } = await fetchHomeOracle({
       access,
-      temperature: liveTemperature,
+      temperature: stableOracleTemperature,
       context: selectedContext,
       brand: 'Alexandria Fragrances',
       wearDate: selectedDate,
     });
     return data as unknown as OracleResult;
-  }, [user, access, selectedContext, selectedDate, liveTemperature]);
+  }, [user, access, selectedContext, selectedDate, stableOracleTemperature]);
 
   const handleEmailAuth = async () => {
     setError('');
