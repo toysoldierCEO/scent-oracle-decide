@@ -1686,6 +1686,8 @@ const OdaraScreen = ({
     return normalizedRows.map((row) => commitSignedInQueuedHero(queueCardToDisplay(row), null));
   }, [commitSignedInQueuedHero]);
 
+  const stateKey = `${selectedDate}:${selectedContext}`;
+
   // Fetch queue from backend — background only, never blocks hero.
   // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
@@ -2028,7 +2030,6 @@ const OdaraScreen = ({
   const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
-  const stateKey = `${selectedDate}:${selectedContext}`;
   const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDateKey);
   const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
   const lockState: LockState = signedInDayState.lockState;
