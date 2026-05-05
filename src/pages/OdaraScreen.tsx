@@ -4137,10 +4137,6 @@ const OdaraScreen = ({
       Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
 
     if (isGuestMode) {
-      const isTouchLikePointer =
-        lastCardPointerTypeRef.current === 'touch' ||
-        lastCardPointerTypeRef.current === 'pen';
-      if (!isTouchLikePointer) return;
       if (guestLocked) return;
 
       if (!within) {
