@@ -5876,6 +5876,7 @@ const OdaraScreen = ({
                 aria-label="Card actions"
               >
               <button
+                ref={favoriteButtonRef}
                 type="button"
                 aria-label="Favorite"
                 aria-pressed={bottomStarActive}
@@ -5908,9 +5909,10 @@ const OdaraScreen = ({
                 >
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <ActionMicroLabel
+                <FloatingActionLabel
                   triggerKey={favoriteLabelTick || null}
                   text="Favorite"
+                  anchorRef={favoriteButtonRef}
                   color={bottomStarActive ? '#eab308' : undefined}
                 />
               </button>
