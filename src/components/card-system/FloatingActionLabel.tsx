@@ -29,7 +29,7 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
   text,
   anchorRef,
   color,
-  duration = 1800,
+  duration = 2600,
   offsetY = 8,
 }) => {
   const [visibleText, setVisibleText] = useState<string | null>(null);
