@@ -2374,6 +2374,10 @@ const OdaraScreen = ({
   // 0 = empty, 1 = liked (single heart), 2 = loved (double heart).
   const [heartStateByKey, setHeartStateByKey] = useState<Record<string, 0 | 1 | 2>>({});
   const [heartFlash, setHeartFlash] = useState(false);
+  // Micro-label triggers for the bottom action row (Favorite / Daisy Chain).
+  // Heart manages its own label inside HeartReactionButton.
+  const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
+  const [daisyLabelTick, setDaisyLabelTick] = useState(0);
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
