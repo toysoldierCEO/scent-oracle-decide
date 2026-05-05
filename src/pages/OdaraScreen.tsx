@@ -2614,6 +2614,23 @@ const OdaraScreen = ({
 
   // No eager modes fetch — moods load lazily on user tap
 
+  const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
+  const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (activeOracle as any)?.today_pick?.fragrance_id ?? (oracle as any)?.today_pick?.fragrance_id ?? null;
+  const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
+  const signedInPayloadAlternates = useMemo(() => {
+    if (isGuestMode) return [];
+    const raw = Array.isArray(v6Payload?.alternates)
+      ? v6Payload.alternates
+      : Array.isArray((activeOracle as any)?.alternates)
+        ? (activeOracle as any).alternates
+        : Array.isArray((oracle as any)?.alternates)
+          ? (oracle as any).alternates
+          : [];
+    return raw
+      .map((row: any) => normalizeAlternateRow(row))
+      .filter((alt): alt is OracleAlternate => !!alt);
+  }, [isGuestMode, v6Payload, activeOracle, oracle]);
+
   useEffect(() => {
     if (!visibleCard) {
       setCurrentCardAlternates([]);
