@@ -4267,7 +4267,7 @@ const OdaraScreen = ({
       mode,
       origin,
       selectedCard,
-      visualTarget: mode !== 'off' && selectedCard ? mode : 'off',
+      visualTarget: (mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
     };
   }, [
     isGuestMode,
