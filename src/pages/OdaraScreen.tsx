@@ -1391,6 +1391,8 @@ type SignedInResolvedDayDecision = {
   source: 'locked' | 'carryover-main' | 'carryover-layer' | 'oracle';
 };
 
+const ODARA_SIGNED_IN_DAY_MEMORY_TABLE = 'odara_signed_in_day_memory';
+
 function createDefaultSignedInDayState(): SignedInDayState {
   return {
     lockState: 'neutral',
@@ -1406,6 +1408,134 @@ function createDefaultSignedInDayState(): SignedInDayState {
     lockedMood: 'balance',
     lockedPromotedAltId: null,
   };
+}
+
+function normalizePersistedLockState(value: unknown): LockState {
+  return value === 'locked' ? 'locked' : 'neutral';
+}
+
+function normalizePersistedCarryoverTarget(value: unknown): SignedInCarryoverTarget {
+  return value === 'hero' || value === 'layer' ? value : 'off';
+}
+
+function normalizePersistedCarryoverOrigin(value: unknown): SignedInDayState['carryoverOrigin'] {
+  return value === 'manual' || value === 'inherited' ? value : null;
+}
+
+function normalizePersistedNextDayRole(value: unknown): SignedInDayState['carryoverNextDayRole'] {
+  return value === 'main' || value === 'layer' ? value : null;
+}
+
+function normalizePersistedMood(value: unknown): LayerMood {
+  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild'
+    ? value
+    : 'balance';
+}
+
+function toPersistedDisplayCard(card: DisplayCard | null | undefined) {
+  if (!card) return null;
+  return {
+    fragrance_id: card.fragrance_id ?? '',
+    name: card.name ?? '',
+    family: card.family ?? '',
+    reason: card.reason ?? '',
+    brand: card.brand ?? '',
+    notes: sanitizeTokenSource(card.notes),
+    accords: sanitizeTokenSource(card.accords),
+    reason_chip_label: card.reason_chip_label ?? null,
+    reason_chip_explanation: card.reason_chip_explanation ?? null,
+    isHero: !!card.isHero,
+  };
+}
+
+function fromPersistedDisplayCard(raw: any): DisplayCard | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const fragrance_id = typeof raw.fragrance_id === 'string' ? raw.fragrance_id.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!fragrance_id || !name) return null;
+  return {
+    fragrance_id,
+    name,
+    family: typeof raw.family === 'string' ? raw.family : '',
+    reason: typeof raw.reason === 'string' ? raw.reason : '',
+    brand: typeof raw.brand === 'string' ? raw.brand : '',
+    notes: sanitizeTokenSource(raw.notes),
+    accords: sanitizeTokenSource(raw.accords),
+    reason_chip_label: typeof raw.reason_chip_label === 'string' ? raw.reason_chip_label : null,
+    reason_chip_explanation: typeof raw.reason_chip_explanation === 'string' ? raw.reason_chip_explanation : null,
+    isHero: raw.isHero === true,
+  };
+}
+
+function serializeSignedInDayStateForStorage(state: SignedInDayState) {
+  const normalizedLockState = normalizePersistedLockState(state.lockState);
+  const daisyChainEnabled = state.daisyChainEnabled === true ? true : state.daisyChainEnabled === false ? false : null;
+  const carryoverMode = daisyChainEnabled === true ? normalizePersistedCarryoverTarget(state.carryoverMode) : 'off';
+  const carryoverOrigin = daisyChainEnabled === true ? normalizePersistedCarryoverOrigin(state.carryoverOrigin) : null;
+  const carryoverNextDayRole = daisyChainEnabled === true ? normalizePersistedNextDayRole(state.carryoverNextDayRole) : null;
+  const lockedCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedCard) : null;
+  const lockedLayerCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedLayerCard) : null;
+
+  return {
+    lockState: normalizedLockState,
+    daisyChainEnabled,
+    carryoverMode,
+    carryoverOrigin,
+    carryoverNextDayRole,
+    carryoverSelectedCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverSelectedCard) : null,
+    carryoverHeroCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverHeroCard) : null,
+    carryoverLayerCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverLayerCard) : null,
+    lockedCard,
+    lockedLayerCard,
+    lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
+    lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
+  };
+}
+
+function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
+  const base = createDefaultSignedInDayState();
+  if (!raw || typeof raw !== 'object') return base;
+
+  const lockState = normalizePersistedLockState(raw.lockState);
+  const daisyChainEnabled = raw.daisyChainEnabled === true ? true : raw.daisyChainEnabled === false ? false : null;
+
+  return {
+    lockState,
+    daisyChainEnabled,
+    carryoverMode: daisyChainEnabled === true ? normalizePersistedCarryoverTarget(raw.carryoverMode) : 'off',
+    carryoverOrigin: daisyChainEnabled === true ? normalizePersistedCarryoverOrigin(raw.carryoverOrigin) : null,
+    carryoverNextDayRole: daisyChainEnabled === true ? normalizePersistedNextDayRole(raw.carryoverNextDayRole) : null,
+    carryoverSelectedCard: daisyChainEnabled === true ? fromPersistedDisplayCard(raw.carryoverSelectedCard) : null,
+    carryoverHeroCard: daisyChainEnabled === true ? fromPersistedDisplayCard(raw.carryoverHeroCard) : null,
+    carryoverLayerCard: daisyChainEnabled === true ? fromPersistedDisplayCard(raw.carryoverLayerCard) : null,
+    lockedCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedCard) : null,
+    lockedLayerCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedLayerCard) : null,
+    lockedMood: lockState === 'locked' ? normalizePersistedMood(raw.lockedMood) : 'balance',
+    lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
+      ? raw.lockedPromotedAltId
+      : null,
+  };
+}
+
+function isPersistableSignedInDayState(state: SignedInDayState): boolean {
+  const serialized = serializeSignedInDayStateForStorage(state);
+  return (
+    serialized.lockState === 'locked'
+    || serialized.daisyChainEnabled !== null
+    || serialized.carryoverMode !== 'off'
+    || serialized.carryoverOrigin !== null
+    || serialized.carryoverNextDayRole !== null
+    || !!serialized.carryoverSelectedCard
+    || !!serialized.carryoverHeroCard
+    || !!serialized.carryoverLayerCard
+    || !!serialized.lockedCard
+    || !!serialized.lockedLayerCard
+    || serialized.lockedPromotedAltId !== null
+  );
+}
+
+function stableSerializeSignedInDayState(state: SignedInDayState): string {
+  return JSON.stringify(serializeSignedInDayStateForStorage(state));
 }
 
 function resolveCarryoverSelectedCard(dayState: SignedInDayState | null | undefined): DisplayCard | null {
@@ -2053,9 +2183,25 @@ const OdaraScreen = ({
   const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
+  const visibleWeekDateKeys = useMemo(() => forecastDays.map((fd) => fd.dateStr), [forecastDays]);
+  const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
+  const signedInWeekHydrationDateKeys = useMemo(() => {
+    if (visibleWeekDateKeys.length === 0) return [];
+    return Array.from(new Set([getPreviousDateKey(visibleWeekDateKeys[0]), ...visibleWeekDateKeys]));
+  }, [visibleWeekDateKeys]);
+  const signedInWeekHydrationDateKeysKey = useMemo(
+    () => signedInWeekHydrationDateKeys.join('|'),
+    [signedInWeekHydrationDateKeys]
+  );
+  const signedInWeekMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${signedInWeekHydrationDateKeysKey}`;
   const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDateKey);
   const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
   const lockState: LockState = signedInDayState.lockState;
+  const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
+  const signedInWeekMemoryRequestIdRef = useRef(0);
+  const signedInWeekMemoryWriteTimeoutRef = useRef<number | null>(null);
+  const [signedInWeekMemoryReadyScopeKey, setSignedInWeekMemoryReadyScopeKey] = useState<string>(isGuestMode ? 'guest' : '');
+  const signedInWeekMemoryReady = isGuestMode || signedInWeekMemoryReadyScopeKey === signedInWeekMemoryScopeKey;
   const setLockState = useCallback((ls: LockState) => {
     setSignedInDayStateMap(prev => {
       const current = prev[currentDateKey] ?? createDefaultSignedInDayState();
@@ -2126,6 +2272,218 @@ const OdaraScreen = ({
       return { ...prev, [key]: next };
     });
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
+        window.clearTimeout(signedInWeekMemoryWriteTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
+      window.clearTimeout(signedInWeekMemoryWriteTimeoutRef.current);
+      signedInWeekMemoryWriteTimeoutRef.current = null;
+    }
+
+    persistedSignedInDayStateRef.current = {};
+    setSignedInDayStateMap({});
+    setSignedInWeekMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
+    if (isGuestMode) {
+      setSignedInWeekMemoryReadyScopeKey('guest');
+      return;
+    }
+
+    if (!userId || signedInWeekHydrationDateKeys.length === 0) {
+      setSignedInWeekMemoryReadyScopeKey('');
+      return;
+    }
+
+    const requestId = signedInWeekMemoryRequestIdRef.current + 1;
+    signedInWeekMemoryRequestIdRef.current = requestId;
+    setSignedInWeekMemoryReadyScopeKey('');
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await odaraSupabase
+          .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+          .select('date_key, state_json, updated_at')
+          .eq('user_id', userId)
+          .in('date_key', signedInWeekHydrationDateKeys);
+
+        if (cancelled || signedInWeekMemoryRequestIdRef.current !== requestId) return;
+        if (error) {
+          throw error;
+        }
+
+        const loadedStates: SignedInDayStateMap = {};
+        const persistedEntries: Record<string, string | null> = {};
+        for (const dateKey of signedInWeekHydrationDateKeys) {
+          persistedEntries[dateKey] = null;
+        }
+
+        for (const row of Array.isArray(data) ? data : []) {
+          const dateKey = typeof row?.date_key === 'string' ? row.date_key : '';
+          if (!dateKey) continue;
+          const state = deserializeSignedInDayStateFromStorage(row?.state_json);
+          loadedStates[dateKey] = state;
+          persistedEntries[dateKey] = stableSerializeSignedInDayState(state);
+        }
+
+        persistedSignedInDayStateRef.current = {
+          ...persistedSignedInDayStateRef.current,
+          ...persistedEntries,
+        };
+
+        setSignedInDayStateMap((prev) => {
+          let changed = false;
+          const next = { ...prev };
+
+          for (const dateKey of signedInWeekHydrationDateKeys) {
+            const loaded = loadedStates[dateKey];
+            if (!loaded) continue;
+
+            const existing = prev[dateKey];
+            if (existing && isPersistableSignedInDayState(existing)) {
+              continue;
+            }
+
+            const serializedLoaded = stableSerializeSignedInDayState(loaded);
+            const serializedExisting = existing ? stableSerializeSignedInDayState(existing) : null;
+            if (serializedExisting === serializedLoaded) continue;
+
+            next[dateKey] = loaded;
+            changed = true;
+          }
+
+          return changed ? next : prev;
+        });
+      } catch (error) {
+        if (cancelled || signedInWeekMemoryRequestIdRef.current !== requestId) return;
+        console.error('[Odara] signed-in week memory hydrate failed', error);
+        const clearedEntries: Record<string, string | null> = {};
+        for (const dateKey of signedInWeekHydrationDateKeys) {
+          clearedEntries[dateKey] = null;
+        }
+        persistedSignedInDayStateRef.current = {
+          ...persistedSignedInDayStateRef.current,
+          ...clearedEntries,
+        };
+      } finally {
+        if (!cancelled && signedInWeekMemoryRequestIdRef.current === requestId) {
+          setSignedInWeekMemoryReadyScopeKey(signedInWeekMemoryScopeKey);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isGuestMode,
+    userId,
+    signedInWeekHydrationDateKeysKey,
+    signedInWeekMemoryScopeKey,
+  ]);
+
+  useEffect(() => {
+    if (isGuestMode || !userId || !signedInWeekMemoryReady || visibleWeekDateKeys.length === 0) {
+      return;
+    }
+
+    const upsertRows: Array<{ dateKey: string; state: SignedInDayState; serialized: string }> = [];
+    const deleteKeys: string[] = [];
+
+    for (const dateKey of visibleWeekDateKeys) {
+      const current = signedInDayStateMap[dateKey];
+      const persistedSerialized = persistedSignedInDayStateRef.current[dateKey] ?? null;
+
+      if (current && isPersistableSignedInDayState(current)) {
+        const serialized = stableSerializeSignedInDayState(current);
+        if (serialized !== persistedSerialized) {
+          upsertRows.push({ dateKey, state: current, serialized });
+        }
+      } else if (persistedSerialized !== null) {
+        deleteKeys.push(dateKey);
+      }
+    }
+
+    if (upsertRows.length === 0 && deleteKeys.length === 0) {
+      return;
+    }
+
+    if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
+      window.clearTimeout(signedInWeekMemoryWriteTimeoutRef.current);
+    }
+
+    signedInWeekMemoryWriteTimeoutRef.current = window.setTimeout(async () => {
+      const nextPersistedEntries: Record<string, string | null> = {};
+
+      try {
+        if (upsertRows.length > 0) {
+          const { error } = await odaraSupabase
+            .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+            .upsert(
+              upsertRows.map(({ dateKey, state }) => ({
+                user_id: userId,
+                date_key: dateKey,
+                state_json: serializeSignedInDayStateForStorage(state),
+                updated_at: new Date().toISOString(),
+              })),
+              { onConflict: 'user_id,date_key' }
+            );
+
+          if (error) throw error;
+
+          for (const row of upsertRows) {
+            nextPersistedEntries[row.dateKey] = row.serialized;
+          }
+        }
+
+        if (deleteKeys.length > 0) {
+          const { error } = await odaraSupabase
+            .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+            .delete()
+            .eq('user_id', userId)
+            .in('date_key', deleteKeys);
+
+          if (error) throw error;
+
+          for (const dateKey of deleteKeys) {
+            nextPersistedEntries[dateKey] = null;
+          }
+        }
+
+        persistedSignedInDayStateRef.current = {
+          ...persistedSignedInDayStateRef.current,
+          ...nextPersistedEntries,
+        };
+      } catch (error) {
+        console.error('[Odara] signed-in week memory persist failed', error);
+      } finally {
+        signedInWeekMemoryWriteTimeoutRef.current = null;
+      }
+    }, 250);
+
+    return () => {
+      if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
+        window.clearTimeout(signedInWeekMemoryWriteTimeoutRef.current);
+        signedInWeekMemoryWriteTimeoutRef.current = null;
+      }
+    };
+  }, [
+    isGuestMode,
+    userId,
+    signedInWeekMemoryReady,
+    visibleWeekDateKeysKey,
+    signedInDayStateMap,
+  ]);
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
   const fetchMoodForCard = useCallback(async (fragranceId: string, mood: LayerMood, isRetry = false) => {
@@ -2436,6 +2794,10 @@ const OdaraScreen = ({
       return;
     }
 
+    if (!isGuestMode && !signedInWeekMemoryReady) {
+      return;
+    }
+
     const capturedSlot = stateKey;
 
     // ── FULL STATE RESET before applying new oracle payload ──
@@ -2615,7 +2977,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay]);
+  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay, isGuestMode, signedInWeekMemoryReady]);
 
   // No eager modes fetch — moods load lazily on user tap
 
