@@ -73,15 +73,17 @@ const FloatingActionLabel: React.FC<FloatingActionLabelProps> = ({
   return createPortal(
     <span
       key={renderKey}
-      className="pointer-events-none fixed whitespace-nowrap text-[9.5px] uppercase tracking-[0.2em] px-2 py-[2px] rounded-full z-[120]"
+      className="pointer-events-none fixed whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.18em] px-2.5 py-[3px] rounded-full"
       style={{
         left: pos.x,
         top: pos.y,
         transform: 'translate(-50%, 0)',
-        color: color ?? 'rgba(255,255,255,0.86)',
-        background: 'rgba(10,10,12,0.82)',
-        border: `1px solid ${color ?? 'rgba(255,255,255,0.14)'}55`,
+        color: color ?? 'rgba(255,255,255,0.95)',
+        background: 'rgba(10,10,12,0.92)',
+        border: `1px solid ${color ?? 'rgba(255,255,255,0.22)'}`,
+        boxShadow: '0 6px 18px rgba(0,0,0,0.55)',
         backdropFilter: 'blur(10px)',
+        zIndex: 2147483647,
         animation: `actionLabelPop ${duration}ms cubic-bezier(0.2,0,0,1) forwards`,
       }}
     >
