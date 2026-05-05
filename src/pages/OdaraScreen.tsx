@@ -2028,7 +2028,6 @@ const OdaraScreen = ({
   const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
-  const stateKey = `${selectedDate}:${selectedContext}`;
   const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDateKey);
   const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
   const lockState: LockState = signedInDayState.lockState;
