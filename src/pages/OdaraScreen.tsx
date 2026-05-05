@@ -5468,16 +5468,7 @@ const OdaraScreen = ({
             <div className="flex items-start justify-between mb-1.5 relative z-10">
               {/* Left: temperature — instrument reading */}
               <div className="flex flex-col items-start min-w-[52px] -mt-0.5">
-                 <span
-                   className="text-[24px] leading-none tracking-[0.02em] font-medium text-foreground/85"
-                   style={{
-                     fontFamily: "'SF Mono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'Geist Mono', monospace",
-                     fontVariantNumeric: 'tabular-nums',
-                     textShadow: '0 0 14px rgba(255,255,255,0.08)',
-                   }}
-                 >
-                  {resolvedTemperature}°
-                 </span>
+                <TemperatureReadout value={resolvedTemperature} />
               </div>
 
               {/* Center: date */}
