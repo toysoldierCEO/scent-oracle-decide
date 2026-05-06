@@ -6019,13 +6019,33 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-4 py-3 mt-2.5"
+          className="rounded-[16px] px-4 py-3 mt-1"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div className="flex w-full justify-between">
+          <div ref={dayStripRef} className="relative flex w-full justify-between">
+            {/* Time orb — quiet timepiece marker on the day track */}
+            {orbGeom && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  left: `${orbGeom.left}px`,
+                  top: '14px',
+                  transform: 'translate(-50%, -50%)',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '9999px',
+                  background: 'rgba(255,255,255,0.92)',
+                  boxShadow: '0 0 6px rgba(255,255,255,0.55), 0 0 12px rgba(255,255,255,0.18)',
+                  opacity: orbGeom.opacity,
+                  zIndex: orbGeom.behind ? 0 : 5,
+                  transition: 'opacity 600ms ease, left 600ms ease',
+                }}
+              />
+            )}
             {forecastDays.map((fd, i) => {
               const dayLanes = isGuestMode
                 ? forecastLaneContexts.map(ctx => {
@@ -6045,11 +6065,13 @@ const OdaraScreen = ({
               return (
                 <button
                   key={i}
+                  ref={(el) => { dayCellRefs.current[i] = el; }}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
+                  className="relative flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
                     background: 'rgba(255,255,255,0.08)',
-                  } : undefined}
+                    zIndex: 2,
+                  } : { zIndex: 2 }}
                 >
                   <span className={`text-[10px] tracking-[0.04em] transition-colors ${
                     fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
