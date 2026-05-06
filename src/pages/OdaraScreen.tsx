@@ -6071,33 +6071,69 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-4 py-3 mt-1"
+          className="rounded-[16px] px-4 py-3 mt-0"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
           <div ref={dayStripRef} className="relative flex w-full justify-between">
-            {/* Time orb — quiet timepiece marker on the day track */}
+            {/* Subtle watch-dial notches at ~6AM / ~12PM / ~6PM between today & tomorrow */}
             {orbGeom && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute"
-                style={{
-                  left: `${orbGeom.left}px`,
-                  top: '14px',
-                  transform: 'translate(-50%, -50%)',
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '9999px',
-                  background: 'rgba(255,255,255,0.92)',
-                  boxShadow: '0 0 6px rgba(255,255,255,0.55), 0 0 12px rgba(255,255,255,0.18)',
-                  opacity: orbGeom.opacity,
-                  zIndex: orbGeom.behind ? 0 : 5,
-                  transition: 'opacity 600ms ease, left 600ms ease',
-                }}
-              />
+              <>
+                {[orbGeom.notchA, (orbGeom.notchA + orbGeom.notchB) / 2, orbGeom.notchB].map((nx, ni) => (
+                  <div
+                    key={`notch-${ni}`}
+                    aria-hidden
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: `${nx}px`,
+                      top: '14px',
+                      transform: 'translate(-50%, -50%)',
+                      width: '1px',
+                      height: ni === 1 ? '5px' : '3px',
+                      background: 'rgba(255,255,255,0.18)',
+                      borderRadius: '1px',
+                      zIndex: 1,
+                    }}
+                  />
+                ))}
+              </>
             )}
+            {/* Time orb — quiet lunar timepiece marker on the day track */}
+            {orbGeom && (() => {
+              const r = 6;
+              const rx = r * Math.abs(1 - 2 * orbGeom.moonLitFrac);
+              const litColor = 'rgba(245,243,235,0.95)';
+              const darkColor = 'rgba(20,22,28,0.95)';
+              const ellipseFill = orbGeom.moonLitFrac < 0.5 ? darkColor : litColor;
+              const litRectX = orbGeom.moonWaxing ? r : 0;
+              return (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${orbGeom.left}px`,
+                    top: '14px',
+                    transform: 'translate(-50%, -50%)',
+                    width: '12px',
+                    height: '12px',
+                    opacity: orbGeom.opacity,
+                    zIndex: orbGeom.behind ? 0 : 5,
+                    transition: 'opacity 600ms ease, left 600ms ease',
+                    filter: 'drop-shadow(0 0 3px rgba(245,243,235,0.35))',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <circle cx="6" cy="6" r="6" fill={darkColor} />
+                    <rect x={litRectX} y="0" width="6" height="12" fill={litColor} />
+                    <ellipse cx="6" cy="6" rx={rx} ry="6" fill={ellipseFill} />
+                    <circle cx="6" cy="6" r="5.6" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
+                  </svg>
+                </div>
+              );
+            })()}
+
             {forecastDays.map((fd, i) => {
               const dayLanes = isGuestMode
                 ? forecastLaneContexts.map(ctx => {
