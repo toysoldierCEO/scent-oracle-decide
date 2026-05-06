@@ -4961,16 +4961,10 @@ const OdaraScreen = ({
           : `inset 0 0 0 1px ${signedInHeroCarryColor}22, 0 10px 24px ${signedInHeroCarryColor}14`,
       }
     : undefined;
-  const signedInLayerCarrySurfaceStyle = !isGuestMode && (signedInLayerCarryActive || signedInLayerCarryPulsing)
-    ? {
-        // Single refined surface — inset ring only, no offset shadow that
-        // would read as a duplicate "shelf" card underneath the LayerCard.
-        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '12' : '0A'}`,
-        boxShadow: signedInLayerCarryPulsing
-          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30`
-          : `inset 0 0 0 1px ${signedInLayerCarryColor}1F`,
-      }
-    : undefined;
+  // No wrapper background or ring around the LayerCard — the LayerCard owns its
+  // own surface. An outer tint/ring here reads as a hidden "shelf" or duplicate
+  // window beneath the card. Keep this undefined to remove that double-window.
+  const signedInLayerCarrySurfaceStyle: React.CSSProperties | undefined = undefined;
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
     ? {
         color: '#ef4444',
