@@ -1829,11 +1829,36 @@ const OdaraScreen = ({
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
 
-  // ── Time-orb tick (forecast strip): refresh position every 60s ──
+  // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
+  // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
+  // local timezone; this is naturally DST-safe (a "day" is still 0:00 → 24:00
+  // wall-clock, even on spring-forward / fall-back days, because we measure
+  // progress against the local clock, not against a fixed 86400s window).
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 60_000);
-    return () => clearInterval(id);
+    let timeoutId: number | undefined;
+    let intervalId: number | undefined;
+    const tick = () => setNowTick(Date.now());
+    const scheduleNextMinute = () => {
+      const now = new Date();
+      const msToNextMinute =
+        (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      timeoutId = window.setTimeout(() => {
+        tick();
+        // After aligning, fall back to a steady 60s interval.
+        intervalId = window.setInterval(tick, 60_000);
+      }, Math.max(250, msToNextMinute));
+    };
+    scheduleNextMinute();
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', tick);
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (intervalId) window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', tick);
+    };
   }, []);
   const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
@@ -1849,8 +1874,11 @@ const OdaraScreen = ({
       const bRect = nextBtn.getBoundingClientRect();
       const aCx = aRect.left + aRect.width / 2 - sRect.left;
       const bCx = bRect.left + bRect.width / 2 - sRect.left;
+      // Local wall-clock progress through today: 0 at local 00:00, 1 at next 00:00.
       const d = new Date();
-      const progress = (d.getHours() * 60 + d.getMinutes()) / 1440;
+      const secondsIntoDay =
+        d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      const progress = Math.min(1, Math.max(0, secondsIntoDay / 86400));
       const left = aCx + (bCx - aCx) * progress;
       // Tuck/fade band: 90% → 100% of day
       const fadeStart = 0.9;
