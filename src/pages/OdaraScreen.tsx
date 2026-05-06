@@ -1828,6 +1828,41 @@ const OdaraScreen = ({
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
+
+  // ── Time-orb tick (forecast strip): refresh position every 60s ──
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const dayStripRef = useRef<HTMLDivElement | null>(null);
+  const [orbGeom, setOrbGeom] = useState<{ left: number; opacity: number; behind: boolean } | null>(null);
+  useEffect(() => {
+    const compute = () => {
+      const strip = dayStripRef.current;
+      const todayBtn = dayCellRefs.current[0];
+      const nextBtn = dayCellRefs.current[1];
+      if (!strip || !todayBtn || !nextBtn) { setOrbGeom(null); return; }
+      const sRect = strip.getBoundingClientRect();
+      const aRect = todayBtn.getBoundingClientRect();
+      const bRect = nextBtn.getBoundingClientRect();
+      const aCx = aRect.left + aRect.width / 2 - sRect.left;
+      const bCx = bRect.left + bRect.width / 2 - sRect.left;
+      const d = new Date();
+      const progress = (d.getHours() * 60 + d.getMinutes()) / 1440;
+      const left = aCx + (bCx - aCx) * progress;
+      // Tuck/fade band: 90% → 100% of day
+      const fadeStart = 0.9;
+      const opacity =
+        progress < fadeStart ? 0.85 : Math.max(0, 0.85 * (1 - (progress - fadeStart) / (1 - fadeStart)));
+      const behind = progress >= fadeStart;
+      setOrbGeom({ left, opacity, behind });
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, [nowTick, selectedDate]);
   const suppressCardClickRef = useRef(false);
   const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
