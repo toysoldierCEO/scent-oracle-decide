@@ -1862,12 +1862,22 @@ const OdaraScreen = ({
   }, []);
   const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
-  const [orbGeom, setOrbGeom] = useState<{ left: number; opacity: number; behind: boolean } | null>(null);
+  const [orbGeom, setOrbGeom] = useState<{
+    left: number;
+    opacity: number;
+    behind: boolean;
+    notchA: number;
+    notchB: number;
+    moonLitFrac: number; // 0..1 illumination
+    moonWaxing: boolean;
+  } | null>(null);
   useEffect(() => {
     const compute = () => {
       const strip = dayStripRef.current;
-      const todayBtn = dayCellRefs.current[0];
-      const nextBtn = dayCellRefs.current[1];
+      // Locate today's cell in the visible strip; if today isn't shown, hide orb.
+      const todayIdx = forecastDays.findIndex((fd) => fd.isToday);
+      const todayBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx] : null;
+      const nextBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
       if (!strip || !todayBtn || !nextBtn) { setOrbGeom(null); return; }
       const sRect = strip.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
@@ -1880,17 +1890,31 @@ const OdaraScreen = ({
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsIntoDay / 86400));
       const left = aCx + (bCx - aCx) * progress;
-      // Tuck/fade band: 90% → 100% of day
       const fadeStart = 0.9;
       const opacity =
-        progress < fadeStart ? 0.85 : Math.max(0, 0.85 * (1 - (progress - fadeStart) / (1 - fadeStart)));
+        progress < fadeStart ? 0.7 : Math.max(0, 0.7 * (1 - (progress - fadeStart) / (1 - fadeStart)));
       const behind = progress >= fadeStart;
-      setOrbGeom({ left, opacity, behind });
+      // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
+      const SYNODIC = 29.530588853;
+      const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
+      const daysSince = (d.getTime() - refMs) / 86400000;
+      const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC; // 0..1
+      const moonLitFrac = (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2;
+      const moonWaxing = phaseFrac < 0.5;
+      setOrbGeom({
+        left,
+        opacity,
+        behind,
+        notchA: aCx + (bCx - aCx) * 0.25,
+        notchB: aCx + (bCx - aCx) * 0.75,
+        moonLitFrac,
+        moonWaxing,
+      });
     };
     compute();
     window.addEventListener('resize', compute);
     return () => window.removeEventListener('resize', compute);
-  }, [nowTick, selectedDate]);
+  }, [nowTick, selectedDate, forecastDays]);
   const suppressCardClickRef = useRef(false);
   const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
