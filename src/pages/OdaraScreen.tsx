@@ -1862,12 +1862,22 @@ const OdaraScreen = ({
   }, []);
   const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
-  const [orbGeom, setOrbGeom] = useState<{ left: number; opacity: number; behind: boolean } | null>(null);
+  const [orbGeom, setOrbGeom] = useState<{
+    left: number;
+    opacity: number;
+    behind: boolean;
+    notchA: number;
+    notchB: number;
+    moonLitFrac: number; // 0..1 illumination
+    moonWaxing: boolean;
+  } | null>(null);
   useEffect(() => {
     const compute = () => {
       const strip = dayStripRef.current;
-      const todayBtn = dayCellRefs.current[0];
-      const nextBtn = dayCellRefs.current[1];
+      // Locate today's cell in the visible strip; if today isn't shown, hide orb.
+      const todayIdx = forecastDays.findIndex((fd) => fd.isToday);
+      const todayBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx] : null;
+      const nextBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
       if (!strip || !todayBtn || !nextBtn) { setOrbGeom(null); return; }
       const sRect = strip.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
@@ -1880,17 +1890,31 @@ const OdaraScreen = ({
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsIntoDay / 86400));
       const left = aCx + (bCx - aCx) * progress;
-      // Tuck/fade band: 90% → 100% of day
       const fadeStart = 0.9;
       const opacity =
-        progress < fadeStart ? 0.85 : Math.max(0, 0.85 * (1 - (progress - fadeStart) / (1 - fadeStart)));
+        progress < fadeStart ? 0.7 : Math.max(0, 0.7 * (1 - (progress - fadeStart) / (1 - fadeStart)));
       const behind = progress >= fadeStart;
-      setOrbGeom({ left, opacity, behind });
+      // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
+      const SYNODIC = 29.530588853;
+      const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
+      const daysSince = (d.getTime() - refMs) / 86400000;
+      const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC; // 0..1
+      const moonLitFrac = (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2;
+      const moonWaxing = phaseFrac < 0.5;
+      setOrbGeom({
+        left,
+        opacity,
+        behind,
+        notchA: aCx + (bCx - aCx) * 0.25,
+        notchB: aCx + (bCx - aCx) * 0.75,
+        moonLitFrac,
+        moonWaxing,
+      });
     };
     compute();
     window.addEventListener('resize', compute);
     return () => window.removeEventListener('resize', compute);
-  }, [nowTick, selectedDate]);
+  }, [nowTick, selectedDate, forecastDays]);
   const suppressCardClickRef = useRef(false);
   const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
@@ -6047,33 +6071,69 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-4 py-3 mt-1"
+          className="rounded-[16px] px-4 py-3 mt-0"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
           <div ref={dayStripRef} className="relative flex w-full justify-between">
-            {/* Time orb — quiet timepiece marker on the day track */}
+            {/* Subtle watch-dial notches at ~6AM / ~12PM / ~6PM between today & tomorrow */}
             {orbGeom && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute"
-                style={{
-                  left: `${orbGeom.left}px`,
-                  top: '14px',
-                  transform: 'translate(-50%, -50%)',
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '9999px',
-                  background: 'rgba(255,255,255,0.92)',
-                  boxShadow: '0 0 6px rgba(255,255,255,0.55), 0 0 12px rgba(255,255,255,0.18)',
-                  opacity: orbGeom.opacity,
-                  zIndex: orbGeom.behind ? 0 : 5,
-                  transition: 'opacity 600ms ease, left 600ms ease',
-                }}
-              />
+              <>
+                {[orbGeom.notchA, (orbGeom.notchA + orbGeom.notchB) / 2, orbGeom.notchB].map((nx, ni) => (
+                  <div
+                    key={`notch-${ni}`}
+                    aria-hidden
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: `${nx}px`,
+                      top: '14px',
+                      transform: 'translate(-50%, -50%)',
+                      width: '1px',
+                      height: ni === 1 ? '5px' : '3px',
+                      background: 'rgba(255,255,255,0.18)',
+                      borderRadius: '1px',
+                      zIndex: 1,
+                    }}
+                  />
+                ))}
+              </>
             )}
+            {/* Time orb — quiet lunar timepiece marker on the day track */}
+            {orbGeom && (() => {
+              const r = 6;
+              const rx = r * Math.abs(1 - 2 * orbGeom.moonLitFrac);
+              const litColor = 'rgba(245,243,235,0.95)';
+              const darkColor = 'rgba(20,22,28,0.95)';
+              const ellipseFill = orbGeom.moonLitFrac < 0.5 ? darkColor : litColor;
+              const litRectX = orbGeom.moonWaxing ? r : 0;
+              return (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${orbGeom.left}px`,
+                    top: '14px',
+                    transform: 'translate(-50%, -50%)',
+                    width: '12px',
+                    height: '12px',
+                    opacity: orbGeom.opacity,
+                    zIndex: orbGeom.behind ? 0 : 5,
+                    transition: 'opacity 600ms ease, left 600ms ease',
+                    filter: 'drop-shadow(0 0 3px rgba(245,243,235,0.35))',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <circle cx="6" cy="6" r="6" fill={darkColor} />
+                    <rect x={litRectX} y="0" width="6" height="12" fill={litColor} />
+                    <ellipse cx="6" cy="6" rx={rx} ry="6" fill={ellipseFill} />
+                    <circle cx="6" cy="6" r="5.6" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
+                  </svg>
+                </div>
+              );
+            })()}
+
             {forecastDays.map((fd, i) => {
               const dayLanes = isGuestMode
                 ? forecastLaneContexts.map(ctx => {
