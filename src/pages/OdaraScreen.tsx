@@ -1884,15 +1884,27 @@ const OdaraScreen = ({
       const bRect = nextBtn.getBoundingClientRect();
       const aCx = aRect.left + aRect.width / 2 - sRect.left;
       const bCx = bRect.left + bRect.width / 2 - sRect.left;
+      // No-overlap boundaries: orb may only travel in the open gap between cells.
+      const ORB_R = 4; // half of ~8px visual
+      const PAD = 4;   // breathing room from each cell edge
+      const trackStart = (aRect.right - sRect.left) + PAD + ORB_R;
+      const trackEnd   = (bRect.left  - sRect.left) - PAD - ORB_R;
       // Local wall-clock progress through today: 0 at local 00:00, 1 at next 00:00.
       const d = new Date();
       const secondsIntoDay =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsIntoDay / 86400));
-      const left = aCx + (bCx - aCx) * progress;
-      const fadeStart = 0.9;
-      const opacity =
-        progress < fadeStart ? 0.7 : Math.max(0, 0.7 * (1 - (progress - fadeStart) / (1 - fadeStart)));
+      // Position lerps between day centers, then clamps inside the open track.
+      const rawLeft = aCx + (bCx - aCx) * progress;
+      const left = Math.min(trackEnd, Math.max(trackStart, rawLeft));
+      // Pre-handoff fade: opacity reaches 0 well before reaching tomorrow.
+      // Begin dimming at 88%, fully out by 98%.
+      const fadeStart = 0.88;
+      const fadeEnd = 0.98;
+      let opacity: number;
+      if (progress < fadeStart) opacity = 0.6;
+      else if (progress >= fadeEnd) opacity = 0;
+      else opacity = 0.6 * (1 - (progress - fadeStart) / (fadeEnd - fadeStart));
       const behind = progress >= fadeStart;
       // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
       const SYNODIC = 29.530588853;
