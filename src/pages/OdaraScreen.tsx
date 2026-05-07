@@ -1912,6 +1912,7 @@ const OdaraScreen = ({
       // sits on today's center; at noon halfway to tomorrow; at 11:59 PM
       // almost on tomorrow's center. At 12:00 AM the new "today" advances
       // and the marker resets onto the new current day cleanly.
+      const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
       // Vertical center: align with the day-number row inside the cell.
       // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
       // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
