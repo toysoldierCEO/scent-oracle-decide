@@ -842,6 +842,43 @@ function backendModeEntryToLayerMode(
   };
 }
 
+function buildMoodLaneKey(
+  slotPrefix: string,
+  fragranceId: string,
+  mood: LayerMood,
+) {
+  return `${slotPrefix}|${fragranceId}|${mood}`;
+}
+
+function modeValueToBackendModeEntry(
+  value: any,
+  mood: LayerMood,
+): BackendModeEntry | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const layerFragranceId = value.layer_fragrance_id ?? value.fragrance_id ?? value.id ?? '';
+  const layerName = value.layer_name ?? value.name ?? '';
+  if (!layerFragranceId && !layerName) return null;
+
+  return {
+    mode: mood,
+    layer_fragrance_id: layerFragranceId,
+    layer_name: layerName,
+    layer_brand: value.layer_brand ?? value.brand ?? '',
+    layer_family: value.layer_family ?? value.family ?? value.family_key ?? '',
+    layer_notes: Array.isArray(value.layer_notes) ? value.layer_notes : Array.isArray(value.notes) ? value.notes : [],
+    layer_accords: Array.isArray(value.layer_accords) ? value.layer_accords : Array.isArray(value.accords) ? value.accords : [],
+    layer_score: value.layer_score ?? 0,
+    reason: value.reason ?? '',
+    why_it_works: value.why_it_works ?? '',
+    ratio_hint: value.ratio_hint ?? '',
+    application_style: value.application_style ?? '',
+    placement_hint: value.placement_hint ?? '',
+    spray_guidance: value.spray_guidance ?? '',
+    interaction_type: value.interaction_type ?? value.layer_mode ?? mood,
+  };
+}
+
 /** Convert a v6 layer entry (from get_signed_in_card_contract_v6, either the
  *  top-level `layer` object or `layer_modes[mood].layers[idx]`) into the
  *  LayerMode shape consumed by LayerCard. Pure mapping — no inference. */
@@ -1301,6 +1338,29 @@ function isSameFragranceIdentity(
   const bBrand = normalizeFragranceIdentityText(b.brand);
 
   return !!aName && !!bName && !!aBrand && !!bBrand && aName === bName && aBrand === bBrand;
+}
+
+function isSameBackendModeEntryIdentity(
+  a: BackendModeEntry | null | undefined,
+  b: BackendModeEntry | null | undefined,
+) {
+  return isSameFragranceIdentity(
+    a ? { fragrance_id: a.layer_fragrance_id, name: a.layer_name, brand: a.layer_brand } : null,
+    b ? { fragrance_id: b.layer_fragrance_id, name: b.layer_name, brand: b.layer_brand } : null,
+  );
+}
+
+function appendUniqueBackendModeEntries(
+  existing: BackendModeEntry[],
+  additions: Array<BackendModeEntry | null | undefined>,
+) {
+  const next = [...existing];
+  for (const addition of additions) {
+    if (!addition) continue;
+    if (next.some((current) => isSameBackendModeEntryIdentity(current, addition))) continue;
+    next.push(addition);
+  }
+  return next;
 }
 
 function pickFirstUniqueDisplayCard(
@@ -1843,6 +1903,8 @@ const OdaraScreen = ({
   // Key: `${date}|${context}|${fragranceId}|${mood}` → BackendModeEntry (never null — failures go to modeErrors)
   const moodCacheRef = useRef<Map<string, BackendModeEntry>>(new Map());
   const moodInFlightRef = useRef<Map<string, Promise<BackendModeEntry | null>>>(new Map());
+  const moodLaneStackRef = useRef<Map<string, BackendModeEntry[]>>(new Map());
+  const moodLaneInFlightRef = useRef<Map<string, Promise<BackendModeEntry[]>>>(new Map());
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [modeLoading, setModeLoading] = useState<Record<LayerMood, boolean>>({ balance: false, bold: false, smooth: false, wild: false });
   const [modeErrors, setModeErrors] = useState<Record<LayerMood, string | null>>({ balance: null, bold: null, smooth: null, wild: null });
@@ -1859,6 +1921,65 @@ const OdaraScreen = ({
   const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
 
   const hasHistory = viewHistory.length > 0;
+
+  const readMoodLaneStack = useCallback((moodKey: string): BackendModeEntry[] => {
+    const seededStack = moodLaneStackRef.current.get(moodKey);
+    if (Array.isArray(seededStack) && seededStack.length > 0) {
+      return seededStack;
+    }
+
+    const cachedEntry = moodCacheRef.current.get(moodKey);
+    return cachedEntry ? [cachedEntry] : [];
+  }, []);
+
+  const writeMoodLaneStack = useCallback((
+    moodKey: string,
+    entries: Array<BackendModeEntry | null | undefined>,
+    selectedIndex = 0,
+  ) => {
+    const nextStack = appendUniqueBackendModeEntries([], entries);
+    if (nextStack.length === 0) {
+      moodLaneStackRef.current.delete(moodKey);
+      moodCacheRef.current.delete(moodKey);
+      return nextStack;
+    }
+
+    moodLaneStackRef.current.set(moodKey, nextStack);
+    const safeIndex = Math.min(Math.max(selectedIndex, 0), nextStack.length - 1);
+    moodCacheRef.current.set(moodKey, nextStack[safeIndex] ?? nextStack[0]);
+    return nextStack;
+  }, []);
+
+  const syncMoodLaneSelectedEntry = useCallback((
+    moodKey: string,
+    selectedIndex: number,
+  ) => {
+    const stack = readMoodLaneStack(moodKey);
+    if (stack.length === 0) return null;
+    const safeIndex = Math.min(Math.max(selectedIndex, 0), stack.length - 1);
+    const selectedEntry = stack[safeIndex] ?? stack[0] ?? null;
+    if (selectedEntry) {
+      moodCacheRef.current.set(moodKey, selectedEntry);
+    }
+    return selectedEntry;
+  }, [readMoodLaneStack]);
+
+  const getResolvedMoodLaneEntry = useCallback((
+    fragranceId: string | null | undefined,
+    mood: LayerMood | null | undefined,
+    explicitIndex?: number | null,
+  ) => {
+    if (!fragranceId) return null;
+    const resolvedMood = mood ?? 'balance';
+    const moodKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, fragranceId, resolvedMood);
+    const stack = readMoodLaneStack(moodKey);
+    if (stack.length === 0) {
+      return moodCacheRef.current.get(moodKey) ?? null;
+    }
+    const laneIndex = explicitIndex ?? (signedInLayerIdxByMood[resolvedMood] ?? 0);
+    const safeIndex = Math.min(Math.max(laneIndex, 0), stack.length - 1);
+    return stack[safeIndex] ?? stack[0] ?? null;
+  }, [readMoodLaneStack, selectedContext, selectedDate, signedInLayerIdxByMood]);
 
   const commitSignedInQueuedHero = useCallback((card: DisplayCard, detail: FragranceDetail | null | undefined) => {
     if (isGuestMode || card.isHero) {
@@ -2646,7 +2767,7 @@ const OdaraScreen = ({
       return null;
     }
     const slotPrefix = `${selectedDate}|${selectedContext}`;
-    const moodKey = `${slotPrefix}|${fragranceId}|${mood}`;
+    const moodKey = buildMoodLaneKey(slotPrefix, fragranceId, mood);
     const cached = moodCacheRef.current.get(moodKey);
     if (cached !== undefined && !isRetry) {
       console.log('[Odara] mood cache hit', moodKey);
@@ -2668,8 +2789,12 @@ const OdaraScreen = ({
     // Gather already-loaded layer fragrance ids for exclusion — CURRENT SLOT ONLY
     const excludeIds: string[] = [];
     for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
-      const existing = moodCacheRef.current.get(`${slotPrefix}|${fragranceId}|${m}`);
-      if (existing?.layer_fragrance_id) excludeIds.push(existing.layer_fragrance_id);
+      const stack = readMoodLaneStack(buildMoodLaneKey(slotPrefix, fragranceId, m));
+      for (const existing of stack) {
+        if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
+          excludeIds.push(existing.layer_fragrance_id);
+        }
+      }
     }
     // Also include oracle.layer id if present
     const ol = activeOracle?.layer;
@@ -2709,25 +2834,12 @@ const OdaraScreen = ({
           const hp: any = activeOracle ?? oracle ?? {};
           const heroIdHp = hp?.today_pick?.fragrance_id ?? null;
           const seed: any = (heroIdHp === fragranceId) ? hp?.layer_modes?.[mood] : null;
-          if (seed && (seed.layer_fragrance_id || seed.fragrance_id || seed.layer_name || seed.name)) {
-            const fbEntry: BackendModeEntry = {
-              mode: mood,
-              layer_fragrance_id: seed.layer_fragrance_id ?? seed.fragrance_id ?? '',
-              layer_name: seed.layer_name ?? seed.name ?? '',
-              layer_brand: seed.layer_brand ?? seed.brand ?? '',
-              layer_family: seed.layer_family ?? seed.family ?? '',
-              layer_notes: Array.isArray(seed.layer_notes) ? seed.layer_notes : Array.isArray(seed.notes) ? seed.notes : [],
-              layer_accords: Array.isArray(seed.layer_accords) ? seed.layer_accords : Array.isArray(seed.accords) ? seed.accords : [],
-              layer_score: seed.layer_score ?? 0,
-              reason: seed.reason ?? '',
-              why_it_works: seed.why_it_works ?? '',
-              ratio_hint: seed.ratio_hint ?? '',
-              application_style: seed.application_style ?? '',
-              placement_hint: seed.placement_hint ?? '',
-              spray_guidance: seed.spray_guidance ?? '',
-              interaction_type: seed.interaction_type ?? mood,
-            };
-            (fbEntry as any).tokens = Array.isArray(seed.tokens) ? seed.tokens : undefined;
+          const fbEntry = modeValueToBackendModeEntry(seed, mood);
+          if (fbEntry) {
+            if (!isRetry) {
+              const seededStack = appendUniqueBackendModeEntries(readMoodLaneStack(moodKey), [fbEntry]);
+              moodLaneStackRef.current.set(moodKey, seededStack);
+            }
             moodCacheRef.current.set(moodKey, fbEntry);
             setModeErrors(prev => ({ ...prev, [mood]: null }));
             setLayerDebugSource(`fallback:${mood}`);
@@ -2752,23 +2864,13 @@ const OdaraScreen = ({
           return null;
         }
 
-        const entry: BackendModeEntry = {
-          mode: mood,
-          layer_fragrance_id: row.layer_fragrance_id ?? '',
-          layer_name: row.layer_name ?? '',
-          layer_brand: row.layer_brand ?? '',
-          layer_family: row.layer_family ?? '',
-          layer_notes: Array.isArray(row.layer_notes) ? row.layer_notes : [],
-          layer_accords: Array.isArray(row.layer_accords) ? row.layer_accords : [],
-          layer_score: row.layer_score ?? 0,
-          reason: row.reason ?? '',
-          why_it_works: row.why_it_works ?? '',
-          ratio_hint: row.ratio_hint ?? '',
-          application_style: row.application_style ?? '',
-          placement_hint: row.placement_hint ?? '',
-          spray_guidance: row.spray_guidance ?? '',
-          interaction_type: row.interaction_type ?? mood,
-        };
+        const entry = modeValueToBackendModeEntry(row, mood);
+        if (!entry) {
+          setLayerDebugSource(`rpc:${mood}(empty)`);
+          setModeLoading(prev => ({ ...prev, [mood]: false }));
+          setMoodCacheVersion(v => v + 1);
+          return null;
+        }
 
         if (entry.layer_fragrance_id && !entry.layer_name) {
           const detail = await fetchFragranceDetail(entry.layer_fragrance_id);
@@ -2795,6 +2897,10 @@ const OdaraScreen = ({
           }
         }
 
+        if (!isRetry) {
+          const nextStack = appendUniqueBackendModeEntries(readMoodLaneStack(moodKey), [entry]);
+          moodLaneStackRef.current.set(moodKey, nextStack);
+        }
         moodCacheRef.current.set(moodKey, entry);
         console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
         setLayerDebugSource(`rpc:${mood}`);
@@ -2818,7 +2924,67 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, activeOracle, stateKey, isGuestMode, fetchFragranceDetail]);
+  }, [userId, selectedContext, selectedDate, activeOracle, oracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
+
+  const ensureMoodLaneDepth = useCallback(async (
+    fragranceId: string,
+    mood: LayerMood,
+    targetIndex: number,
+    extraExcludeIds: string[] = [],
+  ) => {
+    if (isGuestMode) return [];
+
+    const slotPrefix = `${selectedDate}|${selectedContext}`;
+    const moodKey = buildMoodLaneKey(slotPrefix, fragranceId, mood);
+    let currentStack = readMoodLaneStack(moodKey);
+    if (currentStack.length > targetIndex) {
+      return currentStack;
+    }
+
+    const existingInFlight = moodLaneInFlightRef.current.get(moodKey);
+    if (existingInFlight) {
+      const resolvedStack = await existingInFlight;
+      if (resolvedStack.length > targetIndex) {
+        return resolvedStack;
+      }
+      currentStack = resolvedStack;
+    }
+
+    const lanePromise = (async () => {
+      let nextStack = [...readMoodLaneStack(moodKey)];
+
+      while (nextStack.length <= targetIndex) {
+        const excludeIds = Array.from(new Set([
+          ...extraExcludeIds,
+          ...nextStack.map((entry) => entry.layer_fragrance_id).filter(Boolean),
+        ]));
+        const nextEntry = await fetchMoodForCard(
+          fragranceId,
+          mood,
+          nextStack.length > 0,
+          excludeIds,
+        );
+        if (!nextEntry) break;
+
+        const appendedStack = appendUniqueBackendModeEntries(nextStack, [nextEntry]);
+        if (appendedStack.length === nextStack.length) break;
+        nextStack = appendedStack;
+        moodLaneStackRef.current.set(moodKey, nextStack);
+        const safeIndex = Math.min(targetIndex, nextStack.length - 1);
+        moodCacheRef.current.set(moodKey, nextStack[safeIndex] ?? nextStack[0]);
+        setMoodCacheVersion((version) => version + 1);
+      }
+
+      return nextStack;
+    })();
+
+    moodLaneInFlightRef.current.set(moodKey, lanePromise);
+    try {
+      return await lanePromise;
+    } finally {
+      moodLaneInFlightRef.current.delete(moodKey);
+    }
+  }, [isGuestMode, selectedDate, selectedContext, readMoodLaneStack, fetchMoodForCard]);
 
   const resolveAlternatesForCard = useCallback(async (card: DisplayCard) => {
     // GUEST MODE: source alternates directly from raw payload — no signed-in RPC.
@@ -2928,6 +3094,8 @@ const OdaraScreen = ({
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
     moodCacheRef.current.clear();
     moodInFlightRef.current.clear();
+    moodLaneStackRef.current.clear();
+    moodLaneInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
     queueFetchInFlightRef.current.clear();
   }, [stateKey]);
@@ -3052,26 +3220,17 @@ const OdaraScreen = ({
       if (normalized.layerModesRaw) {
         for (const mood of LAYER_MODE_ORDER) {
           const modeData = (normalized.layerModesRaw as any)?.[mood];
-          if (modeData && (modeData.fragrance_id || modeData.layer_fragrance_id)) {
-            const entry: BackendModeEntry = {
-              mode: mood,
-              layer_fragrance_id: modeData.layer_fragrance_id ?? modeData.fragrance_id ?? '',
-              layer_name: modeData.layer_name ?? modeData.name ?? '',
-              layer_brand: modeData.layer_brand ?? modeData.brand ?? '',
-              layer_family: modeData.layer_family ?? modeData.family ?? '',
-              layer_notes: Array.isArray(modeData.layer_notes) ? modeData.layer_notes : Array.isArray(modeData.notes) ? modeData.notes : [],
-              layer_accords: Array.isArray(modeData.layer_accords) ? modeData.layer_accords : Array.isArray(modeData.accords) ? modeData.accords : [],
-              layer_score: modeData.layer_score ?? 0,
-              reason: modeData.reason ?? '',
-              why_it_works: modeData.why_it_works ?? '',
-              ratio_hint: modeData.ratio_hint ?? '',
-              application_style: modeData.application_style ?? '',
-              placement_hint: modeData.placement_hint ?? '',
-              spray_guidance: modeData.spray_guidance ?? '',
-              interaction_type: modeData.interaction_type ?? modeData.layer_mode ?? mood,
-            };
-            moodCacheRef.current.set(`${slotPfx}|${heroId}|${mood}`, entry);
-            console.log('[Odara] pre-seeded mood cache from layer_modes', mood, entry.layer_name);
+          if (modeData) {
+            const seededEntries = appendUniqueBackendModeEntries(
+              [],
+              Array.isArray(modeData.layers)
+                ? modeData.layers.map((layer: any) => modeValueToBackendModeEntry(layer, mood))
+                : [modeValueToBackendModeEntry(modeData, mood)],
+            );
+            if (seededEntries.length > 0) {
+              writeMoodLaneStack(buildMoodLaneKey(slotPfx, heroId, mood), seededEntries);
+              console.log('[Odara] pre-seeded mood cache from layer_modes', mood, seededEntries.map((entry) => entry.layer_name));
+            }
           }
         }
       }
@@ -3081,25 +3240,26 @@ const OdaraScreen = ({
       const balanceCacheKey = `${slotPfx}|${heroId}|balance`;
       if (!moodCacheRef.current.has(balanceCacheKey) && normalized.seededBalanceLayer?.fragranceId) {
         const sb = normalized.seededBalanceLayer;
-        const balanceEntry: BackendModeEntry = {
-          mode: 'balance',
-          layer_fragrance_id: sb.fragranceId!,
-          layer_name: sb.name ?? '',
-          layer_brand: sb.brand ?? '',
-          layer_family: sb.family ?? '',
-          layer_notes: sb.notes,
-          layer_accords: sb.accords,
-          layer_score: sb.layerScore ?? 0,
-          reason: sb.reason ?? '',
-          why_it_works: sb.whyItWorks ?? '',
-          ratio_hint: sb.ratioHint ?? '',
-          application_style: sb.applicationStyle ?? '',
-          placement_hint: sb.placementHint ?? '',
-          spray_guidance: sb.sprayGuidance ?? '',
+        const balanceEntry = modeValueToBackendModeEntry({
+          fragrance_id: sb.fragranceId,
+          name: sb.name,
+          brand: sb.brand,
+          family: sb.family,
+          notes: sb.notes,
+          accords: sb.accords,
+          layer_score: sb.layerScore,
+          reason: sb.reason,
+          why_it_works: sb.whyItWorks,
+          ratio_hint: sb.ratioHint,
+          application_style: sb.applicationStyle,
+          placement_hint: sb.placementHint,
+          spray_guidance: sb.sprayGuidance,
           interaction_type: sb.interactionType ?? 'balance',
-        };
-        moodCacheRef.current.set(balanceCacheKey, balanceEntry);
-        console.log('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
+        }, 'balance');
+        if (balanceEntry) {
+          writeMoodLaneStack(balanceCacheKey, [balanceEntry]);
+          console.log('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
+        }
       }
 
       console.log('[Odara] mode cache after init', {
@@ -3252,39 +3412,47 @@ const OdaraScreen = ({
   // a fallback (legacy/promoted/queue cards).
   const modeResults: LayerModes = useMemo(() => {
     const lm: any = v6Payload?.layer_modes ?? (activeOracle as any)?.layer_modes ?? null;
+    const fromLane = (mood: LayerMood) => {
+      const moodKey = buildMoodLaneKey(slotPrefix, cardId, mood);
+      const stack = readMoodLaneStack(moodKey);
+      if (stack.length === 0) return null;
+      const idx = signedInLayerIdxByMood[mood] ?? 0;
+      const safeIndex = Math.min(Math.max(idx, 0), stack.length - 1);
+      return backendModeEntryToLayerMode(stack[safeIndex] ?? stack[0] ?? null);
+    };
     const fromV6 = (mood: LayerMood) => {
       if (!signedInVisibleIsHeroCard) return null;
       const block = lm?.[mood] ?? null;
       if (!block) return null;
       const idx = signedInLayerIdxByMood[mood] ?? 0;
       const stack: any[] = Array.isArray(block.layers) ? block.layers : [];
-      const picked = stack.length > 0 ? stack[idx % stack.length] : block;
+      const picked = stack.length > 0
+        ? stack[Math.min(Math.max(idx, 0), stack.length - 1)] ?? stack[0]
+        : block;
       return v6LayerToLayerMode(picked, mood);
     };
-    const fallback = (mood: LayerMood) =>
-      backendModeEntryToLayerMode(moodCacheRef.current.get(`${slotPrefix}|${cardId}|${mood}`)) ?? null;
     return {
-      balance: fromV6('balance') ?? fallback('balance'),
-      bold:    fromV6('bold')    ?? fallback('bold'),
-      smooth:  fromV6('smooth')  ?? fallback('smooth'),
-      wild:    fromV6('wild')    ?? fallback('wild'),
+      balance: fromLane('balance') ?? fromV6('balance'),
+      bold:    fromLane('bold')    ?? fromV6('bold'),
+      smooth:  fromLane('smooth')  ?? fromV6('smooth'),
+      wild:    fromLane('wild')    ?? fromV6('wild'),
     };
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard]);
+  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack]);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
     const mood = selectedMood ?? 'balance';
-    const moodKey = `${slotPrefix}|${visibleCard.fragrance_id}|${mood}`;
-    if (moodCacheRef.current.has(moodKey)) return;
+    const moodKey = buildMoodLaneKey(slotPrefix, visibleCard.fragrance_id, mood);
+    if (readMoodLaneStack(moodKey).length > 0) return;
     const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
       ? (signedInVerifiedPredecessorBaton?.excludedPreviousCard?.fragrance_id ?? null)
       : null;
-    void fetchMoodForCard(
+    void ensureMoodLaneDepth(
       visibleCard.fragrance_id,
       mood,
-      false,
+      0,
       predecessorExclusionId ? [predecessorExclusionId] : [],
     );
   }, [
@@ -3293,9 +3461,25 @@ const OdaraScreen = ({
     signedInVisibleIsHeroCard,
     selectedMood,
     slotPrefix,
-    fetchMoodForCard,
+    ensureMoodLaneDepth,
+    readMoodLaneStack,
     signedInResolvedDayDecisionSource,
     signedInVerifiedPredecessorBaton,
+  ]);
+
+  useEffect(() => {
+    if (isGuestMode || !visibleCard?.fragrance_id) return;
+    const mood = selectedMood ?? 'balance';
+    const moodKey = buildMoodLaneKey(slotPrefix, visibleCard.fragrance_id, mood);
+    syncMoodLaneSelectedEntry(moodKey, signedInLayerIdxByMood[mood] ?? 0);
+  }, [
+    isGuestMode,
+    visibleCard?.fragrance_id,
+    selectedMood,
+    slotPrefix,
+    signedInLayerIdxByMood,
+    moodCacheVersion,
+    syncMoodLaneSelectedEntry,
   ]);
 
   useEffect(() => {
@@ -3818,53 +4002,68 @@ const OdaraScreen = ({
 
   // ── v6 mood tap handler ──
   // Different mood  → switch selectedMood; if no idx exists, start at 0.
-  // Same mood again → cycle (idx + 1) % layer_modes[mood].layers.length.
-  // Mood cycling source is ONLY payload.layer_modes[mood].layers[]. Never alternates.
-  // Falls back to legacy lazy fetch (signed-in non-v6 cards: queue / promoted alts).
+  // Same mood again → advance deterministically deeper within this same lane.
+  // Mood cycling source is a single signed-in lane stack per mood/card/slot.
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
     const currentCardId = visibleCard.fragrance_id;
+    const slotPrefix = `${selectedDate}|${selectedContext}`;
+    const moodKey = buildMoodLaneKey(slotPrefix, currentCardId, mood);
     const v6: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
     const heroIdV6 = v6?.hero?.fragrance_id ?? null;
     const isHeroCard = !!heroIdV6 && currentCardId === heroIdV6;
     const stackArr: any[] = isHeroCard && Array.isArray(v6?.layer_modes?.[mood]?.layers)
       ? v6.layer_modes[mood].layers
       : [];
+    const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
+      ? (signedInVerifiedPredecessorBaton?.excludedPreviousCard?.fragrance_id ?? null)
+      : null;
+    const carryoverExclusionIds = predecessorExclusionId ? [predecessorExclusionId] : [];
 
-    if (mood !== selectedMood) {
-      // DIFFERENT mood: switch and reset to current index for that mood (or 0 if first time).
-      setSelectedMood(mood);
-      console.log('[Odara][SignedIn][v6] mood switch', { mood, stackLen: stackArr.length, idx: signedInLayerIdxByMood[mood] ?? 0 });
-    } else if (stackArr.length > 1) {
-      // SAME mood: cycle through this mood's stack only.
-      const cur = signedInLayerIdxByMood[mood] ?? 0;
-      const next = (cur + 1) % stackArr.length;
-      setSignedInLayerIdxByMood(prev => ({ ...prev, [mood]: next }));
-      console.log('[Odara][SignedIn][v6] mood cycle', { mood, from: cur, to: next, stackLen: stackArr.length });
-      return;
-    } else {
-      console.log('[Odara][SignedIn][v6] mood re-tap (no cycle, single layer)', { mood });
-    }
-
-    // Legacy fallback for non-v6 cards (promoted alternates / queue): lazy fetch.
-    if (!isHeroCard || stackArr.length === 0) {
-      const moodKey = `${selectedDate}|${selectedContext}|${currentCardId}|${mood}`;
-      const cached = moodCacheRef.current.get(moodKey);
-      if (cached === undefined) {
-        const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
-          ? (signedInVerifiedPredecessorBaton?.excludedPreviousCard?.fragrance_id ?? null)
-          : null;
-        void fetchMoodForCard(
-          currentCardId,
-          mood,
-          false,
-          predecessorExclusionId ? [predecessorExclusionId] : [],
-        ).then((entry) => {
-          console.log('[Odara] mood click result (legacy)', { mood, fetchedForCard: currentCardId, layerName: entry?.layer_name ?? '(null)' });
-        });
+    let currentLaneStack = readMoodLaneStack(moodKey);
+    if (currentLaneStack.length === 0 && stackArr.length > 0) {
+      currentLaneStack = writeMoodLaneStack(
+        moodKey,
+        stackArr.map((entry: any) => modeValueToBackendModeEntry(entry, mood)),
+      );
+      if (currentLaneStack.length > 0) {
+        setMoodCacheVersion((version) => version + 1);
       }
     }
+
+    if (mood !== selectedMood) {
+      setSelectedMood(mood);
+      syncMoodLaneSelectedEntry(moodKey, signedInLayerIdxByMood[mood] ?? 0);
+      console.log('[Odara][SignedIn][lane] mood switch', { mood, stackLen: currentLaneStack.length, idx: signedInLayerIdxByMood[mood] ?? 0 });
+      if (currentLaneStack.length === 0) {
+        void ensureMoodLaneDepth(currentCardId, mood, 0, carryoverExclusionIds).then((stack) => {
+          console.log('[Odara][SignedIn][lane] primed lane', { mood, fetchedForCard: currentCardId, stackLen: stack.length });
+        });
+      }
+      return;
+    }
+
+    const currentIndex = signedInLayerIdxByMood[mood] ?? 0;
+    const targetIndex = currentLaneStack.length > 0 ? currentIndex + 1 : 0;
+    if (currentLaneStack.length > targetIndex) {
+      setSignedInLayerIdxByMood((prev) => ({ ...prev, [mood]: targetIndex }));
+      syncMoodLaneSelectedEntry(moodKey, targetIndex);
+      console.log('[Odara][SignedIn][lane] mood cycle', { mood, from: currentIndex, to: targetIndex, stackLen: currentLaneStack.length });
+      return;
+    }
+
+    void ensureMoodLaneDepth(currentCardId, mood, targetIndex, carryoverExclusionIds).then((stack) => {
+      if (stack.length > targetIndex) {
+        setSignedInLayerIdxByMood((prev) => ({ ...prev, [mood]: targetIndex }));
+        syncMoodLaneSelectedEntry(moodKey, targetIndex);
+        console.log('[Odara][SignedIn][lane] mood cycle extended', { mood, from: currentIndex, to: targetIndex, stackLen: stack.length });
+        return;
+      }
+
+      syncMoodLaneSelectedEntry(moodKey, currentIndex);
+      console.log('[Odara][SignedIn][lane] mood re-tap exhausted', { mood, currentIndex, stackLen: stack.length });
+    });
   }, [
     lockState,
     visibleCard,
@@ -3872,11 +4071,14 @@ const OdaraScreen = ({
     oracle,
     selectedMood,
     signedInLayerIdxByMood,
-    fetchMoodForCard,
     selectedDate,
     selectedContext,
     signedInResolvedDayDecisionSource,
     signedInVerifiedPredecessorBaton,
+    readMoodLaneStack,
+    writeMoodLaneStack,
+    syncMoodLaneSelectedEntry,
+    ensureMoodLaneDepth,
   ]);
 
   // Lock icon color
@@ -3939,8 +4141,7 @@ const OdaraScreen = ({
 
     try {
       const currentMoodKey = selectedMood ?? 'balance';
-      const currentCacheKey = `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}|${currentMoodKey}`;
-      const currentResolvedEntry = moodCacheRef.current.get(currentCacheKey) ?? null;
+      const currentResolvedEntry = getResolvedMoodLaneEntry(visibleCard.fragrance_id, currentMoodKey);
       console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
         ...h.slice(-(MAX_SESSION_HISTORY - 1)),
@@ -3974,7 +4175,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState]);
+  }, [skipLoading, visibleCard, lockState, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -3994,8 +4195,14 @@ const OdaraScreen = ({
 
     // Seed the mood cache with the saved resolved entry so visibleModeEntry is immediately correct
     if (entry.resolvedVisibleModeEntry) {
-      const restoreCacheKey = `${selectedDate}|${selectedContext}|${entry.card.fragrance_id}|${restoredMood}`;
-      moodCacheRef.current.set(restoreCacheKey, entry.resolvedVisibleModeEntry);
+      const restoreCacheKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, entry.card.fragrance_id, restoredMood);
+      const restoredStack = appendUniqueBackendModeEntries(readMoodLaneStack(restoreCacheKey), [entry.resolvedVisibleModeEntry]);
+      const restoredIndex = Math.max(
+        0,
+        restoredStack.findIndex((candidate) => isSameBackendModeEntryIdentity(candidate, entry.resolvedVisibleModeEntry)),
+      );
+      writeMoodLaneStack(restoreCacheKey, restoredStack, restoredIndex);
+      setMoodCacheVersion((version) => version + 1);
     }
 
     setVisibleCard(entry.card);
@@ -4005,7 +4212,7 @@ const OdaraScreen = ({
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [viewHistory, handleGuestBack]);
+  }, [viewHistory, handleGuestBack, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
@@ -4480,8 +4687,7 @@ const OdaraScreen = ({
 
     // 1. Save history
     const currentMoodKey2 = selectedMood ?? 'balance';
-    const currentCacheKey2 = `${selectedDate}|${selectedContext}|${visibleCard!.fragrance_id}|${currentMoodKey2}`;
-    const currentResolvedEntry2 = moodCacheRef.current.get(currentCacheKey2) ?? null;
+    const currentResolvedEntry2 = getResolvedMoodLaneEntry(visibleCard!.fragrance_id, currentMoodKey2);
     console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
       ...h.slice(-(MAX_SESSION_HISTORY - 1)),
@@ -4510,7 +4716,7 @@ const OdaraScreen = ({
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
       });
     });
-  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext]);
+  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext, getResolvedMoodLaneEntry]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SHARED CARD CONTROLLER BRIDGE
