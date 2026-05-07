@@ -6100,11 +6100,11 @@ const OdaraScreen = ({
                     className="pointer-events-none absolute"
                     style={{
                       left: `${nx}px`,
-                      top: '14px',
+                      top: '18px',
                       transform: 'translate(-50%, -50%)',
                       width: '1px',
-                      height: ni === 1 ? '5px' : '3px',
-                      background: 'rgba(255,255,255,0.18)',
+                      height: ni === 1 ? '4px' : '2px',
+                      background: 'rgba(255,255,255,0.10)',
                       borderRadius: '1px',
                       zIndex: 1,
                     }}
@@ -6112,35 +6112,48 @@ const OdaraScreen = ({
                 ))}
               </>
             )}
-            {/* Time orb — quiet lunar timepiece marker on the day track */}
-            {orbGeom && (() => {
-              const r = 6;
-              const rx = r * Math.abs(1 - 2 * orbGeom.moonLitFrac);
-              const litColor = 'rgba(245,243,235,0.95)';
-              const darkColor = 'rgba(20,22,28,0.95)';
-              const ellipseFill = orbGeom.moonLitFrac < 0.5 ? darkColor : litColor;
-              const litRectX = orbGeom.moonWaxing ? r : 0;
+            {/* Time orb — tiny luxury moon-phase mark on the day track.
+                Only the LIT portion is drawn (no dark hemisphere fill), so
+                the orb reads as a soft pearl crescent/disc, never a tile. */}
+            {orbGeom && orbGeom.opacity > 0.001 && (() => {
+              const D = 7;            // orb diameter in px
+              const C = D / 2;        // center
+              const R = D / 2;        // radius
+              const lit = orbGeom.moonLitFrac;
+              const rx = R * Math.abs(1 - 2 * lit);
+              // Lit hemisphere clip rectangle.
+              const litRectX = orbGeom.moonWaxing ? C : 0;
+              // Terminator ellipse: when lit > 0.5 it adds light (waxing/waning gibbous);
+              // when lit < 0.5 it removes light (carving the crescent edge).
+              const ellipseAdds = lit >= 0.5;
+              const maskId = `moonmask-${orbGeom.moonWaxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
               return (
                 <div
                   aria-hidden
                   className="pointer-events-none absolute"
                   style={{
                     left: `${orbGeom.left}px`,
-                    top: '14px',
+                    top: '18px',
                     transform: 'translate(-50%, -50%)',
-                    width: '12px',
-                    height: '12px',
+                    width: `${D}px`,
+                    height: `${D}px`,
                     opacity: orbGeom.opacity,
-                    zIndex: orbGeom.behind ? 0 : 5,
-                    transition: 'opacity 600ms ease, left 600ms ease',
-                    filter: 'drop-shadow(0 0 3px rgba(245,243,235,0.35))',
+                    zIndex: 0,
+                    transition: 'opacity 800ms ease, left 800ms ease',
+                    filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <circle cx="6" cy="6" r="6" fill={darkColor} />
-                    <rect x={litRectX} y="0" width="6" height="12" fill={litColor} />
-                    <ellipse cx="6" cy="6" rx={rx} ry="6" fill={ellipseFill} />
-                    <circle cx="6" cy="6" r="5.6" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
+                  <svg width={D} height={D} viewBox={`0 0 ${D} ${D}`}>
+                    <defs>
+                      <mask id={maskId}>
+                        <rect x="0" y="0" width={D} height={D} fill="black" />
+                        {/* Lit hemisphere */}
+                        <rect x={litRectX} y="0" width={C} height={D} fill="white" />
+                        {/* Terminator ellipse */}
+                        <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
+                      </mask>
+                    </defs>
+                    <circle cx={C} cy={C} r={R} fill="rgba(245,243,235,0.85)" mask={`url(#${maskId})`} />
                   </svg>
                 </div>
               );
