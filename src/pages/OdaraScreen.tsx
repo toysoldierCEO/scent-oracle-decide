@@ -1907,7 +1907,11 @@ const OdaraScreen = ({
       const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
-      // PURE lerp between today's and tomorrow's centers.
+      // PURE lerp between today's and tomorrow's measured centers, driven by
+      // local-time progress through the 24-hour day. At midnight the marker
+      // sits on today's center; at noon halfway to tomorrow; at 11:59 PM
+      // almost on tomorrow's center. At 12:00 AM the new "today" advances
+      // and the marker resets onto the new current day cleanly.
       const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
       // Vertical center: align with the day-number row inside the cell.
       // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
@@ -6161,7 +6165,7 @@ const OdaraScreen = ({
                     width: `${D}px`,
                     height: `${D}px`,
                     opacity: 0.6,
-                    zIndex: 0,
+                    zIndex: 3,
                     transition: 'left 800ms ease',
                     filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
                   }}
