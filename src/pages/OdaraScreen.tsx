@@ -1862,71 +1862,108 @@ const OdaraScreen = ({
   }, []);
   const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
-  const [orbGeom, setOrbGeom] = useState<{
-    left: number;
-    opacity: number;
-    behind: boolean;
-    notchA: number;
-    notchB: number;
-    moonLitFrac: number; // 0..1 illumination
+  // ── LiveMoonPhaseMarker geometry ──
+  // Position is a PURE lerp between the measured centers of today's and
+  // tomorrow's day cells, driven by local wall-clock seconds-since-midnight.
+  // No clamping into the inter-cell gap — overlap is handled by `opacity`.
+  const [moonMarker, setMoonMarker] = useState<{
+    left: number;          // px, container-relative center of marker
+    opacity: number;       // 0..1, fades inside a no-overlap zone
+    notchA: number;        // 25% tick (px)
+    notchMid: number;      // 50% tick (px)
+    notchB: number;        // 75% tick (px)
+    moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
+  // Per-second tick dedicated to the marker (independent of the minute tick).
+  const [markerSecondTick, setMarkerSecondTick] = useState(0);
   useEffect(() => {
+    const id = window.setInterval(() => setMarkerSecondTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    // Dev-only mock time: ?odaraMockTime=2026-05-07T03:56:00 (local).
+    const getNow = (): Date => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const mock = params.get('odaraMockTime');
+        if (mock) {
+          const parsed = new Date(mock);
+          if (!isNaN(parsed.getTime())) return parsed;
+        }
+      } catch { /* noop */ }
+      return new Date();
+    };
     const compute = () => {
       const strip = dayStripRef.current;
-      // Locate today's cell in the visible strip; if today isn't shown, hide orb.
       const todayIdx = forecastDays.findIndex((fd) => fd.isToday);
       const todayBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx] : null;
-      const nextBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
-      if (!strip || !todayBtn || !nextBtn) { setOrbGeom(null); return; }
+      const nextBtn  = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
+      if (!strip || !todayBtn || !nextBtn) { setMoonMarker(null); return; }
       const sRect = strip.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
       const bRect = nextBtn.getBoundingClientRect();
-      const aCx = aRect.left + aRect.width / 2 - sRect.left;
-      const bCx = bRect.left + bRect.width / 2 - sRect.left;
-      // No-overlap boundaries: orb may only travel in the open gap between cells.
-      const ORB_R = 4; // half of ~8px visual
-      const PAD = 4;   // breathing room from each cell edge
-      const trackStart = (aRect.right - sRect.left) + PAD + ORB_R;
-      const trackEnd   = (bRect.left  - sRect.left) - PAD - ORB_R;
-      // Local wall-clock progress through today: 0 at local 00:00, 1 at next 00:00.
-      const d = new Date();
-      const secondsIntoDay =
+      const todayAnchorX    = aRect.left + aRect.width / 2 - sRect.left;
+      const tomorrowAnchorX = bRect.left + bRect.width / 2 - sRect.left;
+      const d = getNow();
+      const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-      const progress = Math.min(1, Math.max(0, secondsIntoDay / 86400));
-      // Position lerps between day centers, then clamps inside the open track.
-      const rawLeft = aCx + (bCx - aCx) * progress;
-      const left = Math.min(trackEnd, Math.max(trackStart, rawLeft));
-      // Pre-handoff fade: opacity reaches 0 well before reaching tomorrow.
-      // Begin dimming at 88%, fully out by 98%.
-      const fadeStart = 0.88;
-      const fadeEnd = 0.98;
-      let opacity: number;
-      if (progress < fadeStart) opacity = 0.6;
-      else if (progress >= fadeEnd) opacity = 0;
-      else opacity = 0.6 * (1 - (progress - fadeStart) / (fadeEnd - fadeStart));
-      const behind = progress >= fadeStart;
+      const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
+      // PURE lerp — no clamp into gap.
+      const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
+      // No-overlap: fade marker when inside a protected zone around either
+      // day's text. Zone = half-cell-width minus a small reveal margin.
+      const REVEAL_MARGIN = 6; // px past text edge before fully visible
+      const todayHalf    = aRect.width / 2;
+      const tomorrowHalf = bRect.width / 2;
+      const distFromToday    = markerX - todayAnchorX;          // ≥ 0
+      const distFromTomorrow = tomorrowAnchorX - markerX;       // ≥ 0
+      const todayProtected    = todayHalf - REVEAL_MARGIN;
+      const tomorrowProtected = tomorrowHalf - REVEAL_MARGIN;
+      const FADE_PX = 10; // soft fade band beyond the protected edge
+      const fadeIn  = Math.min(1, Math.max(0, (distFromToday    - todayProtected)    / FADE_PX));
+      const fadeOut = Math.min(1, Math.max(0, (distFromTomorrow - tomorrowProtected) / FADE_PX));
+      const opacity = 0.6 * Math.min(fadeIn, fadeOut);
       // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
       const SYNODIC = 29.530588853;
       const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
       const daysSince = (d.getTime() - refMs) / 86400000;
-      const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC; // 0..1
+      const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC;
       const moonLitFrac = (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2;
       const moonWaxing = phaseFrac < 0.5;
-      setOrbGeom({
-        left,
+      setMoonMarker({
+        left: markerX,
         opacity,
-        behind,
-        notchA: aCx + (bCx - aCx) * 0.25,
-        notchB: aCx + (bCx - aCx) * 0.75,
+        notchA:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.25,
+        notchMid: todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.50,
+        notchB:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.75,
         moonLitFrac,
         moonWaxing,
       });
     };
     compute();
+    const strip = dayStripRef.current;
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, [nowTick, selectedDate, forecastDays]);
+    window.addEventListener('scroll', compute, true);
+    strip?.addEventListener('scroll', compute);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('scroll', compute, true);
+      strip?.removeEventListener('scroll', compute);
+    };
+  }, [markerSecondTick, nowTick, selectedDate, forecastDays]);
+  // Backwards-compat alias used by render block below.
+  const orbGeom = moonMarker
+    ? {
+        left: moonMarker.left,
+        opacity: moonMarker.opacity,
+        behind: moonMarker.opacity < 0.05,
+        notchA: moonMarker.notchA,
+        notchB: moonMarker.notchB,
+        moonLitFrac: moonMarker.moonLitFrac,
+        moonWaxing: moonMarker.moonWaxing,
+      }
+    : null;
   const suppressCardClickRef = useRef(false);
   const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
