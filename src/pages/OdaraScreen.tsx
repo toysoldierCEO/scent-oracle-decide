@@ -1868,10 +1868,8 @@ const OdaraScreen = ({
   // No clamping into the inter-cell gap — overlap is handled by `opacity`.
   const [moonMarker, setMoonMarker] = useState<{
     left: number;          // px, container-relative center of marker
-    opacity: number;       // 0..1, fades inside a no-overlap zone
-    notchA: number;        // 25% tick (px)
-    notchMid: number;      // 50% tick (px)
-    notchB: number;        // 75% tick (px)
+    topY: number;          // px, vertical center aligned with day-number row
+    weekNotches: number[]; // px positions for full-week subtle notches
     moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
@@ -1909,21 +1907,20 @@ const OdaraScreen = ({
       const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
-      // PURE lerp — no clamp into gap.
+      // PURE lerp between today's and tomorrow's centers.
       const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
-      // No-overlap: fade marker when inside a protected zone around either
-      // day's text. Zone = half-cell-width minus a small reveal margin.
-      const REVEAL_MARGIN = 6; // px past text edge before fully visible
-      const todayHalf    = aRect.width / 2;
-      const tomorrowHalf = bRect.width / 2;
-      const distFromToday    = markerX - todayAnchorX;          // ≥ 0
-      const distFromTomorrow = tomorrowAnchorX - markerX;       // ≥ 0
-      const todayProtected    = todayHalf - REVEAL_MARGIN;
-      const tomorrowProtected = tomorrowHalf - REVEAL_MARGIN;
-      const FADE_PX = 10; // soft fade band beyond the protected edge
-      const fadeIn  = Math.min(1, Math.max(0, (distFromToday    - todayProtected)    / FADE_PX));
-      const fadeOut = Math.min(1, Math.max(0, (distFromTomorrow - tomorrowProtected) / FADE_PX));
-      const opacity = 0.6 * Math.min(fadeIn, fadeOut);
+      // Vertical center: align with the day-number row inside the cell.
+      // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
+      // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
+      const dayDigitCenterY = aRect.top + 25 - sRect.top;
+      // Full-week notches: a small tick at every cell center.
+      const weekNotches: number[] = [];
+      for (let i = 0; i < dayCellRefs.current.length; i++) {
+        const btn = dayCellRefs.current[i];
+        if (!btn) continue;
+        const r = btn.getBoundingClientRect();
+        weekNotches.push(r.left + r.width / 2 - sRect.left);
+      }
       // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
       const SYNODIC = 29.530588853;
       const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
@@ -1933,10 +1930,8 @@ const OdaraScreen = ({
       const moonWaxing = phaseFrac < 0.5;
       setMoonMarker({
         left: markerX,
-        opacity,
-        notchA:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.25,
-        notchMid: todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.50,
-        notchB:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.75,
+        topY: dayDigitCenterY,
+        weekNotches,
         moonLitFrac,
         moonWaxing,
       });
@@ -1956,10 +1951,8 @@ const OdaraScreen = ({
   const orbGeom = moonMarker
     ? {
         left: moonMarker.left,
-        opacity: moonMarker.opacity,
-        behind: moonMarker.opacity < 0.05,
-        notchA: moonMarker.notchA,
-        notchB: moonMarker.notchB,
+        topY: moonMarker.topY,
+        weekNotches: moonMarker.weekNotches,
         moonLitFrac: moonMarker.moonLitFrac,
         moonWaxing: moonMarker.moonWaxing,
       }
