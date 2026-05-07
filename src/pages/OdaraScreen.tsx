@@ -6120,41 +6120,34 @@ const OdaraScreen = ({
           }}
         >
           <div ref={dayStripRef} className="relative flex w-full justify-between">
-            {/* Subtle watch-dial notches at ~6AM / ~12PM / ~6PM between today & tomorrow */}
-            {orbGeom && (
-              <>
-                {[orbGeom.notchA, (orbGeom.notchA + orbGeom.notchB) / 2, orbGeom.notchB].map((nx, ni) => (
-                  <div
-                    key={`notch-${ni}`}
-                    aria-hidden
-                    className="pointer-events-none absolute"
-                    style={{
-                      left: `${nx}px`,
-                      top: '18px',
-                      transform: 'translate(-50%, -50%)',
-                      width: '1px',
-                      height: ni === 1 ? '4px' : '2px',
-                      background: 'rgba(255,255,255,0.10)',
-                      borderRadius: '1px',
-                      zIndex: 1,
-                    }}
-                  />
-                ))}
-              </>
-            )}
-            {/* Time orb — tiny luxury moon-phase mark on the day track.
-                Only the LIT portion is drawn (no dark hemisphere fill), so
-                the orb reads as a soft pearl crescent/disc, never a tile. */}
-            {orbGeom && orbGeom.opacity > 0.001 && (() => {
+            {/* Subtle full-week notches at every day center, behind day cells */}
+            {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
+              <div
+                key={`notch-${ni}`}
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  left: `${nx}px`,
+                  top: `${orbGeom.topY}px`,
+                  transform: 'translate(-50%, -50%)',
+                  width: '1px',
+                  height: '2px',
+                  background: 'rgba(255,255,255,0.08)',
+                  borderRadius: '1px',
+                  zIndex: 0,
+                }}
+              />
+            ))}
+            {/* Live moon-phase marker — visual unchanged. Sits BEHIND the day
+                cells (zIndex 0 vs cells' zIndex 2) so it peeks out from behind
+                the day labels as it travels along the same horizontal line. */}
+            {orbGeom && (() => {
               const D = 7;            // orb diameter in px
               const C = D / 2;        // center
               const R = D / 2;        // radius
               const lit = orbGeom.moonLitFrac;
               const rx = R * Math.abs(1 - 2 * lit);
-              // Lit hemisphere clip rectangle.
               const litRectX = orbGeom.moonWaxing ? C : 0;
-              // Terminator ellipse: when lit > 0.5 it adds light (waxing/waning gibbous);
-              // when lit < 0.5 it removes light (carving the crescent edge).
               const ellipseAdds = lit >= 0.5;
               const maskId = `moonmask-${orbGeom.moonWaxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
               return (
@@ -6163,13 +6156,13 @@ const OdaraScreen = ({
                   className="pointer-events-none absolute"
                   style={{
                     left: `${orbGeom.left}px`,
-                    top: '18px',
+                    top: `${orbGeom.topY}px`,
                     transform: 'translate(-50%, -50%)',
                     width: `${D}px`,
                     height: `${D}px`,
-                    opacity: orbGeom.opacity,
+                    opacity: 0.6,
                     zIndex: 0,
-                    transition: 'opacity 800ms ease, left 800ms ease',
+                    transition: 'left 800ms ease',
                     filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
                   }}
                 >
@@ -6177,9 +6170,7 @@ const OdaraScreen = ({
                     <defs>
                       <mask id={maskId}>
                         <rect x="0" y="0" width={D} height={D} fill="black" />
-                        {/* Lit hemisphere */}
                         <rect x={litRectX} y="0" width={C} height={D} fill="white" />
-                        {/* Terminator ellipse */}
                         <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
                       </mask>
                     </defs>
