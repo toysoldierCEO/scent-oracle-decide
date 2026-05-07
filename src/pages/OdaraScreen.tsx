@@ -2,10 +2,14 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
+import TemperatureReadout from "@/components/card-system/TemperatureReadout";
+import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
+import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
+import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
-import { Input } from "@/components/ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
@@ -1884,6 +1888,139 @@ const OdaraScreen = ({
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
+
+  // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
+  // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
+  // local timezone; this is naturally DST-safe (a "day" is still 0:00 → 24:00
+  // wall-clock, even on spring-forward / fall-back days, because we measure
+  // progress against the local clock, not against a fixed 86400s window).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    let intervalId: number | undefined;
+    const tick = () => setNowTick(Date.now());
+    const scheduleNextMinute = () => {
+      const now = new Date();
+      const msToNextMinute =
+        (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      timeoutId = window.setTimeout(() => {
+        tick();
+        // After aligning, fall back to a steady 60s interval.
+        intervalId = window.setInterval(tick, 60_000);
+      }, Math.max(250, msToNextMinute));
+    };
+    scheduleNextMinute();
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', tick);
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (intervalId) window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', tick);
+    };
+  }, []);
+  const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const dayStripRef = useRef<HTMLDivElement | null>(null);
+  // ── LiveMoonPhaseMarker geometry ──
+  // Position is a PURE lerp between the measured centers of today's and
+  // tomorrow's day cells, driven by local wall-clock seconds-since-midnight.
+  // No clamping into the inter-cell gap — overlap is handled by `opacity`.
+  const [moonMarker, setMoonMarker] = useState<{
+    left: number;          // px, container-relative center of marker
+    topY: number;          // px, vertical center aligned with day-number row
+    weekNotches: number[]; // px positions for full-week subtle notches
+    moonLitFrac: number;   // 0..1 illumination
+    moonWaxing: boolean;
+  } | null>(null);
+  // Per-second tick dedicated to the marker (independent of the minute tick).
+  const [markerSecondTick, setMarkerSecondTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setMarkerSecondTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    // Dev-only mock time: ?odaraMockTime=2026-05-07T03:56:00 (local).
+    const getNow = (): Date => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const mock = params.get('odaraMockTime');
+        if (mock) {
+          const parsed = new Date(mock);
+          if (!isNaN(parsed.getTime())) return parsed;
+        }
+      } catch { /* noop */ }
+      return new Date();
+    };
+    const compute = () => {
+      const strip = dayStripRef.current;
+      const todayIdx = forecastDays.findIndex((fd) => fd.isToday);
+      const todayBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx] : null;
+      const nextBtn  = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
+      if (!strip || !todayBtn || !nextBtn) { setMoonMarker(null); return; }
+      const sRect = strip.getBoundingClientRect();
+      const aRect = todayBtn.getBoundingClientRect();
+      const bRect = nextBtn.getBoundingClientRect();
+      const todayAnchorX    = aRect.left + aRect.width / 2 - sRect.left;
+      const tomorrowAnchorX = bRect.left + bRect.width / 2 - sRect.left;
+      const d = getNow();
+      const secondsSinceMidnight =
+        d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
+      // PURE lerp between today's and tomorrow's measured centers, driven by
+      // local-time progress through the 24-hour day. At midnight the marker
+      // sits on today's center; at noon halfway to tomorrow; at 11:59 PM
+      // almost on tomorrow's center. At 12:00 AM the new "today" advances
+      // and the marker resets onto the new current day cleanly.
+      const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
+      // Vertical center: align with the day-number row inside the cell.
+      // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
+      // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
+      const dayDigitCenterY = aRect.top + 25 - sRect.top;
+      // Full-week notches: a small tick at every cell center.
+      const weekNotches: number[] = [];
+      for (let i = 0; i < dayCellRefs.current.length; i++) {
+        const btn = dayCellRefs.current[i];
+        if (!btn) continue;
+        const r = btn.getBoundingClientRect();
+        weekNotches.push(r.left + r.width / 2 - sRect.left);
+      }
+      // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
+      const SYNODIC = 29.530588853;
+      const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
+      const daysSince = (d.getTime() - refMs) / 86400000;
+      const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC;
+      const moonLitFrac = (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2;
+      const moonWaxing = phaseFrac < 0.5;
+      setMoonMarker({
+        left: markerX,
+        topY: dayDigitCenterY,
+        weekNotches,
+        moonLitFrac,
+        moonWaxing,
+      });
+    };
+    compute();
+    const strip = dayStripRef.current;
+    window.addEventListener('resize', compute);
+    window.addEventListener('scroll', compute, true);
+    strip?.addEventListener('scroll', compute);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('scroll', compute, true);
+      strip?.removeEventListener('scroll', compute);
+    };
+  }, [markerSecondTick, nowTick, selectedDate, forecastDays]);
+  // Backwards-compat alias used by render block below.
+  const orbGeom = moonMarker
+    ? {
+        left: moonMarker.left,
+        topY: moonMarker.topY,
+        weekNotches: moonMarker.weekNotches,
+        moonLitFrac: moonMarker.moonLitFrac,
+        moonWaxing: moonMarker.moonWaxing,
+      }
+    : null;
   const suppressCardClickRef = useRef(false);
   const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
@@ -2488,6 +2625,17 @@ const OdaraScreen = ({
 
   // Favorite state — persisted per day+context
   const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
+  // Heart state — local/visual only. Per-card key (date|context|heroId).
+  // 0 = empty, 1 = liked (single heart), 2 = loved (double heart).
+  const [heartStateByKey, setHeartStateByKey] = useState<Record<string, 0 | 1 | 2>>({});
+  const [heartFlash, setHeartFlash] = useState(false);
+  // Micro-label triggers for the bottom action row (Favorite / Daisy Chain).
+  // Heart manages its own label inside HeartReactionButton.
+  const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
+  const [daisyLabelTick, setDaisyLabelTick] = useState(0);
+  const [daisyLabelText, setDaisyLabelText] = useState<string | null>(null);
+  const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const daisyButtonRef = useRef<HTMLButtonElement | null>(null);
   const currentFavorite = favoriteMap[stateKey] ?? null;
   const isFavorited = !!(currentFavorite && visibleCard &&
     currentFavorite.mainId === visibleCard.fragrance_id);
@@ -4338,10 +4486,6 @@ const OdaraScreen = ({
       Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
 
     if (isGuestMode) {
-      const isTouchLikePointer =
-        lastCardPointerTypeRef.current === 'touch' ||
-        lastCardPointerTypeRef.current === 'pen';
-      if (!isTouchLikePointer) return;
       if (guestLocked) return;
 
       if (!within) {
@@ -4453,6 +4597,7 @@ const OdaraScreen = ({
       el.closest('[data-debug-controls]') ||
       el.closest('[data-mode-chip]') ||
       el.closest('[data-alternate-chip]') ||
+      el.closest('[data-layer-section]') ||
       el.closest('[data-no-card-swipe]') ||
       el.closest('button, a, input, textarea, select, [role="button"]')
     );
@@ -5155,14 +5300,10 @@ const OdaraScreen = ({
           : `inset 0 0 0 1px ${signedInHeroCarryColor}22, 0 10px 24px ${signedInHeroCarryColor}14`,
       }
     : undefined;
-  const signedInLayerCarrySurfaceStyle = !isGuestMode && (signedInLayerCarryActive || signedInLayerCarryPulsing)
-    ? {
-        background: `${signedInLayerCarryColor}${signedInLayerCarryPulsing ? '14' : '0E'}`,
-        boxShadow: signedInLayerCarryPulsing
-          ? `inset 0 0 0 1px ${signedInLayerCarryColor}30, 0 18px 40px ${signedInLayerCarryColor}20`
-          : `inset 0 0 0 1px ${signedInLayerCarryColor}22, 0 10px 26px ${signedInLayerCarryColor}14`,
-      }
-    : undefined;
+  // No wrapper background or ring around the LayerCard — the LayerCard owns its
+  // own surface. An outer tint/ring here reads as a hidden "shelf" or duplicate
+  // window beneath the card. Keep this undefined to remove that double-window.
+  const signedInLayerCarrySurfaceStyle: React.CSSProperties | undefined = undefined;
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
     ? {
         color: '#ef4444',
@@ -5413,58 +5554,9 @@ const OdaraScreen = ({
         </SheetContent>
       </Sheet>
 
-      <Sheet
-        open={searchOpen}
-        onOpenChange={(open) => {
-          setSearchOpen(open);
-          if (open) setMenuOpen(false);
-          if (!open) setSearchQuery('');
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-md"
-        >
-          <SheetHeader className="space-y-1 text-left">
-            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
-              Search
-            </SheetTitle>
-            <SheetDescription className="text-[12px] text-foreground/48">
-              Search across fragrances, notes, accords, brands, and families.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-5">
-            <Input
-              autoFocus
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search fragrances, notes, accords, brands…"
-              className="h-11 rounded-[16px] border-white/10 bg-white/[0.03] px-4 text-[14px] text-foreground placeholder:text-foreground/34 focus-visible:ring-white/15"
-            />
-          </div>
-
-          <div
-            className="mt-4 rounded-[20px] border border-white/8 bg-white/[0.02] px-4 py-5"
-            style={{ minHeight: '220px' }}
-          >
-            {/* TODO: wire the search sheet to a real Odara search contract when a backend search RPC/query exists. */}
-            {!searchHasQuery ? (
-              <p className="text-[14px] text-foreground/62">
-                Search your scent world.
-              </p>
-            ) : (
-              <p className="text-[14px] text-foreground/52">
-                Nothing found yet. Try a fragrance, brand, note, accord, or family.
-              </p>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
-        <div className="relative mb-3 flex items-center justify-between">
+        {/* Top bar — chrome-less icons, inline expanding search. */}
+        <div className="relative mb-3 flex items-center justify-between min-h-[40px]">
           <button
             type="button"
             aria-label="Open menu"
@@ -5472,37 +5564,105 @@ const OdaraScreen = ({
               setSearchOpen(false);
               setMenuOpen(true);
             }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
               <path d="M4 7h16" />
               <path d="M4 12h16" />
               <path d="M4 17h16" />
             </svg>
           </button>
 
-          <div
-            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
-            style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
-          >
-            ODARA
-          </div>
+          {/* Centered ODARA wordmark — hidden when search is expanded so the
+              expanding field has room without colliding with the title. */}
+          {!searchOpen && (
+            <div
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
+              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+            >
+              ODARA
+            </div>
+          )}
 
-          <button
-            type="button"
-            aria-label="Open search"
-            onClick={() => {
-              setMenuOpen(false);
-              setSearchOpen(true);
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/80 transition-colors hover:bg-white/[0.06]"
+          {/* Inline expanding search — same top-bar region.
+              Card / state remain untouched underneath. */}
+          <div
+            className="flex items-center justify-end overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
+            style={{ width: searchOpen ? 'calc(100% - 56px)' : '40px' }}
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="M16 16l4 4" />
-            </svg>
-          </button>
+            {!searchOpen ? (
+              <button
+                type="button"
+                aria-label="Open search"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setSearchOpen(true);
+                }}
+                className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M16 16l4 4" />
+                </svg>
+              </button>
+            ) : (
+              <div
+                className="flex w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 h-10 backdrop-blur-xl"
+                style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/55">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M16 16l4 4" />
+                </svg>
+                <input
+                  autoFocus
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search fragrances, notes, accords…"
+                  className="h-9 flex-1 min-w-0 bg-transparent text-[13px] text-foreground placeholder:text-foreground/34 outline-none"
+                />
+                <button
+                  type="button"
+                  aria-label="Close search"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchQuery('');
+                  }}
+                  className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-foreground/55 hover:text-foreground/95"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M6 6l12 12" />
+                    <path d="M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Inline search results — appear DIRECTLY UNDER the search bar.
+            Lightweight, scrollable, integrated into the same screen. */}
+        {searchOpen && (
+          <div
+            className="mb-3 rounded-[16px] border border-white/8 bg-white/[0.02] backdrop-blur-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
+            style={{ maxHeight: '40vh', overflowY: 'auto' }}
+          >
+            {/* TODO: wire to real Odara search contract when a backend search RPC exists. */}
+            {searchHasQuery ? (
+              <p className="text-[12.5px] text-foreground/52">
+                Nothing found yet. Try a fragrance, brand, note, accord, or family.
+              </p>
+            ) : (
+              <p className="text-[12.5px] text-foreground/55">
+                Search your scent world.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Context chips — centered under the top bar */}
         <div className="flex gap-1.5 mb-3 justify-center">
@@ -5666,17 +5826,17 @@ const OdaraScreen = ({
                 }}
               />
             )}
-            {/* Top row: temp left · centered date · action stack right */}
-            <div className="flex items-start justify-between mb-1.5 relative z-10">
-              {/* Left: temperature */}
-              <div className="flex flex-col items-start pt-1 min-w-[52px]">
-                 <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                  {resolvedTemperature}°
-                 </span>
+            {/* Top row: temp left · centered date · action stack right.
+                Temperature/date/lock form ONE quiet metadata row — same
+                opacity, mirrored horizontal inset, balanced visual weight. */}
+            <div className="flex items-center justify-between mb-1.5 relative z-10 px-0.5">
+              {/* Left: temperature — instrument reading (digital, but quiet). */}
+              <div className="flex items-center min-w-[52px]">
+                <TemperatureReadout value={resolvedTemperature} />
               </div>
 
               {/* Center: date */}
-              <span className="text-[11px] tracking-[0.06em] font-medium text-foreground/70 pt-1" style={{ fontFamily: "'Geist Mono', monospace" }}>
+              <span className="text-[14px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
                 {getDateLabel(selectedDate)}
               </span>
 
@@ -5699,11 +5859,11 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Lock"
                   onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-11 h-11 -m-[15px] touch-manipulation"
+                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation text-foreground/70"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   <svg
-                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke={lockColor} strokeWidth="1.5"
                     className="transition-colors duration-300 relative z-[1]"
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
@@ -6045,17 +6205,21 @@ const OdaraScreen = ({
               )}
 
               <div
-                className="flex min-h-10 w-full items-center justify-center gap-5"
+                className="flex min-h-10 w-full items-center justify-center gap-10"
                 data-shared-bottom-action-row
                 role="group"
                 aria-label="Card actions"
               >
               <button
+                ref={favoriteButtonRef}
                 type="button"
                 aria-label="Favorite"
                 aria-pressed={bottomStarActive}
-                onClick={() => cardController.actions.toggleStar()}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
+                onClick={() => {
+                  cardController.actions.toggleStar();
+                  setFavoriteLabelTick((t) => t + 1);
+                }}
+                className="relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
                   ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
@@ -6080,15 +6244,48 @@ const OdaraScreen = ({
                 >
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
+                <FloatingActionLabel
+                  triggerKey={favoriteLabelTick || null}
+                  text="Favorite"
+                  anchorRef={favoriteButtonRef}
+                  color={bottomStarActive ? '#eab308' : undefined}
+                />
               </button>
 
+              {(() => {
+                const heartKey = visibleCard
+                  ? `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}`
+                  : '';
+                const heartState: HeartState = heartKey ? (heartStateByKey[heartKey] ?? 0) : 0;
+                return (
+                  <HeartReactionButton
+                    state={heartState}
+                    disabled={!heartKey}
+                    onChange={(next) => {
+                      if (!heartKey) return;
+                      setHeartStateByKey(prev => ({ ...prev, [heartKey]: next }));
+                    }}
+                    onHaptic={(intensity) => haptic(intensity === 'medium' ? 'success' : 'selection')}
+                  />
+                );
+              })()}
+
               <button
+                ref={daisyButtonRef}
                 type="button"
-                aria-label="Carry to next day"
+                aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || undefined}
-                onClick={isGuestMode ? undefined : handleSignedInCarryoverToggle}
-                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
+                onClick={isGuestMode ? undefined : () => {
+                  // Determine the label BEFORE state flip:
+                  // current target 'off' -> next is daisy active -> "Daisy Chain"
+                  // current target non-off -> next will turn off -> "Off"
+                  const nextLabel = signedInCarryoverVisualTarget === 'off' ? 'Daisy Chain' : 'Off';
+                  handleSignedInCarryoverToggle();
+                  setDaisyLabelText(nextLabel);
+                  setDaisyLabelTick((t) => t + 1);
+                }}
+                className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
                 style={{
                   ...sharedBottomActionButtonStyle,
                   ...bottomCarryoverButtonStyle,
@@ -6109,6 +6306,12 @@ const OdaraScreen = ({
                   <path d="M14 10l1.6-1.6a3 3 0 0 1 4.2 4.2l-3.2 3.2a3 3 0 0 1-4.2 0" />
                   <path d="M9 15l6-6" />
                 </svg>
+                <FloatingActionLabel
+                  triggerKey={daisyLabelTick || null}
+                  text={daisyLabelText}
+                  anchorRef={daisyButtonRef}
+                  color={daisyLabelText === 'Off' ? '#ef4444' : undefined}
+                />
               </button>
             </div>
             </div>
@@ -6120,13 +6323,73 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-4 py-3 mt-2.5"
+          className="rounded-[16px] px-4 py-3 mt-0"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div className="flex w-full justify-between">
+          <div ref={dayStripRef} className="relative flex w-full justify-between">
+            {/* Subtle full-week notches at every day center, behind day cells */}
+            {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
+              <div
+                key={`notch-${ni}`}
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  left: `${nx}px`,
+                  top: `${orbGeom.topY}px`,
+                  transform: 'translate(-50%, -50%)',
+                  width: '1px',
+                  height: '2px',
+                  background: 'rgba(255,255,255,0.08)',
+                  borderRadius: '1px',
+                  zIndex: 0,
+                }}
+              />
+            ))}
+            {/* Live moon-phase marker — visual unchanged. Sits BEHIND the day
+                cells (zIndex 0 vs cells' zIndex 2) so it peeks out from behind
+                the day labels as it travels along the same horizontal line. */}
+            {orbGeom && (() => {
+              const D = 7;            // orb diameter in px
+              const C = D / 2;        // center
+              const R = D / 2;        // radius
+              const lit = orbGeom.moonLitFrac;
+              const rx = R * Math.abs(1 - 2 * lit);
+              const litRectX = orbGeom.moonWaxing ? C : 0;
+              const ellipseAdds = lit >= 0.5;
+              const maskId = `moonmask-${orbGeom.moonWaxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
+              return (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${orbGeom.left}px`,
+                    top: `${orbGeom.topY}px`,
+                    transform: 'translate(-50%, -50%)',
+                    width: `${D}px`,
+                    height: `${D}px`,
+                    opacity: 0.6,
+                    zIndex: 3,
+                    transition: 'left 800ms ease',
+                    filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
+                  }}
+                >
+                  <svg width={D} height={D} viewBox={`0 0 ${D} ${D}`}>
+                    <defs>
+                      <mask id={maskId}>
+                        <rect x="0" y="0" width={D} height={D} fill="black" />
+                        <rect x={litRectX} y="0" width={C} height={D} fill="white" />
+                        <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
+                      </mask>
+                    </defs>
+                    <circle cx={C} cy={C} r={R} fill="rgba(245,243,235,0.85)" mask={`url(#${maskId})`} />
+                  </svg>
+                </div>
+              );
+            })()}
+
             {forecastDays.map((fd, i) => {
               const dayLanes = isGuestMode
                 ? forecastLaneContexts.map(ctx => {
@@ -6146,11 +6409,13 @@ const OdaraScreen = ({
               return (
                 <button
                   key={i}
+                  ref={(el) => { dayCellRefs.current[i] = el; }}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
+                  className="relative flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
                     background: 'rgba(255,255,255,0.08)',
-                  } : undefined}
+                    zIndex: 2,
+                  } : { zIndex: 2 }}
                 >
                   <span className={`text-[10px] tracking-[0.04em] transition-colors ${
                     fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
