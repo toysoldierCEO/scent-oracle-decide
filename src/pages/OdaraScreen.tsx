@@ -1903,16 +1903,15 @@ const OdaraScreen = ({
       const bRect = nextBtn.getBoundingClientRect();
       const todayAnchorX    = aRect.left + aRect.width / 2 - sRect.left;
       const tomorrowAnchorX = bRect.left + bRect.width / 2 - sRect.left;
-      const dayWidth = tomorrowAnchorX - todayAnchorX;
       const d = getNow();
       const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
-      // Pac-Man rule: today's segment spans from (todayCenter - dayWidth/2)
-      // at 12:00 AM to (todayCenter + dayWidth/2) at 11:59 PM. At noon the
-      // marker sits exactly on today's center. At midnight it resets cleanly
-      // onto the new current day (which becomes the next "today").
-      const markerX = todayAnchorX + (progress - 0.5) * dayWidth;
+      // PURE lerp between today's and tomorrow's measured centers, driven by
+      // local-time progress through the 24-hour day. At midnight the marker
+      // sits on today's center; at noon halfway to tomorrow; at 11:59 PM
+      // almost on tomorrow's center. At 12:00 AM the new "today" advances
+      // and the marker resets onto the new current day cleanly.
       // Vertical center: align with the day-number row inside the cell.
       // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
       // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
