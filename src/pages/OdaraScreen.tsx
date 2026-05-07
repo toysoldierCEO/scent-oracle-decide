@@ -1868,10 +1868,8 @@ const OdaraScreen = ({
   // No clamping into the inter-cell gap — overlap is handled by `opacity`.
   const [moonMarker, setMoonMarker] = useState<{
     left: number;          // px, container-relative center of marker
-    opacity: number;       // 0..1, fades inside a no-overlap zone
-    notchA: number;        // 25% tick (px)
-    notchMid: number;      // 50% tick (px)
-    notchB: number;        // 75% tick (px)
+    topY: number;          // px, vertical center aligned with day-number row
+    weekNotches: number[]; // px positions for full-week subtle notches
     moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
@@ -1909,21 +1907,20 @@ const OdaraScreen = ({
       const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
       const progress = Math.min(1, Math.max(0, secondsSinceMidnight / 86400));
-      // PURE lerp — no clamp into gap.
+      // PURE lerp between today's and tomorrow's centers.
       const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
-      // No-overlap: fade marker when inside a protected zone around either
-      // day's text. Zone = half-cell-width minus a small reveal margin.
-      const REVEAL_MARGIN = 6; // px past text edge before fully visible
-      const todayHalf    = aRect.width / 2;
-      const tomorrowHalf = bRect.width / 2;
-      const distFromToday    = markerX - todayAnchorX;          // ≥ 0
-      const distFromTomorrow = tomorrowAnchorX - markerX;       // ≥ 0
-      const todayProtected    = todayHalf - REVEAL_MARGIN;
-      const tomorrowProtected = tomorrowHalf - REVEAL_MARGIN;
-      const FADE_PX = 10; // soft fade band beyond the protected edge
-      const fadeIn  = Math.min(1, Math.max(0, (distFromToday    - todayProtected)    / FADE_PX));
-      const fadeOut = Math.min(1, Math.max(0, (distFromTomorrow - tomorrowProtected) / FADE_PX));
-      const opacity = 0.6 * Math.min(fadeIn, fadeOut);
+      // Vertical center: align with the day-number row inside the cell.
+      // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
+      // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
+      const dayDigitCenterY = aRect.top + 25 - sRect.top;
+      // Full-week notches: a small tick at every cell center.
+      const weekNotches: number[] = [];
+      for (let i = 0; i < dayCellRefs.current.length; i++) {
+        const btn = dayCellRefs.current[i];
+        if (!btn) continue;
+        const r = btn.getBoundingClientRect();
+        weekNotches.push(r.left + r.width / 2 - sRect.left);
+      }
       // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
       const SYNODIC = 29.530588853;
       const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
@@ -1933,10 +1930,8 @@ const OdaraScreen = ({
       const moonWaxing = phaseFrac < 0.5;
       setMoonMarker({
         left: markerX,
-        opacity,
-        notchA:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.25,
-        notchMid: todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.50,
-        notchB:   todayAnchorX + (tomorrowAnchorX - todayAnchorX) * 0.75,
+        topY: dayDigitCenterY,
+        weekNotches,
         moonLitFrac,
         moonWaxing,
       });
@@ -1956,10 +1951,8 @@ const OdaraScreen = ({
   const orbGeom = moonMarker
     ? {
         left: moonMarker.left,
-        opacity: moonMarker.opacity,
-        behind: moonMarker.opacity < 0.05,
-        notchA: moonMarker.notchA,
-        notchB: moonMarker.notchB,
+        topY: moonMarker.topY,
+        weekNotches: moonMarker.weekNotches,
         moonLitFrac: moonMarker.moonLitFrac,
         moonWaxing: moonMarker.moonWaxing,
       }
@@ -6127,41 +6120,34 @@ const OdaraScreen = ({
           }}
         >
           <div ref={dayStripRef} className="relative flex w-full justify-between">
-            {/* Subtle watch-dial notches at ~6AM / ~12PM / ~6PM between today & tomorrow */}
-            {orbGeom && (
-              <>
-                {[orbGeom.notchA, (orbGeom.notchA + orbGeom.notchB) / 2, orbGeom.notchB].map((nx, ni) => (
-                  <div
-                    key={`notch-${ni}`}
-                    aria-hidden
-                    className="pointer-events-none absolute"
-                    style={{
-                      left: `${nx}px`,
-                      top: '18px',
-                      transform: 'translate(-50%, -50%)',
-                      width: '1px',
-                      height: ni === 1 ? '4px' : '2px',
-                      background: 'rgba(255,255,255,0.10)',
-                      borderRadius: '1px',
-                      zIndex: 1,
-                    }}
-                  />
-                ))}
-              </>
-            )}
-            {/* Time orb — tiny luxury moon-phase mark on the day track.
-                Only the LIT portion is drawn (no dark hemisphere fill), so
-                the orb reads as a soft pearl crescent/disc, never a tile. */}
-            {orbGeom && orbGeom.opacity > 0.001 && (() => {
+            {/* Subtle full-week notches at every day center, behind day cells */}
+            {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
+              <div
+                key={`notch-${ni}`}
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  left: `${nx}px`,
+                  top: `${orbGeom.topY}px`,
+                  transform: 'translate(-50%, -50%)',
+                  width: '1px',
+                  height: '2px',
+                  background: 'rgba(255,255,255,0.08)',
+                  borderRadius: '1px',
+                  zIndex: 0,
+                }}
+              />
+            ))}
+            {/* Live moon-phase marker — visual unchanged. Sits BEHIND the day
+                cells (zIndex 0 vs cells' zIndex 2) so it peeks out from behind
+                the day labels as it travels along the same horizontal line. */}
+            {orbGeom && (() => {
               const D = 7;            // orb diameter in px
               const C = D / 2;        // center
               const R = D / 2;        // radius
               const lit = orbGeom.moonLitFrac;
               const rx = R * Math.abs(1 - 2 * lit);
-              // Lit hemisphere clip rectangle.
               const litRectX = orbGeom.moonWaxing ? C : 0;
-              // Terminator ellipse: when lit > 0.5 it adds light (waxing/waning gibbous);
-              // when lit < 0.5 it removes light (carving the crescent edge).
               const ellipseAdds = lit >= 0.5;
               const maskId = `moonmask-${orbGeom.moonWaxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
               return (
@@ -6170,13 +6156,13 @@ const OdaraScreen = ({
                   className="pointer-events-none absolute"
                   style={{
                     left: `${orbGeom.left}px`,
-                    top: '18px',
+                    top: `${orbGeom.topY}px`,
                     transform: 'translate(-50%, -50%)',
                     width: `${D}px`,
                     height: `${D}px`,
-                    opacity: orbGeom.opacity,
+                    opacity: 0.6,
                     zIndex: 0,
-                    transition: 'opacity 800ms ease, left 800ms ease',
+                    transition: 'left 800ms ease',
                     filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
                   }}
                 >
@@ -6184,9 +6170,7 @@ const OdaraScreen = ({
                     <defs>
                       <mask id={maskId}>
                         <rect x="0" y="0" width={D} height={D} fill="black" />
-                        {/* Lit hemisphere */}
                         <rect x={litRectX} y="0" width={C} height={D} fill="white" />
-                        {/* Terminator ellipse */}
                         <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
                       </mask>
                     </defs>
