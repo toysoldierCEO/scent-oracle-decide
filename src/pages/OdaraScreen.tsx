@@ -6165,7 +6165,7 @@ const OdaraScreen = ({
                     width: `${D}px`,
                     height: `${D}px`,
                     opacity: 0.6,
-                    zIndex: 0,
+                    zIndex: 3,
                     transition: 'left 800ms ease',
                     filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
                   }}
