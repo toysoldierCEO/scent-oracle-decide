@@ -19,6 +19,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 
 type GuestModeKey = 'balance' | 'bold' | 'smooth' | 'wild';
 const GUEST_DEFAULT_MODE_ORDER: GuestModeKey[] = ['balance', 'bold', 'smooth', 'wild'];
+const LAYER_MOOD_ALIASES: Record<string, LayerMood> = {
+  balance: 'balance',
+  balanced: 'balance',
+  bold: 'bold',
+  smooth: 'smooth',
+  wild: 'wild',
+};
 
 const REASON_CHIP_LABELS = [
   'Signature',
@@ -82,8 +89,73 @@ interface ResolvedGuestCardVM {
   reasonChipExplanation: string | null;
 }
 
-function isGuestModeKey(value: any): value is GuestModeKey {
-  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild';
+function normalizeLayerMoodKey(value: unknown): LayerMood | null {
+  if (typeof value !== 'string') return null;
+  const normalized = LAYER_MOOD_ALIASES[value.trim().toLowerCase()];
+  return normalized ?? null;
+}
+
+function normalizeLayerMoodList(values: unknown[]): LayerMood[] {
+  const seen = new Set<LayerMood>();
+  const normalized: LayerMood[] = [];
+  for (const value of values) {
+    const mood = normalizeLayerMoodKey(value);
+    if (!mood || seen.has(mood)) continue;
+    seen.add(mood);
+    normalized.push(mood);
+  }
+  return normalized;
+}
+
+function getNormalizedLayerModeBlock(
+  layerModes: Record<string, any> | null | undefined,
+  mood: unknown,
+) {
+  const normalizedMood = normalizeLayerMoodKey(mood);
+  if (!normalizedMood || !layerModes || typeof layerModes !== 'object') return null;
+  if (normalizedMood === 'balance') {
+    return layerModes.balance ?? layerModes.balanced ?? null;
+  }
+  return layerModes[normalizedMood] ?? null;
+}
+
+function layerModeBlockToStack(block: any): any[] {
+  if (Array.isArray(block?.layers)) return block.layers;
+  return block ? [block] : [];
+}
+
+function readTrimmedLayerText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return '';
+}
+
+function normalizeLayerTeachingFields(value: any) {
+  return {
+    reason: readTrimmedLayerText(value?.reason, value?.explanation),
+    why_it_works: readTrimmedLayerText(value?.why_it_works, value?.whyItWorks, value?.why),
+    ratio_hint: readTrimmedLayerText(value?.ratio_hint, value?.ratioHint, value?.ratio),
+    application_style: readTrimmedLayerText(
+      value?.application_style,
+      value?.applicationStyle,
+      value?.instructions,
+      value?.layer_instructions,
+    ),
+    placement_hint: readTrimmedLayerText(
+      value?.placement_hint,
+      value?.placementHint,
+      value?.placement_guidance,
+      value?.placement,
+    ),
+    spray_guidance: readTrimmedLayerText(
+      value?.spray_guidance,
+      value?.spray_logic,
+      value?.sprayLogic,
+    ),
+  };
 }
 
 function resolveReasonChip(
@@ -128,25 +200,24 @@ function resolveGuestCardVM(
     : Array.isArray(main?.layer_mode_order) && main.layer_mode_order.length > 0
       ? main.layer_mode_order
       : GUEST_DEFAULT_MODE_ORDER;
-  const modeOrder = modeOrderRaw.filter(isGuestModeKey);
+  const modeOrder = normalizeLayerMoodList(modeOrderRaw) as GuestModeKey[];
   const layerModesObj: Record<string, any> = bundle?.layer_modes && typeof bundle.layer_modes === 'object'
     ? bundle.layer_modes
     : {};
-  const defaultMode: GuestModeKey = isGuestModeKey(bundle?.ui_default_mode)
-    ? bundle.ui_default_mode
-    : modeOrder.find((mode) => !!layerModesObj[mode]) ?? 'balance';
+  const defaultMode = (normalizeLayerMoodKey(bundle?.ui_default_mode)
+    ?? modeOrder.find((mode) => !!getNormalizedLayerModeBlock(layerModesObj, mode))
+    ?? 'balance') as GuestModeKey;
 
-  let selectedMode: GuestModeKey = state.selectedMood;
-  if (!layerModesObj[selectedMode]) {
+  let selectedMode = (normalizeLayerMoodKey(state.selectedMood) ?? defaultMode) as GuestModeKey;
+  if (!getNormalizedLayerModeBlock(layerModesObj, selectedMode)) {
     selectedMode = defaultMode;
   }
-  if (!layerModesObj[selectedMode]) {
-    selectedMode = modeOrder.find((mode) => !!layerModesObj[mode]) ?? defaultMode;
+  if (!getNormalizedLayerModeBlock(layerModesObj, selectedMode)) {
+    selectedMode = (modeOrder.find((mode) => !!getNormalizedLayerModeBlock(layerModesObj, mode)) ?? defaultMode) as GuestModeKey;
   }
 
-  const modeLayerStack: any[] = Array.isArray(layerModesObj[selectedMode]?.layers)
-    ? layerModesObj[selectedMode].layers
-    : [];
+  const selectedModeBlock = getNormalizedLayerModeBlock(layerModesObj, selectedMode);
+  const modeLayerStack = layerModeBlockToStack(selectedModeBlock);
   let activeLayerIndex = state.activeLayerIdx;
   if (activeLayerIndex < 0 || activeLayerIndex >= modeLayerStack.length) {
     activeLayerIndex = 0;
@@ -159,13 +230,17 @@ function resolveGuestCardVM(
     : Array.isArray(bundle?.hero?.tokens)
       ? bundle.hero.tokens
       : [];
-  const layerTokens = Array.isArray(layerFromMode?.tokens) && layerFromMode.tokens.length > 0
-    ? layerFromMode.tokens
-    : Array.isArray(bundle?.layer_tokens)
-      ? bundle.layer_tokens
-      : Array.isArray(bundle?.layer?.tokens)
-        ? bundle.layer.tokens
-        : [];
+  const layerTokens = resolveGuestLayerTokens(
+    layer,
+    bundle?.hero ?? null,
+    Array.isArray(layerFromMode?.tokens) && layerFromMode.tokens.length > 0
+      ? layerFromMode.tokens
+      : Array.isArray(bundle?.layer_tokens)
+        ? bundle.layer_tokens
+        : Array.isArray(bundle?.layer?.tokens)
+          ? bundle.layer.tokens
+          : [],
+  );
   const reasonChip = readReasonChipFromSources(bundle?.hero, bundle, main?.hero, main, payload);
 
   return {
@@ -178,10 +253,10 @@ function resolveGuestCardVM(
     layer,
     layerTokens,
     layerModes: {
-      balance: layerModesObj.balance ?? null,
-      bold: layerModesObj.bold ?? null,
-      smooth: layerModesObj.smooth ?? null,
-      wild: layerModesObj.wild ?? null,
+      balance: getNormalizedLayerModeBlock(layerModesObj, 'balance'),
+      bold: getNormalizedLayerModeBlock(layerModesObj, 'bold'),
+      smooth: getNormalizedLayerModeBlock(layerModesObj, 'smooth'),
+      wild: getNormalizedLayerModeBlock(layerModesObj, 'wild'),
     },
     modeOrder,
     modeLayerStack,
@@ -194,31 +269,64 @@ function resolveGuestCardVM(
 
 function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> | null {
   if (!layer) return null;
+  const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
+  const name = layer.name ?? layer.layer_name ?? '';
+  if (!id && !name) return null;
+  const teaching = normalizeLayerTeachingFields(layer);
   return {
-    id: layer.fragrance_id ?? layer.id ?? '',
-    name: layer.name ?? '',
-    brand: layer.brand ?? null,
-    family_key: layer.family ?? layer.family_key ?? '',
-    notes: Array.isArray(layer.notes) ? layer.notes : null,
-    accords: Array.isArray(layer.accords) ? layer.accords : null,
-    interactionType: (layer.interaction_type ?? layer.layer_mode ?? 'balance') as InteractionType,
-    reason: layer.reason ?? '',
-    why_it_works: layer.why_it_works ?? '',
+    id,
+    name,
+    brand: layer.brand ?? layer.layer_brand ?? null,
+    family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
+    notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : null,
+    accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : null,
+    interactionType: (layer.interaction_type ?? layer.layer_mode ?? layer.mode ?? 'balance') as InteractionType,
+    reason: teaching.reason,
+    why_it_works: teaching.why_it_works,
     projection: typeof layer.projection === 'number' ? layer.projection : null,
-    ratio_hint: layer.ratio_hint ?? undefined,
-    application_style: layer.application_style ?? undefined,
-    placement_hint: layer.placement_hint ?? undefined,
-    spray_guidance: layer.spray_guidance ?? undefined,
+    ratio_hint: teaching.ratio_hint || undefined,
+    application_style: teaching.application_style || undefined,
+    placement_hint: teaching.placement_hint || undefined,
+    spray_guidance: teaching.spray_guidance || undefined,
   };
 }
 
 function guestLayerModesToModeSelector(layerModes: Record<GuestModeKey, any | null>): LayerModes {
-  return {
-    balance: guestLayerToModeEntry(layerModes.balance),
-    bold: guestLayerToModeEntry(layerModes.bold),
-    smooth: guestLayerToModeEntry(layerModes.smooth),
-    wild: guestLayerToModeEntry(layerModes.wild),
+  const pickModeSeed = (mood: LayerMood) => {
+    const block = getNormalizedLayerModeBlock(layerModes, mood);
+    const stack = layerModeBlockToStack(block);
+    return stack[0] ?? null;
   };
+  return {
+    balance: guestLayerToModeEntry(pickModeSeed('balance')),
+    bold: guestLayerToModeEntry(pickModeSeed('bold')),
+    smooth: guestLayerToModeEntry(pickModeSeed('smooth')),
+    wild: guestLayerToModeEntry(pickModeSeed('wild')),
+  };
+}
+
+function resolveGuestLayerTokens(
+  layer: any,
+  hero: any,
+  rawTokens: any[] | null | undefined,
+) {
+  if (Array.isArray(rawTokens) && rawTokens.length > 0) {
+    return rawTokens;
+  }
+  const normalizedLayer = guestLayerToModeEntry(layer);
+  if (!normalizedLayer) return [];
+  const sharedKeys = buildSharedTokenKeySet(
+    hero?.notes,
+    hero?.accords,
+    normalizedLayer.notes ?? [],
+    normalizedLayer.accords ?? [],
+  );
+  return buildSemanticSurfaceTokens(
+    normalizedLayer.notes ?? [],
+    normalizedLayer.accords ?? [],
+    sharedKeys,
+    4,
+  );
 }
 
 interface GuestBottle {
@@ -887,6 +995,7 @@ function modeValueToBackendModeEntry(
   const layerFragranceId = value.layer_fragrance_id ?? value.fragrance_id ?? value.id ?? '';
   const layerName = value.layer_name ?? value.name ?? '';
   if (!layerFragranceId && !layerName) return null;
+  const teaching = normalizeLayerTeachingFields(value);
 
   return {
     mode: mood,
@@ -897,13 +1006,13 @@ function modeValueToBackendModeEntry(
     layer_notes: Array.isArray(value.layer_notes) ? value.layer_notes : Array.isArray(value.notes) ? value.notes : [],
     layer_accords: Array.isArray(value.layer_accords) ? value.layer_accords : Array.isArray(value.accords) ? value.accords : [],
     layer_score: value.layer_score ?? 0,
-    reason: value.reason ?? '',
-    why_it_works: value.why_it_works ?? '',
-    ratio_hint: value.ratio_hint ?? '',
-    application_style: value.application_style ?? '',
-    placement_hint: value.placement_hint ?? '',
-    spray_guidance: value.spray_guidance ?? '',
-    interaction_type: value.interaction_type ?? value.layer_mode ?? mood,
+    reason: teaching.reason,
+    why_it_works: teaching.why_it_works,
+    ratio_hint: teaching.ratio_hint,
+    application_style: teaching.application_style,
+    placement_hint: teaching.placement_hint,
+    spray_guidance: teaching.spray_guidance,
+    interaction_type: value.interaction_type ?? value.interactionType ?? value.layer_mode ?? value.mode ?? mood,
   };
 }
 
@@ -918,6 +1027,7 @@ function v6LayerToLayerMode(
   const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
   const name = layer.name ?? layer.layer_name ?? '';
   if (!id && !name) return null;
+  const teaching = normalizeLayerTeachingFields(layer);
   return {
     id,
     name,
@@ -925,14 +1035,14 @@ function v6LayerToLayerMode(
     family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
     notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : [],
     accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : [],
-    interactionType: ((layer.interaction_type ?? layer.layer_mode ?? mood) as InteractionType) || mood,
-    reason: layer.reason ?? '',
-    why_it_works: layer.why_it_works ?? '',
+    interactionType: ((layer.interaction_type ?? layer.interactionType ?? layer.layer_mode ?? layer.mode ?? mood) as InteractionType) || mood,
+    reason: teaching.reason,
+    why_it_works: teaching.why_it_works,
     projection: layer.projection ?? null,
-    ratio_hint: layer.ratio_hint ?? '',
-    application_style: layer.application_style ?? '',
-    placement_hint: layer.placement_hint ?? '',
-    spray_guidance: layer.spray_guidance ?? '',
+    ratio_hint: teaching.ratio_hint,
+    application_style: teaching.application_style,
+    placement_hint: teaching.placement_hint,
+    spray_guidance: teaching.spray_guidance,
   } as any;
 }
 
@@ -1554,9 +1664,7 @@ function normalizePersistedNextDayRole(value: unknown): SignedInDayState['carryo
 }
 
 function normalizePersistedMood(value: unknown): LayerMood {
-  return value === 'balance' || value === 'bold' || value === 'smooth' || value === 'wild'
-    ? value
-    : 'balance';
+  return normalizeLayerMoodKey(value) ?? 'balance';
 }
 
 function normalizePersistedLockedContext(value: unknown): string | null {
@@ -2537,7 +2645,7 @@ const OdaraScreen = ({
     setGuestLocked(false);
     setLockedGuestSnapshot(null);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
-    const safeDef: GuestModeKey = (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : 'balance';
+    const safeDef = (normalizeLayerMoodKey(def) ?? 'balance') as GuestModeKey;
     setGuestSelectedMood(safeDef);
   }, [selectedDate, selectedContext, (oracle as any)?.style_key, (oracle as any)?.main_bundle?.ui_default_mode, (oracle as any)?.ui_default_mode]);
 
@@ -2575,6 +2683,12 @@ const OdaraScreen = ({
       activeLayerIdx: guestActiveLayerIdx,
     });
     if (!resolved) return null;
+    const normalizedActiveLayer = guestLayerToModeEntry(resolved.layer);
+    const resolvedLayerTokens = resolveGuestLayerTokens(
+      resolved.layer,
+      resolved.hero,
+      resolved.layerTokens,
+    );
     return {
       contract: 'v5' as const,
       source: resolved.source,
@@ -2585,7 +2699,13 @@ const OdaraScreen = ({
       selectedAlternateIndex: resolved.selectedAlternateIndex,
       activeHero: resolved.hero,
       activeHeroTokens: resolved.heroTokens,
-      activeLayer: resolved.layer ? { ...resolved.layer, tokens: resolved.layerTokens } : null,
+      activeLayer: normalizedActiveLayer
+        ? {
+            ...normalizedActiveLayer,
+            family: normalizedActiveLayer.family_key,
+            tokens: resolvedLayerTokens,
+          }
+        : null,
       layerModes: resolved.layerModes,
       modeLayerStack: resolved.modeLayerStack,
       alternates: resolved.alternates,
@@ -2594,29 +2714,6 @@ const OdaraScreen = ({
       reasonChipExplanation: resolved.reasonChipExplanation,
     };
   }, [isGuestMode, oracle, activeOracle, selectedAlternateIdx, guestSelectedMood, guestActiveLayerIdx, selectedContext, selectedDate]);
-
-  useEffect(() => {
-    if (!isGuestMode || !activeGuestRender) return;
-    const heroTokens = Array.isArray(activeGuestRender.activeHeroTokens) ? activeGuestRender.activeHeroTokens : [];
-    const layerTokens = Array.isArray(activeGuestRender.activeLayer?.tokens) ? activeGuestRender.activeLayer.tokens : [];
-    const modeKeys = Object.keys(activeGuestRender.layerModes ?? {}).filter((key) => !!(activeGuestRender.layerModes as any)?.[key]);
-    console.info('ODARA_GUEST_VM_RENDER_PROOF', {
-      source: activeGuestRender.source,
-      selectedAlternateIdx,
-      heroName: activeGuestRender.activeHero?.name ?? null,
-      heroTokenCount: heroTokens.length,
-      layerName: activeGuestRender.activeLayer?.name ?? null,
-      layerTokenCount: layerTokens.length,
-      hasLayer: !!activeGuestRender.activeLayer,
-      hasLayerModes: modeKeys.length > 0,
-      modeKeys,
-      hasBalance: !!activeGuestRender.layerModes?.balance,
-      hasBold: !!activeGuestRender.layerModes?.bold,
-      hasSmooth: !!activeGuestRender.layerModes?.smooth,
-      hasWild: !!activeGuestRender.layerModes?.wild,
-      renderedFromFullBundle: !!activeGuestRender.renderedFromFullBundle,
-    });
-  }, [isGuestMode, activeGuestRender, selectedAlternateIdx]);
 
   // Single authoritative guest lock boolean — used by every guest mutation handler.
   const isGuestLocked = isGuestMode && guestLocked;
@@ -2638,7 +2735,8 @@ const OdaraScreen = ({
       selectedMood: mode,
       activeLayerIdx: 0,
     });
-    const stack: any[] = Array.isArray(resolved?.layerModes?.[mode]?.layers) ? resolved!.layerModes[mode]!.layers : [];
+    const modeBlock = getNormalizedLayerModeBlock(resolved?.layerModes ?? null, mode);
+    const stack = layerModeBlockToStack(modeBlock);
     if (stack.length === 0) return;
     if (mode !== guestSelectedMood) {
       setGuestSelectedMood(mode);
@@ -3257,7 +3355,9 @@ const OdaraScreen = ({
           // unavailable on the backend.
           const hp: any = activeOracle ?? oracle ?? {};
           const heroIdHp = hp?.today_pick?.fragrance_id ?? null;
-          const seed: any = (heroIdHp === fragranceId) ? hp?.layer_modes?.[mood] : null;
+          const seed: any = heroIdHp === fragranceId
+            ? getNormalizedLayerModeBlock(hp?.layer_modes ?? null, mood)
+            : null;
           const fbEntry = modeValueToBackendModeEntry(seed, mood);
           if (fbEntry) {
             if (!isRetry) {
@@ -3547,31 +3647,8 @@ const OdaraScreen = ({
       return;
     }
 
-    const capturedSlot = stateKey;
-
-    // ── FULL STATE RESET before applying new oracle payload ──
-    const prevVisibleId = visibleCard?.fragrance_id ?? '(none)';
-    const prevPromotedId = promotedAltId ?? '(none)';
-
     // ── Normalize raw payload ONCE — single source of truth ──
     const normalized = normalizeOracleHomePayload(oracle);
-
-    const v6Peek: any = (oracle as any)?.__v6 ?? null;
-    const balanceLayersPeek = Array.isArray(v6Peek?.layer_modes?.balance?.layers)
-      ? v6Peek.layer_modes.balance.layers
-      : [];
-    console.info('[Odara] oracle apply', {
-      selectedDate,
-      selectedContext,
-      backendHeroId: v6Peek?.hero?.fragrance_id ?? oracle.today_pick?.fragrance_id ?? '(none)',
-      previousVisibleId: prevVisibleId,
-      promotedAltIdBeforeReset: prevPromotedId,
-      contract: v6Peek?.card_contract_version ?? (oracle as any)?.card_contract_version ?? normalized.rawModeContract,
-      surfaceType: v6Peek?.surface_type ?? (oracle as any)?.surface_type ?? null,
-      heroName: v6Peek?.hero?.name ?? oracle.today_pick?.name ?? null,
-      seededBalanceLayerName: balanceLayersPeek[0]?.name ?? normalized.seededBalanceLayer?.name ?? '(null)',
-      seededBalanceLayerId: balanceLayersPeek[0]?.fragrance_id ?? normalized.seededBalanceLayer?.fragranceId ?? '(null)',
-    });
 
     // 1) Clear ALL stale state first
     // viewHistory is NOT cleared here — slot changes clear it in Effect 1 above
@@ -3594,7 +3671,7 @@ const OdaraScreen = ({
     const v6 = (oracle as any)?.__v6 ?? null;
     const v6DefaultMood: LayerMood = (() => {
       const def = v6?.ui_default_mode ?? normalized.defaultMode;
-      return (def === 'balance' || def === 'bold' || def === 'smooth' || def === 'wild') ? def : normalized.defaultMode;
+      return normalizeLayerMoodKey(def) ?? normalized.defaultMode;
     })();
     const resolvedDayDecision = resolveSignedInDayDecision(
       currentDayState,
@@ -3609,32 +3686,11 @@ const OdaraScreen = ({
     setSelectedMood(initialMood);
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
-    console.log('[Odara] oracle apply complete', {
-      newVisibleId: oracle.today_pick?.fragrance_id ?? '(none)',
-      promotedAltIdAfterReset: '(null)',
-      initialMood,
-    });
-
     if (oracle.today_pick) {
       setVisibleCard(initialVisibleCard);
       setSignedInForcedLayerCarryCard(initialForcedLayerCarryCard);
       setSignedInResolvedDayDecisionSource(resolvedDayDecision.source);
       setPromotedAltId(resolvedDayDecision.promotedAltId);
-      console.log(
-        '[Odara] applying oracle home for slot',
-        capturedSlot,
-        {
-          hero: oracle.today_pick.fragrance_id,
-          initialVisibleId: initialVisibleCard?.fragrance_id ?? null,
-          dayDecisionSource: resolvedDayDecision.source,
-          usedCarryover: resolveCarryoverSelectedCard(previousDayState)?.fragrance_id ?? null,
-          carryoverRoleForCurrentDay: previousDayState?.carryoverNextDayRole ?? resolveCarryoverNextDayRole(previousDayState?.carryoverMode ?? 'off'),
-          forcedLayerCarryId: initialForcedLayerCarryCard?.fragrance_id ?? null,
-          restoredLockedCard: currentDayState.lockState === 'locked'
-            ? (currentDayState.lockedCard?.fragrance_id ?? null)
-            : null,
-        }
-      );
 
       // 4) Pre-seed mood cache from normalized payload for hero card
       const slotPfx = `${selectedDate}|${selectedContext}`;
@@ -3643,7 +3699,7 @@ const OdaraScreen = ({
       // 4a) Seed every mode block from layer_modes when present
       if (normalized.layerModesRaw) {
         for (const mood of LAYER_MODE_ORDER) {
-          const modeData = (normalized.layerModesRaw as any)?.[mood];
+          const modeData = getNormalizedLayerModeBlock(normalized.layerModesRaw as any, mood);
           if (modeData) {
             const seededEntries = appendUniqueBackendModeEntries(
               [],
@@ -3846,7 +3902,7 @@ const OdaraScreen = ({
     };
     const fromV6 = (mood: LayerMood) => {
       if (!signedInVisibleIsHeroCard) return null;
-      const block = lm?.[mood] ?? null;
+      const block = getNormalizedLayerModeBlock(lm, mood);
       if (!block) return null;
       const idx = signedInLayerIdxByMood[mood] ?? 0;
       const stack: any[] = Array.isArray(block.layers) ? block.layers : [];
@@ -4015,7 +4071,7 @@ const OdaraScreen = ({
     ) {
       const uniqueLayerCandidate = isHeroCard
         ? findFirstAllowedLayerModeCandidate(
-            (v6?.layer_modes ?? null)?.[selectedMood] ?? null,
+            getNormalizedLayerModeBlock(v6?.layer_modes ?? null, selectedMood),
             selectedMood,
             [finalHero, predecessorExcludedCard, predecessorCarriedCard],
           )
@@ -4049,7 +4105,7 @@ const OdaraScreen = ({
         }
       } else {
         const uniqueLayerCandidate = isHeroCard
-          ? findFirstUniqueLayerModeCandidate((v6?.layer_modes ?? null)?.[selectedMood] ?? null, selectedMood, resolvedHero)
+          ? findFirstUniqueLayerModeCandidate(getNormalizedLayerModeBlock(v6?.layer_modes ?? null, selectedMood), selectedMood, resolvedHero)
           : null;
         if (uniqueLayerCandidate) {
           const uniqueLayerDetail = uniqueLayerCandidate.layer.id
@@ -4225,209 +4281,7 @@ const OdaraScreen = ({
     signedInIsReadOnlyHistoryCard,
   ]);
 
-  // ── DEBUG PROOF — signed-in v7 contract ──
-  useEffect(() => {
-    if (isGuestMode) return;
-    const contract: any = v6Payload ?? activeOracle ?? oracle ?? {};
-    const lm: any = contract?.layer_modes ?? {};
-    const heroTokensArr = Array.isArray(activeMainCardRender?.activeHeroTokens) ? activeMainCardRender!.activeHeroTokens : [];
-    const layerTokensArr = Array.isArray(activeMainCardRender?.activeLayerTokens) ? activeMainCardRender!.activeLayerTokens : [];
-    console.info('ODARA_SIGNED_IN_CONTRACT_PROOF', {
-      contractVersion: contract?.card_contract_version ?? contract?.layer_mode_contract ?? null,
-      surfaceType: contract?.surface_type ?? null,
-      heroName: activeMainCardRender?.activeHero?.name ?? null,
-      heroTokenObjects: heroTokensArr,
-      heroTokenLabels: heroTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
-      activeMode: activeMainCardRender?.selectedMode ?? null,
-      activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
-      layerName: activeMainCardRender?.activeLayer?.name ?? null,
-      layerTokenObjects: layerTokensArr,
-      layerTokenLabels: layerTokensArr.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
-      balanceNames: Array.isArray(lm?.balance?.layers) ? lm.balance.layers.map((l: any) => l?.name) : null,
-      boldNames: Array.isArray(lm?.bold?.layers) ? lm.bold.layers.map((l: any) => l?.name) : null,
-      smoothNames: Array.isArray(lm?.smooth?.layers) ? lm.smooth.layers.map((l: any) => l?.name) : null,
-      wildNames: Array.isArray(lm?.wild?.layers) ? lm.wild.layers.map((l: any) => l?.name) : null,
-    });
-  }, [isGuestMode, v6Payload, activeMainCardRender, selectedMood, signedInLayerIdxByMood]);
-
-  // ── DEBUG PROOF — token render ──
-  useEffect(() => {
-    const heroTokens = isGuestMode
-      ? (activeGuestRender?.activeHeroTokens ?? [])
-      : (activeMainCardRender?.activeHeroTokens ?? []);
-    const layerTokens = isGuestMode
-      ? (Array.isArray(activeGuestRender?.activeLayer?.tokens) ? activeGuestRender!.activeLayer!.tokens : [])
-      : (activeMainCardRender?.activeLayerTokens ?? []);
-    const heroName = isGuestMode
-      ? (activeGuestRender?.activeHero?.name ?? null)
-      : (activeMainCardRender?.activeHero?.name ?? null);
-    const layerName = isGuestMode
-      ? (activeGuestRender?.activeLayer?.name ?? null)
-      : (activeMainCardRender?.activeLayer?.name ?? null);
-    const heroTokensArrR = Array.isArray(heroTokens) ? heroTokens : [];
-    const layerTokensArrR = Array.isArray(layerTokens) ? layerTokens : [];
-    console.info('ODARA_TOKEN_RENDER_PROOF', {
-      surfaceType: isGuestMode ? 'guest' : 'signed_in',
-      heroName,
-      heroTokenObjects: heroTokensArrR,
-      heroTokenLabels: heroTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
-      layerName,
-      layerTokenObjects: layerTokensArrR,
-      layerTokenLabels: layerTokensArrR.map((t: any) => t?.label ?? t?.token_label ?? t?.name ?? null),
-      activeMode: isGuestMode ? activeGuestRender?.selectedMode : activeMainCardRender?.selectedMode,
-      activeLayerIndex: isGuestMode
-        ? (activeGuestRender?.activeLayerIndex ?? 0)
-        : (signedInLayerIdxByMood[selectedMood] ?? 0),
-      selectedAlternateName: null,
-      rawAccordsTextRendered: false,
-      numericTokenRendered: false,
-      frontendGeneratedTokensRendered: false,
-    });
-  }, [isGuestMode, activeMainCardRender, activeGuestRender, selectedMood, signedInLayerIdxByMood]);
-
-  // ── UNIFIED ACTIVE-CARD VIEW MODEL ──
-  // Single resolved shape that BOTH signed-in and guest renderers describe.
-  // The JSX above already renders the same logical layout for each surface
-  // (hero name/brand/family/tokens → layer name/brand/family/tokens → mode row
-  // → alternates). This VM is the single source of truth that proves the
-  // shared shell and exposes any guest payload incompleteness.
-  const activeCardVM = useMemo(() => {
-    if (isGuestMode) {
-      const o: any = oracle ?? activeOracle ?? {};
-      const main: any = o?.main_bundle ?? {};
-      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
-      const inAlt = selectedAlternateIdx !== null && !!altBundles[selectedAlternateIdx];
-      const inSkipRestore = guestSkipHistory.length === 0 && selectedAlternateIdx !== null && !!altBundles[selectedAlternateIdx];
-      let source: 'guest_main' | 'guest_skip' | 'guest_alternate' | 'guest_back_restore' = 'guest_main';
-      if (inAlt) source = guestSkipHistory.length > 0 ? 'guest_skip' : 'guest_alternate';
-      const hero = activeGuestRender?.activeHero ?? null;
-      const heroTokens = activeGuestRender?.activeHeroTokens ?? [];
-      const layer = activeGuestRender?.activeLayer ?? null;
-      const layerTokens = Array.isArray(layer?.tokens) ? layer!.tokens : [];
-      const layerModesObj: Record<string, any> = main?.layer_modes ?? {};
-      const modeKeys = Object.keys(layerModesObj);
-      return {
-        surfaceType: 'guest' as const,
-        source,
-        cardId: hero?.fragrance_id ?? hero?.id ?? null,
-        isLocked: lockState === 'locked',
-        hero: hero ? {
-          id: hero.fragrance_id ?? hero.id ?? null,
-          name: hero.name ?? null,
-          brand: hero.brand ?? null,
-          family: hero.family ?? null,
-          tokens: heroTokens,
-        } : null,
-        layer: layer ? {
-          id: layer.fragrance_id ?? layer.id ?? null,
-          name: layer.name ?? null,
-          brand: layer.brand ?? null,
-          family: layer.family ?? null,
-          tokens: layerTokens,
-          visible: true,
-        } : null,
-        layerModes: {
-          balance: !!layerModesObj.balance,
-          bold: !!layerModesObj.bold,
-          smooth: !!layerModesObj.smooth,
-          wild: !!layerModesObj.wild,
-        },
-        selectedMode: activeGuestRender?.selectedMode ?? null,
-        activeLayerIndex: activeGuestRender?.activeLayerIndex ?? 0,
-        alternateCount: altBundles.length,
-        modeKeys,
-      };
-    }
-    // Signed-in
-    const hero = activeMainCardRender?.activeHero ?? null;
-    const heroTokens = activeMainCardRender?.activeHeroTokens ?? [];
-    const layer = activeMainCardRender?.activeLayer ?? null;
-    const layerTokens = activeMainCardRender?.activeLayerTokens ?? [];
-    const heroAny: any = hero;
-    const layerAny: any = layer;
-    return {
-      surfaceType: 'signed_in' as const,
-      source: 'signed_in' as const,
-      cardId: heroAny?.fragrance_id ?? heroAny?.id ?? null,
-      isLocked: lockState === 'locked',
-      hero: heroAny ? {
-        id: heroAny.fragrance_id ?? heroAny.id ?? null,
-        name: heroAny.name ?? null,
-        brand: heroAny.brand ?? null,
-        family: heroAny.family ?? null,
-        tokens: heroTokens,
-      } : null,
-      layer: layerAny ? {
-        id: layerAny.fragrance_id ?? layerAny.id ?? null,
-        name: layerAny.name ?? null,
-        brand: layerAny.brand ?? null,
-        family: layerAny.family ?? null,
-        tokens: layerTokens,
-        visible: true,
-      } : null,
-      layerModes: {
-        balance: !!modeResults.balance,
-        bold: !!modeResults.bold,
-        smooth: !!modeResults.smooth,
-        wild: !!modeResults.wild,
-      },
-      selectedMode: activeMainCardRender?.selectedMode ?? selectedMood,
-      activeLayerIndex: signedInLayerIdxByMood[selectedMood] ?? 0,
-      alternateCount: signedInVisibleAlternates.length,
-      modeKeys: ['balance', 'bold', 'smooth', 'wild'].filter(k => !!(modeResults as any)[k]),
-    };
-  }, [isGuestMode, oracle, activeOracle, activeGuestRender, activeMainCardRender, selectedAlternateIdx, guestSkipHistory, lockState, modeResults, selectedMood, signedInLayerIdxByMood, signedInVisibleAlternates.length]);
-
-  useEffect(() => {
-    const vm = activeCardVM;
-    const heroTokensArr = Array.isArray(vm.hero?.tokens) ? vm.hero!.tokens : [];
-    const layerTokensArr = Array.isArray(vm.layer?.tokens) ? vm.layer!.tokens : [];
-    console.info('ODARA_ACTIVE_CARD_VM_PROOF', {
-      surfaceType: vm.surfaceType,
-      source: vm.source,
-      heroName: vm.hero?.name ?? null,
-      heroTokenCount: heroTokensArr.length,
-      layerName: vm.layer?.name ?? null,
-      layerTokenCount: layerTokensArr.length,
-      hasLayer: !!vm.layer,
-      modeKeys: vm.modeKeys,
-      hasBalance: vm.layerModes.balance,
-      hasBold: vm.layerModes.bold,
-      hasSmooth: vm.layerModes.smooth,
-      hasWild: vm.layerModes.wild,
-      alternateCount: vm.alternateCount,
-      renderedThroughSharedShell: true,
-    });
-    // Guest VM completeness gate — log missing fields when an alternate bundle
-    // can't be resolved into a full card (no layer or no modes available).
-    if (vm.surfaceType === 'guest' && (vm.source === 'guest_alternate' || vm.source === 'guest_skip')) {
-      const missing: string[] = [];
-      if (!vm.hero?.name) missing.push('hero.name');
-      if (!vm.hero?.brand) missing.push('hero.brand');
-      if (!vm.hero?.family) missing.push('hero.family');
-      if (!heroTokensArr.length) missing.push('hero.tokens');
-      if (!vm.layer?.name) missing.push('layer.name');
-      if (!vm.layer?.brand) missing.push('layer.brand');
-      if (!vm.layer?.family) missing.push('layer.family');
-      if (!layerTokensArr.length) missing.push('layer.tokens');
-      if (missing.length > 0) {
-        console.warn('fail_guest_vm_incomplete', { source: vm.source, missing });
-      }
-    }
-  }, [activeCardVM]);
-
   // (Skip gesture lifecycle reset effect lives just below swipeRef declaration.)
-
-  useEffect(() => {
-    console.log('[Odara] mode-results debug', {
-      cardId,
-      selectedMood,
-      'modeResults.balance': modeResults.balance ? { id: modeResults.balance.id, name: modeResults.balance.name } : null,
-      'modeResults.bold': modeResults.bold ? { id: modeResults.bold.id, name: modeResults.bold.name } : null,
-      visibleModeEntry: visibleModeEntry ? { id: visibleModeEntry.id, name: visibleModeEntry.name } : null,
-      cacheSize: moodCacheRef.current.size,
-    });
-  }, [cardId, selectedMood, modeResults.balance, modeResults.bold, visibleModeEntry]);
 
   // ── v6 mood tap handler ──
   // Different mood  → switch selectedMood; if no idx exists, start at 0.
@@ -4442,8 +4296,8 @@ const OdaraScreen = ({
     const v6: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
     const heroIdV6 = v6?.hero?.fragrance_id ?? null;
     const isHeroCard = !!heroIdV6 && currentCardId === heroIdV6;
-    const stackArr: any[] = isHeroCard && Array.isArray(v6?.layer_modes?.[mood]?.layers)
-      ? v6.layer_modes[mood].layers
+    const stackArr = isHeroCard
+      ? layerModeBlockToStack(getNormalizedLayerModeBlock(v6?.layer_modes ?? null, mood))
       : [];
     const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
       ? (signedInVerifiedPredecessorBaton?.excludedPreviousCard?.fragrance_id ?? null)
@@ -4464,11 +4318,8 @@ const OdaraScreen = ({
     if (mood !== selectedMood) {
       setSelectedMood(mood);
       syncMoodLaneSelectedEntry(moodKey, signedInLayerIdxByMood[mood] ?? 0);
-      console.log('[Odara][SignedIn][lane] mood switch', { mood, stackLen: currentLaneStack.length, idx: signedInLayerIdxByMood[mood] ?? 0 });
       if (currentLaneStack.length === 0) {
-        void ensureMoodLaneDepth(currentCardId, mood, 0, carryoverExclusionIds).then((stack) => {
-          console.log('[Odara][SignedIn][lane] primed lane', { mood, fetchedForCard: currentCardId, stackLen: stack.length });
-        });
+        void ensureMoodLaneDepth(currentCardId, mood, 0, carryoverExclusionIds);
       }
       return;
     }
@@ -4478,7 +4329,6 @@ const OdaraScreen = ({
     if (currentLaneStack.length > targetIndex) {
       setSignedInLayerIdxByMood((prev) => ({ ...prev, [mood]: targetIndex }));
       syncMoodLaneSelectedEntry(moodKey, targetIndex);
-      console.log('[Odara][SignedIn][lane] mood cycle', { mood, from: currentIndex, to: targetIndex, stackLen: currentLaneStack.length });
       return;
     }
 
@@ -4486,7 +4336,6 @@ const OdaraScreen = ({
       if (stack.length > targetIndex) {
         setSignedInLayerIdxByMood((prev) => ({ ...prev, [mood]: targetIndex }));
         syncMoodLaneSelectedEntry(moodKey, targetIndex);
-        console.log('[Odara][SignedIn][lane] mood cycle extended', { mood, from: currentIndex, to: targetIndex, stackLen: stack.length });
         return;
       }
 

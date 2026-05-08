@@ -433,7 +433,20 @@ const LayerCard = ({
     : null;
 
   // Backend-driven text
-  const whyText = activeModeEntry?.why_it_works || '';
+  const whyText = activeModeEntry?.why_it_works?.trim() || '';
+  const explanationText = activeModeEntry?.reason?.trim() || '';
+  const wearText = activeModeEntry?.application_style?.trim() || '';
+  const sprayText = activeModeEntry?.spray_guidance?.trim() || '';
+  const placementText = activeModeEntry?.placement_hint?.trim() || '';
+  const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
+  const detailSections = [
+    whyText ? { label: 'Why it works', value: whyText } : null,
+    explanationText && explanationText !== whyText ? { label: 'Explanation', value: explanationText } : null,
+    wearText ? { label: 'How to wear it', value: wearText } : null,
+    sprayText ? { label: 'Spray logic', value: sprayText } : null,
+    placementText ? { label: 'Placement', value: placementText } : null,
+    ratioText ? { label: 'Ratio', value: ratioText } : null,
+  ].filter((section): section is { label: string; value: string } => !!section);
 
   return (
     <div
@@ -570,7 +583,7 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <motion.div
-              key={selectedMood}
+              key={`${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
@@ -578,11 +591,14 @@ const LayerCard = ({
               className="pt-3 mt-2 text-left"
               style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
             >
-              {/* Why it works — sole expanded explanatory section */}
-              {activeModeEntry && whyText && (
-                <div>
-                  <span className="text-[9px] uppercase tracking-[0.15em] text-white/50 block text-center">Why it works</span>
-                  <p className="text-sm text-white/80 leading-relaxed mt-1">{whyText}</p>
+              {activeModeEntry && detailSections.length > 0 && (
+                <div className="space-y-3">
+                  {detailSections.map((section) => (
+                    <div key={section.label}>
+                      <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
+                      <p className="mt-1 text-sm leading-relaxed text-white/80">{section.value}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </motion.div>
