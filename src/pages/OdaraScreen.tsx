@@ -2148,6 +2148,7 @@ const OdaraScreen = ({
     : null;
   const selectedCurrentWeekIndex = currentWeekDays.findIndex((fd) => fd.dateStr === selectedDate);
   const selectedHistoryIndex = signedInLockedHistoryDays.findIndex((fd) => fd.dateStr === selectedDate);
+  const showLockedHistoryRail = !isGuestMode && signedInLockedHistoryDays.length > 0 && selectedHistoryIndex >= 0;
 
   useEffect(() => {
     if (selectedCurrentWeekIndex < 0) return;
@@ -6604,7 +6605,7 @@ const OdaraScreen = ({
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          {!isGuestMode && signedInLockedHistoryDays.length > 0 && (
+          {showLockedHistoryRail && (
             <div className="mb-3">
               <span className="mb-2 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground/38">
                 Locked History
