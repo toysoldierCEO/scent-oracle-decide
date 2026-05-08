@@ -2313,6 +2313,12 @@ const OdaraScreen = ({
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
+  // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
+  // Reset to {balance:0,bold:0,smooth:0,wild:0} on every payload change.
+  // Repeated taps on the same mood cycle this index modulo stack length.
+  const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
+    balance: 0, bold: 0, smooth: 0, wild: 0,
+  });
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
