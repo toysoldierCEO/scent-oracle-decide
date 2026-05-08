@@ -776,13 +776,19 @@ function fmtLocalDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function parseLocalDateKey(dateStr: string) {
+  return new Date(`${dateStr}T12:00:00`);
+}
+
 function buildForecastDays(selectedDate: string) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const today = new Date();
-  const todayStr = fmtLocalDateStr(today);
+  const anchor = parseLocalDateKey(selectedDate);
+  const todayStr = fmtLocalDateStr(new Date());
+  const weekStart = new Date(anchor);
+  weekStart.setDate(anchor.getDate() - anchor.getDay());
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
     const dateStr = fmtLocalDateStr(d);
     return {
       label: dayNames[d.getDay()],
@@ -795,13 +801,13 @@ function buildForecastDays(selectedDate: string) {
 }
 
 function getDateLabel(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00');
+  const d = parseLocalDateKey(dateStr);
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   return `${days[d.getDay()]} · ${d.getDate()}`;
 }
 
 function getPreviousDateKey(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00');
+  const d = parseLocalDateKey(dateStr);
   d.setDate(d.getDate() - 1);
   return fmtLocalDateStr(d);
 }
@@ -2553,6 +2559,7 @@ const OdaraScreen = ({
   const [signedInForcedLayerCarryCard, setSignedInForcedLayerCarryCard] = useState<DisplayCard | null>(null);
   const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
+  const todayDateKey = fmtLocalDateStr(new Date());
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
   const visibleWeekDateKeys = useMemo(() => forecastDays.map((fd) => fd.dateStr), [forecastDays]);
   const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
@@ -2580,6 +2587,9 @@ const OdaraScreen = ({
     () => (isGuestMode ? null : resolveSignedInLockedTruth(signedInDayState)),
     [isGuestMode, signedInDayState]
   );
+  const signedInIsReadOnlyHistoryCard = !isGuestMode
+    && !!signedInResolvedLockTruth
+    && currentDateKey < todayDateKey;
   const lockState: LockState = signedInDayState.lockState;
   const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
   const signedInWeekMemoryRequestIdRef = useRef(0);
@@ -4265,7 +4275,7 @@ const OdaraScreen = ({
 
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
-    if (skipLoading || !visibleCard || lockState === 'locked') return;
+    if (skipLoading || !visibleCard || lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
 
     setSkipLoading(true);
     // Play red Tron flash on skip
@@ -4324,13 +4334,13 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry]);
+  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
     // Guest v5: unwind alternate state, then mode-layer depth, before normal back.
     if (handleGuestBack()) return;
-    if (viewHistory.length === 0 || lockState === 'locked') return;
+    if (viewHistory.length === 0 || lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
     const entry = viewHistory[viewHistory.length - 1];
 
     const restoredMood = entry.selectedMood ?? 'balance';
@@ -4361,7 +4371,7 @@ const OdaraScreen = ({
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [viewHistory, handleGuestBack, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
+  }, [viewHistory, handleGuestBack, lockState, signedInIsReadOnlyHistoryCard, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
 
   const pulseLock = useCallback(() => {
     setLockPulse(true);
@@ -4500,6 +4510,7 @@ const OdaraScreen = ({
     }
 
     // Already locked → no-op (use the lock icon to unlock).
+    if (signedInIsReadOnlyHistoryCard) return;
     if (lockState === 'locked') return;
 
     if (!within) {
@@ -4536,6 +4547,7 @@ const OdaraScreen = ({
     isGuestMode,
     guestLocked,
     engageGuestLock,
+    signedInIsReadOnlyHistoryCard,
     lockState,
     clearUnlockTimeout,
     setLockState,
@@ -4684,6 +4696,8 @@ const OdaraScreen = ({
     if (isGuestMode && isGuestLocked) {
       actionTaken = 'unlock_guest';
       unlockGuestCard();
+    } else if (signedInIsReadOnlyHistoryCard) {
+      actionTaken = 'history_locked_read_only';
     } else if (lockState === 'locked') {
       actionTaken = 'unlock';
       setLockState('neutral');
@@ -4770,6 +4784,7 @@ const OdaraScreen = ({
     guestSkipHistory,
     isGuestLocked,
     activeGuestRender,
+    signedInIsReadOnlyHistoryCard,
     prevForecastDay,
     nextForecastDay,
   ]);
@@ -4894,6 +4909,7 @@ const OdaraScreen = ({
   const isCardLocked = isGuestMode
     ? guestLockedForCurrentCard
     : signedInResolvedLockActive;
+  const isReadOnlyHistoryCard = signedInIsReadOnlyHistoryCard;
 
   // (3) Normalized action-rail state.
   const guestStarredForCurrentCard =
@@ -4952,6 +4968,7 @@ const OdaraScreen = ({
           engageGuestLock();
           return;
         }
+        if (isReadOnlyHistoryCard) return;
         // Signed-in: only the unlock half is exposed via tap (lock is engaged
         // by gestures). Preserve existing behavior.
         if (lockState === 'locked') {
@@ -4978,6 +4995,7 @@ const OdaraScreen = ({
           haptic(wasStarred ? 'selection' : 'success');
           return;
         }
+        if (isReadOnlyHistoryCard) return;
         if (!visibleCard) return;
         const combo: FavoriteCombo = {
           mainId: activeMainCardRender?.resolvedCurrentCard?.fragrance_id ?? visibleCard.fragrance_id,
@@ -5009,7 +5027,7 @@ const OdaraScreen = ({
             guestSelectedMood,
           });
         }
-        if (isCardLocked) return;
+        if (isCardLocked || isReadOnlyHistoryCard) return;
         if (isGuestMode) {
           handleGuestModeTap(mood as GuestModeKey);
         } else {
@@ -5028,7 +5046,7 @@ const OdaraScreen = ({
             selectedAlternateIdx,
           });
         }
-        if (isCardLocked) return;
+        if (isCardLocked || isReadOnlyHistoryCard) return;
         if (isGuestMode) {
           if (typeof idx === 'number') handleGuestAlternateTap(idx);
         } else {
@@ -5038,14 +5056,14 @@ const OdaraScreen = ({
       back: () => {
         // Back never modifies the locked decision — the locked card stays
         // visible. We still allow back to be a no-op while locked.
-        if (isCardLocked) return;
+        if (isCardLocked || isReadOnlyHistoryCard) return;
         handleBack();
       },
       skipOrSwipe: () => {
         // Locked cards cannot be skipped. Signed-in unlock-via-swipe remains
         // handled by the existing pointer handler (which still inspects
         // lockState directly inside its own internals).
-        if (isCardLocked) return;
+        if (isCardLocked || isReadOnlyHistoryCard) return;
         // No direct external invocation here — the pointer handler owns it.
       },
     },
@@ -5444,7 +5462,7 @@ const OdaraScreen = ({
     promotedAltId,
   ]);
   const handleSignedInCarryoverToggle = useCallback(() => {
-    if (isGuestMode) return;
+    if (isGuestMode || signedInIsReadOnlyHistoryCard) return;
     const hasLayer = !!signedInCurrentLayerCarryCard;
     const nextTarget: SignedInCarryoverTarget = !signedInResolvedSequelState.enabled
       ? 'hero'
@@ -5485,6 +5503,7 @@ const OdaraScreen = ({
     haptic('selection');
   }, [
     isGuestMode,
+    signedInIsReadOnlyHistoryCard,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
     signedInResolvedSequelState,
@@ -6053,8 +6072,10 @@ const OdaraScreen = ({
                         type="button"
                         data-no-card-swipe
                         aria-expanded={reasonChipExpanded}
+                        aria-disabled={isReadOnlyHistoryCard || undefined}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isReadOnlyHistoryCard) return;
                           setReasonChipExpanded((expanded) => !expanded);
                         }}
                         className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
@@ -6121,7 +6142,7 @@ const OdaraScreen = ({
                   selectedMood={(visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood}
                   onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
-                  onSelectRatio={setSelectedRatio}
+                  onSelectRatio={isReadOnlyHistoryCard ? (() => {}) : setSelectedRatio}
                   isExpanded={isGuestMode ? guestLayerExpanded : layerExpanded}
                   onToggleExpand={() => {
                     if (isGuestMode) {
@@ -6135,7 +6156,7 @@ const OdaraScreen = ({
                   consumeLockedMoodTap={isGuestMode || undefined}
                   modeLoading={!isGuestMode ? modeLoading : undefined}
                   modeErrors={!isGuestMode ? modeErrors : undefined}
-                  onRetryMood={!isGuestMode ? ((mood) => {
+                  onRetryMood={!isGuestMode && !isReadOnlyHistoryCard ? ((mood) => {
                     const currentCardId = signedInResolvedCurrentCard?.fragrance_id;
                     if (!currentCardId) return;
                     const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
@@ -6211,15 +6232,17 @@ const OdaraScreen = ({
                 role="group"
                 aria-label="Card actions"
               >
-              <button
-                ref={favoriteButtonRef}
-                type="button"
-                aria-label="Favorite"
-                aria-pressed={bottomStarActive}
-                onClick={() => {
-                  cardController.actions.toggleStar();
-                  setFavoriteLabelTick((t) => t + 1);
-                }}
+                <button
+                  ref={favoriteButtonRef}
+                  type="button"
+                  aria-label="Favorite"
+                  aria-pressed={bottomStarActive}
+                  aria-disabled={isReadOnlyHistoryCard || undefined}
+                  onClick={() => {
+                    if (isReadOnlyHistoryCard) return;
+                    cardController.actions.toggleStar();
+                    setFavoriteLabelTick((t) => t + 1);
+                  }}
                 className="relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
                   ...sharedBottomActionButtonStyle,
@@ -6261,9 +6284,9 @@ const OdaraScreen = ({
                 return (
                   <HeartReactionButton
                     state={heartState}
-                    disabled={!heartKey}
+                    disabled={!heartKey || isReadOnlyHistoryCard}
                     onChange={(next) => {
-                      if (!heartKey) return;
+                      if (!heartKey || isReadOnlyHistoryCard) return;
                       setHeartStateByKey(prev => ({ ...prev, [heartKey]: next }));
                     }}
                     onHaptic={(intensity) => haptic(intensity === 'medium' ? 'success' : 'selection')}
@@ -6276,8 +6299,8 @@ const OdaraScreen = ({
                 type="button"
                 aria-label="Daisy chain"
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
-                aria-disabled={isGuestMode || undefined}
-                onClick={isGuestMode ? undefined : () => {
+                aria-disabled={isGuestMode || isReadOnlyHistoryCard || undefined}
+                onClick={isGuestMode || isReadOnlyHistoryCard ? undefined : () => {
                   // Determine the label BEFORE state flip:
                   // current target 'off' -> next is daisy active -> "Daisy Chain"
                   // current target non-off -> next will turn off -> "Off"
