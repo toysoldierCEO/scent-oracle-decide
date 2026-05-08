@@ -2101,6 +2101,13 @@ const OdaraScreen = ({
     return selectedEntry;
   }, [readMoodLaneStack]);
 
+  // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
+  // Reset to {balance:0,bold:0,smooth:0,wild:0} on every payload change.
+  // Repeated taps on the same mood cycle this index modulo stack length.
+  const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
+    balance: 0, bold: 0, smooth: 0, wild: 0,
+  });
+
   const getResolvedMoodLaneEntry = useCallback((
     fragranceId: string | null | undefined,
     mood: LayerMood | null | undefined,
