@@ -782,10 +782,10 @@ function parseLocalDateKey(dateStr: string) {
 
 function buildForecastDays(selectedDate: string) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const anchor = parseLocalDateKey(selectedDate);
-  const todayStr = fmtLocalDateStr(new Date());
-  const weekStart = new Date(anchor);
-  weekStart.setDate(anchor.getDate() - anchor.getDay());
+  const today = new Date();
+  const todayStr = fmtLocalDateStr(today);
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay());
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
@@ -1448,6 +1448,7 @@ type FavoriteCombo = {
   ratio: string;
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
+type PersistedLayerModeSnapshot = NonNullable<LayerModes[LayerMood]>;
 
 type SignedInDayState = {
   lockState: LockState;
@@ -1462,6 +1463,7 @@ type SignedInDayState = {
   carryoverLayerCard: DisplayCard | null;
   lockedCard: DisplayCard | null;
   lockedLayerCard: DisplayCard | null;
+  lockedLayerMode: PersistedLayerModeSnapshot | null;
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
@@ -1488,6 +1490,7 @@ type SignedInVerifiedPredecessorBaton = {
 type SignedInResolvedLockTruth = {
   lockedCard: DisplayCard;
   lockedLayerCard: DisplayCard | null;
+  lockedLayerMode: PersistedLayerModeSnapshot | null;
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
@@ -1509,6 +1512,7 @@ function createDefaultSignedInDayState(): SignedInDayState {
     carryoverLayerCard: null,
     lockedCard: null,
     lockedLayerCard: null,
+    lockedLayerMode: null,
     lockedContext: null,
     lockedMood: 'balance',
     lockedPromotedAltId: null,
@@ -1539,6 +1543,12 @@ function normalizePersistedMood(value: unknown): LayerMood {
 
 function normalizePersistedLockedContext(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function normalizePersistedInteractionType(value: unknown): InteractionType {
+  return value === 'amplify' || value === 'contrast' || value === 'balance'
+    ? value
+    : 'balance';
 }
 
 function toPersistedDisplayCard(card: DisplayCard | null | undefined) {
@@ -1576,6 +1586,75 @@ function fromPersistedDisplayCard(raw: any): DisplayCard | null {
   };
 }
 
+function toPersistedLayerModeSnapshot(
+  layer: NonNullable<LayerModes[LayerMood]> | null | undefined,
+): PersistedLayerModeSnapshot | null {
+  if (!layer?.id || !layer?.name) return null;
+  return {
+    id: layer.id,
+    name: layer.name ?? '',
+    brand: layer.brand ?? '',
+    family_key: layer.family_key ?? '',
+    notes: sanitizeTokenSource(layer.notes),
+    accords: sanitizeTokenSource(layer.accords),
+    interactionType: normalizePersistedInteractionType(layer.interactionType),
+    reason: layer.reason ?? '',
+    why_it_works: layer.why_it_works ?? '',
+    projection: typeof layer.projection === 'number' ? layer.projection : null,
+    ratio_hint: layer.ratio_hint ?? '',
+    application_style: layer.application_style ?? '',
+    placement_hint: layer.placement_hint ?? '',
+    spray_guidance: layer.spray_guidance ?? '',
+  };
+}
+
+function fromPersistedLayerModeSnapshot(raw: any): PersistedLayerModeSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    brand: typeof raw.brand === 'string' ? raw.brand : '',
+    family_key: typeof raw.family_key === 'string' ? raw.family_key : '',
+    notes: sanitizeTokenSource(raw.notes),
+    accords: sanitizeTokenSource(raw.accords),
+    interactionType: normalizePersistedInteractionType(raw.interactionType),
+    reason: typeof raw.reason === 'string' ? raw.reason : '',
+    why_it_works: typeof raw.why_it_works === 'string' ? raw.why_it_works : '',
+    projection: typeof raw.projection === 'number' ? raw.projection : null,
+    ratio_hint: typeof raw.ratio_hint === 'string' ? raw.ratio_hint : '',
+    application_style: typeof raw.application_style === 'string' ? raw.application_style : '',
+    placement_hint: typeof raw.placement_hint === 'string' ? raw.placement_hint : '',
+    spray_guidance: typeof raw.spray_guidance === 'string' ? raw.spray_guidance : '',
+  };
+}
+
+function areSameLayerModeSnapshots(
+  a: PersistedLayerModeSnapshot | null | undefined,
+  b: PersistedLayerModeSnapshot | null | undefined,
+) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.brand === b.brand &&
+    a.family_key === b.family_key &&
+    a.interactionType === b.interactionType &&
+    a.reason === b.reason &&
+    a.why_it_works === b.why_it_works &&
+    a.projection === b.projection &&
+    a.ratio_hint === b.ratio_hint &&
+    a.application_style === b.application_style &&
+    a.placement_hint === b.placement_hint &&
+    a.spray_guidance === b.spray_guidance &&
+    JSON.stringify(a.notes) === JSON.stringify(b.notes) &&
+    JSON.stringify(a.accords) === JSON.stringify(b.accords)
+  );
+}
+
 function serializeSignedInDayStateForStorage(state: SignedInDayState) {
   const normalizedLockState = normalizePersistedLockState(state.lockState);
   const daisyChainEnabled = state.daisyChainEnabled === true ? true : state.daisyChainEnabled === false ? false : null;
@@ -1584,6 +1663,7 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
   const carryoverNextDayRole = daisyChainEnabled === true ? normalizePersistedNextDayRole(state.carryoverNextDayRole) : null;
   const lockedCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedCard) : null;
   const lockedLayerCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedLayerCard) : null;
+  const lockedLayerMode = normalizedLockState === 'locked' ? toPersistedLayerModeSnapshot(state.lockedLayerMode) : null;
 
   return {
     lockState: normalizedLockState,
@@ -1598,6 +1678,7 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     carryoverLayerCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverLayerCard) : null,
     lockedCard,
     lockedLayerCard,
+    lockedLayerMode,
     lockedContext: normalizedLockState === 'locked' ? normalizePersistedLockedContext(state.lockedContext) : null,
     lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
@@ -1632,6 +1713,7 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
       : null,
     lockedCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedCard) : null,
     lockedLayerCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedLayerCard) : null,
+    lockedLayerMode: lockState === 'locked' ? fromPersistedLayerModeSnapshot(raw.lockedLayerMode) : null,
     lockedContext: lockState === 'locked' ? normalizePersistedLockedContext(raw.lockedContext) : null,
     lockedMood: lockState === 'locked' ? normalizePersistedMood(raw.lockedMood) : 'balance',
     lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
@@ -1653,6 +1735,7 @@ function isPersistableSignedInDayState(state: SignedInDayState): boolean {
     || !!serialized.carryoverLayerCard
     || !!serialized.lockedCard
     || !!serialized.lockedLayerCard
+    || !!serialized.lockedLayerMode
     || serialized.lockedPromotedAltId !== null
   );
 }
@@ -1716,11 +1799,16 @@ function resolveSignedInLockedTruth(
 ): SignedInResolvedLockTruth | null {
   if (!dayState || dayState.lockState !== 'locked' || !dayState.lockedCard) return null;
 
+  const lockedMood = normalizePersistedMood(dayState.lockedMood);
+  const lockedLayerMode = dayState.lockedLayerMode
+    ?? toLayerModeFromDisplayCard(dayState.lockedLayerCard, lockedMood);
+
   return {
     lockedCard: dayState.lockedCard,
     lockedLayerCard: dayState.lockedLayerCard ?? null,
+    lockedLayerMode,
     lockedContext: normalizePersistedLockedContext(dayState.lockedContext),
-    lockedMood: normalizePersistedMood(dayState.lockedMood),
+    lockedMood,
     lockedPromotedAltId: dayState.lockedPromotedAltId ?? null,
   };
 }
@@ -1887,7 +1975,30 @@ const OdaraScreen = ({
 }: OdaraScreenProps) => {
   const [activeOracle, setActiveOracle] = useState<OracleResult | null>(oracle);
   // heroLayer no longer used — all layer resolution goes through get_layer_for_card_v1
-  const forecastDays = buildForecastDays(selectedDate);
+  const currentWeekDays = buildForecastDays(selectedDate);
+  const currentWeekStartDateKey = currentWeekDays[0]?.dateStr ?? fmtLocalDateStr(new Date());
+  const [signedInLockedHistoryDateKeys, setSignedInLockedHistoryDateKeys] = useState<string[]>([]);
+  const signedInLockedHistoryDays = useMemo(() => {
+    const todayStr = fmtLocalDateStr(new Date());
+    return signedInLockedHistoryDateKeys
+      .filter((dateKey) => dateKey < currentWeekStartDateKey)
+      .sort((a, b) => a.localeCompare(b))
+      .map((dateKey) => {
+        const d = parseLocalDateKey(dateKey);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return {
+          label: dayNames[d.getDay()],
+          day: d.getDate(),
+          dateStr: dateKey,
+          isToday: dateKey === todayStr,
+          isSelected: dateKey === selectedDate,
+        };
+      });
+  }, [signedInLockedHistoryDateKeys, currentWeekStartDateKey, selectedDate]);
+  const forecastDays = useMemo(
+    () => [...signedInLockedHistoryDays, ...currentWeekDays],
+    [signedInLockedHistoryDays, currentWeekDays]
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2028,9 +2139,24 @@ const OdaraScreen = ({
       }
     : null;
   const suppressCardClickRef = useRef(false);
-  const selectedForecastIndex = Math.max(0, forecastDays.findIndex((fd) => fd.dateStr === selectedDate));
+  const selectedForecastIndex = forecastDays.findIndex((fd) => fd.dateStr === selectedDate);
   const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
-  const nextForecastDay = selectedForecastIndex < forecastDays.length - 1 ? forecastDays[selectedForecastIndex + 1] : null;
+  const nextForecastDay = selectedForecastIndex >= 0 && selectedForecastIndex < forecastDays.length - 1
+    ? forecastDays[selectedForecastIndex + 1]
+    : null;
+
+  useEffect(() => {
+    if (selectedForecastIndex < 0) return;
+    const selectedCell = dayCellRefs.current[selectedForecastIndex];
+    if (!selectedCell) return;
+    window.requestAnimationFrame(() => {
+      selectedCell.scrollIntoView({
+        inline: 'center',
+        block: 'nearest',
+        behavior: 'smooth',
+      });
+    });
+  }, [selectedForecastIndex, forecastDays.length]);
 
   // ── Queue from get_home_card_queue_v1 ──
   const [queue, setQueue] = useState<DisplayCard[]>([]);
@@ -2561,7 +2687,8 @@ const OdaraScreen = ({
   const currentDateKey = selectedDate;
   const todayDateKey = fmtLocalDateStr(new Date());
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
-  const visibleWeekDateKeys = useMemo(() => forecastDays.map((fd) => fd.dateStr), [forecastDays]);
+  const currentWeekDateKeys = useMemo(() => currentWeekDays.map((fd) => fd.dateStr), [currentWeekDays]);
+  const visibleWeekDateKeys = currentWeekDateKeys;
   const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
   const forecastLaneContexts = useMemo(() => ['daily', 'work', 'hangout', 'date'] as const, []);
   const signedInWeekHydrationDateKeys = useMemo(() => {
@@ -2593,9 +2720,16 @@ const OdaraScreen = ({
   const lockState: LockState = signedInDayState.lockState;
   const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
   const signedInWeekMemoryRequestIdRef = useRef(0);
+  const signedInHistoryMemoryRequestIdRef = useRef(0);
   const signedInWeekMemoryWriteTimeoutRef = useRef<number | null>(null);
   const [signedInWeekMemoryReadyScopeKey, setSignedInWeekMemoryReadyScopeKey] = useState<string>(isGuestMode ? 'guest' : '');
   const signedInWeekMemoryReady = isGuestMode || signedInWeekMemoryReadyScopeKey === signedInWeekMemoryScopeKey;
+  const [signedInHistoryMemoryReadyScopeKey, setSignedInHistoryMemoryReadyScopeKey] = useState<string>(isGuestMode ? 'guest' : '');
+  const signedInHistoryMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${currentWeekStartDateKey}`;
+  const signedInHistoryMemoryReady = isGuestMode || signedInHistoryMemoryReadyScopeKey === signedInHistoryMemoryScopeKey;
+  const selectedDateNeedsHistoryMemory = !isGuestMode && currentDateKey < currentWeekStartDateKey;
+  const signedInResolvedMemoryReady = isGuestMode
+    || (signedInWeekMemoryReady && (!selectedDateNeedsHistoryMemory || signedInHistoryMemoryReady));
   const setLockState = useCallback((ls: LockState) => {
     setSignedInDayStateMap(prev => {
       const current = prev[currentDateKey] ?? createDefaultSignedInDayState();
@@ -2606,6 +2740,7 @@ const OdaraScreen = ({
             lockState: ls,
             lockedCard: null,
             lockedLayerCard: null,
+            lockedLayerMode: null,
             lockedContext: null,
             lockedMood: 'balance',
             lockedPromotedAltId: null,
@@ -2614,6 +2749,7 @@ const OdaraScreen = ({
         current.lockState === next.lockState &&
         current.lockedCard === next.lockedCard &&
         current.lockedLayerCard === next.lockedLayerCard &&
+        current.lockedLayerMode === next.lockedLayerMode &&
         current.lockedContext === next.lockedContext &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId
@@ -2694,7 +2830,8 @@ const OdaraScreen = ({
         areSameDisplayCards(current.carryoverHeroCard, next.carryoverHeroCard) &&
         areSameDisplayCards(current.carryoverLayerCard, next.carryoverLayerCard) &&
         areSameDisplayCards(current.lockedCard, next.lockedCard) &&
-        areSameDisplayCards(current.lockedLayerCard, next.lockedLayerCard)
+        areSameDisplayCards(current.lockedLayerCard, next.lockedLayerCard) &&
+        areSameLayerModeSnapshots(current.lockedLayerMode, next.lockedLayerMode)
       ) {
         return prev;
       }
@@ -2718,7 +2855,9 @@ const OdaraScreen = ({
 
     persistedSignedInDayStateRef.current = {};
     setSignedInDayStateMap({});
+    setSignedInLockedHistoryDateKeys([]);
     setSignedInWeekMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
+    setSignedInHistoryMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
   }, [isGuestMode, userId]);
 
   useEffect(() => {
@@ -2819,6 +2958,95 @@ const OdaraScreen = ({
     userId,
     signedInWeekHydrationDateKeysKey,
     signedInWeekMemoryScopeKey,
+  ]);
+
+  useEffect(() => {
+    if (isGuestMode) {
+      setSignedInLockedHistoryDateKeys([]);
+      setSignedInHistoryMemoryReadyScopeKey('guest');
+      return;
+    }
+
+    if (!userId) {
+      setSignedInLockedHistoryDateKeys([]);
+      setSignedInHistoryMemoryReadyScopeKey('');
+      return;
+    }
+
+    const requestId = signedInHistoryMemoryRequestIdRef.current + 1;
+    signedInHistoryMemoryRequestIdRef.current = requestId;
+    setSignedInHistoryMemoryReadyScopeKey('');
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await odaraSupabase
+          .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+          .select('date_key, state_json, updated_at')
+          .eq('user_id', userId)
+          .lt('date_key', currentWeekStartDateKey);
+
+        if (cancelled || signedInHistoryMemoryRequestIdRef.current !== requestId) return;
+        if (error) throw error;
+
+        const loadedStates: SignedInDayStateMap = {};
+        const lockedHistoryKeys: string[] = [];
+        const persistedEntries: Record<string, string | null> = {};
+
+        for (const row of Array.isArray(data) ? data : []) {
+          const dateKey = typeof row?.date_key === 'string' ? row.date_key : '';
+          if (!dateKey) continue;
+          const state = deserializeSignedInDayStateFromStorage(row?.state_json);
+          const lockTruth = resolveSignedInLockedTruth(state);
+          if (!lockTruth) continue;
+          loadedStates[dateKey] = state;
+          lockedHistoryKeys.push(dateKey);
+          persistedEntries[dateKey] = stableSerializeSignedInDayState(state);
+        }
+
+        persistedSignedInDayStateRef.current = {
+          ...persistedSignedInDayStateRef.current,
+          ...persistedEntries,
+        };
+
+        setSignedInLockedHistoryDateKeys(
+          lockedHistoryKeys.sort((a, b) => a.localeCompare(b))
+        );
+        setSignedInDayStateMap((prev) => {
+          let changed = false;
+          const next = { ...prev };
+
+          for (const [dateKey, loaded] of Object.entries(loadedStates)) {
+            const serializedLoaded = stableSerializeSignedInDayState(loaded);
+            const existing = prev[dateKey];
+            const serializedExisting = existing ? stableSerializeSignedInDayState(existing) : null;
+            if (serializedExisting === serializedLoaded) continue;
+            next[dateKey] = loaded;
+            changed = true;
+          }
+
+          return changed ? next : prev;
+        });
+      } catch (error) {
+        if (cancelled || signedInHistoryMemoryRequestIdRef.current !== requestId) return;
+        console.error('[Odara] signed-in locked history hydrate failed', error);
+        setSignedInLockedHistoryDateKeys([]);
+      } finally {
+        if (!cancelled && signedInHistoryMemoryRequestIdRef.current === requestId) {
+          setSignedInHistoryMemoryReadyScopeKey(signedInHistoryMemoryScopeKey);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isGuestMode,
+    userId,
+    currentWeekStartDateKey,
+    signedInHistoryMemoryScopeKey,
   ]);
 
   useEffect(() => {
@@ -3278,7 +3506,7 @@ const OdaraScreen = ({
       return;
     }
 
-    if (!isGuestMode && !signedInWeekMemoryReady) {
+    if (!isGuestMode && !signedInResolvedMemoryReady) {
       return;
     }
 
@@ -3453,7 +3681,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay, isGuestMode, signedInWeekMemoryReady]);
+  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay, isGuestMode, signedInResolvedMemoryReady]);
 
   // No eager modes fetch — moods load lazily on user tap
 
@@ -3696,9 +3924,13 @@ const OdaraScreen = ({
       : resolveQueuedHeroDisplayWithDetails(queuedHeroSource, heroDetail);
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
-    const forcedLayerMode = signedInForcedLayerCarryCard
-      ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood)
+    const forcedLockedLayerMode = signedInResolvedDayDecisionSource === 'locked'
+      ? (signedInResolvedLockTruth?.lockedLayerMode ?? null)
       : null;
+    const forcedLayerMode = forcedLockedLayerMode
+      ?? (signedInForcedLayerCarryCard
+        ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood)
+        : null);
     const layerSource = forcedLayerMode ?? visibleModeEntry;
     const visibleLayerDetail = layerSource?.id
       ? (fragranceDetailCacheRef.current.get(layerSource.id) ?? null)
@@ -3903,7 +4135,7 @@ const OdaraScreen = ({
       duplicateResolution,
       resolvedCurrentCard,
     };
-  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInVerifiedPredecessorBaton]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton]);
 
   useEffect(() => {
     if (isGuestMode || !activeMainCardRender || !visibleCard) return;
@@ -3938,8 +4170,8 @@ const OdaraScreen = ({
 
     if (lockState === 'locked') {
       updateSignedInDayState(currentDateKey, (current) => (
-        current.lockedLayerCard
-          ? { ...current, lockedLayerCard: null }
+        current.lockedLayerCard || current.lockedLayerMode
+          ? { ...current, lockedLayerCard: null, lockedLayerMode: null }
           : current
       ));
     }
@@ -5424,6 +5656,7 @@ const OdaraScreen = ({
           ...next,
           lockedCard: signedInCurrentHeroCarryCard,
           lockedLayerCard: signedInCurrentLayerCarryCard,
+          lockedLayerMode: toPersistedLayerModeSnapshot(signedInVisibleLayer),
           lockedContext: selectedContext,
           lockedMood: selectedMood,
           lockedPromotedAltId: promotedAltId,
@@ -5458,6 +5691,7 @@ const OdaraScreen = ({
     lockState,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
+    signedInVisibleLayer,
     selectedMood,
     promotedAltId,
   ]);
@@ -6353,7 +6587,7 @@ const OdaraScreen = ({
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div ref={dayStripRef} className="relative flex w-full justify-between">
+          <div ref={dayStripRef} className="relative flex w-full gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
             {/* Subtle full-week notches at every day center, behind day cells */}
             {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
               <div
@@ -6435,7 +6669,7 @@ const OdaraScreen = ({
                   key={i}
                   ref={(el) => { dayCellRefs.current[i] = el; }}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="relative flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
+                  className="relative flex flex-none flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
                     background: 'rgba(255,255,255,0.08)',
                     zIndex: 2,
