@@ -800,6 +800,24 @@ function buildForecastDays(selectedDate: string) {
   });
 }
 
+function buildForwardRailDays(selectedDate: string) {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+  const todayStr = fmtLocalDateStr(today);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = fmtLocalDateStr(d);
+    return {
+      label: dayNames[d.getDay()],
+      day: d.getDate(),
+      dateStr,
+      isToday: dateStr === todayStr,
+      isSelected: dateStr === selectedDate,
+    };
+  });
+}
+
 function getDateLabel(dateStr: string) {
   const d = parseLocalDateKey(dateStr);
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -1995,9 +2013,17 @@ const OdaraScreen = ({
         };
       });
   }, [signedInLockedHistoryDateKeys, currentWeekStartDateKey, selectedDate, todayDateKey]);
+  const forwardRailDays = useMemo(
+    () => buildForwardRailDays(selectedDate),
+    [selectedDate]
+  );
+  const earlierCurrentWeekDays = useMemo(
+    () => currentWeekDays.filter((fd) => fd.dateStr < todayDateKey),
+    [currentWeekDays, todayDateKey]
+  );
   const navigationDays = useMemo(
-    () => [...signedInLockedHistoryDays, ...currentWeekDays],
-    [signedInLockedHistoryDays, currentWeekDays]
+    () => [...signedInLockedHistoryDays, ...earlierCurrentWeekDays, ...forwardRailDays],
+    [signedInLockedHistoryDays, earlierCurrentWeekDays, forwardRailDays]
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -2074,13 +2100,9 @@ const OdaraScreen = ({
     const compute = () => {
       const strip = navigationStripRef.current;
       const content = navigationContentRef.current;
-      const todayIdx = currentWeekDays.findIndex((fd) => fd.isToday);
-      const todayDateStr = todayIdx >= 0 ? currentWeekDays[todayIdx]?.dateStr ?? null : null;
-      const tomorrowDateStr = todayIdx >= 0 ? currentWeekDays[todayIdx + 1]?.dateStr ?? null : null;
-      const todayNavIdx = todayDateStr ? navigationDays.findIndex((fd) => fd.dateStr === todayDateStr) : -1;
-      const tomorrowNavIdx = tomorrowDateStr ? navigationDays.findIndex((fd) => fd.dateStr === tomorrowDateStr) : -1;
+      const todayNavIdx = navigationDays.findIndex((fd) => fd.isToday);
       const todayBtn = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx] : null;
-      const nextBtn  = tomorrowNavIdx >= 0 ? navigationDayCellRefs.current[tomorrowNavIdx] : null;
+      const nextBtn  = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx + 1] : null;
       if (!strip || !content || !todayBtn || !nextBtn) { setMoonMarker(null); return; }
       const cRect = content.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
@@ -2103,9 +2125,8 @@ const OdaraScreen = ({
       const dayDigitCenterY = aRect.top + 25 - cRect.top;
       // Full-week notches: a small tick at every cell center.
       const weekNotches: number[] = [];
-      for (const fd of currentWeekDays) {
-        const navIdx = navigationDays.findIndex((day) => day.dateStr === fd.dateStr);
-        const btn = navIdx >= 0 ? navigationDayCellRefs.current[navIdx] : null;
+      for (let i = 0; i < navigationDays.length; i++) {
+        const btn = navigationDayCellRefs.current[i];
         if (!btn) continue;
         const r = btn.getBoundingClientRect();
         weekNotches.push(r.left + r.width / 2 - cRect.left);
@@ -2135,7 +2156,7 @@ const OdaraScreen = ({
       window.removeEventListener('scroll', compute, true);
       strip?.removeEventListener('scroll', compute);
     };
-  }, [markerSecondTick, nowTick, currentWeekDays, navigationDays]);
+  }, [markerSecondTick, nowTick, navigationDays]);
   // Backwards-compat alias used by render block below.
   const orbGeom = moonMarker
     ? {
@@ -6606,8 +6627,8 @@ const OdaraScreen = ({
         >
           <div
             ref={navigationStripRef}
-            className="overflow-x-auto pb-1"
-            style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+            className="hide-horizontal-scrollbar overflow-x-auto pb-1"
+            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
           >
             <div
               ref={navigationContentRef}

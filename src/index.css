@@ -125,3 +125,12 @@
   92%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
 }
+
+.hide-horizontal-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-horizontal-scrollbar::-webkit-scrollbar {
+  display: none;
+}
