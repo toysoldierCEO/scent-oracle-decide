@@ -1995,7 +1995,7 @@ const OdaraScreen = ({
         };
       });
   }, [signedInLockedHistoryDateKeys, currentWeekStartDateKey, selectedDate]);
-  const forecastDays = useMemo(
+  const navigationDays = useMemo(
     () => [...signedInLockedHistoryDays, ...currentWeekDays],
     [signedInLockedHistoryDays, currentWeekDays]
   );
@@ -2037,8 +2037,10 @@ const OdaraScreen = ({
       window.removeEventListener('focus', tick);
     };
   }, []);
-  const dayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const dayStripRef = useRef<HTMLDivElement | null>(null);
+  const currentWeekDayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const currentWeekStripRef = useRef<HTMLDivElement | null>(null);
+  const historyDayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const historyStripRef = useRef<HTMLDivElement | null>(null);
   // ── LiveMoonPhaseMarker geometry ──
   // Position is a PURE lerp between the measured centers of today's and
   // tomorrow's day cells, driven by local wall-clock seconds-since-midnight.
@@ -2070,10 +2072,10 @@ const OdaraScreen = ({
       return new Date();
     };
     const compute = () => {
-      const strip = dayStripRef.current;
-      const todayIdx = forecastDays.findIndex((fd) => fd.isToday);
-      const todayBtn = todayIdx >= 0 ? dayCellRefs.current[todayIdx] : null;
-      const nextBtn  = todayIdx >= 0 ? dayCellRefs.current[todayIdx + 1] : null;
+      const strip = currentWeekStripRef.current;
+      const todayIdx = currentWeekDays.findIndex((fd) => fd.isToday);
+      const todayBtn = todayIdx >= 0 ? currentWeekDayCellRefs.current[todayIdx] : null;
+      const nextBtn  = todayIdx >= 0 ? currentWeekDayCellRefs.current[todayIdx + 1] : null;
       if (!strip || !todayBtn || !nextBtn) { setMoonMarker(null); return; }
       const sRect = strip.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
@@ -2096,8 +2098,8 @@ const OdaraScreen = ({
       const dayDigitCenterY = aRect.top + 25 - sRect.top;
       // Full-week notches: a small tick at every cell center.
       const weekNotches: number[] = [];
-      for (let i = 0; i < dayCellRefs.current.length; i++) {
-        const btn = dayCellRefs.current[i];
+      for (let i = 0; i < currentWeekDayCellRefs.current.length; i++) {
+        const btn = currentWeekDayCellRefs.current[i];
         if (!btn) continue;
         const r = btn.getBoundingClientRect();
         weekNotches.push(r.left + r.width / 2 - sRect.left);
@@ -2118,7 +2120,7 @@ const OdaraScreen = ({
       });
     };
     compute();
-    const strip = dayStripRef.current;
+    const strip = currentWeekStripRef.current;
     window.addEventListener('resize', compute);
     window.addEventListener('scroll', compute, true);
     strip?.addEventListener('scroll', compute);
@@ -2127,7 +2129,7 @@ const OdaraScreen = ({
       window.removeEventListener('scroll', compute, true);
       strip?.removeEventListener('scroll', compute);
     };
-  }, [markerSecondTick, nowTick, selectedDate, forecastDays]);
+  }, [markerSecondTick, nowTick, currentWeekDays]);
   // Backwards-compat alias used by render block below.
   const orbGeom = moonMarker
     ? {
@@ -2139,15 +2141,17 @@ const OdaraScreen = ({
       }
     : null;
   const suppressCardClickRef = useRef(false);
-  const selectedForecastIndex = forecastDays.findIndex((fd) => fd.dateStr === selectedDate);
-  const prevForecastDay = selectedForecastIndex > 0 ? forecastDays[selectedForecastIndex - 1] : null;
-  const nextForecastDay = selectedForecastIndex >= 0 && selectedForecastIndex < forecastDays.length - 1
-    ? forecastDays[selectedForecastIndex + 1]
+  const selectedNavigationIndex = navigationDays.findIndex((fd) => fd.dateStr === selectedDate);
+  const prevForecastDay = selectedNavigationIndex > 0 ? navigationDays[selectedNavigationIndex - 1] : null;
+  const nextForecastDay = selectedNavigationIndex >= 0 && selectedNavigationIndex < navigationDays.length - 1
+    ? navigationDays[selectedNavigationIndex + 1]
     : null;
+  const selectedCurrentWeekIndex = currentWeekDays.findIndex((fd) => fd.dateStr === selectedDate);
+  const selectedHistoryIndex = signedInLockedHistoryDays.findIndex((fd) => fd.dateStr === selectedDate);
 
   useEffect(() => {
-    if (selectedForecastIndex < 0) return;
-    const selectedCell = dayCellRefs.current[selectedForecastIndex];
+    if (selectedCurrentWeekIndex < 0) return;
+    const selectedCell = currentWeekDayCellRefs.current[selectedCurrentWeekIndex];
     if (!selectedCell) return;
     window.requestAnimationFrame(() => {
       selectedCell.scrollIntoView({
@@ -2156,7 +2160,20 @@ const OdaraScreen = ({
         behavior: 'smooth',
       });
     });
-  }, [selectedForecastIndex, forecastDays.length]);
+  }, [selectedCurrentWeekIndex, currentWeekDays.length]);
+
+  useEffect(() => {
+    if (selectedHistoryIndex < 0) return;
+    const selectedCell = historyDayCellRefs.current[selectedHistoryIndex];
+    if (!selectedCell) return;
+    window.requestAnimationFrame(() => {
+      selectedCell.scrollIntoView({
+        inline: 'center',
+        block: 'nearest',
+        behavior: 'smooth',
+      });
+    });
+  }, [selectedHistoryIndex, signedInLockedHistoryDays.length]);
 
   // ── Queue from get_home_card_queue_v1 ──
   const [queue, setQueue] = useState<DisplayCard[]>([]);
@@ -6587,7 +6604,57 @@ const OdaraScreen = ({
             border: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div ref={dayStripRef} className="relative flex w-full gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {!isGuestMode && signedInLockedHistoryDays.length > 0 && (
+            <div className="mb-3">
+              <span className="mb-2 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground/38">
+                Locked History
+              </span>
+              <div
+                ref={historyStripRef}
+                className="flex w-full gap-2 overflow-x-auto pb-1"
+                style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+              >
+                {signedInLockedHistoryDays.map((fd, i) => {
+                  const lane = signedInLockedLaneByDate[fd.dateStr] ?? null;
+                  const accent = lane?.mainColor ?? 'rgba(255,255,255,0.36)';
+                  const layerGlow = lane?.layerColor ?? lane?.mainColor ?? accent;
+                  return (
+                    <button
+                      key={`history-${fd.dateStr}`}
+                      ref={(el) => { historyDayCellRefs.current[i] = el; }}
+                      onClick={() => onDateChange(fd.dateStr)}
+                      className="relative flex flex-none flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 transition-all duration-200"
+                      style={fd.isSelected ? {
+                        background: 'rgba(255,255,255,0.08)',
+                        boxShadow: `inset 0 0 0 1px ${accent}55`,
+                      } : {
+                        background: 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <span className={`text-[10px] tracking-[0.04em] ${fd.isSelected ? 'text-foreground font-semibold' : 'text-muted-foreground/42'}`}>
+                        {fd.label}
+                      </span>
+                      <span className={`text-[14px] font-medium ${fd.isSelected ? 'text-foreground' : 'text-muted-foreground/34'}`}>
+                        {fd.day}
+                      </span>
+                      <div
+                        className="mt-1 h-[3px] w-[18px] rounded-full"
+                        style={{
+                          background: accent,
+                          boxShadow: `0 0 4px ${layerGlow}, 0 0 8px ${layerGlow}44`,
+                        }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div
+            ref={currentWeekStripRef}
+            className="relative flex w-full justify-between"
+          >
             {/* Subtle full-week notches at every day center, behind day cells */}
             {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
               <div
@@ -6610,9 +6677,9 @@ const OdaraScreen = ({
                 cells (zIndex 0 vs cells' zIndex 2) so it peeks out from behind
                 the day labels as it travels along the same horizontal line. */}
             {orbGeom && (() => {
-              const D = 7;            // orb diameter in px
-              const C = D / 2;        // center
-              const R = D / 2;        // radius
+              const D = 7;
+              const C = D / 2;
+              const R = D / 2;
               const lit = orbGeom.moonLitFrac;
               const rx = R * Math.abs(1 - 2 * lit);
               const litRectX = orbGeom.moonWaxing ? C : 0;
@@ -6648,9 +6715,9 @@ const OdaraScreen = ({
               );
             })()}
 
-            {forecastDays.map((fd, i) => {
+            {currentWeekDays.map((fd, i) => {
               const dayLanes = isGuestMode
-                ? forecastLaneContexts.map(ctx => {
+                ? forecastLaneContexts.map((ctx) => {
                     const key = `${fd.dateStr}:${ctx}`;
                     return lockedSelections[key] ?? null;
                   })
@@ -6666,10 +6733,10 @@ const OdaraScreen = ({
 
               return (
                 <button
-                  key={i}
-                  ref={(el) => { dayCellRefs.current[i] = el; }}
+                  key={fd.dateStr}
+                  ref={(el) => { currentWeekDayCellRefs.current[i] = el; }}
                   onClick={() => onDateChange(fd.dateStr)}
-                  className="relative flex flex-none flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
+                  className="relative flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg transition-all duration-200"
                   style={fd.isSelected ? {
                     background: 'rgba(255,255,255,0.08)',
                     zIndex: 2,
@@ -6686,11 +6753,9 @@ const OdaraScreen = ({
                     {fd.day}
                   </span>
 
-                  {/* 4 fixed occasion lane slots — always render all 4 positions */}
                   <div className="flex flex-col gap-[3px] mt-1 w-full items-center" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                     {dayLanes.map((lane, li) => {
                       if (!lane) {
-                        // Empty lane: invisible but preserves positional space only when siblings exist
                         return hasAnyLane ? (
                           <div key={li} style={{ width: '18px', height: '3px' }} />
                         ) : null;
