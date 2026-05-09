@@ -999,7 +999,7 @@ function searchResultToDisplayCard(result: OdaraSearchFragranceResult): DisplayC
     fragrance_id: result.fragrance_id,
     name: result.title,
     family: result.family_key,
-    reason: '',
+    reason: 'Added from search for this card.',
     brand: result.brand,
     image_url: result.image_url,
     notes: sanitizeTokenSource(result.notes),
@@ -2104,8 +2104,8 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     lockedContext: normalizedLockState === 'locked' ? normalizePersistedLockedContext(state.lockedContext) : null,
     lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
-    manualHeroCard: toPersistedDisplayCard(state.manualHeroCard),
-    manualLayerCard: toPersistedDisplayCard(state.manualLayerCard),
+    manualHeroCard: null,
+    manualLayerCard: null,
   };
 }
 
@@ -2143,8 +2143,8 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
     lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
       ? raw.lockedPromotedAltId
       : null,
-    manualHeroCard: fromPersistedDisplayCard(raw.manualHeroCard),
-    manualLayerCard: fromPersistedDisplayCard(raw.manualLayerCard),
+    manualHeroCard: null,
+    manualLayerCard: null,
   };
 }
 
@@ -2163,8 +2163,6 @@ function isPersistableSignedInDayState(state: SignedInDayState): boolean {
     || !!serialized.lockedLayerCard
     || !!serialized.lockedLayerMode
     || serialized.lockedPromotedAltId !== null
-    || !!serialized.manualHeroCard
-    || !!serialized.manualLayerCard
   );
 }
 
@@ -2395,7 +2393,7 @@ function toLayerModeFromDisplayCard(
     accords: Array.isArray(card.accords) ? card.accords : [],
     interactionType: mood,
     reason: card.reason ?? '',
-    why_it_works: '',
+    why_it_works: card.reason ?? '',
     projection: null,
     ratio_hint: '',
     application_style: '',
@@ -3469,6 +3467,8 @@ const OdaraScreen = ({
     () => (isGuestMode ? null : resolveSignedInLockedTruth(signedInDayState)),
     [isGuestMode, signedInDayState]
   );
+  const signedInManualPreviewActive = !isGuestMode
+    && (!!signedInDayState.manualHeroCard || !!signedInDayState.manualLayerCard);
   const signedInIsReadOnlyHistoryCard = !isGuestMode
     && !!signedInResolvedLockTruth
     && currentDateKey < todayDateKey;
@@ -4333,6 +4333,25 @@ const OdaraScreen = ({
     prevSlotRef.current = stateKey;
 
     console.log('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
+    setSignedInDayStateMap((prev) => {
+      let changed = false;
+      const next: SignedInDayStateMap = {};
+
+      for (const [dateKey, state] of Object.entries(prev)) {
+        if (state.manualHeroCard || state.manualLayerCard) {
+          next[dateKey] = {
+            ...state,
+            manualHeroCard: null,
+            manualLayerCard: null,
+          };
+          changed = true;
+        } else {
+          next[dateKey] = state;
+        }
+      }
+
+      return changed ? next : prev;
+    });
     // Immediately wipe the old slot's card data so it can't bleed
     setVisibleCard(null);
     setActiveOracle(null);
@@ -5165,6 +5184,51 @@ const OdaraScreen = ({
   const handleSkipLocal = useCallback(async () => {
     if (skipLoading || !visibleCard || lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
 
+    const hasManualPreview = signedInResolvedDayDecisionSource === 'manual'
+      || !!signedInDayState.manualHeroCard
+      || !!signedInDayState.manualLayerCard;
+
+    if (hasManualPreview) {
+      const currentDayState = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+      const clearedDayState: SignedInDayState = {
+        ...currentDayState,
+        manualHeroCard: null,
+        manualLayerCard: null,
+      };
+      const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
+      const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
+      const normalized = activeSignedInOracle ? normalizeOracleHomePayload(activeSignedInOracle) : null;
+      const v6 = activeSignedInOracle?.__v6 ?? null;
+      const previewClearedDecision = activeSignedInOracle?.today_pick
+        ? resolveSignedInDayDecision(
+            clearedDayState,
+            true,
+            previousDayState,
+            activeSignedInOracle.today_pick,
+            normalizeLayerMoodKey(v6?.ui_default_mode ?? normalized?.defaultMode) ?? (normalized?.defaultMode ?? 'balance'),
+          )
+        : null;
+
+      updateSignedInDayState(currentDateKey, (current) => (
+        current.manualHeroCard || current.manualLayerCard
+          ? { ...current, manualHeroCard: null, manualLayerCard: null }
+          : current
+      ));
+
+      if (previewClearedDecision?.visibleCard) {
+        setVisibleCard(previewClearedDecision.visibleCard);
+        setSignedInForcedLayerCarryCard(previewClearedDecision.forcedLayerCarryCard);
+        setSignedInResolvedDayDecisionSource(previewClearedDecision.source);
+        setSelectedMood(previewClearedDecision.selectedMood);
+        setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
+        setPromotedAltId(previewClearedDecision.promotedAltId);
+      }
+
+      setLayerExpanded(false);
+      setLockState('neutral');
+      return;
+    }
+
     setSkipLoading(true);
     // Play red Tron flash on skip
     setSkipFlash(true);
@@ -5222,7 +5286,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry]);
+  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, previousDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, activeOracle, oracle, updateSignedInDayState]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -5746,12 +5810,18 @@ const OdaraScreen = ({
     // 2. Clear stale state completely
     setLayerExpanded(false);
     setLockState('neutral');
+    updateSignedInDayState(currentDateKey, (current) => (
+      current.manualHeroCard || current.manualLayerCard
+        ? { ...current, manualHeroCard: null, manualLayerCard: null }
+        : current
+    ));
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
 
     // 3. Set new card state BEFORE fetch
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
+    setSignedInResolvedDayDecisionSource('oracle');
     setSelectedMood('balance');
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
@@ -5765,7 +5835,7 @@ const OdaraScreen = ({
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
       });
     });
-  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext, getResolvedMoodLaneEntry]);
+  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext, getResolvedMoodLaneEntry, updateSignedInDayState, currentDateKey]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SHARED CARD CONTROLLER BRIDGE
@@ -6199,16 +6269,17 @@ const OdaraScreen = ({
     const enabled = signedInDayState.daisyChainEnabled === true;
     const mode = signedInDayState.carryoverMode;
     const origin = signedInDayState.carryoverOrigin;
+    const carryoverPreviewBlocked = !!signedInDayState.manualHeroCard || !!signedInDayState.manualLayerCard;
     const selectedCard = enabled && mode === 'hero'
       ? (
-          signedInCurrentHeroCarryCard
+          (carryoverPreviewBlocked ? null : signedInCurrentHeroCarryCard)
           ?? signedInDayState.carryoverHeroCard
           ?? signedInDayState.carryoverSelectedCard
           ?? null
         )
       : enabled && mode === 'layer'
         ? (
-            signedInCurrentLayerCarryCard
+            (carryoverPreviewBlocked ? null : signedInCurrentLayerCarryCard)
             ?? signedInDayState.carryoverLayerCard
             ?? signedInDayState.carryoverSelectedCard
             ?? null
@@ -6317,6 +6388,7 @@ const OdaraScreen = ({
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
     if (lockState === 'locked') return;
+    if (signedInManualPreviewActive) return;
     if (hasStoredSignedInDayState && signedInDayState.daisyChainEnabled === false) return;
     if (hasStoredSignedInDayState && signedInCarryoverOrigin === 'manual') return;
 
@@ -6367,6 +6439,7 @@ const OdaraScreen = ({
     isGuestMode,
     slotChangedSinceLastCommit,
     lockState,
+    signedInManualPreviewActive,
     hasStoredSignedInDayState,
     signedInDayState.daisyChainEnabled,
     signedInCarryoverOrigin,
@@ -6379,6 +6452,7 @@ const OdaraScreen = ({
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
+    if (signedInManualPreviewActive && lockState !== 'locked') return;
     updateSignedInDayState(currentDateKey, (current) => {
       let next = {
         ...current,
@@ -6395,6 +6469,8 @@ const OdaraScreen = ({
           lockedContext: selectedContext,
           lockedMood: selectedMood,
           lockedPromotedAltId: promotedAltId,
+          manualHeroCard: null,
+          manualLayerCard: null,
         };
       }
 
@@ -6423,6 +6499,7 @@ const OdaraScreen = ({
     currentDateKey,
     slotChangedSinceLastCommit,
     updateSignedInDayState,
+    signedInManualPreviewActive,
     lockState,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
@@ -6432,6 +6509,7 @@ const OdaraScreen = ({
   ]);
   const handleSignedInCarryoverToggle = useCallback(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard) return 'off' as SignedInCarryoverTarget;
+    if (signedInManualPreviewActive) return 'off' as SignedInCarryoverTarget;
     const hasLayer = !!signedInCurrentLayerCarryCard;
     const nextTarget = resolveNextSignedInCarryoverTarget(signedInResolvedSequelState, hasLayer);
     const nextSelectedCard = nextTarget === 'hero'
@@ -6468,6 +6546,7 @@ const OdaraScreen = ({
   }, [
     isGuestMode,
     signedInIsReadOnlyHistoryCard,
+    signedInManualPreviewActive,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
     signedInResolvedSequelState,
