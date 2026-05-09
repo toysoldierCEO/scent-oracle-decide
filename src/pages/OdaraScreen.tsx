@@ -1709,6 +1709,44 @@ function isSameFragranceIdentity(
   return !!aName && !!bName && !!aBrand && !!bBrand && aName === bName && aBrand === bBrand;
 }
 
+function isSameRenderableFragranceIdentity(
+  a: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+  b: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+) {
+  if (isSameFragranceIdentity(a, b)) return true;
+
+  const aName = normalizeFragranceIdentityText(a?.name);
+  const bName = normalizeFragranceIdentityText(b?.name);
+  if (!aName || !bName || aName !== bName) return false;
+
+  const aBrand = normalizeFragranceIdentityText(a?.brand);
+  const bBrand = normalizeFragranceIdentityText(b?.brand);
+  if (aBrand && bBrand) {
+    return aBrand === bBrand;
+  }
+
+  return true;
+}
+
+function filterAlternatesAgainstVisibleScents<T>(
+  alternates: T[],
+  getIdentity: (alternate: T) => { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+  excluded: Array<{ fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined>,
+) {
+  const filtered: T[] = [];
+
+  for (const alternate of alternates) {
+    const identity = getIdentity(alternate);
+    if (!identity) continue;
+    if (excluded.some((candidate) => isSameRenderableFragranceIdentity(identity, candidate))) {
+      continue;
+    }
+    filtered.push(alternate);
+  }
+
+  return filtered;
+}
+
 function isSameBackendModeEntryIdentity(
   a: BackendModeEntry | null | undefined,
   b: BackendModeEntry | null | undefined,
@@ -2364,6 +2402,17 @@ function toLayerModeFromDisplayCard(
     placement_hint: '',
     spray_guidance: '',
   } as any;
+}
+
+function buildManualLayerModesFromDisplayCard(
+  card: DisplayCard | null | undefined,
+): LayerModes {
+  return {
+    balance: toLayerModeFromDisplayCard(card, 'balance'),
+    bold: toLayerModeFromDisplayCard(card, 'bold'),
+    smooth: toLayerModeFromDisplayCard(card, 'smooth'),
+    wild: toLayerModeFromDisplayCard(card, 'wild'),
+  };
 }
 
 function findFirstUniqueLayerModeCandidate(
@@ -3632,6 +3681,10 @@ const OdaraScreen = ({
       }
       setSignedInForcedLayerCarryCard(nextForcedLayerCard);
       setSignedInResolvedDayDecisionSource('manual');
+      if (nextForcedLayerCard) {
+        setSelectedMood('balance');
+        setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
+      }
       setPromotedAltId(null);
       setLayerExpanded(false);
       setLockState('neutral');
@@ -3649,6 +3702,8 @@ const OdaraScreen = ({
     fetchFragranceDetail,
     isGuestMode,
     setLockState,
+    setSelectedMood,
+    setSignedInLayerIdxByMood,
     signedInIsReadOnlyHistoryCard,
     updateSignedInDayState,
   ]);
@@ -4686,31 +4741,45 @@ const OdaraScreen = ({
     const v6: any = v6Payload;
     const o: any = activeOracle ?? oracle ?? {};
     const heroId = (v6?.hero?.fragrance_id ?? o?.today_pick?.fragrance_id) ?? null;
-    const isHeroCard = !!heroId && visibleCard.fragrance_id === heroId;
+    const manualHeroCard = signedInResolvedDayDecisionSource === 'manual'
+      ? (signedInDayState.manualHeroCard ?? visibleCard)
+      : null;
+    const manualLayerCard = signedInResolvedDayDecisionSource === 'manual'
+      ? (signedInDayState.manualLayerCard ?? signedInForcedLayerCarryCard)
+      : null;
+    const heroSourceCard = manualHeroCard ?? visibleCard;
+    const isHeroCard = !manualHeroCard && !!heroId && visibleCard.fragrance_id === heroId;
 
-    const heroDetail = fragranceDetailCacheRef.current.get(visibleCard.fragrance_id) ?? null;
-    const queuedHeroSnapshot = !isHeroCard
-      ? (queue.find((card) => card.fragrance_id === visibleCard.fragrance_id) ?? null)
+    const heroDetail = fragranceDetailCacheRef.current.get(heroSourceCard.fragrance_id) ?? null;
+    const queuedHeroSnapshot = !manualHeroCard && !isHeroCard
+      ? (queue.find((card) => card.fragrance_id === heroSourceCard.fragrance_id) ?? null)
       : null;
-    const queuedHeroSettled = !isHeroCard
-      ? (signedInQueuedHeroRef.current.get(visibleCard.fragrance_id) ?? null)
+    const queuedHeroSettled = !manualHeroCard && !isHeroCard
+      ? (signedInQueuedHeroRef.current.get(heroSourceCard.fragrance_id) ?? null)
       : null;
-    const queuedHeroSource = !isHeroCard
+    const queuedHeroSource = !manualHeroCard && !isHeroCard
       ? (mergeQueuedHeroCardSources(
           queuedHeroSettled,
-          visibleCard,
+          heroSourceCard,
           queuedHeroSnapshot,
-        ) ?? visibleCard)
-      : visibleCard;
-    const resolvedHero = isHeroCard
-      ? resolveDisplayCardWithDetails(visibleCard, heroDetail)
+        ) ?? heroSourceCard)
+      : heroSourceCard;
+    const resolvedHero = manualHeroCard
+      ? resolveDisplayCardWithDetails(heroSourceCard, heroDetail)
+      : isHeroCard
+      ? resolveDisplayCardWithDetails(heroSourceCard, heroDetail)
       : resolveQueuedHeroDisplayWithDetails(queuedHeroSource, heroDetail);
 
     // Visible layer — resolved from the v6 mode stack (already in modeResults).
     const forcedLockedLayerMode = signedInResolvedDayDecisionSource === 'locked'
       ? (signedInResolvedLockTruth?.lockedLayerMode ?? null)
       : null;
-    const forcedLayerMode = forcedLockedLayerMode
+    const manualLayerModes = manualLayerCard
+      ? buildManualLayerModesFromDisplayCard(manualLayerCard)
+      : null;
+    const forcedLayerMode = manualLayerCard
+      ? manualLayerModes?.balance ?? null
+      : forcedLockedLayerMode
       ?? (signedInForcedLayerCarryCard
         ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood)
         : null);
@@ -4874,9 +4943,14 @@ const OdaraScreen = ({
           accords: layerSurfacesReady ? finalLayer.accords : [],
         }
       : null;
-    const finalAlternates = finalHero.fragrance_id === visibleCard.fragrance_id
-      ? signedInVisibleAlternates
+    const finalAlternates = finalHero.fragrance_id === heroSourceCard.fragrance_id
+      ? filterAlternatesAgainstVisibleScents(
+          signedInVisibleAlternates,
+          (alternate) => alternate,
+          [finalHero, visibleLayer, manualHeroCard, manualLayerCard],
+        )
       : [];
+    const finalSelectedMode: LayerMood = manualLayerModes?.balance ? 'balance' : selectedMood;
 
     const resolvedCurrentCard = {
       fragrance_id: finalHero.fragrance_id,
@@ -4897,9 +4971,9 @@ const OdaraScreen = ({
       layerFamilyKey: layerFamilyKeyForDisplay,
       layerFamilyLabel: layerFamilyLabel,
       layerTokens: layerSurfacesReady ? layerTokens : [],
-      layerModes: modeResults,
+      layerModes: manualLayerModes ?? modeResults,
       alternates: finalAlternates,
-      selectedMode: selectedMood,
+      selectedMode: finalSelectedMode,
       visibleCardId: finalHero.fragrance_id,
       isHeroCard: resolvedCurrentCardIsHeroCard,
     };
@@ -4915,8 +4989,8 @@ const OdaraScreen = ({
       activeLayerFamilyKey: layerFamilyKeyForDisplay,
       activeLayerFamilyLabel: layerFamilyLabel,
       activeLayerTokens: layerSurfacesReady ? layerTokens : [],
-      layerModes: modeResults,
-      selectedMode: selectedMood,
+      layerModes: manualLayerModes ?? modeResults,
+      selectedMode: finalSelectedMode,
       visibleCardId: finalHero.fragrance_id,
       isLocked: lockState === 'locked',
       activeAlternates: finalAlternates,
@@ -4926,7 +5000,7 @@ const OdaraScreen = ({
       duplicateResolution,
       resolvedCurrentCard,
     };
-  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
 
   useEffect(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard || !activeMainCardRender || !visibleCard) return;
@@ -6014,6 +6088,11 @@ const OdaraScreen = ({
         };
       })
       .filter((item) => item.label && item.originalIdx !== selectedAlternateIdx);
+    const filteredGuestAlternates = filterAlternatesAgainstVisibleScents(
+      guestAlternates,
+      (item) => item?.alternate?.hero ?? null,
+      [hero, layer],
+    );
 
     return {
       fragrance_id: hero?.fragrance_id ?? hero?.id ?? null,
@@ -6030,7 +6109,7 @@ const OdaraScreen = ({
       layerFamilyLabel,
       layerTokens,
       layerModes: guestLayerModesToModeSelector(visibleGuestRender.layerModes),
-      alternates: guestAlternates,
+      alternates: filteredGuestAlternates,
       selectedMode: visibleGuestRender.selectedMode,
       resolvedHeroRail: {
         familyLabel: heroFamilyLabel,
@@ -6551,16 +6630,12 @@ const OdaraScreen = ({
 
         {/* Inline search results — appear DIRECTLY UNDER the search bar.
             Lightweight, scrollable, integrated into the same screen. */}
-        {searchOpen && (
+        {searchOpen && (searchHasQuery || searchLoading || !!searchError || searchResults.length > 0) && (
           <div
             className="mb-3 rounded-[16px] border border-white/8 bg-white/[0.02] backdrop-blur-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
             style={{ maxHeight: '40vh', overflowY: 'auto' }}
           >
-            {!searchHasQuery ? (
-              <p className="text-[12.5px] text-foreground/55">
-                Search your scent world.
-              </p>
-            ) : searchLoading ? (
+            {searchLoading ? (
               <p className="text-[12.5px] text-foreground/52">
                 Searching scents…
               </p>

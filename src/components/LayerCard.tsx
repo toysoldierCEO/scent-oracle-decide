@@ -571,7 +571,7 @@ const LayerCard = ({
 
               {resolvedLayerTokens.length > 0 && (
                 <div
-                  className="hide-horizontal-scrollbar mt-1.5 flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-1"
+                  className="odara-token-rail-fade hide-horizontal-scrollbar mt-1.5 flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-1"
                   style={{ WebkitOverflowScrolling: 'touch' }}
                   onClick={(e) => e.stopPropagation()}
                 >
