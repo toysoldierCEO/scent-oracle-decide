@@ -918,6 +918,8 @@ interface FragranceDetail {
   family_key: string | null;
   notes: string[];
   accords: string[];
+  image_url: string | null;
+  thumbnail_url: string | null;
 }
 
 /** Normalized card for display — shared between hero and queue */
@@ -1412,14 +1414,22 @@ function hasResolvedFamilyValue(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function hasResolvedImageValue(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 function displayCardNeedsDetailHydration(card: DisplayCard | null | undefined): boolean {
   if (!card) return false;
-  return !hasResolvedFamilyValue(card.family) || !hasRenderableRailTokens(card.accords, card.notes);
+  return !hasResolvedFamilyValue(card.family)
+    || !hasRenderableRailTokens(card.accords, card.notes)
+    || !hasResolvedImageValue(card.image_url);
 }
 
 function layerModeNeedsDetailHydration(layer: NonNullable<LayerModes[LayerMood]> | null | undefined): boolean {
   if (!layer) return false;
-  return !hasResolvedFamilyValue(layer.family_key) || !hasRenderableRailTokens(layer.accords, layer.notes);
+  return !hasResolvedFamilyValue(layer.family_key)
+    || !hasRenderableRailTokens(layer.accords, layer.notes)
+    || !hasResolvedImageValue(layer.image_url);
 }
 
 function pickPreferredRailSource(
@@ -1474,7 +1484,7 @@ function resolveDisplayCardWithDetails(
     name: card.name || detail.name || '',
     brand: card.brand || detail.brand || '',
     family: card.family || detail.family_key || '',
-    image_url: card.image_url ?? null,
+    image_url: card.image_url ?? detail.image_url ?? null,
     notes: preferredRail.notes,
     accords: preferredRail.accords,
   };
@@ -1507,7 +1517,7 @@ function resolveQueuedHeroDisplayWithDetails(
     name: card.name || detail.name || '',
     brand: card.brand || detail.brand || '',
     family: detail.family_key || card.family || '',
-    image_url: card.image_url ?? null,
+    image_url: card.image_url ?? detail.image_url ?? null,
     notes: useDetailRail ? detailNotes : previewNotes,
     accords: useDetailRail ? detailAccords : previewAccords,
   };
@@ -1542,6 +1552,7 @@ function mergeQueuedHeroCardSources(
     name: sources.find((source) => source.name)?.name ?? '',
     brand: sources.find((source) => source.brand)?.brand ?? '',
     family: sources.find((source) => typeof source.family === 'string' && source.family.trim().length > 0)?.family ?? '',
+    image_url: sources.find((source) => hasResolvedImageValue(source.image_url))?.image_url ?? null,
     reason: sources.find((source) => source.reason)?.reason ?? '',
     notes: bestNotes,
     accords: bestAccords,
@@ -1708,7 +1719,7 @@ function resolveLayerModeWithDetails(
     name: layer.name || detail.name || '',
     brand: layer.brand || detail.brand || '',
     family_key: layer.family_key || detail.family_key || '',
-    image_url: layer.image_url ?? null,
+    image_url: layer.image_url ?? detail.image_url ?? null,
     notes: preferredRail.notes,
     accords: preferredRail.accords,
   };
@@ -1763,6 +1774,12 @@ type SignedInResolvedDayDecision = {
   selectedMood: LayerMood;
   promotedAltId: string | null;
   source: 'locked' | 'carryover-main' | 'carryover-layer' | 'oracle';
+};
+
+type FragranceImageAsset = {
+  fragrance_id: string;
+  image_url: string | null;
+  thumbnail_url: string | null;
 };
 
 type SignedInVerifiedPredecessorBaton = {
@@ -2615,6 +2632,7 @@ const OdaraScreen = ({
       ? {
           ...card,
           family: card.family || previous.family,
+          image_url: card.image_url ?? previous.image_url ?? null,
           notes: card.notes.length > 0 ? card.notes : previous.notes,
           accords: card.accords.length > 0 ? card.accords : previous.accords,
           reason_chip_label: card.reason_chip_label ?? previous.reason_chip_label ?? null,
@@ -2628,6 +2646,33 @@ const OdaraScreen = ({
     }
     return resolved;
   }, [isGuestMode]);
+
+  const fetchFragranceImageAssets = useCallback(async (fragranceIds: string[]) => {
+    const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      return new Map<string, FragranceImageAsset>();
+    }
+
+    try {
+      const { data, error } = await odaraSupabase
+        .from('fragrance_image_assets' as any)
+        .select('fragrance_id, image_url, thumbnail_url')
+        .in('fragrance_id', uniqueIds);
+
+      if (error) {
+        console.warn('[Odara] fragrance image asset fetch skipped', error.message);
+        return new Map<string, FragranceImageAsset>();
+      }
+
+      return new Map<string, FragranceImageAsset>(
+        (Array.isArray(data) ? (data as FragranceImageAsset[]) : [])
+          .filter((row) => !!row?.fragrance_id)
+          .map((row) => [row.fragrance_id, row]),
+      );
+    } catch {
+      return new Map<string, FragranceImageAsset>();
+    }
+  }, []);
 
   const fetchFragranceDetails = useCallback(async (fragranceIds: string[]) => {
     const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
@@ -2648,10 +2693,13 @@ const OdaraScreen = ({
     }
 
     try {
-      const { data, error } = await odaraSupabase
-        .from('fragrances')
-        .select('id, name, brand, family_key, notes, accords')
-        .in('id', missingIds);
+      const [{ data, error }, imageAssets] = await Promise.all([
+        odaraSupabase
+          .from('fragrances')
+          .select('id, name, brand, family_key, notes, accords')
+          .in('id', missingIds),
+        fetchFragranceImageAssets(missingIds),
+      ]);
 
       if (error) {
         return details;
@@ -2660,6 +2708,7 @@ const OdaraScreen = ({
       let cacheUpdated = false;
       for (const row of Array.isArray(data) ? data : []) {
         if (!row?.id) continue;
+        const imageAsset = imageAssets.get(row.id) ?? null;
         const detail: FragranceDetail = {
           id: row.id,
           name: row.name ?? '',
@@ -2667,6 +2716,8 @@ const OdaraScreen = ({
           family_key: row.family_key ?? null,
           notes: Array.isArray(row.notes) ? row.notes : [],
           accords: Array.isArray(row.accords) ? row.accords : [],
+          image_url: imageAsset?.image_url ?? readBottleImageUrlFromObject(row as any),
+          thumbnail_url: imageAsset?.thumbnail_url ?? null,
         };
         fragranceDetailCacheRef.current.set(row.id, detail);
         details.set(row.id, detail);
@@ -2771,16 +2822,20 @@ const OdaraScreen = ({
 
     const request = (async (): Promise<FragranceDetail | null> => {
       try {
-        const { data, error } = await odaraSupabase
-          .from('fragrances')
-          .select('id, name, brand, family_key, notes, accords')
-          .eq('id', fragranceId)
-          .maybeSingle();
+        const [{ data, error }, imageAssets] = await Promise.all([
+          odaraSupabase
+            .from('fragrances')
+            .select('id, name, brand, family_key, notes, accords')
+            .eq('id', fragranceId)
+            .maybeSingle(),
+          fetchFragranceImageAssets([fragranceId]),
+        ]);
 
         if (error || !data?.id) {
           return null;
         }
 
+        const imageAsset = imageAssets.get(fragranceId) ?? null;
         const detail: FragranceDetail = {
           id: data.id,
           name: data.name ?? '',
@@ -2788,6 +2843,8 @@ const OdaraScreen = ({
           family_key: data.family_key ?? null,
           notes: Array.isArray(data.notes) ? data.notes : [],
           accords: Array.isArray(data.accords) ? data.accords : [],
+          image_url: imageAsset?.image_url ?? readBottleImageUrlFromObject(data as any),
+          thumbnail_url: imageAsset?.thumbnail_url ?? null,
         };
 
         fragranceDetailCacheRef.current.set(fragranceId, detail);
@@ -2802,7 +2859,7 @@ const OdaraScreen = ({
 
     fragranceDetailInFlightRef.current.set(fragranceId, request);
     return request;
-  }, []);
+  }, [fetchFragranceImageAssets]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -2939,6 +2996,28 @@ const OdaraScreen = ({
     isGuestMode && guestLocked && lockedGuestSnapshot
       ? lockedGuestSnapshot
       : activeGuestRender;
+
+  useEffect(() => {
+    if (!isGuestMode || !visibleGuestRender?.activeHero) return;
+
+    const heroId = visibleGuestRender.activeHero?.fragrance_id ?? visibleGuestRender.activeHero?.id ?? null;
+    if (
+      heroId
+      && !resolveBottleImageUrl(visibleGuestRender.activeHero)
+      && !hasResolvedImageValue(fragranceDetailCacheRef.current.get(heroId)?.image_url)
+    ) {
+      void fetchFragranceDetail(heroId);
+    }
+
+    const activeLayer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
+    if (
+      activeLayer?.id
+      && !resolveBottleImageUrl(visibleGuestRender.activeLayer, activeLayer)
+      && !hasResolvedImageValue(fragranceDetailCacheRef.current.get(activeLayer.id)?.image_url)
+    ) {
+      void fetchFragranceDetail(activeLayer.id);
+    }
+  }, [isGuestMode, visibleGuestRender, fetchFragranceDetail, fragranceDetailVersion]);
 
   useEffect(() => {
     guestModeHistoryRef.current = guestModeHistory;
@@ -5563,7 +5642,9 @@ const OdaraScreen = ({
     if (!isGuestMode || !visibleGuestRender?.activeHero) return null;
 
     const hero: any = visibleGuestRender.activeHero ?? null;
-    const heroImageUrl = resolveBottleImageUrl(hero);
+    const heroId = hero?.fragrance_id ?? hero?.id ?? null;
+    const heroDetail = heroId ? (fragranceDetailCacheRef.current.get(heroId) ?? null) : null;
+    const heroImageUrl = resolveBottleImageUrl(hero, heroDetail);
     const heroFamilyKey = typeof hero?.family === 'string' ? hero.family : '';
     const heroFamilyLabel = heroFamilyKey
       ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
@@ -5579,7 +5660,8 @@ const OdaraScreen = ({
         return typeof label === 'string' && label.trim().length > 0;
       });
     const layer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
-    const layerImageUrl = resolveBottleImageUrl(visibleGuestRender.activeLayer, layer);
+    const layerDetail = layer?.id ? (fragranceDetailCacheRef.current.get(layer.id) ?? null) : null;
+    const layerImageUrl = resolveBottleImageUrl(visibleGuestRender.activeLayer, layer, layerDetail);
     const layerTokens = resolveGuestLayerTokens(
       visibleGuestRender.activeLayer,
       hero,
@@ -5638,7 +5720,7 @@ const OdaraScreen = ({
         tokens: heroTokens,
       },
     };
-  }, [isGuestMode, visibleGuestRender, selectedAlternateIdx]);
+  }, [isGuestMode, visibleGuestRender, selectedAlternateIdx, fragranceDetailVersion]);
 
   const signedInResolvedCurrentCard = useMemo(() => {
     if (isGuestMode || !activeMainCardRender?.resolvedCurrentCard) return null;
