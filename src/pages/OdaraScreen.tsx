@@ -5035,10 +5035,14 @@ const OdaraScreen = ({
     isGuestMode && !!guestStarredByKey[guestStarKey];
   const guestHasRealHistory =
     isGuestMode && (selectedAlternateIdx !== null || guestSkipHistory.length > 0);
+  const isLayerDetailExpanded = isGuestMode ? guestLayerExpanded : layerExpanded;
+  const showHistoryBack = isGuestMode ? guestHasRealHistory : hasHistory;
   const actionRailState = {
     locked: isCardLocked,
     starred: isGuestMode ? guestStarredForCurrentCard : isFavorited,
-    showBack: isGuestMode ? guestHasRealHistory : hasHistory,
+    showBack: isLayerDetailExpanded || showHistoryBack,
+    showDetailBack: isLayerDetailExpanded,
+    showHistoryBack,
   };
 
   if (isGuestMode) {
@@ -5187,6 +5191,14 @@ const OdaraScreen = ({
       },
     },
   };
+
+  const collapseLayerDetail = useCallback(() => {
+    if (isGuestMode) {
+      setGuestLayerExpanded(false);
+      return;
+    }
+    setLayerExpanded(false);
+  }, [isGuestMode]);
 
   if (isGuestMode) {
     const o: any = oracle ?? {};
@@ -5993,7 +6005,11 @@ const OdaraScreen = ({
                 const lockColor = lockActive ? '#22c55e' : 'currentColor';
 
                 return (
-                <div className="flex flex-col items-center gap-1.5 min-w-[52px]" data-action-stack>
+                <div
+                  className="flex flex-col items-center min-w-[52px]"
+                  data-action-stack
+                  style={{ rowGap: showBack ? '14px' : '6px' }}
+                >
                 {/* Lock button — interactive for both signed-in and guest.
                     Guest writes only to local guestLocked boolean (no Supabase). */}
                 <button
@@ -6109,10 +6125,22 @@ const OdaraScreen = ({
                     </span>
                   )}
                 </button>
-                {/* Back arrow — history-gated for both signed-in and guest */}
+                {/* Back arrow — detail-state first, then history fallback.
+                    Sits beneath the fixed lock icon without moving it. */}
                 {showBack && (
-                  <button onClick={() => cardController.actions.back()} className="p-0.5" aria-label="Back">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-foreground/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (actionRailState.showDetailBack) {
+                        collapseLayerDetail();
+                        return;
+                      }
+                      cardController.actions.back();
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/8 bg-white/[0.02] text-foreground/50 transition-all duration-200 hover:text-foreground/70 active:scale-95"
+                    aria-label="Back"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                   </button>

@@ -434,16 +434,10 @@ const LayerCard = ({
 
   // Backend-driven text
   const whyText = activeModeEntry?.why_it_works?.trim() || '';
-  const explanationText = activeModeEntry?.reason?.trim() || '';
-  const wearText = activeModeEntry?.application_style?.trim() || '';
-  const sprayText = activeModeEntry?.spray_guidance?.trim() || '';
   const placementText = activeModeEntry?.placement_hint?.trim() || '';
   const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
   const detailSections = [
-    whyText ? { label: 'Why it works', value: whyText } : null,
-    explanationText && explanationText !== whyText ? { label: 'Explanation', value: explanationText } : null,
-    wearText ? { label: 'How to wear it', value: wearText } : null,
-    sprayText ? { label: 'Spray logic', value: sprayText } : null,
+    whyText ? { label: 'Why It Works', value: whyText } : null,
     placementText ? { label: 'Placement', value: placementText } : null,
     ratioText ? { label: 'Ratio', value: ratioText } : null,
   ].filter((section): section is { label: string; value: string } => !!section);
