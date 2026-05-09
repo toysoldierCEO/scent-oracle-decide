@@ -1085,6 +1085,13 @@ function modeValueToBackendModeEntry(
   const layerFragranceId = value.layer_fragrance_id ?? value.fragrance_id ?? value.id ?? '';
   const layerName = value.layer_name ?? value.name ?? '';
   if (!layerFragranceId && !layerName) return null;
+  if (isTemporarilySuppressedRotationFragrance({
+    fragrance_id: layerFragranceId,
+    name: layerName,
+    brand: value.layer_brand ?? value.brand ?? '',
+  })) {
+    return null;
+  }
   const teaching = normalizeLayerTeachingFields(value);
 
   return {
@@ -1118,6 +1125,13 @@ function v6LayerToLayerMode(
   const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
   const name = layer.name ?? layer.layer_name ?? '';
   if (!id && !name) return null;
+  if (isTemporarilySuppressedRotationFragrance({
+    fragrance_id: id,
+    name,
+    brand: layer.brand ?? layer.layer_brand ?? '',
+  })) {
+    return null;
+  }
   const teaching = normalizeLayerTeachingFields(layer);
   return {
     id,
@@ -1161,6 +1175,7 @@ function normalizeAlternateRow(row: any): OracleAlternate | null {
       : undefined;
 
   if (!fragrance_id || !name) return null;
+  if (isTemporarilySuppressedRotationFragrance({ fragrance_id, name, brand })) return null;
 
   return {
     fragrance_id,
@@ -1559,6 +1574,39 @@ function normalizeFragranceIdentityText(value: string | null | undefined) {
     .replace(/\s+/g, ' ');
 }
 
+const TEMPORARILY_SUPPRESSED_ROTATION_FRAGRANCES = [
+  {
+    id: '9befd638-82c6-486e-89f7-f26a8ecef0b4',
+    name: 'Sugi Noir',
+    brand: 'Alexandria Fragrances',
+  },
+  {
+    id: 'af5d280b-dc4d-4013-8450-dffc49587f0b',
+    name: 'Trepak',
+    brand: 'Alexandria Fragrances',
+  },
+] as const;
+
+function isTemporarilySuppressedRotationFragrance(
+  candidate: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
+) {
+  if (!candidate) return false;
+
+  const candidateId = candidate.fragrance_id ?? candidate.id ?? null;
+  if (candidateId && TEMPORARILY_SUPPRESSED_ROTATION_FRAGRANCES.some((entry) => entry.id === candidateId)) {
+    return true;
+  }
+
+  const candidateName = normalizeFragranceIdentityText(candidate.name);
+  const candidateBrand = normalizeFragranceIdentityText(candidate.brand);
+  if (!candidateName || !candidateBrand) return false;
+
+  return TEMPORARILY_SUPPRESSED_ROTATION_FRAGRANCES.some((entry) => (
+    normalizeFragranceIdentityText(entry.name) === candidateName
+    && normalizeFragranceIdentityText(entry.brand) === candidateBrand
+  ));
+}
+
 function isSameFragranceIdentity(
   a: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
   b: { fragrance_id?: string | null; id?: string | null; name?: string | null; brand?: string | null } | null | undefined,
@@ -1594,6 +1642,13 @@ function appendUniqueBackendModeEntries(
   const next = [...existing];
   for (const addition of additions) {
     if (!addition) continue;
+    if (isTemporarilySuppressedRotationFragrance({
+      fragrance_id: addition.layer_fragrance_id,
+      name: addition.layer_name,
+      brand: addition.layer_brand,
+    })) {
+      continue;
+    }
     if (next.some((current) => isSameBackendModeEntryIdentity(current, addition))) continue;
     next.push(addition);
   }
@@ -1606,6 +1661,7 @@ function pickFirstUniqueDisplayCard(
 ) {
   for (const candidate of candidates) {
     if (!candidate) continue;
+    if (isTemporarilySuppressedRotationFragrance(candidate)) continue;
     if (!isSameFragranceIdentity(candidate, against)) {
       return candidate;
     }
@@ -1619,6 +1675,7 @@ function pickFirstDisplayCardExcluding(
 ) {
   for (const candidate of candidates) {
     if (!candidate) continue;
+    if (isTemporarilySuppressedRotationFragrance(candidate)) continue;
     if (excluded.some((blocked) => isSameFragranceIdentity(candidate, blocked))) continue;
     return candidate;
   }
@@ -2046,6 +2103,7 @@ function resolveVerifiedPredecessorBaton(
     : (previousLayerCard ?? dayState.carryoverSelectedCard);
 
   if (!carriedCard) return null;
+  if (isTemporarilySuppressedRotationFragrance(carriedCard)) return null;
 
   return {
     selectedSource,
@@ -2083,6 +2141,10 @@ function resolveSignedInDayDecision(
   oraclePick: OraclePick | null | undefined,
   defaultMood: LayerMood,
 ): SignedInResolvedDayDecision {
+  const oracleVisibleCard = oraclePick ? heroToDisplay(oraclePick) : null;
+  const eligibleOracleVisibleCard = oracleVisibleCard && !isTemporarilySuppressedRotationFragrance(oracleVisibleCard)
+    ? oracleVisibleCard
+    : null;
   const lockedTruth = resolveSignedInLockedTruth(currentDayState);
   if (lockedTruth) {
     return {
@@ -2096,7 +2158,7 @@ function resolveSignedInDayDecision(
 
   if (hasCurrentDayState && currentDayState.daisyChainEnabled === false) {
     return {
-      visibleCard: oraclePick ? heroToDisplay(oraclePick) : null,
+      visibleCard: eligibleOracleVisibleCard,
       forcedLayerCarryCard: null,
       selectedMood: defaultMood,
       promotedAltId: null,
@@ -2118,7 +2180,7 @@ function resolveSignedInDayDecision(
 
   if (predecessorBaton?.nextDayRole === 'layer') {
     return {
-      visibleCard: oraclePick ? heroToDisplay(oraclePick) : null,
+      visibleCard: eligibleOracleVisibleCard,
       forcedLayerCarryCard: predecessorBaton.carriedCard,
       selectedMood: defaultMood,
       promotedAltId: null,
@@ -2127,7 +2189,7 @@ function resolveSignedInDayDecision(
   }
 
   return {
-    visibleCard: oraclePick ? heroToDisplay(oraclePick) : null,
+    visibleCard: eligibleOracleVisibleCard,
     forcedLayerCarryCard: null,
     selectedMood: defaultMood,
     promotedAltId: null,
@@ -2624,7 +2686,15 @@ const OdaraScreen = ({
   const queueRowsToDisplay = useCallback((rowsInput: any[], excludeId?: string) => {
     const normalizedRows = (Array.isArray(rowsInput) ? rowsInput : [])
       .map(normalizeQueueCardRow)
-      .filter((row): row is QueueCard => !!row && (!excludeId || row.fragrance_id !== excludeId));
+      .filter((row): row is QueueCard => (
+        !!row
+        && (!excludeId || row.fragrance_id !== excludeId)
+        && !isTemporarilySuppressedRotationFragrance({
+          fragrance_id: row.fragrance_id,
+          name: row.name,
+          brand: row.brand,
+        })
+      ));
 
     return normalizedRows.map((row) => commitSignedInQueuedHero(queueCardToDisplay(row), null));
   }, [commitSignedInQueuedHero]);
@@ -3961,10 +4031,21 @@ const OdaraScreen = ({
       );
       if (seededQueue.length > 0) {
         setQueue(seededQueue);
-        setQueuePointer(0);
+        if (!initialVisibleCard) {
+          setVisibleCard(seededQueue[0] ?? null);
+          setQueuePointer(seededQueue.length > 1 ? 1 : 0);
+        } else {
+          setQueuePointer(0);
+        }
       } else {
         fetchQueueRef.current(initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id).then(q => {
           if (activeSlotRef.current !== capturedSlot) return;
+          if (!initialVisibleCard && q.length > 0) {
+            setVisibleCard(q[0] ?? null);
+            setQueuePointer(q.length > 1 ? 1 : 0);
+            setQueue(q);
+            return;
+          }
           setQueue(q);
           setQueuePointer(0);
         });
