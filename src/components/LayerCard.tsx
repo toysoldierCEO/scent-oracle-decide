@@ -57,6 +57,43 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
   return display;
 }
 
+function normalizeComparisonText(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractCoreComparisonName(name: string | null | undefined, brand?: string | null) {
+  return normalizeComparisonText(getDisplayName(name, brand))
+    .replace(/\b(eau de parfum|eau de toilette|eau de cologne|parfum|edp|edt|extrait|intense|elixir|absolu|le parfum)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isNearDuplicateFlankerPair(
+  mainName: string | null | undefined,
+  mainBrand: string | null | undefined,
+  mainFamily: string | null | undefined,
+  layerName: string | null | undefined,
+  layerBrand: string | null | undefined,
+  layerFamily: string | null | undefined,
+) {
+  const normalizedMainBrand = normalizeComparisonText(mainBrand);
+  const normalizedLayerBrand = normalizeComparisonText(layerBrand);
+  if (!normalizedMainBrand || normalizedMainBrand !== normalizedLayerBrand) return false;
+  if (mainFamily && layerFamily && mainFamily !== layerFamily) return false;
+
+  const mainCore = extractCoreComparisonName(mainName, mainBrand);
+  const layerCore = extractCoreComparisonName(layerName, layerBrand);
+  if (!mainCore || !layerCore) return false;
+
+  return mainCore === layerCore || mainCore.includes(layerCore) || layerCore.includes(mainCore);
+}
+
 /** Generic notes to filter out */
 const GENERIC_NOTES = new Set(["fresh", "clean", "warm", "soft", "light", "smooth", "musk", "white musk"]);
 
@@ -381,6 +418,7 @@ interface LayerCardProps {
    *  Rendered between the layer family chip and the mode row to match the locked
    *  layer order (name → brand → family → tokens → mode row → why it works). */
   layerTokens?: Array<any> | null;
+  layerImageUrl?: string | null;
   showLegacyAccordsText?: boolean;
 }
 
@@ -406,6 +444,7 @@ const LayerCard = ({
   modeErrors,
   onRetryMood,
   layerTokens = null,
+  layerImageUrl = null,
   showLegacyAccordsText = true,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
@@ -433,7 +472,20 @@ const LayerCard = ({
     : null;
 
   // Backend-driven text
-  const whyText = activeModeEntry?.why_it_works?.trim() || '';
+  const sameDnaPair = activeModeEntry
+    ? isNearDuplicateFlankerPair(
+        mainName,
+        mainBrand,
+        mainFamily,
+        activeModeEntry.name,
+        activeModeEntry.brand,
+        activeModeEntry.family_key,
+      )
+    : false;
+  const rawWhyText = activeModeEntry?.why_it_works?.trim() || '';
+  const whyText = sameDnaPair && rawWhyText
+    ? 'A same-DNA intensifier — this pairing deepens the original profile instead of acting like a contrasting support layer.'
+    : rawWhyText;
   const placementText = activeModeEntry?.placement_hint?.trim() || '';
   const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
   const detailSections = [
@@ -444,7 +496,7 @@ const LayerCard = ({
 
   return (
     <div
-      className="flex flex-col items-center mb-[14px] py-[10px] px-5 rounded-xl cursor-pointer select-none relative z-10 w-full"
+      className="relative z-10 mb-[14px] flex w-full cursor-pointer select-none flex-col rounded-xl px-5 py-[12px]"
       onClick={(e) => {
         e.stopPropagation();
         onToggleExpand();
@@ -461,73 +513,92 @@ const LayerCard = ({
     >
       {activeModeEntry ? (
         <>
-          <p className="text-lg font-serif tracking-wide text-white leading-tight">
-            {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
-          </p>
-          {activeModeEntry.brand && (
-            <p className="text-[10px] text-white/50 mt-[1px]">{activeModeEntry.brand}</p>
-          )}
-          <span
-            className="text-[9px] uppercase tracking-[0.25em] mt-[4px] px-3 py-[2px] rounded-full text-white/70 text-center w-auto"
-            style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
-          >
-            {activeModeEntry.family_key?.toUpperCase() ?? ''}
-          </span>
+          <div className="flex w-full items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-left text-lg font-serif leading-tight tracking-wide text-white">
+                {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
+              </p>
+              {activeModeEntry.brand && (
+                <p className="mt-[1px] text-left text-[10px] text-white/50">{activeModeEntry.brand}</p>
+              )}
+              <span
+                className="mt-[4px] inline-flex w-auto rounded-full px-3 py-[2px] text-left text-[9px] uppercase tracking-[0.25em] text-white/70"
+                style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
+              >
+                {activeModeEntry.family_key?.toUpperCase() ?? ''}
+              </span>
 
-          {/* Layer token rail — backend-supplied, between family chip and accords/mode row */}
-          {Array.isArray(layerTokens) && layerTokens.length > 0 && (
-            <div
-              className="flex flex-nowrap items-center gap-1.5 mt-1.5 w-full overflow-x-auto px-1 justify-center"
-              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {layerTokens.map((t: any, i: number) => (
-                <span
-                  key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
-                  className="flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full"
-                  style={{
-                    color: t?.color_hex || '#aaa',
-                    border: `1px solid ${(t?.color_hex || '#888')}${t?.is_shared ? '88' : '44'}`,
-                    background: `${(t?.color_hex || '#888')}${t?.is_shared ? '16' : '0A'}`,
-                    boxShadow: t?.is_shared ? `inset 0 0 0 1px ${(t?.color_hex || '#888')}22` : undefined,
-                  }}
+              {Array.isArray(layerTokens) && layerTokens.length > 0 && (
+                <div
+                  className="hide-horizontal-scrollbar mt-1.5 flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-1"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {t?.token_label}
-                </span>
-              ))}
-            </div>
-          )}
+                  {layerTokens.map((t: any, i: number) => (
+                    <span
+                      key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
+                      className="flex-shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.12em]"
+                      style={{
+                        color: t?.color_hex || '#aaa',
+                        border: `1px solid ${(t?.color_hex || '#888')}${t?.is_shared ? '88' : '44'}`,
+                        background: `${(t?.color_hex || '#888')}${t?.is_shared ? '16' : '0A'}`,
+                        boxShadow: t?.is_shared ? `inset 0 0 0 1px ${(t?.color_hex || '#888')}22` : undefined,
+                      }}
+                    >
+                      {t?.token_label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
-          {showLegacyAccordsText && (() => {
-            const layerNotes = activeModeEntry.notes ?? [];
-            const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
-            const displayNotes = normalizeNotes(layerNotes, 3);
-            const displayAccords = layerAccords.slice(0, 4);
-            const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
-            if (!hasAny) return null;
-            return (
-              <div className="w-full mt-[6px] px-1 space-y-[2px]">
-                {displayAccords.length > 0 && (
-                  <p className="text-[11px] text-white/80 text-center lowercase" style={{ letterSpacing: '0.06em' }}>
-                    <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
-                  </p>
-                )}
+              {showLegacyAccordsText && (() => {
+                const layerNotes = activeModeEntry.notes ?? [];
+                const layerAccords = (activeModeEntry.accords ?? []).map(a => a.trim());
+                const displayNotes = normalizeNotes(layerNotes, 3);
+                const displayAccords = layerAccords.slice(0, 4);
+                const hasAny = displayNotes.length > 0 || displayAccords.length > 0;
+                if (!hasAny) return null;
+                return (
+                  <div className="mt-[6px] w-full space-y-[2px] pr-2">
+                    {displayAccords.length > 0 && (
+                      <p className="text-left text-[11px] lowercase text-white/80" style={{ letterSpacing: '0.06em' }}>
+                        <span className="text-white/50">Accords:</span> {displayAccords.join(', ').toLowerCase()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {layerImageUrl ? (
+              <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
+                <img
+                  src={layerImageUrl}
+                  alt={`${activeModeEntry.name} bottle`}
+                  className="h-full w-full object-contain object-center"
+                  loading="lazy"
+                  draggable={false}
+                  style={{
+                    opacity: 0.88,
+                    filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.30))',
+                  }}
+                />
               </div>
-            );
-          })()}
+            ) : null}
+          </div>
         </>
       ) : (
-        <div className="w-full flex flex-col items-center gap-2">
+        <div className="flex w-full flex-col items-start gap-2 text-left">
           {isLoadingSelectedMood ? (
             <>
               <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
-              <p className="text-[11px] text-white/45 text-center">
+              <p className="text-[11px] text-left text-white/45">
                 Loading {selectedMood} layer…
               </p>
             </>
           ) : moodError ? (
             <>
-              <p className="text-sm font-serif tracking-wide text-white/60 leading-tight text-center">
+              <p className="text-left text-sm font-serif leading-tight tracking-wide text-white/60">
                 Couldn't load {selectedMood} layer
               </p>
               {onRetryMood && (
@@ -541,10 +612,10 @@ const LayerCard = ({
             </>
           ) : (
             <>
-              <p className="text-lg font-serif tracking-wide text-white/75 leading-tight text-center">
+              <p className="text-left text-lg font-serif leading-tight tracking-wide text-white/75">
                 No layer loaded for this mode
               </p>
-              <p className="text-[11px] text-white/45 text-center max-w-[18rem]">
+              <p className="max-w-[18rem] text-left text-[11px] text-white/45">
                 Pick a mode to load its layer without showing the wrong scent.
               </p>
             </>
@@ -553,7 +624,7 @@ const LayerCard = ({
       )}
 
       {/* Mode selector */}
-      <div className="mt-[8px]">
+      <div className="mt-[10px] w-full">
         <ModeSelector
           layerModes={layerModes}
           selectedMood={selectedMood}
@@ -589,7 +660,7 @@ const LayerCard = ({
                 <div className="space-y-3">
                   {detailSections.map((section) => (
                     <div key={section.label}>
-                      <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
+                      <span className="block text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
                       <p className="mt-1 text-sm leading-relaxed text-white/80">{section.value}</p>
                     </div>
                   ))}

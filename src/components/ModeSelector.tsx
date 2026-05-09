@@ -14,6 +14,7 @@ export interface LayerModeEntry {
   name: string;
   brand: string | null;
   family_key: string;
+  image_url?: string | null;
   notes: string[] | null;
   accords: string[] | null;
   interactionType: InteractionType;

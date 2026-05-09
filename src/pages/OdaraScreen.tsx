@@ -163,6 +163,87 @@ function normalizeLayerTeachingFields(value: any) {
   };
 }
 
+function readTrimmedImageUrl(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (
+      /^https?:\/\//i.test(trimmed)
+      || trimmed.startsWith('/')
+      || trimmed.startsWith('data:image/')
+      || trimmed.startsWith('blob:')
+    ) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function readBottleImageUrlFromObject(value: any): string | null {
+  if (!value || typeof value !== 'object') return null;
+  return readTrimmedImageUrl(
+    value.image_url,
+    value.imageUrl,
+    value.bottle_image_url,
+    value.bottleImageUrl,
+    value.fragrance_image_url,
+    value.fragranceImageUrl,
+    value.photo_url,
+    value.photoUrl,
+    value.thumbnail_url,
+    value.thumbnailUrl,
+    value.image,
+    value.photo,
+    value.thumbnail,
+    value.preview?.image_url,
+    value.preview?.imageUrl,
+    value.preview?.thumbnail_url,
+    value.preview?.thumbnailUrl,
+    value.preview?.photo_url,
+    value.preview?.photoUrl,
+    value.image?.url,
+    value.image?.src,
+    value.photo?.url,
+    value.photo?.src,
+    value.thumbnail?.url,
+    value.thumbnail?.src,
+  );
+}
+
+function resolveBottleImageUrl(...sources: any[]): string | null {
+  const visited = new Set<any>();
+  const queue = [...sources];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+
+    if (typeof current === 'string') {
+      const resolved = readTrimmedImageUrl(current);
+      if (resolved) return resolved;
+      continue;
+    }
+
+    if (typeof current !== 'object') continue;
+
+    const direct = readBottleImageUrlFromObject(current);
+    if (direct) return direct;
+
+    queue.push(
+      current.preview,
+      current.hero,
+      current.layer,
+      current.fragrance,
+      current.main_bundle?.hero,
+      current.main_bundle?.layer,
+    );
+  }
+
+  return null;
+}
+
 function resolveReasonChip(
   rawLabel: unknown,
   rawExplanation: unknown,
@@ -283,6 +364,7 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
     name,
     brand: layer.brand ?? layer.layer_brand ?? null,
     family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
+    image_url: resolveBottleImageUrl(layer),
     notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : null,
     accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : null,
     interactionType: (layer.interaction_type ?? layer.layer_mode ?? layer.mode ?? 'balance') as InteractionType,
@@ -798,6 +880,7 @@ interface BackendModeEntry {
   layer_name: string;
   layer_brand: string;
   layer_family: string;
+  image_url?: string | null;
   layer_notes: string[];
   layer_accords: string[];
   layer_score: number;
@@ -844,6 +927,7 @@ interface DisplayCard {
   family: string;
   reason: string;
   brand: string;
+  image_url?: string | null;
   notes: string[];
   accords: string[];
   reason_chip_label?: string | null;
@@ -970,6 +1054,7 @@ function backendModeEntryToLayerMode(
     name: entry.layer_name || '',
     brand: entry.layer_brand || '',
     family_key: entry.layer_family || '',
+    image_url: entry.image_url ?? null,
     notes: Array.isArray(entry.layer_notes) ? entry.layer_notes : [],
     accords: Array.isArray(entry.layer_accords) ? entry.layer_accords : [],
     interactionType: (entry.interaction_type as InteractionType) || 'balance',
@@ -1008,6 +1093,7 @@ function modeValueToBackendModeEntry(
     layer_name: layerName,
     layer_brand: value.layer_brand ?? value.brand ?? '',
     layer_family: value.layer_family ?? value.family ?? value.family_key ?? '',
+    image_url: resolveBottleImageUrl(value),
     layer_notes: Array.isArray(value.layer_notes) ? value.layer_notes : Array.isArray(value.notes) ? value.notes : [],
     layer_accords: Array.isArray(value.layer_accords) ? value.layer_accords : Array.isArray(value.accords) ? value.accords : [],
     layer_score: value.layer_score ?? 0,
@@ -1038,6 +1124,7 @@ function v6LayerToLayerMode(
     name,
     brand: layer.brand ?? layer.layer_brand ?? '',
     family_key: layer.family ?? layer.family_key ?? layer.layer_family ?? '',
+    image_url: resolveBottleImageUrl(layer),
     notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : [],
     accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : [],
     interactionType: ((layer.interaction_type ?? layer.interactionType ?? layer.layer_mode ?? layer.mode ?? mood) as InteractionType) || mood,
@@ -1081,6 +1168,7 @@ function normalizeAlternateRow(row: any): OracleAlternate | null {
     family,
     reason,
     brand,
+    image_url: resolveBottleImageUrl(row, preview),
     notes,
     accords,
     reason_chip_label: row.reason_chip_label ?? preview.reason_chip_label ?? null,
@@ -1097,6 +1185,7 @@ function queueCardToDisplay(qc: QueueCard): DisplayCard {
     family: qc.family_key ?? '',
     reason: qc.why_this ?? '',
     brand: qc.brand ?? '',
+    image_url: resolveBottleImageUrl(qc, preview),
     notes: Array.isArray(qc.notes) ? qc.notes : Array.isArray(preview.notes) ? preview.notes : [],
     accords: Array.isArray(qc.accords) ? qc.accords : Array.isArray(preview.accords) ? preview.accords : [],
     reason_chip_label: qc.reason_chip_label ?? preview.reason_chip_label ?? null,
@@ -1354,6 +1443,7 @@ function resolveDisplayCardWithDetails(
   if (!detail) {
     return {
       ...card,
+      image_url: card.image_url ?? null,
       notes: cardNotes,
       accords: cardAccords,
     };
@@ -1369,6 +1459,7 @@ function resolveDisplayCardWithDetails(
     name: card.name || detail.name || '',
     brand: card.brand || detail.brand || '',
     family: card.family || detail.family_key || '',
+    image_url: card.image_url ?? null,
     notes: preferredRail.notes,
     accords: preferredRail.accords,
   };
@@ -1385,6 +1476,7 @@ function resolveQueuedHeroDisplayWithDetails(
   if (!detail) {
     return {
       ...card,
+      image_url: card.image_url ?? null,
       notes: previewNotes,
       accords: previewAccords,
     };
@@ -1400,6 +1492,7 @@ function resolveQueuedHeroDisplayWithDetails(
     name: card.name || detail.name || '',
     brand: card.brand || detail.brand || '',
     family: detail.family_key || card.family || '',
+    image_url: card.image_url ?? null,
     notes: useDetailRail ? detailNotes : previewNotes,
     accords: useDetailRail ? detailAccords : previewAccords,
   };
@@ -1449,6 +1542,7 @@ function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard |
     a.name === b.name &&
     a.brand === b.brand &&
     a.family === b.family &&
+    (a.image_url ?? null) === (b.image_url ?? null) &&
     a.reason_chip_label === b.reason_chip_label &&
     a.reason_chip_explanation === b.reason_chip_explanation &&
     a.notes.length === b.notes.length &&
@@ -1541,6 +1635,7 @@ function resolveLayerModeWithDetails(
   if (!detail) {
     return {
       ...layer,
+      image_url: layer.image_url ?? null,
       notes: layerNotes,
       accords: layerAccords,
     };
@@ -1556,6 +1651,7 @@ function resolveLayerModeWithDetails(
     name: layer.name || detail.name || '',
     brand: layer.brand || detail.brand || '',
     family_key: layer.family_key || detail.family_key || '',
+    image_url: layer.image_url ?? null,
     notes: preferredRail.notes,
     accords: preferredRail.accords,
   };
@@ -1565,6 +1661,7 @@ function resolveLayerModeWithDetails(
 function heroToDisplay(pick: OraclePick): DisplayCard {
   return {
     ...pick,
+    image_url: resolveBottleImageUrl(pick),
     isHero: true,
   };
 }
@@ -1690,6 +1787,7 @@ function toPersistedDisplayCard(card: DisplayCard | null | undefined) {
     family: card.family ?? '',
     reason: card.reason ?? '',
     brand: card.brand ?? '',
+    image_url: card.image_url ?? null,
     notes: sanitizeTokenSource(card.notes),
     accords: sanitizeTokenSource(card.accords),
     reason_chip_label: card.reason_chip_label ?? null,
@@ -1709,6 +1807,7 @@ function fromPersistedDisplayCard(raw: any): DisplayCard | null {
     family: typeof raw.family === 'string' ? raw.family : '',
     reason: typeof raw.reason === 'string' ? raw.reason : '',
     brand: typeof raw.brand === 'string' ? raw.brand : '',
+    image_url: readBottleImageUrlFromObject(raw),
     notes: sanitizeTokenSource(raw.notes),
     accords: sanitizeTokenSource(raw.accords),
     reason_chip_label: typeof raw.reason_chip_label === 'string' ? raw.reason_chip_label : null,
@@ -1726,6 +1825,7 @@ function toPersistedLayerModeSnapshot(
     name: layer.name ?? '',
     brand: layer.brand ?? '',
     family_key: layer.family_key ?? '',
+    image_url: layer.image_url ?? null,
     notes: sanitizeTokenSource(layer.notes),
     accords: sanitizeTokenSource(layer.accords),
     interactionType: normalizePersistedInteractionType(layer.interactionType),
@@ -1749,6 +1849,7 @@ function fromPersistedLayerModeSnapshot(raw: any): PersistedLayerModeSnapshot | 
     name,
     brand: typeof raw.brand === 'string' ? raw.brand : '',
     family_key: typeof raw.family_key === 'string' ? raw.family_key : '',
+    image_url: readBottleImageUrlFromObject(raw),
     notes: sanitizeTokenSource(raw.notes),
     accords: sanitizeTokenSource(raw.accords),
     interactionType: normalizePersistedInteractionType(raw.interactionType),
@@ -1773,6 +1874,7 @@ function areSameLayerModeSnapshots(
     a.name === b.name &&
     a.brand === b.brand &&
     a.family_key === b.family_key &&
+    a.image_url === b.image_url &&
     a.interactionType === b.interactionType &&
     a.reason === b.reason &&
     a.why_it_works === b.why_it_works &&
@@ -2011,6 +2113,7 @@ function toDisplayCardFromResolvedCurrentCard(card: any | null | undefined): Dis
     family: card.family ?? '',
     reason: card.reason ?? '',
     brand: card.brand ?? '',
+    image_url: card.image_url ?? null,
     notes: Array.isArray(card.notes) ? card.notes : [],
     accords: Array.isArray(card.accords) ? card.accords : [],
     reason_chip_label: card.reason_chip_label ?? null,
@@ -2028,6 +2131,7 @@ function toDisplayCardFromLayerMode(layer: any | null | undefined): DisplayCard 
     family: layer.family_key ?? layer.family ?? '',
     reason: layer.reason ?? layer.why_it_works ?? '',
     brand: layer.brand ?? layer.layer_brand ?? '',
+    image_url: layer.image_url ?? null,
     notes: Array.isArray(layer.notes) ? layer.notes : [],
     accords: Array.isArray(layer.accords) ? layer.accords : [],
     reason_chip_label: null,
@@ -2046,6 +2150,7 @@ function toLayerModeFromDisplayCard(
     name: card.name,
     brand: card.brand ?? '',
     family_key: card.family ?? '',
+    image_url: card.image_url ?? null,
     notes: Array.isArray(card.notes) ? card.notes : [],
     accords: Array.isArray(card.accords) ? card.accords : [],
     interactionType: mood,
@@ -4197,6 +4302,12 @@ const OdaraScreen = ({
           finalHero,
         );
     const heroFamilyKey = finalHero.family ?? '';
+    const heroImageUrl = resolveBottleImageUrl(
+      finalHeroSource,
+      finalHero,
+      isHeroCard ? v6?.hero : null,
+      isHeroCard ? o?.today_pick : null,
+    );
     const heroFamilyColorForDisplay = heroFamilyKey
       ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
       : '#888';
@@ -4238,6 +4349,7 @@ const OdaraScreen = ({
     const visibleLayer = finalLayer
       ? {
           ...finalLayer,
+          image_url: resolveBottleImageUrl(finalLayer, layerSource),
           family_key: layerSurfacesReady ? finalLayer.family_key : '',
           notes: layerSurfacesReady ? finalLayer.notes : [],
           accords: layerSurfacesReady ? finalLayer.accords : [],
@@ -4252,6 +4364,7 @@ const OdaraScreen = ({
       name: finalHero.name,
       brand: finalHero.brand,
       family: heroFamilyKey,
+      image_url: heroImageUrl,
       familyLabel: heroFamilyLabelForDisplay,
       familyColor: heroFamilyColorForDisplay,
       reason_chip_label: reasonChip?.label ?? finalHero.reason_chip_label ?? null,
@@ -5338,6 +5451,7 @@ const OdaraScreen = ({
     if (!isGuestMode || !visibleGuestRender?.activeHero) return null;
 
     const hero: any = visibleGuestRender.activeHero ?? null;
+    const heroImageUrl = resolveBottleImageUrl(hero);
     const heroFamilyKey = typeof hero?.family === 'string' ? hero.family : '';
     const heroFamilyLabel = heroFamilyKey
       ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
@@ -5353,6 +5467,7 @@ const OdaraScreen = ({
         return typeof label === 'string' && label.trim().length > 0;
       });
     const layer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
+    const layerImageUrl = resolveBottleImageUrl(visibleGuestRender.activeLayer, layer);
     const layerTokens = (Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : [])
       .filter((token: any) => {
         const label = token?.token_label ?? token?.label ?? token?.name ?? '';
@@ -5388,11 +5503,12 @@ const OdaraScreen = ({
       name: hero?.name ?? '',
       brand: hero?.brand ?? '',
       family: heroFamilyKey,
+      image_url: heroImageUrl,
       familyLabel: heroFamilyLabel,
       familyColor: heroFamilyColor,
       notes: heroNotes,
       accords: heroAccords,
-      layer,
+      layer: layer ? { ...layer, image_url: layerImageUrl ?? layer.image_url ?? null } : null,
       layerFamilyKey,
       layerFamilyLabel,
       layerTokens,
@@ -5460,6 +5576,8 @@ const OdaraScreen = ({
   const visibleResolvedLayer = isGuestMode
     ? (guestResolvedCurrentCard?.layer ?? null)
     : signedInVisibleLayer;
+  const visibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
+  const visibleLayerBottleImageUrl = visibleResolvedLayer?.image_url ?? null;
   const visibleResolvedLayerModes = isGuestMode
     ? (guestResolvedCurrentCard?.layerModes ?? { balance: null, bold: null, smooth: null, wild: null })
     : signedInVisibleLayerModes;
@@ -5576,24 +5694,29 @@ const OdaraScreen = ({
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
     ? {
         color: '#ef4444',
-        background: 'rgba(239,68,68,0.14)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px rgba(239,68,68,0.20)',
+        background: 'transparent',
+        boxShadow: 'none',
+        filter: 'drop-shadow(0 0 6px rgba(239,68,68,0.34))',
       }
     : signedInCarryoverColor
     ? {
         color: signedInCarryoverColor,
-        background: `${signedInCarryoverColor}16`,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px ${signedInCarryoverColor}18`,
+        background: 'transparent',
+        boxShadow: 'none',
+        filter: `drop-shadow(0 0 6px ${signedInCarryoverColor}32)`,
       }
     : {
         color: 'rgba(255,255,255,0.62)',
-        background: 'rgba(255,255,255,0.035)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+        background: 'transparent',
+        boxShadow: 'none',
+        filter: 'none',
       };
   const bottomStarActive = actionRailState.starred;
   const sharedBottomActionButtonStyle = {
-    border: '1px solid rgba(255,255,255,0.06)',
-    backdropFilter: 'blur(12px)',
+    border: 'none',
+    background: 'transparent',
+    boxShadow: 'none',
+    backdropFilter: 'none',
   } as const;
   const bottomCarryoverButtonStyle = signedInCarryoverButtonStyle;
   useEffect(() => {
@@ -6250,7 +6373,7 @@ const OdaraScreen = ({
                 {showBack && (
                   <button
                     type="button"
-                    className="absolute left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border border-white/8 bg-white/[0.02] text-foreground/50 transition-all duration-200 hover:text-foreground/70 active:scale-95"
+                    className="absolute left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center text-foreground/50 transition-all duration-200 hover:text-foreground/72 active:scale-95"
                     style={{ top: 'calc(100% + 14px)' }}
                     onClick={() => {
                       if (handleLocalLayerBack()) {
@@ -6272,13 +6395,13 @@ const OdaraScreen = ({
 
             <div
               className={isGuestMode
-                ? "relative flex w-full flex-col items-center"
-                : "relative flex w-full flex-col items-center rounded-[20px] px-3 pt-1 pb-1 transition-all duration-300"}
+                ? "relative flex w-full flex-col rounded-[20px] px-3 pt-1 pb-1"
+                : "relative flex w-full flex-col rounded-[20px] px-3 pt-1 pb-1 transition-all duration-300"}
               style={signedInHeroCarrySurfaceStyle}
             >
               {/* Source badge for queue cards */}
               {!isHeroStyle && (
-                <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 text-center mb-0.5">
+                <span className="mb-1 ml-3 text-left text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40">
                   from queue
                 </span>
               )}
@@ -6297,7 +6420,7 @@ const OdaraScreen = ({
                   : undefined;
                 return (
                   <div
-                    className="text-center mt-1 mb-1 text-[12px] uppercase tracking-[0.22em] font-medium"
+                    className="mb-1 ml-3 mt-1 text-left text-[12px] font-medium uppercase tracking-[0.22em]"
                     style={color ? { color } : undefined}
                     data-recipe-header
                   >
@@ -6306,89 +6429,111 @@ const OdaraScreen = ({
                 );
               })()}
 
-              {/* Fragrance name */}
-              <h2
-                className="text-[32px] leading-[1.1] font-normal text-foreground mt-0.5 mb-0.5 text-center"
-                style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-                data-guest-profile-reserved
-              >
-                {getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}
-              </h2>
+              <div className="w-full px-3 pb-1">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 text-left">
+                    {/* Fragrance name */}
+                    <h2
+                      className="mb-0.5 text-left text-[32px] font-normal leading-[1.1] text-foreground"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+                      data-guest-profile-reserved
+                    >
+                      {getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}
+                    </h2>
 
-              {/* Brand */}
-              <span className="text-[13px] text-muted-foreground/60 text-center mb-1.5">
-                {visibleResolvedCurrentCard?.brand ?? ''}
-              </span>
+                    {/* Brand */}
+                    <span className="mb-1.5 block text-left text-[13px] text-muted-foreground/60">
+                      {visibleResolvedCurrentCard?.brand ?? ''}
+                    </span>
 
-              {/* Family label */}
-              {visibleHeroFamilyLabel ? (
-                <span
-                  className="text-[12px] uppercase tracking-[0.15em] font-medium text-center mb-1.5"
-                  style={{ color: visibleHeroFamilyColor }}
-                >
-                  {visibleHeroFamilyLabel}
-                </span>
-              ) : null}
-
-              {(activeReasonChip || heroRailTokens.length > 0) && (
-                <div className="mt-0.5 mb-3 w-full">
-                  <div
-                    className="flex flex-nowrap items-center gap-1.5 px-3 overflow-x-auto justify-start w-full"
-                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-                  >
-                    {activeReasonChip && (
-                      <button
-                        type="button"
-                        data-no-card-swipe
-                        aria-expanded={reasonChipExpanded}
-                        aria-disabled={isReadOnlyHistoryCard || undefined}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isReadOnlyHistoryCard) return;
-                          setReasonChipExpanded((expanded) => !expanded);
-                        }}
-                        className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
-                        style={{
-                          background: 'rgba(9,9,11,0.82)',
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-                        }}
+                    {/* Family label */}
+                    {visibleHeroFamilyLabel ? (
+                      <span
+                        className="mb-2 inline-flex text-left text-[12px] font-medium uppercase tracking-[0.15em]"
+                        style={{ color: visibleHeroFamilyColor }}
                       >
-                        {activeReasonChip.label}
-                      </button>
-                    )}
+                        {visibleHeroFamilyLabel}
+                      </span>
+                    ) : null}
 
-                    {heroRailTokens.map((t, i) => {
-                      const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
-                      if (!tokenLabel) return null;
-                      const tokenColor = t?.color_hex || '#888';
-                      const isSharedToken = !!t?.is_shared;
-                      return (
-                        <span
-                          key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
-                          className="flex-shrink-0 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] px-2.5 py-1 rounded-full"
-                          style={{
-                            color: tokenColor,
-                            border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
-                            background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
-                            boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
-                          }}
+                    {(activeReasonChip || heroRailTokens.length > 0) && (
+                      <div className="mt-0.5 mb-2.5 w-full">
+                        <div
+                          className="hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
+                          style={{ WebkitOverflowScrolling: 'touch' }}
                         >
-                          {tokenLabel}
-                        </span>
-                      );
-                    })}
+                          {activeReasonChip && (
+                            <button
+                              type="button"
+                              data-no-card-swipe
+                              aria-expanded={reasonChipExpanded}
+                              aria-disabled={isReadOnlyHistoryCard || undefined}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isReadOnlyHistoryCard) return;
+                                setReasonChipExpanded((expanded) => !expanded);
+                              }}
+                              className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
+                              style={{
+                                background: 'rgba(9,9,11,0.82)',
+                                border: '1px solid rgba(255,255,255,0.10)',
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                              }}
+                            >
+                              {activeReasonChip.label}
+                            </button>
+                          )}
+
+                          {heroRailTokens.map((t, i) => {
+                            const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
+                            if (!tokenLabel) return null;
+                            const tokenColor = t?.color_hex || '#888';
+                            const isSharedToken = !!t?.is_shared;
+                            return (
+                              <span
+                                key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
+                                className="flex-shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.12em]"
+                                style={{
+                                  color: tokenColor,
+                                  border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
+                                  background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
+                                  boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
+                                }}
+                              >
+                                {tokenLabel}
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
+                          <div className="pt-2 pr-3">
+                            <p className="text-left text-[12px] leading-[1.5] text-foreground/72">
+                              {activeReasonChip.explanation}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
-                    <div className="px-3 pt-2">
-                      <p className="text-[12px] leading-[1.5] text-foreground/72">
-                        {activeReasonChip.explanation}
-                      </p>
+                  {visibleHeroBottleImageUrl ? (
+                    <div className="pointer-events-none relative mt-1 h-[108px] w-[78px] shrink-0 sm:h-[118px] sm:w-[86px]">
+                      <img
+                        src={visibleHeroBottleImageUrl}
+                        alt={`${visibleResolvedCurrentCard?.name ?? 'Fragrance'} bottle`}
+                        className="h-full w-full object-contain object-center"
+                        loading="lazy"
+                        draggable={false}
+                        style={{
+                          opacity: 0.92,
+                          filter: 'drop-shadow(0 16px 24px rgba(0,0,0,0.34))',
+                        }}
+                      />
                     </div>
-                  )}
+                  ) : null}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* ── Layer card — shared layout contract for signed-in and guest. ── */}
@@ -6439,6 +6584,7 @@ const OdaraScreen = ({
                     );
                   }) : undefined}
                   layerTokens={visibleResolvedCurrentCard?.layerTokens ?? null}
+                  layerImageUrl={visibleLayerBottleImageUrl}
                   showLegacyAccordsText={false}
                 />
               </div>
@@ -6516,10 +6662,7 @@ const OdaraScreen = ({
                 style={{
                   ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
-                  background: bottomStarActive ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
-                  boxShadow: bottomStarActive
-                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(234,179,8,0.14)'
-                    : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  filter: bottomStarActive ? 'drop-shadow(0 0 6px rgba(234,179,8,0.34))' : 'none',
                 }}
               >
                 <svg
