@@ -937,6 +937,79 @@ interface DisplayCard {
   isHero: boolean; // true = oracle hero, false = queue card
 }
 
+interface OdaraSearchFragranceResult {
+  fragrance_id: string;
+  title: string;
+  brand: string;
+  family_key: string;
+  subtitle: string;
+  supporting_text: string;
+  notes: string[];
+  accords: string[];
+  image_url: string | null;
+  source: 'search_rpc' | 'catalog_fallback';
+}
+
+function normalizeOdaraSearchQuery(query: string) {
+  return query
+    .trim()
+    .replace(/[^a-z0-9\s-]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeOdaraSearchFragranceResult(
+  raw: any,
+  source: OdaraSearchFragranceResult['source'],
+): OdaraSearchFragranceResult | null {
+  const payload = raw?.payload && typeof raw.payload === 'object' ? raw.payload : null;
+  const fragranceId = typeof raw?.fragrance_id === 'string'
+    ? raw.fragrance_id.trim()
+    : typeof raw?.id === 'string'
+      ? raw.id.trim()
+      : '';
+  const title = readTrimmedLayerText(raw?.title, raw?.name);
+  if (!fragranceId || !title) return null;
+
+  const brand = readTrimmedLayerText(raw?.brand, payload?.brand);
+  const familyKey = readTrimmedLayerText(raw?.family_key, payload?.family_key);
+  const subtitle = readTrimmedLayerText(
+    raw?.subtitle,
+    [brand, familyKey ? (FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase()) : '']
+      .filter(Boolean)
+      .join(' · '),
+  );
+
+  return {
+    fragrance_id: fragranceId,
+    title,
+    brand,
+    family_key: familyKey,
+    subtitle,
+    supporting_text: readTrimmedLayerText(raw?.supporting_text),
+    notes: sanitizeTokenSource(raw?.notes ?? payload?.notes),
+    accords: sanitizeTokenSource(raw?.accords ?? payload?.accords),
+    image_url: resolveBottleImageUrl(raw, payload),
+    source,
+  };
+}
+
+function searchResultToDisplayCard(result: OdaraSearchFragranceResult): DisplayCard {
+  return {
+    fragrance_id: result.fragrance_id,
+    name: result.title,
+    family: result.family_key,
+    reason: '',
+    brand: result.brand,
+    image_url: result.image_url,
+    notes: sanitizeTokenSource(result.notes),
+    accords: sanitizeTokenSource(result.accords),
+    reason_chip_label: null,
+    reason_chip_explanation: null,
+    isHero: false,
+  };
+}
+
 const MAX_SESSION_HISTORY = 30;
 
 type HistoryEntry = {
@@ -1765,6 +1838,8 @@ type SignedInDayState = {
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
+  manualHeroCard: DisplayCard | null;
+  manualLayerCard: DisplayCard | null;
 };
 
 type SignedInDayStateMap = Record<string, SignedInDayState>; // key = "dateStr"
@@ -1773,7 +1848,7 @@ type SignedInResolvedDayDecision = {
   forcedLayerCarryCard: DisplayCard | null;
   selectedMood: LayerMood;
   promotedAltId: string | null;
-  source: 'locked' | 'carryover-main' | 'carryover-layer' | 'oracle';
+  source: 'locked' | 'manual' | 'carryover-main' | 'carryover-layer' | 'oracle';
 };
 
 type FragranceImageAsset = {
@@ -1820,6 +1895,8 @@ function createDefaultSignedInDayState(): SignedInDayState {
     lockedContext: null,
     lockedMood: 'balance',
     lockedPromotedAltId: null,
+    manualHeroCard: null,
+    manualLayerCard: null,
   };
 }
 
@@ -1989,6 +2066,8 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     lockedContext: normalizedLockState === 'locked' ? normalizePersistedLockedContext(state.lockedContext) : null,
     lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
+    manualHeroCard: toPersistedDisplayCard(state.manualHeroCard),
+    manualLayerCard: toPersistedDisplayCard(state.manualLayerCard),
   };
 }
 
@@ -2026,6 +2105,8 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
     lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
       ? raw.lockedPromotedAltId
       : null,
+    manualHeroCard: fromPersistedDisplayCard(raw.manualHeroCard),
+    manualLayerCard: fromPersistedDisplayCard(raw.manualLayerCard),
   };
 }
 
@@ -2044,6 +2125,8 @@ function isPersistableSignedInDayState(state: SignedInDayState): boolean {
     || !!serialized.lockedLayerCard
     || !!serialized.lockedLayerMode
     || serialized.lockedPromotedAltId !== null
+    || !!serialized.manualHeroCard
+    || !!serialized.manualLayerCard
   );
 }
 
@@ -2170,6 +2253,16 @@ function resolveSignedInDayDecision(
       selectedMood: lockedTruth.lockedMood ?? defaultMood,
       promotedAltId: lockedTruth.lockedPromotedAltId,
       source: 'locked',
+    };
+  }
+
+  if (currentDayState.manualHeroCard) {
+    return {
+      visibleCard: currentDayState.manualHeroCard,
+      forcedLayerCarryCard: currentDayState.manualLayerCard,
+      selectedMood: defaultMood,
+      promotedAltId: null,
+      source: 'manual',
     };
   }
 
@@ -2355,6 +2448,11 @@ const OdaraScreen = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchAddPendingFragranceId, setSearchAddPendingFragranceId] = useState<string | null>(null);
+  const [searchAddFeedback, setSearchAddFeedback] = useState<{ fragranceId: string; text: string } | null>(null);
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
@@ -2393,7 +2491,37 @@ const OdaraScreen = ({
   const navigationDayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const navigationStripRef = useRef<HTMLDivElement | null>(null);
   const navigationContentRef = useRef<HTMLDivElement | null>(null);
+  const searchRpcAvailableRef = useRef<boolean | null>(null);
+  const searchFeedbackTimeoutRef = useRef<number | null>(null);
   const railAnchoredToTodayRef = useRef(false);
+  const [navigationDayCellWidth, setNavigationDayCellWidth] = useState<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (searchFeedbackTimeoutRef.current) {
+        window.clearTimeout(searchFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+  useEffect(() => {
+    const strip = navigationStripRef.current;
+    if (!strip || typeof ResizeObserver === 'undefined') return;
+
+    const gapPx = 4;
+    const compute = () => {
+      const nextWidth = (strip.clientWidth - gapPx * 6) / 7;
+      if (!Number.isFinite(nextWidth) || nextWidth <= 0) return;
+      setNavigationDayCellWidth((current) => (
+        current !== null && Math.abs(current - nextWidth) < 0.25
+          ? current
+          : nextWidth
+      ));
+    };
+
+    compute();
+    const observer = new ResizeObserver(compute);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, []);
   // ── LiveMoonPhaseMarker geometry ──
   // Position is a PURE lerp between the measured centers of today's and
   // tomorrow's day cells, driven by local wall-clock seconds-since-midnight.
@@ -2447,9 +2575,9 @@ const OdaraScreen = ({
       // and the marker resets onto the new current day cleanly.
       const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
       // Vertical center: align with the day-number row inside the cell.
-      // Cell layout: py-1.5 (6px) + label (10px) + gap(2) + day(14px). Day digit
-      // center ≈ 6 + 10 + 2 + 7 = 25px from cell top.
-      const dayDigitCenterY = aRect.top + 25 - cRect.top;
+      // Cell layout: py-1.5 (6px) + label (10px) + gap(3) + day(14px). Day digit
+      // center ≈ 6 + 10 + 3 + 7 = 26px from cell top.
+      const dayDigitCenterY = aRect.top + 26 - cRect.top;
       // Full-week notches: a small tick at every cell center.
       const weekNotches: number[] = [];
       for (let i = 0; i < navigationDays.length; i++) {
@@ -2507,7 +2635,8 @@ const OdaraScreen = ({
     if (!selectedCell || !strip) return;
     window.requestAnimationFrame(() => {
       if (selectedDate === todayDateKey) {
-        const left = Math.max(0, selectedCell.offsetLeft - 2);
+        const maxScrollLeft = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        const left = Math.max(0, Math.min(selectedCell.offsetLeft, maxScrollLeft));
         strip.scrollTo({
           left,
           behavior: railAnchoredToTodayRef.current ? 'smooth' : 'auto',
@@ -2860,6 +2989,98 @@ const OdaraScreen = ({
     fragranceDetailInFlightRef.current.set(fragranceId, request);
     return request;
   }, [fetchFragranceImageAssets]);
+
+  const runFallbackFragranceSearch = useCallback(async (query: string) => {
+    const normalizedQuery = normalizeOdaraSearchQuery(query);
+    if (!normalizedQuery) return [] as OdaraSearchFragranceResult[];
+
+    const pattern = `%${normalizedQuery}%`;
+    const { data, error } = await odaraSupabase
+      .from('fragrances')
+      .select('id, name, brand, family_key, notes, accords')
+      .or(`name.ilike.${pattern},brand.ilike.${pattern},family_key.ilike.${pattern}`)
+      .order('name', { ascending: true })
+      .limit(12);
+
+    if (error) throw error;
+
+    return (Array.isArray(data) ? data : [])
+      .map((row) => normalizeOdaraSearchFragranceResult(row, 'catalog_fallback'))
+      .filter((row): row is OdaraSearchFragranceResult => !!row);
+  }, []);
+
+  const runFragranceSearch = useCallback(async (query: string) => {
+    const normalizedQuery = normalizeOdaraSearchQuery(query);
+    if (!normalizedQuery) return [] as OdaraSearchFragranceResult[];
+
+    if (!isGuestMode && userId && searchRpcAvailableRef.current !== false) {
+      try {
+        const { data, error } = await odaraSupabase.rpc('search_odara_v3' as any, {
+          p_user: userId,
+          p_query: normalizedQuery,
+          p_in_collection_only: false,
+          p_limit_per_section: 8,
+        });
+
+        if (error) {
+          searchRpcAvailableRef.current = false;
+        } else {
+          searchRpcAvailableRef.current = true;
+          return (Array.isArray(data) ? data : [])
+            .filter((row: any) => row?.section_key === 'fragrances' && row?.fragrance_id)
+            .map((row: any) => normalizeOdaraSearchFragranceResult(row, 'search_rpc'))
+            .filter((row): row is OdaraSearchFragranceResult => !!row);
+        }
+      } catch {
+        searchRpcAvailableRef.current = false;
+      }
+    }
+
+    return runFallbackFragranceSearch(normalizedQuery);
+  }, [isGuestMode, runFallbackFragranceSearch, userId]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchError(null);
+      return;
+    }
+
+    const normalizedQuery = normalizeOdaraSearchQuery(searchQuery);
+    if (!normalizedQuery) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      setSearchLoading(true);
+      setSearchError(null);
+      runFragranceSearch(normalizedQuery)
+        .then((results) => {
+          if (cancelled) return;
+          setSearchResults(results);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setSearchResults([]);
+          setSearchError('Search is unavailable right now.');
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearchLoading(false);
+          }
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchOpen, searchQuery, runFragranceSearch]);
 
   // Interactive state
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
@@ -3317,13 +3538,120 @@ const OdaraScreen = ({
         areSameDisplayCards(current.carryoverLayerCard, next.carryoverLayerCard) &&
         areSameDisplayCards(current.lockedCard, next.lockedCard) &&
         areSameDisplayCards(current.lockedLayerCard, next.lockedLayerCard) &&
-        areSameLayerModeSnapshots(current.lockedLayerMode, next.lockedLayerMode)
+        areSameLayerModeSnapshots(current.lockedLayerMode, next.lockedLayerMode) &&
+        areSameDisplayCards(current.manualHeroCard, next.manualHeroCard) &&
+        areSameDisplayCards(current.manualLayerCard, next.manualLayerCard)
       ) {
         return prev;
       }
       return { ...prev, [key]: next };
     });
   }, []);
+
+  const clearLockedSelection = useCallback(() => {
+    const key = `${selectedDate}:${selectedContext}`;
+    setLockedSelections(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, [selectedDate, selectedContext]);
+
+  const handleAddSearchResultToSelectedDay = useCallback(async (result: OdaraSearchFragranceResult) => {
+    if (!result?.fragrance_id) return;
+
+    const showSearchFeedback = (fragranceId: string, text: string) => {
+      if (searchFeedbackTimeoutRef.current) {
+        window.clearTimeout(searchFeedbackTimeoutRef.current);
+      }
+      setSearchAddFeedback({ fragranceId, text });
+      searchFeedbackTimeoutRef.current = window.setTimeout(() => {
+        setSearchAddFeedback((current) => (
+          current?.fragranceId === fragranceId ? null : current
+        ));
+      }, 1500);
+    };
+
+    if (isGuestMode) {
+      showSearchFeedback(result.fragrance_id, 'Sign in to add');
+      return;
+    }
+
+    if (signedInIsReadOnlyHistoryCard) {
+      showSearchFeedback(result.fragrance_id, 'History is read-only');
+      return;
+    }
+
+    setSearchAddPendingFragranceId(result.fragrance_id);
+    try {
+      const detail = await fetchFragranceDetail(result.fragrance_id);
+      const resolvedCard = resolveDisplayCardWithDetails(
+        searchResultToDisplayCard(result),
+        detail,
+      );
+
+      let nextVisibleCard: DisplayCard | null = null;
+      let nextForcedLayerCard: DisplayCard | null = null;
+      let feedbackText = 'Added as top';
+
+      updateSignedInDayState(currentDateKey, (current) => {
+        const base: SignedInDayState = {
+          ...current,
+          lockState: 'neutral',
+          lockedCard: null,
+          lockedLayerCard: null,
+          lockedLayerMode: null,
+          lockedContext: null,
+          lockedMood: 'balance',
+          lockedPromotedAltId: null,
+        };
+
+        if (!current.manualHeroCard) {
+          nextVisibleCard = resolvedCard;
+          nextForcedLayerCard = null;
+          feedbackText = 'Added as top';
+          return {
+            ...base,
+            manualHeroCard: resolvedCard,
+            manualLayerCard: null,
+          };
+        }
+
+        nextVisibleCard = current.manualHeroCard;
+        nextForcedLayerCard = resolvedCard;
+        feedbackText = current.manualLayerCard ? 'Replaced layer' : 'Added as layer';
+        return {
+          ...base,
+          manualHeroCard: current.manualHeroCard,
+          manualLayerCard: resolvedCard,
+        };
+      });
+
+      if (nextVisibleCard) {
+        setVisibleCard(nextVisibleCard);
+      }
+      setSignedInForcedLayerCarryCard(nextForcedLayerCard);
+      setSignedInResolvedDayDecisionSource('manual');
+      setPromotedAltId(null);
+      setLayerExpanded(false);
+      setLockState('neutral');
+      clearLockedSelection();
+      showSearchFeedback(result.fragrance_id, feedbackText);
+      haptic('success');
+    } finally {
+      setSearchAddPendingFragranceId((current) => (
+        current === result.fragrance_id ? null : current
+      ));
+    }
+  }, [
+    clearLockedSelection,
+    currentDateKey,
+    fetchFragranceDetail,
+    isGuestMode,
+    setLockState,
+    signedInIsReadOnlyHistoryCard,
+    updateSignedInDayState,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -4758,15 +5086,6 @@ const OdaraScreen = ({
     const layerColor = layerFamily ? FAMILY_COLORS[layerFamily] ?? null : null;
     setLockedSelections(prev => ({ ...prev, [key]: { mainColor, layerColor } }));
   }, [activeGuestRender, selectedDate, selectedContext]);
-
-  const clearLockedSelection = useCallback(() => {
-    const key = `${selectedDate}:${selectedContext}`;
-    setLockedSelections(prev => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }, [selectedDate, selectedContext]);
 
   // ── Skip = advance through queue cards ──
   const handleSkipLocal = useCallback(async () => {
@@ -6237,14 +6556,94 @@ const OdaraScreen = ({
             className="mb-3 rounded-[16px] border border-white/8 bg-white/[0.02] backdrop-blur-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
             style={{ maxHeight: '40vh', overflowY: 'auto' }}
           >
-            {/* TODO: wire to real Odara search contract when a backend search RPC exists. */}
-            {searchHasQuery ? (
-              <p className="text-[12.5px] text-foreground/52">
-                Nothing found yet. Try a fragrance, brand, note, accord, or family.
-              </p>
-            ) : (
+            {!searchHasQuery ? (
               <p className="text-[12.5px] text-foreground/55">
                 Search your scent world.
+              </p>
+            ) : searchLoading ? (
+              <p className="text-[12.5px] text-foreground/52">
+                Searching scents…
+              </p>
+            ) : searchError ? (
+              <p className="text-[12.5px] text-foreground/52">
+                {searchError}
+              </p>
+            ) : searchResults.length > 0 ? (
+              <div className="flex flex-col divide-y divide-white/6">
+                {searchResults.map((result) => {
+                  const familyColor = result.family_key
+                    ? (FAMILY_COLORS[result.family_key] ?? '#888')
+                    : '#888';
+                  const familyLabel = result.family_key
+                    ? (FAMILY_LABELS[result.family_key] ?? result.family_key.toUpperCase())
+                    : '';
+                  const feedbackText = searchAddFeedback?.fragranceId === result.fragrance_id
+                    ? searchAddFeedback.text
+                    : null;
+                  const isAdding = searchAddPendingFragranceId === result.fragrance_id;
+
+                  return (
+                    <div
+                      key={`${result.source}-${result.fragrance_id}`}
+                      className="flex items-start justify-between gap-3 py-3 first:pt-1 last:pb-1"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] text-foreground/92">
+                          {result.title}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11.5px] text-foreground/52">
+                          {result.subtitle || result.brand || 'Fragrance'}
+                        </div>
+                        {(familyLabel || result.supporting_text) && (
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            {familyLabel ? (
+                              <span
+                                className="text-[10px] uppercase tracking-[0.12em]"
+                                style={{ color: familyColor }}
+                              >
+                                {familyLabel}
+                              </span>
+                            ) : null}
+                            {result.supporting_text ? (
+                              <span className="truncate text-[10.5px] text-foreground/44">
+                                {result.supporting_text}
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Add ${result.title} to ${getDateLabel(currentDateKey)}`}
+                          onClick={() => void handleAddSearchResultToSelectedDay(result)}
+                          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/74 transition-colors hover:text-foreground/96 disabled:cursor-wait disabled:opacity-55"
+                          style={{ WebkitTapHighlightColor: 'transparent' }}
+                          disabled={isAdding}
+                        >
+                          {isAdding ? (
+                            <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                              <path d="M12 5v14" />
+                              <path d="M5 12h14" />
+                            </svg>
+                          )}
+                        </button>
+                        {feedbackText ? (
+                          <span className="text-[10px] uppercase tracking-[0.12em] text-foreground/48">
+                            {feedbackText}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[12.5px] text-foreground/52">
+                Nothing found yet. Try a fragrance, brand, note, accord, or family.
               </p>
             )}
           </div>
@@ -6650,7 +7049,7 @@ const OdaraScreen = ({
                     {(activeReasonChip || heroRailTokens.length > 0) && (
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
-                          className="hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
+                          className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
                           style={{ WebkitOverflowScrolling: 'touch' }}
                         >
                           {activeReasonChip && (
@@ -7046,11 +7445,16 @@ const OdaraScreen = ({
                     key={fd.dateStr}
                     ref={(el) => { navigationDayCellRefs.current[i] = el; }}
                     onClick={() => onDateChange(fd.dateStr)}
-                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-0 rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
-                    style={fd.isSelected ? {
-                      background: 'rgba(255,255,255,0.08)',
-                      zIndex: 2,
-                    } : { zIndex: 2 }}
+                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-[1px] rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
+                    style={{
+                      width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      ...(fd.isSelected ? {
+                        background: 'rgba(255,255,255,0.08)',
+                        zIndex: 2,
+                      } : { zIndex: 2 }),
+                    }}
                   >
                     <span className={`text-[10px] tracking-[0.04em] transition-colors ${
                       fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
@@ -7063,7 +7467,7 @@ const OdaraScreen = ({
                       {fd.day}
                     </span>
 
-                    <div className="mt-0.5 flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    <div className="mt-[3px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                       {dayLanes.map((lane, li) => {
                         if (!lane) {
                           return hasAnyLane ? (
