@@ -94,6 +94,50 @@ function isNearDuplicateFlankerPair(
   return mainCore === layerCore || mainCore.includes(layerCore) || layerCore.includes(mainCore);
 }
 
+function buildFallbackLayerTokens(
+  notes: string[] | null | undefined,
+  accords: string[] | null | undefined,
+  color: string,
+) {
+  const accordLabels = normalizeNotes((accords ?? []).map((value) => `${value}`.trim()).filter(Boolean), 4);
+  const noteLabels = normalizeNotes((notes ?? []).map((value) => `${value}`.trim()).filter(Boolean), 4);
+  const labels = [...accordLabels, ...noteLabels].filter(Boolean);
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  for (const label of labels) {
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(label);
+    if (unique.length >= 4) break;
+  }
+
+  return unique.map((label, index) => ({
+    token_key: `layer-fallback-${index}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+    token_label: label,
+    color_hex: color,
+    is_shared: false,
+  }));
+}
+
+function combinePlacementAndRatioText(placement: string, ratio: string) {
+  const normalizedPlacement = normalizeComparisonText(placement);
+  const normalizedRatio = normalizeComparisonText(ratio);
+
+  if (placement && ratio) {
+    if (
+      normalizedRatio
+      && (normalizedPlacement.includes(normalizedRatio) || normalizedRatio.includes(normalizedPlacement))
+    ) {
+      return placement;
+    }
+    return `${placement} · ${ratio}`;
+  }
+
+  return placement || ratio;
+}
+
 /** Generic notes to filter out */
 const GENERIC_NOTES = new Set(["fresh", "clean", "warm", "soft", "light", "smooth", "musk", "white musk"]);
 
@@ -465,12 +509,6 @@ const LayerCard = ({
   const layerColor = activeModeEntry ? (FAMILY_COLORS[activeModeEntry.family_key] ?? '#888') : '#888';
   const layerTint = activeModeEntry ? (FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT) : DEFAULT_TINT;
 
-  const mn = getDisplayName(mainName, mainBrand);
-
-  const cfg = activeModeEntry
-    ? buildMoodConfig(selectedMood, mainName, mainBrand, activeModeEntry.name, activeModeEntry.brand, mainFamily, activeModeEntry.family_key)
-    : null;
-
   // Backend-driven text
   const sameDnaPair = activeModeEntry
     ? isNearDuplicateFlankerPair(
@@ -488,10 +526,13 @@ const LayerCard = ({
     : rawWhyText;
   const placementText = activeModeEntry?.placement_hint?.trim() || '';
   const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
+  const placementWithRatio = combinePlacementAndRatioText(placementText, ratioText);
+  const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
+    ? layerTokens
+    : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
   const detailSections = [
     whyText ? { label: 'Why It Works', value: whyText } : null,
-    placementText ? { label: 'Placement', value: placementText } : null,
-    ratioText ? { label: 'Ratio', value: ratioText } : null,
+    placementWithRatio ? { label: 'Placement', value: placementWithRatio } : null,
   ].filter((section): section is { label: string; value: string } => !!section);
 
   return (
@@ -528,13 +569,13 @@ const LayerCard = ({
                 {activeModeEntry.family_key?.toUpperCase() ?? ''}
               </span>
 
-              {Array.isArray(layerTokens) && layerTokens.length > 0 && (
+              {resolvedLayerTokens.length > 0 && (
                 <div
                   className="hide-horizontal-scrollbar mt-1.5 flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-1"
                   style={{ WebkitOverflowScrolling: 'touch' }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {layerTokens.map((t: any, i: number) => (
+                  {resolvedLayerTokens.map((t: any, i: number) => (
                     <span
                       key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
                       className="flex-shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.12em]"

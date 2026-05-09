@@ -28,7 +28,10 @@ const TemperatureReadout: React.FC<TemperatureReadoutProps> = ({ value, classNam
         fontVariantNumeric: 'tabular-nums',
       }}
     >
-      {value}°
+      <span className="inline-flex items-baseline">
+        <span>{value}</span>
+        <span aria-hidden="true" style={{ marginLeft: '0.12em' }}>°</span>
+      </span>
     </span>
   );
 };

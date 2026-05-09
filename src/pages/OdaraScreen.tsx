@@ -1996,6 +1996,36 @@ function resolveCarryoverNextDayRole(source: SignedInCarryoverTarget): 'main' | 
   return null;
 }
 
+function resolveNextSignedInCarryoverTarget(
+  state: {
+    enabled: boolean;
+    mode: SignedInCarryoverTarget;
+    origin: SignedInDayState['carryoverOrigin'];
+    selectedCard: DisplayCard | null;
+  },
+  hasLayer: boolean,
+): SignedInCarryoverTarget {
+  if (!state.enabled || state.mode === 'off' || !state.selectedCard) {
+    return 'hero';
+  }
+
+  if (state.origin === 'inherited') {
+    return state.mode === 'layer' && hasLayer ? 'layer' : 'hero';
+  }
+
+  if (state.mode === 'hero') {
+    return hasLayer ? 'layer' : 'off';
+  }
+
+  return 'off';
+}
+
+function getSignedInCarryoverFeedbackLabel(target: SignedInCarryoverTarget): string {
+  if (target === 'hero') return 'Daisy Chain';
+  if (target === 'layer') return 'Layer Carry';
+  return 'Off';
+}
+
 function resolveVerifiedPredecessorBaton(
   dayState: SignedInDayState | null | undefined,
 ): SignedInVerifiedPredecessorBaton | null {
@@ -3085,6 +3115,7 @@ const OdaraScreen = ({
   // Micro-label triggers for the bottom action row (Favorite / Daisy Chain).
   // Heart manages its own label inside HeartReactionButton.
   const [favoriteLabelTick, setFavoriteLabelTick] = useState(0);
+  const [favoriteLabelText, setFavoriteLabelText] = useState<string | null>(null);
   const [daisyLabelTick, setDaisyLabelTick] = useState(0);
   const [daisyLabelText, setDaisyLabelText] = useState<string | null>(null);
   const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -5468,7 +5499,11 @@ const OdaraScreen = ({
       });
     const layer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
     const layerImageUrl = resolveBottleImageUrl(visibleGuestRender.activeLayer, layer);
-    const layerTokens = (Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : [])
+    const layerTokens = resolveGuestLayerTokens(
+      visibleGuestRender.activeLayer,
+      hero,
+      Array.isArray(visibleGuestRender.activeLayer?.tokens) ? visibleGuestRender.activeLayer.tokens : [],
+    )
       .filter((token: any) => {
         const label = token?.token_label ?? token?.label ?? token?.name ?? '';
         return typeof label === 'string' && label.trim().length > 0;
@@ -5624,7 +5659,7 @@ const OdaraScreen = ({
       mode,
       origin,
       selectedCard,
-      visualTarget: (enabled && mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
+      visualTarget: (enabled && origin === 'manual' && mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
     };
   }, [
     isGuestMode,
@@ -5694,29 +5729,27 @@ const OdaraScreen = ({
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
     ? {
         color: '#ef4444',
-        background: 'transparent',
-        boxShadow: 'none',
-        filter: 'drop-shadow(0 0 6px rgba(239,68,68,0.34))',
+        background: 'rgba(239,68,68,0.14)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px rgba(239,68,68,0.20)',
+        filter: 'none',
       }
     : signedInCarryoverColor
     ? {
         color: signedInCarryoverColor,
-        background: 'transparent',
-        boxShadow: 'none',
-        filter: `drop-shadow(0 0 6px ${signedInCarryoverColor}32)`,
+        background: `${signedInCarryoverColor}16`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px ${signedInCarryoverColor}18`,
+        filter: 'none',
       }
     : {
         color: 'rgba(255,255,255,0.62)',
-        background: 'transparent',
-        boxShadow: 'none',
+        background: 'rgba(255,255,255,0.035)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
         filter: 'none',
       };
   const bottomStarActive = actionRailState.starred;
   const sharedBottomActionButtonStyle = {
-    border: 'none',
-    background: 'transparent',
-    boxShadow: 'none',
-    backdropFilter: 'none',
+    border: '1px solid rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(12px)',
   } as const;
   const bottomCarryoverButtonStyle = signedInCarryoverButtonStyle;
   useEffect(() => {
@@ -5837,22 +5870,16 @@ const OdaraScreen = ({
     promotedAltId,
   ]);
   const handleSignedInCarryoverToggle = useCallback(() => {
-    if (isGuestMode || signedInIsReadOnlyHistoryCard) return;
+    if (isGuestMode || signedInIsReadOnlyHistoryCard) return 'off' as SignedInCarryoverTarget;
     const hasLayer = !!signedInCurrentLayerCarryCard;
-    const nextTarget: SignedInCarryoverTarget = !signedInResolvedSequelState.enabled
-      ? 'hero'
-      : signedInResolvedSequelState.origin === 'inherited'
-        ? 'off'
-        : signedInResolvedSequelState.mode === 'hero'
-          ? (hasLayer ? 'layer' : 'off')
-          : 'off';
+    const nextTarget = resolveNextSignedInCarryoverTarget(signedInResolvedSequelState, hasLayer);
     const nextSelectedCard = nextTarget === 'hero'
       ? signedInCurrentHeroCarryCard
       : nextTarget === 'layer'
         ? signedInCurrentLayerCarryCard
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
-    const turningOff = signedInResolvedSequelState.enabled && nextTarget === 'off';
+    const turningOff = signedInResolvedSequelState.origin === 'manual' && signedInResolvedSequelState.enabled && nextTarget === 'off';
     updateSignedInDayState(currentDateKey, (current) => ({
       ...current,
       daisyChainEnabled: nextTarget === 'off' ? false : true,
@@ -5876,6 +5903,7 @@ const OdaraScreen = ({
       triggerSignedInCarryoverPulse(nextTarget === 'off' ? null : nextTarget);
     }
     haptic('selection');
+    return nextTarget;
   }, [
     isGuestMode,
     signedInIsReadOnlyHistoryCard,
@@ -6656,13 +6684,17 @@ const OdaraScreen = ({
                   onClick={() => {
                     if (isReadOnlyHistoryCard) return;
                     cardController.actions.toggleStar();
+                    setFavoriteLabelText(bottomStarActive ? 'Removed' : 'Favorite');
                     setFavoriteLabelTick((t) => t + 1);
                   }}
                 className="relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 active:scale-95"
                 style={{
                   ...sharedBottomActionButtonStyle,
                   color: bottomStarActive ? '#eab308' : 'rgba(255,255,255,0.62)',
-                  filter: bottomStarActive ? 'drop-shadow(0 0 6px rgba(234,179,8,0.34))' : 'none',
+                  background: bottomStarActive ? 'rgba(234,179,8,0.14)' : 'rgba(255,255,255,0.035)',
+                  boxShadow: bottomStarActive
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(234,179,8,0.14)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.04)',
                 }}
               >
                 <svg
@@ -6682,9 +6714,9 @@ const OdaraScreen = ({
                 </svg>
                 <FloatingActionLabel
                   triggerKey={favoriteLabelTick || null}
-                  text="Favorite"
+                  text={favoriteLabelText}
                   anchorRef={favoriteButtonRef}
-                  color={bottomStarActive ? '#eab308' : undefined}
+                  color={favoriteLabelText === 'Removed' ? '#a1a1aa' : bottomStarActive ? '#eab308' : undefined}
                 />
               </button>
 
@@ -6713,12 +6745,8 @@ const OdaraScreen = ({
                 aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
                 aria-disabled={isGuestMode || isReadOnlyHistoryCard || undefined}
                 onClick={isGuestMode || isReadOnlyHistoryCard ? undefined : () => {
-                  // Determine the label BEFORE state flip:
-                  // current target 'off' -> next is daisy active -> "Daisy Chain"
-                  // current target non-off -> next will turn off -> "Off"
-                  const nextLabel = signedInCarryoverVisualTarget === 'off' ? 'Daisy Chain' : 'Off';
-                  handleSignedInCarryoverToggle();
-                  setDaisyLabelText(nextLabel);
+                  const nextTarget = handleSignedInCarryoverToggle();
+                  setDaisyLabelText(getSignedInCarryoverFeedbackLabel(nextTarget));
                   setDaisyLabelTick((t) => t + 1);
                 }}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${isGuestMode ? '' : 'active:scale-95'}`}
@@ -6759,7 +6787,7 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="rounded-[16px] px-4 py-3 mt-0"
+          className="mt-0 rounded-[16px] px-3.5 py-2.5"
           style={{
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',
@@ -6767,12 +6795,12 @@ const OdaraScreen = ({
         >
           <div
             ref={navigationStripRef}
-            className="hide-horizontal-scrollbar overflow-x-auto pb-1"
+            className="hide-horizontal-scrollbar overflow-x-auto pb-0.5"
             style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
           >
             <div
               ref={navigationContentRef}
-              className="relative flex w-max min-w-full gap-2"
+              className="relative flex w-max min-w-full gap-1"
             >
               {/* Subtle full-week notches at every day center, behind day cells */}
               {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
@@ -6855,7 +6883,7 @@ const OdaraScreen = ({
                     key={fd.dateStr}
                     ref={(el) => { navigationDayCellRefs.current[i] = el; }}
                     onClick={() => onDateChange(fd.dateStr)}
-                    className="relative flex min-w-[52px] flex-none flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 transition-all duration-200"
+                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-0 rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
                     style={fd.isSelected ? {
                       background: 'rgba(255,255,255,0.08)',
                       zIndex: 2,
@@ -6872,11 +6900,11 @@ const OdaraScreen = ({
                       {fd.day}
                     </span>
 
-                    <div className="mt-1 flex w-full flex-col items-center gap-[3px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    <div className="mt-0.5 flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                       {dayLanes.map((lane, li) => {
                         if (!lane) {
                           return hasAnyLane ? (
-                            <div key={li} style={{ width: '18px', height: '3px' }} />
+                            <div key={li} style={{ width: '16px', height: '2px' }} />
                           ) : null;
                         }
                         return (
@@ -6884,8 +6912,8 @@ const OdaraScreen = ({
                             key={li}
                             className="rounded-full"
                             style={{
-                              width: '18px',
-                              height: '3px',
+                              width: '16px',
+                              height: '2px',
                               background: lane.mainColor,
                               boxShadow: lane.layerColor
                                 ? `0 0 4px ${lane.layerColor}, 0 0 8px ${lane.layerColor}44`

@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
   CARD_ACTION_BUTTON_BASE_CLASS,
+  CARD_ACTION_BUTTON_BASE_STYLE,
+  CARD_ACTION_BUTTON_INACTIVE_STYLE,
   HEART_LIKE_COLOR,
   HEART_LOVE_COLOR,
 } from './tokens';
@@ -68,12 +70,16 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
       disabled={disabled}
       className={`${CARD_ACTION_BUTTON_BASE_CLASS} relative`}
       style={{
-        color: heartColor ?? 'rgba(255,255,255,0.62)',
-        background: 'transparent',
-        border: 'none',
-        boxShadow: 'none',
-        backdropFilter: 'none',
-        filter: liked ? `drop-shadow(0 0 6px ${heartColor}44)` : 'none',
+        ...CARD_ACTION_BUTTON_BASE_STYLE,
+        ...(liked
+          ? {
+              color: heartColor,
+              background: loved ? 'rgba(239,68,68,0.14)' : 'rgba(244,114,182,0.14)',
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px ${
+                loved ? 'rgba(239,68,68,0.16)' : 'rgba(244,114,182,0.14)'
+              }`,
+            }
+          : CARD_ACTION_BUTTON_INACTIVE_STYLE),
       }}
     >
       <span
