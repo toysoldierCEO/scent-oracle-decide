@@ -89,6 +89,11 @@ interface ResolvedGuestCardVM {
   reasonChipExplanation: string | null;
 }
 
+interface LocalModeHistoryEntry<Mood> {
+  mood: Mood;
+  layerIndex: number;
+}
+
 function normalizeLayerMoodKey(value: unknown): LayerMood | null {
   if (typeof value !== 'string') return null;
   const normalized = LAYER_MOOD_ALIASES[value.trim().toLowerCase()];
@@ -2598,6 +2603,8 @@ const OdaraScreen = ({
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
+  const [signedInModeHistory, setSignedInModeHistory] = useState<LocalModeHistoryEntry<LayerMood>[]>([]);
+  const signedInModeHistoryRef = useRef<LocalModeHistoryEntry<LayerMood>[]>([]);
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
@@ -2610,6 +2617,8 @@ const OdaraScreen = ({
   const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
   const [guestSelectedMood, setGuestSelectedMood] = useState<GuestModeKey>('balance');
   const [guestActiveLayerIdx, setGuestActiveLayerIdx] = useState(0);
+  const [guestModeHistory, setGuestModeHistory] = useState<LocalModeHistoryEntry<GuestModeKey>[]>([]);
+  const guestModeHistoryRef = useRef<LocalModeHistoryEntry<GuestModeKey>[]>([]);
   const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
   // Snapshot of main-state at time alternate was selected, for clean restore.
   const guestPrevMainStateRef = useRef<{ mood: GuestModeKey; idx: number } | null>(null);
@@ -2726,6 +2735,57 @@ const OdaraScreen = ({
       ? lockedGuestSnapshot
       : activeGuestRender;
 
+  useEffect(() => {
+    guestModeHistoryRef.current = guestModeHistory;
+  }, [guestModeHistory]);
+
+  useEffect(() => {
+    signedInModeHistoryRef.current = signedInModeHistory;
+  }, [signedInModeHistory]);
+
+  const guestModeHistoryScopeKey = useMemo(() => {
+    const guestCardId = visibleGuestRender?.activeHero?.fragrance_id ?? visibleGuestRender?.activeHero?.id ?? 'none';
+    return `${selectedDate}|${selectedContext}|guest|${selectedAlternateIdx ?? 'main'}|${guestCardId}`;
+  }, [selectedDate, selectedContext, selectedAlternateIdx, visibleGuestRender?.activeHero?.fragrance_id, visibleGuestRender?.activeHero?.id]);
+
+  const signedInModeHistoryScopeKey = useMemo(() => {
+    const currentCardId = visibleCard?.fragrance_id ?? 'none';
+    return `${selectedDate}|${selectedContext}|signed_in|${currentCardId}|${promotedAltId ?? 'base'}`;
+  }, [selectedDate, selectedContext, visibleCard?.fragrance_id, promotedAltId]);
+
+  const guestModeHistoryScopeRef = useRef<string>('');
+  const signedInModeHistoryScopeRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isGuestMode) {
+      if (guestModeHistoryRef.current.length > 0) {
+        guestModeHistoryRef.current = [];
+        setGuestModeHistory([]);
+      }
+      guestModeHistoryScopeRef.current = '';
+      return;
+    }
+    if (guestModeHistoryScopeRef.current === guestModeHistoryScopeKey) return;
+    guestModeHistoryScopeRef.current = guestModeHistoryScopeKey;
+    guestModeHistoryRef.current = [];
+    setGuestModeHistory([]);
+  }, [isGuestMode, guestModeHistoryScopeKey]);
+
+  useEffect(() => {
+    if (isGuestMode) {
+      if (signedInModeHistoryRef.current.length > 0) {
+        signedInModeHistoryRef.current = [];
+        setSignedInModeHistory([]);
+      }
+      signedInModeHistoryScopeRef.current = '';
+      return;
+    }
+    if (signedInModeHistoryScopeRef.current === signedInModeHistoryScopeKey) return;
+    signedInModeHistoryScopeRef.current = signedInModeHistoryScopeKey;
+    signedInModeHistoryRef.current = [];
+    setSignedInModeHistory([]);
+  }, [isGuestMode, signedInModeHistoryScopeKey]);
+
   // Guest mode-row tap: different mode → switch + reset idx; same mode → cycle.
   const handleGuestModeTap = useCallback((mode: GuestModeKey) => {
     if (isGuestLocked) return;
@@ -2739,13 +2799,19 @@ const OdaraScreen = ({
     const stack = layerModeBlockToStack(modeBlock);
     if (stack.length === 0) return;
     if (mode !== guestSelectedMood) {
+      const nextHistory = [
+        ...guestModeHistoryRef.current,
+        { mood: guestSelectedMood, layerIndex: guestActiveLayerIdx },
+      ];
+      guestModeHistoryRef.current = nextHistory;
+      setGuestModeHistory(nextHistory);
       setGuestSelectedMood(mode);
       setGuestActiveLayerIdx(0);
     } else {
       // cycle within current mode using backend layers.length (no hard-coded N)
       setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
     }
-  }, [oracle, activeOracle, guestSelectedMood, selectedAlternateIdx, isGuestLocked]);
+  }, [oracle, activeOracle, guestSelectedMood, guestActiveLayerIdx, selectedAlternateIdx, isGuestLocked]);
 
   // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
   // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
@@ -4316,6 +4382,12 @@ const OdaraScreen = ({
     }
 
     if (mood !== selectedMood) {
+      const nextHistory = [
+        ...signedInModeHistoryRef.current,
+        { mood: selectedMood, layerIndex: signedInLayerIdxByMood[selectedMood] ?? 0 },
+      ];
+      signedInModeHistoryRef.current = nextHistory;
+      setSignedInModeHistory(nextHistory);
       setSelectedMood(mood);
       syncMoodLaneSelectedEntry(moodKey, signedInLayerIdxByMood[mood] ?? 0);
       if (currentLaneStack.length === 0) {
@@ -5036,12 +5108,18 @@ const OdaraScreen = ({
   const guestHasRealHistory =
     isGuestMode && (selectedAlternateIdx !== null || guestSkipHistory.length > 0);
   const isLayerDetailExpanded = isGuestMode ? guestLayerExpanded : layerExpanded;
+  const guestModeHistoryAvailable =
+    isGuestMode && !guestLockedForCurrentCard && !isReadOnlyHistoryCard && guestModeHistory.length > 0;
+  const signedInModeHistoryAvailable =
+    !isGuestMode && !signedInResolvedLockActive && !isReadOnlyHistoryCard && signedInModeHistory.length > 0;
+  const showModeBack = isGuestMode ? guestModeHistoryAvailable : signedInModeHistoryAvailable;
   const showHistoryBack = isGuestMode ? guestHasRealHistory : hasHistory;
   const actionRailState = {
     locked: isCardLocked,
     starred: isGuestMode ? guestStarredForCurrentCard : isFavorited,
-    showBack: isLayerDetailExpanded || showHistoryBack,
+    showBack: isLayerDetailExpanded || showModeBack || showHistoryBack,
     showDetailBack: isLayerDetailExpanded,
+    showModeBack,
     showHistoryBack,
   };
 
@@ -5199,6 +5277,47 @@ const OdaraScreen = ({
     }
     setLayerExpanded(false);
   }, [isGuestMode]);
+
+  const handleLocalLayerBack = useCallback(() => {
+    if (isLayerDetailExpanded) {
+      collapseLayerDetail();
+      return true;
+    }
+
+    if (isGuestMode) {
+      if (!guestModeHistoryAvailable) return false;
+      const nextHistory = guestModeHistoryRef.current.slice(0, -1);
+      const previous = guestModeHistoryRef.current[guestModeHistoryRef.current.length - 1] ?? null;
+      if (!previous) return false;
+      guestModeHistoryRef.current = nextHistory;
+      setGuestModeHistory(nextHistory);
+      setGuestSelectedMood(previous.mood);
+      setGuestActiveLayerIdx(previous.layerIndex);
+      return true;
+    }
+
+    if (!signedInModeHistoryAvailable || !visibleCard) return false;
+    const nextHistory = signedInModeHistoryRef.current.slice(0, -1);
+    const previous = signedInModeHistoryRef.current[signedInModeHistoryRef.current.length - 1] ?? null;
+    if (!previous) return false;
+    signedInModeHistoryRef.current = nextHistory;
+    setSignedInModeHistory(nextHistory);
+    setSelectedMood(previous.mood);
+    setSignedInLayerIdxByMood((prev) => ({ ...prev, [previous.mood]: previous.layerIndex }));
+    const moodKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, visibleCard.fragrance_id, previous.mood);
+    syncMoodLaneSelectedEntry(moodKey, previous.layerIndex);
+    return true;
+  }, [
+    isLayerDetailExpanded,
+    collapseLayerDetail,
+    isGuestMode,
+    guestModeHistoryAvailable,
+    signedInModeHistoryAvailable,
+    visibleCard,
+    selectedDate,
+    selectedContext,
+    syncMoodLaneSelectedEntry,
+  ]);
 
   if (isGuestMode) {
     const o: any = oracle ?? {};
@@ -5982,7 +6101,10 @@ const OdaraScreen = ({
             {/* Top row: temp left · centered date · action stack right.
                 Temperature/date/lock form ONE quiet metadata row — same
                 opacity, mirrored horizontal inset, balanced visual weight. */}
-            <div className="flex items-center justify-between mb-1.5 relative z-10 px-0.5">
+            <div
+              className="relative z-10 flex items-center justify-between px-0.5"
+              style={{ marginBottom: actionRailState.showBack ? '44px' : '6px' }}
+            >
               {/* Left: temperature — instrument reading (digital, but quiet). */}
               <div className="flex items-center min-w-[52px]">
                 <TemperatureReadout value={resolvedTemperature} />
@@ -5993,10 +6115,8 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: SHARED action stack (lock → back).
-                  Single rail used by BOTH signed-in and guest modes.
-                  - Lock: interactive when signed-in; visually disabled no-op for guest.
-                  - Back: rendered only when there is promotion/history (signed-in OR guest). */}
+              {/* Right: fixed lock anchor with an independent under-lock back control.
+                  The lock never participates in the back button's layout flow. */}
               {(() => {
                 // Action rail consumes the normalized cardController state —
                 // single source of truth for both signed-in and guest.
@@ -6006,9 +6126,9 @@ const OdaraScreen = ({
 
                 return (
                 <div
-                  className="flex flex-col items-center min-w-[52px]"
+                  className="relative flex min-w-[52px] items-center justify-center"
                   data-action-stack
-                  style={{ rowGap: showBack ? '14px' : '6px' }}
+                  style={{ height: '32px' }}
                 >
                 {/* Lock button — interactive for both signed-in and guest.
                     Guest writes only to local guestLocked boolean (no Supabase). */}
@@ -6130,14 +6250,14 @@ const OdaraScreen = ({
                 {showBack && (
                   <button
                     type="button"
+                    className="absolute left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border border-white/8 bg-white/[0.02] text-foreground/50 transition-all duration-200 hover:text-foreground/70 active:scale-95"
+                    style={{ top: 'calc(100% + 14px)' }}
                     onClick={() => {
-                      if (actionRailState.showDetailBack) {
-                        collapseLayerDetail();
+                      if (handleLocalLayerBack()) {
                         return;
                       }
                       cardController.actions.back();
                     }}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/8 bg-white/[0.02] text-foreground/50 transition-all duration-200 hover:text-foreground/70 active:scale-95"
                     aria-label="Back"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
