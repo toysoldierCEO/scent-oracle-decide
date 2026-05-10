@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, LAYER_MOODS } from "./ModeSelector";
+import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 
 /* ── Color maps (shared reference, same as OdaraScreen) ── */
@@ -136,6 +137,119 @@ function combinePlacementAndRatioText(placement: string, ratio: string) {
   }
 
   return placement || ratio;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function splitDetailSentences(value: string) {
+  return value
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function stripMaskingRiskSentences(value: string) {
+  return splitDetailSentences(value)
+    .filter((sentence) => !/masking risk/i.test(sentence))
+    .join(' ')
+    .trim();
+}
+
+function buildAllowedReferenceSet(
+  mainName: string | null | undefined,
+  mainBrand: string | null | undefined,
+  layerName: string | null | undefined,
+  layerBrand: string | null | undefined,
+) {
+  const allowed = new Set<string>();
+  const mainDisplayName = getDisplayName(mainName, mainBrand);
+  const layerDisplayName = getDisplayName(layerName, layerBrand);
+
+  [
+    mainDisplayName,
+    layerDisplayName,
+    mainName ?? '',
+    layerName ?? '',
+    mainBrand ?? '',
+    layerBrand ?? '',
+  ].forEach((value) => {
+    const normalized = normalizeComparisonText(value);
+    if (normalized) allowed.add(normalized);
+  });
+
+  return allowed;
+}
+
+function readSentenceReferenceCandidate(sentence: string) {
+  const colonPrefix = sentence.match(/^\s*([^:]{2,48})\s*:/);
+  if (colonPrefix) {
+    return normalizeComparisonText(colonPrefix[1]);
+  }
+
+  const leadingName = sentence.match(/^\s*([A-Z0-9][A-Za-z0-9'&.-]*(?:\s+[A-Z0-9][A-Za-z0-9'&.-]*){1,3})\b/);
+  if (!leadingName) return null;
+  const normalized = normalizeComparisonText(leadingName[1]);
+  if (!normalized) return null;
+  if (/^(the|one|use|layer|anchor|base|top|both|this|that|manual)\b/.test(normalized)) return null;
+  return normalized;
+}
+
+function sentenceReferencesVisiblePair(
+  sentence: string,
+  allowedReferences: Set<string>,
+) {
+  const candidate = readSentenceReferenceCandidate(sentence);
+  if (!candidate) return true;
+
+  for (const allowed of allowedReferences) {
+    if (candidate === allowed || candidate.includes(allowed) || allowed.includes(candidate)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function sentenceContainsForeignFragrancePhrase(
+  sentence: string,
+  allowedReferences: Set<string>,
+) {
+  const matches = sentence.matchAll(/\b([A-Z0-9][A-Za-z0-9'&.-]*(?:\s+[A-Z0-9][A-Za-z0-9'&.-]*){1,3})\b/g);
+  for (const match of matches) {
+    const candidate = normalizeComparisonText(match[1]);
+    if (!candidate) continue;
+    if (/^(the|one|use|layer|anchor|base|top|both|manual|added|placement|why|this|that)\b/.test(candidate)) {
+      continue;
+    }
+    const isAllowed = Array.from(allowedReferences).some((allowed) => (
+      candidate === allowed || candidate.includes(allowed) || allowed.includes(candidate)
+    ));
+    if (!isAllowed) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function sanitizeLayerDetailCopy(
+  value: string,
+  mainName: string | null | undefined,
+  mainBrand: string | null | undefined,
+  layerName: string | null | undefined,
+  layerBrand: string | null | undefined,
+) {
+  const withoutMaskingRisk = stripMaskingRiskSentences(value);
+  if (!withoutMaskingRisk) return '';
+
+  const allowedReferences = buildAllowedReferenceSet(mainName, mainBrand, layerName, layerBrand);
+  const sanitizedSentences = splitDetailSentences(withoutMaskingRisk).filter((sentence) => (
+    sentenceReferencesVisiblePair(sentence, allowedReferences)
+    && !sentenceContainsForeignFragrancePhrase(sentence, allowedReferences)
+  ));
+
+  return sanitizedSentences.join(' ').trim();
 }
 
 /** Generic notes to filter out */
@@ -443,6 +557,7 @@ interface LayerCardProps {
   mainNotes: string[] | null;
   mainFamily: string | null;
   mainProjection: number | null;
+  mainSprayCount?: number | null;
   layerModes: LayerModes;
   visibleLayerMode?: NonNullable<LayerModes[LayerMood]> | null;
   selectedMood: LayerMood;
@@ -463,6 +578,8 @@ interface LayerCardProps {
    *  layer order (name → brand → family → tokens → mode row → why it works). */
   layerTokens?: Array<any> | null;
   layerImageUrl?: string | null;
+  layerSprayCount?: number | null;
+  detailIdentityKey?: string;
   showLegacyAccordsText?: boolean;
 }
 
@@ -472,6 +589,7 @@ const LayerCard = ({
   mainNotes,
   mainFamily,
   mainProjection,
+  mainSprayCount = null,
   layerModes,
   visibleLayerMode = null,
   selectedMood,
@@ -489,6 +607,8 @@ const LayerCard = ({
   onRetryMood,
   layerTokens = null,
   layerImageUrl = null,
+  layerSprayCount = null,
+  detailIdentityKey = '',
   showLegacyAccordsText = true,
 }: LayerCardProps) => {
   const activeModeEntry = visibleLayerMode;
@@ -520,13 +640,46 @@ const LayerCard = ({
         activeModeEntry.family_key,
       )
     : false;
-  const rawWhyText = activeModeEntry?.why_it_works?.trim() || '';
-  const whyText = sameDnaPair && rawWhyText
+  const rawWhyText = activeModeEntry?.why_it_works?.trim() || activeModeEntry?.reason?.trim() || '';
+  const sanitizedWhyText = sanitizeLayerDetailCopy(
+    rawWhyText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const safeWhyFallback = activeModeEntry
+    ? `Use ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} as the selected layer for this card.`
+    : '';
+  const whyText = sameDnaPair && sanitizedWhyText
     ? 'A same-DNA intensifier — this pairing deepens the original profile instead of acting like a contrasting support layer.'
-    : rawWhyText;
+    : (sanitizedWhyText || (rawWhyText ? safeWhyFallback : ''));
   const placementText = activeModeEntry?.placement_hint?.trim() || '';
   const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
-  const placementWithRatio = combinePlacementAndRatioText(placementText, ratioText);
+  const sanitizedPlacementText = sanitizeLayerDetailCopy(
+    placementText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const sanitizedRatioText = sanitizeLayerDetailCopy(
+    ratioText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const derivedSprayCounts = deriveSprayCountsFromLayerMode(activeModeEntry as any);
+  const resolvedMainSprayCount = mainSprayCount ?? derivedSprayCounts.main;
+  const resolvedLayerSprayCount = layerSprayCount ?? derivedSprayCounts.layer;
+  const fallbackPlacementText = resolvedMainSprayCount || resolvedLayerSprayCount
+    ? [
+        resolvedMainSprayCount ? `Anchor: ${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : null,
+        resolvedLayerSprayCount ? `Layer: ${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : null,
+      ].filter(Boolean).join(' · ')
+    : '';
+  const placementWithRatio = combinePlacementAndRatioText(sanitizedPlacementText, sanitizedRatioText) || fallbackPlacementText;
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
@@ -556,8 +709,15 @@ const LayerCard = ({
         <>
           <div className="flex w-full items-start justify-between gap-4">
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-left text-lg font-serif leading-tight tracking-wide text-white">
-                {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-left text-lg font-serif leading-tight tracking-wide text-white">
+                <span className="min-w-0">
+                  {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
+                </span>
+                <SprayDots
+                  count={resolvedLayerSprayCount}
+                  color={layerColor}
+                  className="inline-flex items-center gap-1 pt-0.5"
+                />
               </p>
               {activeModeEntry.brand && (
                 <p className="mt-[1px] text-left text-[10px] text-white/50">{activeModeEntry.brand}</p>
@@ -689,7 +849,7 @@ const LayerCard = ({
             className="w-full overflow-hidden"
           >
             <motion.div
-              key={`${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
+              key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}

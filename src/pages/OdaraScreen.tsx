@@ -6,6 +6,7 @@ import TemperatureReadout from "@/components/card-system/TemperatureReadout";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
 import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
 import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
+import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
@@ -136,6 +137,22 @@ function readTrimmedLayerText(...values: unknown[]) {
     if (trimmed.length > 0) return trimmed;
   }
   return '';
+}
+
+function readPositiveLayerCount(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return Math.round(value);
+    }
+    if (typeof value === 'string') {
+      const match = value.trim().match(/^(\d{1,2})$/);
+      if (match) {
+        const parsed = Number.parseInt(match[1], 10);
+        if (parsed > 0) return parsed;
+      }
+    }
+  }
+  return null;
 }
 
 function normalizeLayerTeachingFields(value: any) {
@@ -375,6 +392,33 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
     application_style: teaching.application_style || undefined,
     placement_hint: teaching.placement_hint || undefined,
     spray_guidance: teaching.spray_guidance || undefined,
+    anchor_sprays: readPositiveLayerCount(
+      layer.anchor_sprays,
+      layer.anchorSprays,
+      layer.hero_sprays,
+      layer.heroSprays,
+      layer.main_sprays,
+      layer.mainSprays,
+      layer.base_sprays,
+      layer.baseSprays,
+      layer?.anchor?.sprays,
+      layer?.hero?.sprays,
+      layer?.main?.sprays,
+      layer?.base?.sprays,
+    ),
+    layer_sprays: readPositiveLayerCount(
+      layer.layer_sprays,
+      layer.layerSprays,
+      layer.top_sprays,
+      layer.topSprays,
+      layer.support_sprays,
+      layer.supportSprays,
+      layer?.layer?.sprays,
+      layer?.top?.sprays,
+      layer?.support?.sprays,
+    ),
+    spray_map: layer.spray_map ?? layer.sprayMap ?? null,
+    zone_spray_map: layer.zone_spray_map ?? layer.zoneSprayMap ?? null,
   };
 }
 
@@ -890,6 +934,10 @@ interface BackendModeEntry {
   application_style: string;
   placement_hint: string;
   spray_guidance: string;
+  anchor_sprays?: number | null;
+  layer_sprays?: number | null;
+  spray_map?: unknown;
+  zone_spray_map?: unknown;
   interaction_type: string;
 }
 
@@ -1140,6 +1188,10 @@ function backendModeEntryToLayerMode(
     application_style: entry.application_style || '',
     placement_hint: entry.placement_hint || '',
     spray_guidance: entry.spray_guidance || '',
+    anchor_sprays: entry.anchor_sprays ?? null,
+    layer_sprays: entry.layer_sprays ?? null,
+    spray_map: entry.spray_map ?? null,
+    zone_spray_map: entry.zone_spray_map ?? null,
   };
 }
 
@@ -1185,6 +1237,33 @@ function modeValueToBackendModeEntry(
     application_style: teaching.application_style,
     placement_hint: teaching.placement_hint,
     spray_guidance: teaching.spray_guidance,
+    anchor_sprays: readPositiveLayerCount(
+      value.anchor_sprays,
+      value.anchorSprays,
+      value.hero_sprays,
+      value.heroSprays,
+      value.main_sprays,
+      value.mainSprays,
+      value.base_sprays,
+      value.baseSprays,
+      value?.anchor?.sprays,
+      value?.hero?.sprays,
+      value?.main?.sprays,
+      value?.base?.sprays,
+    ),
+    layer_sprays: readPositiveLayerCount(
+      value.layer_sprays,
+      value.layerSprays,
+      value.top_sprays,
+      value.topSprays,
+      value.support_sprays,
+      value.supportSprays,
+      value?.layer?.sprays,
+      value?.top?.sprays,
+      value?.support?.sprays,
+    ),
+    spray_map: value.spray_map ?? value.sprayMap ?? null,
+    zone_spray_map: value.zone_spray_map ?? value.zoneSprayMap ?? null,
     interaction_type: value.interaction_type ?? value.interactionType ?? value.layer_mode ?? value.mode ?? mood,
   };
 }
@@ -1224,6 +1303,33 @@ function v6LayerToLayerMode(
     application_style: teaching.application_style,
     placement_hint: teaching.placement_hint,
     spray_guidance: teaching.spray_guidance,
+    anchor_sprays: readPositiveLayerCount(
+      layer.anchor_sprays,
+      layer.anchorSprays,
+      layer.hero_sprays,
+      layer.heroSprays,
+      layer.main_sprays,
+      layer.mainSprays,
+      layer.base_sprays,
+      layer.baseSprays,
+      layer?.anchor?.sprays,
+      layer?.hero?.sprays,
+      layer?.main?.sprays,
+      layer?.base?.sprays,
+    ),
+    layer_sprays: readPositiveLayerCount(
+      layer.layer_sprays,
+      layer.layerSprays,
+      layer.top_sprays,
+      layer.topSprays,
+      layer.support_sprays,
+      layer.supportSprays,
+      layer?.layer?.sprays,
+      layer?.top?.sprays,
+      layer?.support?.sprays,
+    ),
+    spray_map: layer.spray_map ?? layer.sprayMap ?? null,
+    zone_spray_map: layer.zone_spray_map ?? layer.zoneSprayMap ?? null,
   } as any;
 }
 
@@ -2025,6 +2131,10 @@ function toPersistedLayerModeSnapshot(
     application_style: layer.application_style ?? '',
     placement_hint: layer.placement_hint ?? '',
     spray_guidance: layer.spray_guidance ?? '',
+    anchor_sprays: readPositiveLayerCount((layer as any).anchor_sprays, (layer as any).anchorSprays),
+    layer_sprays: readPositiveLayerCount((layer as any).layer_sprays, (layer as any).layerSprays),
+    spray_map: (layer as any).spray_map ?? (layer as any).sprayMap ?? null,
+    zone_spray_map: (layer as any).zone_spray_map ?? (layer as any).zoneSprayMap ?? null,
   };
 }
 
@@ -2049,6 +2159,10 @@ function fromPersistedLayerModeSnapshot(raw: any): PersistedLayerModeSnapshot | 
     application_style: typeof raw.application_style === 'string' ? raw.application_style : '',
     placement_hint: typeof raw.placement_hint === 'string' ? raw.placement_hint : '',
     spray_guidance: typeof raw.spray_guidance === 'string' ? raw.spray_guidance : '',
+    anchor_sprays: readPositiveLayerCount(raw.anchor_sprays, raw.anchorSprays),
+    layer_sprays: readPositiveLayerCount(raw.layer_sprays, raw.layerSprays),
+    spray_map: raw.spray_map ?? raw.sprayMap ?? null,
+    zone_spray_map: raw.zone_spray_map ?? raw.zoneSprayMap ?? null,
   };
 }
 
@@ -2072,6 +2186,10 @@ function areSameLayerModeSnapshots(
     a.application_style === b.application_style &&
     a.placement_hint === b.placement_hint &&
     a.spray_guidance === b.spray_guidance &&
+    ((a as any).anchor_sprays ?? null) === ((b as any).anchor_sprays ?? null) &&
+    ((a as any).layer_sprays ?? null) === ((b as any).layer_sprays ?? null) &&
+    JSON.stringify((a as any).spray_map ?? null) === JSON.stringify((b as any).spray_map ?? null) &&
+    JSON.stringify((a as any).zone_spray_map ?? null) === JSON.stringify((b as any).zone_spray_map ?? null) &&
     JSON.stringify(a.notes) === JSON.stringify(b.notes) &&
     JSON.stringify(a.accords) === JSON.stringify(b.accords)
   );
@@ -6244,6 +6362,25 @@ const OdaraScreen = ({
     : signedInVisibleLayer;
   const visibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
   const visibleLayerBottleImageUrl = visibleResolvedLayer?.image_url ?? null;
+  const visibleLayerSprayCounts = useMemo(
+    () => deriveSprayCountsFromLayerMode(visibleResolvedLayer as any),
+    [visibleResolvedLayer]
+  );
+  const visibleHeroSprayCount = visibleLayerSprayCounts.main;
+  const visibleLayerSprayCount = visibleLayerSprayCounts.layer;
+  const layerDetailIdentityKey = useMemo(() => (
+    `${selectedDate}|${selectedContext}|${visibleResolvedCurrentCard?.fragrance_id ?? 'none'}|${visibleResolvedLayer?.id ?? 'none'}|${visibleResolvedCurrentCard?.selectedMode ?? selectedMood}|${isGuestMode ? (selectedAlternateIdx ?? 'main') : (promotedAltId ?? 'base')}`
+  ), [
+    selectedDate,
+    selectedContext,
+    visibleResolvedCurrentCard?.fragrance_id,
+    visibleResolvedCurrentCard?.selectedMode,
+    visibleResolvedLayer?.id,
+    selectedMood,
+    isGuestMode,
+    selectedAlternateIdx,
+    promotedAltId,
+  ]);
   const visibleResolvedLayerModes = isGuestMode
     ? (guestResolvedCurrentCard?.layerModes ?? { balance: null, bold: null, smooth: null, wild: null })
     : signedInVisibleLayerModes;
@@ -7178,11 +7315,18 @@ const OdaraScreen = ({
                   <div className="min-w-0 flex-1 text-left">
                     {/* Fragrance name */}
                     <h2
-                      className="mb-0.5 text-left text-[32px] font-normal leading-[1.1] text-foreground"
+                      className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-left text-[32px] font-normal leading-[1.1] text-foreground"
                       style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
                       data-guest-profile-reserved
                     >
-                      {getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}
+                      <span className="min-w-0">
+                        {getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}
+                      </span>
+                      <SprayDots
+                        count={visibleHeroSprayCount}
+                        color={visibleHeroFamilyColor}
+                        className="inline-flex items-center gap-1 pt-1"
+                      />
                     </h2>
 
                     {/* Brand */}
@@ -7329,6 +7473,9 @@ const OdaraScreen = ({
                   }) : undefined}
                   layerTokens={visibleResolvedCurrentCard?.layerTokens ?? null}
                   layerImageUrl={visibleLayerBottleImageUrl}
+                  mainSprayCount={visibleHeroSprayCount}
+                  layerSprayCount={visibleLayerSprayCount}
+                  detailIdentityKey={layerDetailIdentityKey}
                   showLegacyAccordsText={false}
                 />
               </div>
