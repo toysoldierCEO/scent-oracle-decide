@@ -3724,108 +3724,6 @@ const OdaraScreen = ({
     });
   }, [selectedDate, selectedContext]);
 
-  const handleAddSearchResultToSelectedDay = useCallback(async (result: OdaraSearchFragranceResult) => {
-    if (!result?.fragrance_id) return;
-
-    const showSearchFeedback = (fragranceId: string, text: string) => {
-      if (searchFeedbackTimeoutRef.current) {
-        window.clearTimeout(searchFeedbackTimeoutRef.current);
-      }
-      setSearchAddFeedback({ fragranceId, text });
-      searchFeedbackTimeoutRef.current = window.setTimeout(() => {
-        setSearchAddFeedback((current) => (
-          current?.fragranceId === fragranceId ? null : current
-        ));
-      }, 1500);
-    };
-
-    if (isGuestMode) {
-      showSearchFeedback(result.fragrance_id, 'Sign in to add');
-      return;
-    }
-
-    if (signedInIsReadOnlyHistoryCard) {
-      showSearchFeedback(result.fragrance_id, 'History is read-only');
-      return;
-    }
-
-    setSearchAddPendingFragranceId(result.fragrance_id);
-    try {
-      const detail = await fetchFragranceDetail(result.fragrance_id);
-      const resolvedCard = resolveDisplayCardWithDetails(
-        searchResultToDisplayCard(result),
-        detail,
-      );
-
-      let nextVisibleCard: DisplayCard | null = null;
-      let nextForcedLayerCard: DisplayCard | null = null;
-      let feedbackText = 'Added as top';
-
-      updateSignedInDayState(currentDateKey, (current) => {
-        const base: SignedInDayState = {
-          ...current,
-          lockState: 'neutral',
-          lockedCard: null,
-          lockedLayerCard: null,
-          lockedLayerMode: null,
-          lockedContext: null,
-          lockedMood: 'balance',
-          lockedPromotedAltId: null,
-        };
-
-        if (!current.manualHeroCard) {
-          nextVisibleCard = resolvedCard;
-          nextForcedLayerCard = null;
-          feedbackText = 'Added as top';
-          return {
-            ...base,
-            manualHeroCard: resolvedCard,
-            manualLayerCard: null,
-          };
-        }
-
-        nextVisibleCard = current.manualHeroCard;
-        nextForcedLayerCard = resolvedCard;
-        feedbackText = current.manualLayerCard ? 'Replaced layer' : 'Added as layer';
-        return {
-          ...base,
-          manualHeroCard: current.manualHeroCard,
-          manualLayerCard: resolvedCard,
-        };
-      });
-
-      if (nextVisibleCard) {
-        setVisibleCard(nextVisibleCard);
-      }
-      setSignedInForcedLayerCarryCard(nextForcedLayerCard);
-      setSignedInResolvedDayDecisionSource('manual');
-      if (nextForcedLayerCard) {
-        setSelectedMood('balance');
-        setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
-      }
-      setPromotedAltId(null);
-      setLayerExpanded(false);
-      setLockState('neutral');
-      clearLockedSelection();
-      showSearchFeedback(result.fragrance_id, feedbackText);
-      haptic('success');
-    } finally {
-      setSearchAddPendingFragranceId((current) => (
-        current === result.fragrance_id ? null : current
-      ));
-    }
-  }, [
-    clearLockedSelection,
-    currentDateKey,
-    fetchFragranceDetail,
-    isGuestMode,
-    setLockState,
-    setSelectedMood,
-    setSignedInLayerIdxByMood,
-    signedInIsReadOnlyHistoryCard,
-    updateSignedInDayState,
-  ]);
-
   useEffect(() => {
     return () => {
       if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
@@ -4443,6 +4341,234 @@ const OdaraScreen = ({
 
   // Track previous slot to detect actual slot changes
   const prevSlotRef = useRef(stateKey);
+  const activeSearchPreviewTopId = !isGuestMode ? (signedInDayState.manualHeroCard?.fragrance_id ?? null) : null;
+  const activeSearchPreviewLayerId = !isGuestMode ? (signedInDayState.manualLayerCard?.fragrance_id ?? null) : null;
+
+  const showSearchFeedback = useCallback((fragranceId: string, text: string) => {
+    if (searchFeedbackTimeoutRef.current) {
+      window.clearTimeout(searchFeedbackTimeoutRef.current);
+    }
+    setSearchAddFeedback({ fragranceId, text });
+    searchFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setSearchAddFeedback((current) => (
+        current?.fragranceId === fragranceId ? null : current
+      ));
+    }, 1500);
+  }, []);
+
+  const resolveActiveSignedInDefaultMood = useCallback((): LayerMood => {
+    const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
+    const normalized = activeSignedInOracle ? normalizeOracleHomePayload(activeSignedInOracle) : null;
+    const v6 = activeSignedInOracle?.__v6 ?? null;
+    return normalizeLayerMoodKey(v6?.ui_default_mode ?? normalized?.defaultMode)
+      ?? (normalized?.defaultMode ?? 'balance');
+  }, [activeOracle, oracle]);
+
+  const resolveSearchPreviewDecision = useCallback((
+    nextDayState: SignedInDayState,
+  ): SignedInResolvedDayDecision | null => {
+    const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
+    const defaultMood = resolveActiveSignedInDefaultMood();
+    if (!activeSignedInOracle?.today_pick) {
+      if (!nextDayState.manualHeroCard) return null;
+      return {
+        visibleCard: nextDayState.manualHeroCard,
+        forcedLayerCarryCard: nextDayState.manualLayerCard,
+        selectedMood: defaultMood,
+        promotedAltId: null,
+        source: 'manual',
+      };
+    }
+    const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
+    return resolveSignedInDayDecision(
+      nextDayState,
+      true,
+      previousDayState,
+      activeSignedInOracle.today_pick,
+      defaultMood,
+    );
+  }, [activeOracle, oracle, previousDateKey, resolveActiveSignedInDefaultMood]);
+
+  const applySignedInSearchPreviewDecision = useCallback((
+    decision: SignedInResolvedDayDecision | null,
+    options?: {
+      prefetchedAlternates?: OracleAlternate[] | null;
+    },
+  ) => {
+    const fallbackMood = resolveActiveSignedInDefaultMood();
+    if (decision?.visibleCard) {
+      setVisibleCard(decision.visibleCard);
+      setSignedInForcedLayerCarryCard(decision.forcedLayerCarryCard);
+      setSignedInResolvedDayDecisionSource(decision.source);
+      setPromotedAltId(decision.promotedAltId);
+      setSelectedMood(decision.selectedMood ?? fallbackMood);
+    } else {
+      setVisibleCard(null);
+      setSignedInForcedLayerCarryCard(null);
+      setSignedInResolvedDayDecisionSource('oracle');
+      setPromotedAltId(null);
+      setSelectedMood(fallbackMood);
+    }
+
+    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
+    signedInModeHistoryRef.current = [];
+    setSignedInModeHistory([]);
+    setLayerExpanded(false);
+    setLockState('neutral');
+    clearLockedSelection();
+
+    if (decision?.visibleCard && options?.prefetchedAlternates) {
+      setCurrentCardAlternates(options.prefetchedAlternates);
+      setCurrentCardAlternatesOwnerId(decision.visibleCard.fragrance_id);
+    } else {
+      setCurrentCardAlternates([]);
+      setCurrentCardAlternatesOwnerId(null);
+    }
+  }, [clearLockedSelection, resolveActiveSignedInDefaultMood, setLockState]);
+
+  const primeSignedInPreviewTopCard = useCallback(async (heroCard: DisplayCard) => {
+    const [prefetchedAlternates] = await Promise.all([
+      resolveAlternatesForCard(heroCard),
+      fetchMoodForCard(heroCard.fragrance_id, 'balance'),
+    ]);
+    return prefetchedAlternates;
+  }, [resolveAlternatesForCard, fetchMoodForCard]);
+
+  const clearSearchPreviewFromSelectedDay = useCallback(async (
+    target: 'top' | 'layer' | 'all' = 'all',
+  ) => {
+    if (isGuestMode) return false;
+
+    const current = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+    if (!current.manualHeroCard && !current.manualLayerCard) return false;
+
+    const shouldClearTop = target === 'all' || target === 'top';
+    const shouldClearLayer = target === 'all' || target === 'layer' || shouldClearTop;
+    const nextDayState: SignedInDayState = {
+      ...current,
+      manualHeroCard: shouldClearTop ? null : current.manualHeroCard,
+      manualLayerCard: shouldClearLayer ? null : current.manualLayerCard,
+    };
+
+    const capturedSlot = stateKey;
+    updateSignedInDayState(currentDateKey, () => nextDayState);
+
+    const decision = resolveSearchPreviewDecision(nextDayState);
+    applySignedInSearchPreviewDecision(decision);
+
+    if (decision?.source === 'manual' && decision.visibleCard) {
+      const prefetchedAlternates = await primeSignedInPreviewTopCard(decision.visibleCard);
+      if (activeSlotRef.current !== capturedSlot) return true;
+      setCurrentCardAlternates(prefetchedAlternates);
+      setCurrentCardAlternatesOwnerId(decision.visibleCard.fragrance_id);
+    }
+
+    return true;
+  }, [
+    applySignedInSearchPreviewDecision,
+    currentDateKey,
+    isGuestMode,
+    primeSignedInPreviewTopCard,
+    resolveSearchPreviewDecision,
+    stateKey,
+    updateSignedInDayState,
+  ]);
+
+  const handleAddSearchResultToSelectedDay = useCallback(async (result: OdaraSearchFragranceResult) => {
+    if (!result?.fragrance_id) return;
+
+    if (isGuestMode) {
+      showSearchFeedback(result.fragrance_id, 'Sign in to add');
+      return;
+    }
+
+    if (signedInIsReadOnlyHistoryCard) {
+      showSearchFeedback(result.fragrance_id, 'History is read-only');
+      return;
+    }
+
+    const current = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+    const isActiveTop = current.manualHeroCard?.fragrance_id === result.fragrance_id;
+    const isActiveLayer = current.manualLayerCard?.fragrance_id === result.fragrance_id;
+    if (isActiveTop) {
+      await clearSearchPreviewFromSelectedDay('top');
+      showSearchFeedback(result.fragrance_id, 'Removed preview');
+      return;
+    }
+    if (isActiveLayer) {
+      await clearSearchPreviewFromSelectedDay('layer');
+      showSearchFeedback(result.fragrance_id, 'Removed layer');
+      return;
+    }
+
+    const capturedSlot = stateKey;
+    setSearchAddPendingFragranceId(result.fragrance_id);
+
+    try {
+      const detail = await fetchFragranceDetail(result.fragrance_id);
+      const resolvedCard = resolveDisplayCardWithDetails(
+        searchResultToDisplayCard(result),
+        detail,
+      );
+      if (activeSlotRef.current !== capturedSlot) return;
+
+      const base: SignedInDayState = {
+        ...current,
+        lockState: 'neutral',
+        lockedCard: null,
+        lockedLayerCard: null,
+        lockedLayerMode: null,
+        lockedContext: null,
+        lockedMood: 'balance',
+        lockedPromotedAltId: null,
+      };
+
+      let nextDayState: SignedInDayState;
+      let feedbackText = 'Added as top';
+      let prefetchedAlternates: OracleAlternate[] | null = null;
+
+      if (!current.manualHeroCard) {
+        nextDayState = {
+          ...base,
+          manualHeroCard: resolvedCard,
+          manualLayerCard: null,
+        };
+        prefetchedAlternates = await primeSignedInPreviewTopCard(resolvedCard);
+        feedbackText = 'Added as top';
+      } else {
+        nextDayState = {
+          ...base,
+          manualHeroCard: current.manualHeroCard,
+          manualLayerCard: resolvedCard,
+        };
+        feedbackText = current.manualLayerCard ? 'Replaced layer' : 'Added as layer';
+      }
+
+      if (activeSlotRef.current !== capturedSlot) return;
+
+      updateSignedInDayState(currentDateKey, () => nextDayState);
+      const decision = resolveSearchPreviewDecision(nextDayState);
+      applySignedInSearchPreviewDecision(decision, { prefetchedAlternates });
+      showSearchFeedback(result.fragrance_id, feedbackText);
+      haptic('success');
+    } finally {
+      setSearchAddPendingFragranceId((currentPending) => (
+        currentPending === result.fragrance_id ? null : currentPending
+      ));
+    }
+  }, [
+    applySignedInSearchPreviewDecision,
+    clearSearchPreviewFromSelectedDay,
+    currentDateKey,
+    fetchFragranceDetail,
+    isGuestMode,
+    primeSignedInPreviewTopCard,
+    resolveSearchPreviewDecision,
+    showSearchFeedback,
+    signedInIsReadOnlyHistoryCard,
+    stateKey,
+    updateSignedInDayState,
+  ]);
 
   // Effect 1: CLEAR card state immediately when the slot (date or context) changes
   useEffect(() => {
@@ -5302,6 +5428,10 @@ const OdaraScreen = ({
   const handleSkipLocal = useCallback(async () => {
     if (skipLoading || !visibleCard || lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
 
+    let effectiveVisibleCard = visibleCard;
+    let effectivePromotedAltId = promotedAltId;
+    let effectiveSelectedMood: LayerMood = selectedMood ?? 'balance';
+
     const hasManualPreview = signedInResolvedDayDecisionSource === 'manual'
       || !!signedInDayState.manualHeroCard
       || !!signedInDayState.manualLayerCard;
@@ -5313,19 +5443,7 @@ const OdaraScreen = ({
         manualHeroCard: null,
         manualLayerCard: null,
       };
-      const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
-      const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
-      const normalized = activeSignedInOracle ? normalizeOracleHomePayload(activeSignedInOracle) : null;
-      const v6 = activeSignedInOracle?.__v6 ?? null;
-      const previewClearedDecision = activeSignedInOracle?.today_pick
-        ? resolveSignedInDayDecision(
-            clearedDayState,
-            true,
-            previousDayState,
-            activeSignedInOracle.today_pick,
-            normalizeLayerMoodKey(v6?.ui_default_mode ?? normalized?.defaultMode) ?? (normalized?.defaultMode ?? 'balance'),
-          )
-        : null;
+      const previewClearedDecision = resolveSearchPreviewDecision(clearedDayState);
 
       updateSignedInDayState(currentDateKey, (current) => (
         current.manualHeroCard || current.manualLayerCard
@@ -5333,18 +5451,12 @@ const OdaraScreen = ({
           : current
       ));
 
-      if (previewClearedDecision?.visibleCard) {
-        setVisibleCard(previewClearedDecision.visibleCard);
-        setSignedInForcedLayerCarryCard(previewClearedDecision.forcedLayerCarryCard);
-        setSignedInResolvedDayDecisionSource(previewClearedDecision.source);
-        setSelectedMood(previewClearedDecision.selectedMood);
-        setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
-        setPromotedAltId(previewClearedDecision.promotedAltId);
-      }
+      applySignedInSearchPreviewDecision(previewClearedDecision);
+      if (!previewClearedDecision?.visibleCard) return;
 
-      setLayerExpanded(false);
-      setLockState('neutral');
-      return;
+      effectiveVisibleCard = previewClearedDecision.visibleCard;
+      effectivePromotedAltId = previewClearedDecision.promotedAltId;
+      effectiveSelectedMood = previewClearedDecision.selectedMood ?? 'balance';
     }
 
     setSkipLoading(true);
@@ -5355,12 +5467,12 @@ const OdaraScreen = ({
     // Fire-and-forget backend skip via canonical RPC
     void odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
       p_user: userId,
-      p_fragrance_id: visibleCard.fragrance_id,
+      p_fragrance_id: effectiveVisibleCard.fragrance_id,
       p_context: selectedContext,
       p_skip_date: selectedDate,
     }).then(
-      () => console.log('[Odara] skip rpc success (fire-forget)', { userId, fragranceId: visibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' }),
-      (err: any) => console.error('[Odara] skip rpc fail (fire-forget)', { userId, fragranceId: visibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: err?.message })
+      () => console.log('[Odara] skip rpc success (fire-forget)', { userId, fragranceId: effectiveVisibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' }),
+      (err: any) => console.error('[Odara] skip rpc fail (fire-forget)', { userId, fragranceId: effectiveVisibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: err?.message })
     );
 
     // Slide the card down
@@ -5369,16 +5481,16 @@ const OdaraScreen = ({
     setSkipAnimating(false);
 
     try {
-      const currentMoodKey = selectedMood ?? 'balance';
-      const currentResolvedEntry = getResolvedMoodLaneEntry(visibleCard.fragrance_id, currentMoodKey);
-      console.log('[Odara] history push (skip)', { id: visibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
+      const currentMoodKey = effectiveSelectedMood ?? 'balance';
+      const currentResolvedEntry = getResolvedMoodLaneEntry(effectiveVisibleCard.fragrance_id, currentMoodKey);
+      console.log('[Odara] history push (skip)', { id: effectiveVisibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
         ...h.slice(-(MAX_SESSION_HISTORY - 1)),
         {
-          card: visibleCard,
+          card: effectiveVisibleCard,
           queuePointerBefore: queuePointer,
-          promotedAltId,
-          selectedMood,
+          promotedAltId: effectivePromotedAltId,
+          selectedMood: effectiveSelectedMood,
           resolvedVisibleModeEntry: currentResolvedEntry,
         },
       ]);
@@ -5388,7 +5500,7 @@ const OdaraScreen = ({
         setVisibleCard(nextCard);
         setQueuePointer(queuePointer + 1);
       } else {
-        const newQueue = await fetchQueue(visibleCard.fragrance_id);
+        const newQueue = await fetchQueue(effectiveVisibleCard.fragrance_id);
         if (newQueue.length > 0) {
           setQueue(newQueue);
           setVisibleCard(newQueue[0]);
@@ -5404,7 +5516,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, previousDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, activeOracle, oracle, updateSignedInDayState]);
+  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, updateSignedInDayState, resolveSearchPreviewDecision, applySignedInSearchPreviewDecision]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -5997,13 +6109,15 @@ const OdaraScreen = ({
     isGuestMode && !guestLockedForCurrentCard && !isReadOnlyHistoryCard && guestModeHistory.length > 0;
   const signedInModeHistoryAvailable =
     !isGuestMode && !signedInResolvedLockActive && !isReadOnlyHistoryCard && signedInModeHistory.length > 0;
+  const showPreviewBack = !isGuestMode && !isReadOnlyHistoryCard && signedInManualPreviewActive;
   const showModeBack = isGuestMode ? guestModeHistoryAvailable : signedInModeHistoryAvailable;
   const showHistoryBack = isGuestMode ? guestHasRealHistory : hasHistory;
   const actionRailState = {
     locked: isCardLocked,
     starred: isGuestMode ? guestStarredForCurrentCard : isFavorited,
-    showBack: isLayerDetailExpanded || showModeBack || showHistoryBack,
+    showBack: isLayerDetailExpanded || showPreviewBack || showModeBack || showHistoryBack,
     showDetailBack: isLayerDetailExpanded,
+    showPreviewBack,
     showModeBack,
     showHistoryBack,
   };
@@ -6169,6 +6283,11 @@ const OdaraScreen = ({
       return true;
     }
 
+    if (!isGuestMode && signedInManualPreviewActive) {
+      void clearSearchPreviewFromSelectedDay('all');
+      return true;
+    }
+
     if (isGuestMode) {
       if (!guestModeHistoryAvailable) return false;
       const nextHistory = guestModeHistoryRef.current.slice(0, -1);
@@ -6196,6 +6315,8 @@ const OdaraScreen = ({
     isLayerDetailExpanded,
     collapseLayerDetail,
     isGuestMode,
+    signedInManualPreviewActive,
+    clearSearchPreviewFromSelectedDay,
     guestModeHistoryAvailable,
     signedInModeHistoryAvailable,
     visibleCard,
@@ -6872,6 +6993,11 @@ const OdaraScreen = ({
                     ? searchAddFeedback.text
                     : null;
                   const isAdding = searchAddPendingFragranceId === result.fragrance_id;
+                  const previewRole = result.fragrance_id === activeSearchPreviewTopId
+                    ? 'top'
+                    : result.fragrance_id === activeSearchPreviewLayerId
+                      ? 'layer'
+                      : null;
 
                   return (
                     <div
@@ -6907,7 +7033,9 @@ const OdaraScreen = ({
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <button
                           type="button"
-                          aria-label={`Add ${result.title} to ${getDateLabel(currentDateKey)}`}
+                          aria-label={previewRole
+                            ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
+                            : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
                           onClick={() => void handleAddSearchResultToSelectedDay(result)}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/74 transition-colors hover:text-foreground/96 disabled:cursor-wait disabled:opacity-55"
                           style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -6915,6 +7043,11 @@ const OdaraScreen = ({
                         >
                           {isAdding ? (
                             <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
+                          ) : previewRole ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                              <path d="M6 6l12 12" />
+                              <path d="M18 6L6 18" />
+                            </svg>
                           ) : (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                               <path d="M12 5v14" />
