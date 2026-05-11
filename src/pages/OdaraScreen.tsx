@@ -139,6 +139,22 @@ function readTrimmedLayerText(...values: unknown[]) {
   return '';
 }
 
+function normalizeSearchFamilyKey(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-');
+}
+
+function getFamilyLabelText(familyKey: string) {
+  const normalized = normalizeSearchFamilyKey(familyKey);
+  if (!normalized) return '';
+  return FAMILY_LABELS[normalized] ?? normalized.toUpperCase();
+}
+
 function readPositiveLayerCount(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
@@ -1020,10 +1036,12 @@ function normalizeOdaraSearchFragranceResult(
   if (!fragranceId || !title) return null;
 
   const brand = readTrimmedLayerText(raw?.brand, payload?.brand);
-  const familyKey = readTrimmedLayerText(raw?.family_key, payload?.family_key);
+  const familyKey = normalizeSearchFamilyKey(
+    readTrimmedLayerText(raw?.family_key, raw?.family, payload?.family_key, payload?.family),
+  );
   const subtitle = readTrimmedLayerText(
     raw?.subtitle,
-    [brand, familyKey ? (FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase()) : '']
+    [brand, familyKey ? getFamilyLabelText(familyKey) : '']
       .filter(Boolean)
       .join(' · '),
   );
@@ -2692,6 +2710,8 @@ const OdaraScreen = ({
   const navigationDayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const navigationStripRef = useRef<HTMLDivElement | null>(null);
   const navigationContentRef = useRef<HTMLDivElement | null>(null);
+  const searchBarRef = useRef<HTMLDivElement | null>(null);
+  const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const searchRpcAvailableRef = useRef<boolean | null>(null);
   const searchFeedbackTimeoutRef = useRef<number | null>(null);
   const railAnchoredToTodayRef = useRef(false);
@@ -2703,6 +2723,35 @@ const OdaraScreen = ({
       }
     };
   }, []);
+  const closeSearchSurface = useCallback((clearQuery = true) => {
+    setSearchOpen(false);
+    if (clearQuery) {
+      setSearchQuery('');
+    }
+  }, []);
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (searchBarRef.current?.contains(target)) return;
+      if (searchResultsRef.current?.contains(target)) return;
+      closeSearchSurface();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeSearchSurface();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeSearchSurface, searchOpen]);
   useEffect(() => {
     const strip = navigationStripRef.current;
     if (!strip || typeof ResizeObserver === 'undefined') return;
@@ -4434,16 +4483,47 @@ const OdaraScreen = ({
     const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
     const defaultMood = resolveActiveSignedInDefaultMood();
     if (!activeSignedInOracle?.today_pick) {
-      if (!nextDayState.manualHeroCard) return null;
+      if (nextDayState.manualHeroCard) {
+        return {
+          visibleCard: nextDayState.manualHeroCard,
+          forcedLayerCarryCard: nextDayState.manualLayerCard,
+          selectedMood: defaultMood,
+          promotedAltId: null,
+          source: 'manual',
+        };
+      }
+      if (nextDayState.manualLayerCard) {
+        return {
+          visibleCard: visibleCard ?? null,
+          forcedLayerCarryCard: nextDayState.manualLayerCard,
+          selectedMood: defaultMood,
+          promotedAltId: null,
+          source: 'manual',
+        };
+      }
+      return null;
+    }
+    const previousDayState = signedInDayStateMapRef.current[previousDayStateKey] ?? createDefaultSignedInDayState();
+    const resolvedBaseDecision = resolveSignedInDayDecision(
+      {
+        ...nextDayState,
+        manualHeroCard: null,
+        manualLayerCard: null,
+      },
+      true,
+      previousDayState,
+      activeSignedInOracle.today_pick,
+      defaultMood,
+    );
+    if (nextDayState.manualLayerCard) {
       return {
-        visibleCard: nextDayState.manualHeroCard,
         forcedLayerCarryCard: nextDayState.manualLayerCard,
+        visibleCard: resolvedBaseDecision.visibleCard ?? visibleCard ?? null,
         selectedMood: defaultMood,
-        promotedAltId: null,
+        promotedAltId: resolvedBaseDecision.promotedAltId ?? null,
         source: 'manual',
       };
     }
-    const previousDayState = signedInDayStateMapRef.current[previousDayStateKey] ?? createDefaultSignedInDayState();
     return resolveSignedInDayDecision(
       nextDayState,
       true,
@@ -4451,7 +4531,7 @@ const OdaraScreen = ({
       activeSignedInOracle.today_pick,
       defaultMood,
     );
-  }, [activeOracle, oracle, previousDayStateKey, resolveActiveSignedInDefaultMood]);
+  }, [activeOracle, oracle, previousDayStateKey, resolveActiveSignedInDefaultMood, visibleCard]);
 
   const applySignedInSearchPreviewDecision = useCallback((
     decision: SignedInResolvedDayDecision | null,
@@ -4520,8 +4600,10 @@ const OdaraScreen = ({
     const decision = resolveSearchPreviewDecision(nextDayState);
     applySignedInSearchPreviewDecision(decision);
 
-    if (decision?.source === 'manual' && decision.visibleCard) {
-      const prefetchedAlternates = await primeSignedInPreviewTopCard(decision.visibleCard);
+    if (decision?.visibleCard) {
+      const prefetchedAlternates = decision.source === 'manual' && decision.forcedLayerCarryCard === null
+        ? await primeSignedInPreviewTopCard(decision.visibleCard)
+        : await resolveAlternatesForCard(decision.visibleCard);
       if (activeSlotRef.current !== capturedSlot) return true;
       setCurrentCardAlternates(prefetchedAlternates);
       setCurrentCardAlternatesOwnerId(decision.visibleCard.fragrance_id);
@@ -4533,6 +4615,7 @@ const OdaraScreen = ({
     currentDayStateKey,
     isGuestMode,
     primeSignedInPreviewTopCard,
+    resolveAlternatesForCard,
     resolveSearchPreviewDecision,
     stateKey,
     updateSignedInDayState,
@@ -4554,14 +4637,17 @@ const OdaraScreen = ({
     const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
     const isActiveTop = current.manualHeroCard?.fragrance_id === result.fragrance_id;
     const isActiveLayer = current.manualLayerCard?.fragrance_id === result.fragrance_id;
+    const hadPreviewTop = !!current.manualHeroCard;
     if (isActiveTop) {
-      await clearSearchPreviewFromSelectedDay('top');
-      showSearchFeedback(result.fragrance_id, 'Removed preview');
-      return;
+      if (isActiveLayer) {
+        await clearSearchPreviewFromSelectedDay('all');
+        showSearchFeedback(result.fragrance_id, 'Removed');
+        return;
+      }
     }
     if (isActiveLayer) {
       await clearSearchPreviewFromSelectedDay('layer');
-      showSearchFeedback(result.fragrance_id, 'Removed layer');
+      showSearchFeedback(result.fragrance_id, 'Removed');
       return;
     }
 
@@ -4588,10 +4674,16 @@ const OdaraScreen = ({
       };
 
       let nextDayState: SignedInDayState;
-      let feedbackText = 'Added as top';
+      let feedbackText = hadPreviewTop ? 'Added as layer' : 'Added as top';
       let prefetchedAlternates: OracleAlternate[] | null = null;
 
-      if (!current.manualHeroCard) {
+      if (isActiveTop) {
+        nextDayState = {
+          ...base,
+          manualHeroCard: null,
+          manualLayerCard: resolvedCard,
+        };
+      } else if (!current.manualHeroCard) {
         nextDayState = {
           ...base,
           manualHeroCard: resolvedCard,
@@ -4605,13 +4697,18 @@ const OdaraScreen = ({
           manualHeroCard: current.manualHeroCard,
           manualLayerCard: resolvedCard,
         };
-        feedbackText = current.manualLayerCard ? 'Replaced layer' : 'Added as layer';
+        feedbackText = 'Added as layer';
       }
 
       if (activeSlotRef.current !== capturedSlot) return;
 
-      updateSignedInDayState(currentDayStateKey, () => nextDayState);
       const decision = resolveSearchPreviewDecision(nextDayState);
+      if (!prefetchedAlternates && decision?.visibleCard) {
+        prefetchedAlternates = await resolveAlternatesForCard(decision.visibleCard);
+        if (activeSlotRef.current !== capturedSlot) return;
+      }
+
+      updateSignedInDayState(currentDayStateKey, () => nextDayState);
       applySignedInSearchPreviewDecision(decision, { prefetchedAlternates });
       showSearchFeedback(result.fragrance_id, feedbackText);
       haptic('success');
@@ -4627,6 +4724,7 @@ const OdaraScreen = ({
     fetchFragranceDetail,
     isGuestMode,
     primeSignedInPreviewTopCard,
+    resolveAlternatesForCard,
     resolveSearchPreviewDecision,
     showSearchFeedback,
     signedInIsReadOnlyHistoryCard,
@@ -6959,7 +7057,7 @@ const OdaraScreen = ({
             type="button"
             aria-label="Open menu"
             onClick={() => {
-              setSearchOpen(false);
+              closeSearchSurface();
               setMenuOpen(true);
             }}
             className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
@@ -6986,6 +7084,7 @@ const OdaraScreen = ({
           {/* Inline expanding search — same top-bar region.
               Card / state remain untouched underneath. */}
           <div
+            ref={searchBarRef}
             className="flex items-center justify-end overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
             style={{ width: searchOpen ? 'calc(100% - 56px)' : '40px' }}
           >
@@ -7007,8 +7106,11 @@ const OdaraScreen = ({
               </button>
             ) : (
               <div
-                className="flex w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 h-10 backdrop-blur-xl"
-                style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}
+                className="flex h-10 w-full items-center gap-1.5 rounded-full border border-white/10 px-3 backdrop-blur-[22px]"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(18,20,26,0.66) 0%, rgba(10,12,16,0.54) 100%)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 16px 30px rgba(0,0,0,0.22)',
+                }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/55">
                   <circle cx="11" cy="11" r="6.5" />
@@ -7026,8 +7128,7 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Close search"
                   onClick={() => {
-                    setSearchOpen(false);
-                    setSearchQuery('');
+                    closeSearchSurface();
                   }}
                   className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-foreground/55 hover:text-foreground/95"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -7046,8 +7147,15 @@ const OdaraScreen = ({
             Lightweight, scrollable, integrated into the same screen. */}
         {searchOpen && (searchHasQuery || searchLoading || !!searchError || searchResults.length > 0) && (
           <div
-            className="mb-3 rounded-[16px] border border-white/8 bg-white/[0.02] backdrop-blur-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
-            style={{ maxHeight: '40vh', overflowY: 'auto' }}
+            ref={searchResultsRef}
+            className="mb-3 rounded-[18px] border border-white/10 px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200"
+            style={{
+              maxHeight: '40vh',
+              overflowY: 'auto',
+              background: 'linear-gradient(180deg, rgba(18,20,26,0.68) 0%, rgba(11,13,18,0.58) 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 40px rgba(0,0,0,0.24)',
+              backdropFilter: 'blur(24px) saturate(135%)',
+            }}
           >
             {searchLoading ? (
               <p className="text-[12.5px] text-foreground/52">
@@ -7064,17 +7172,34 @@ const OdaraScreen = ({
                     ? (FAMILY_COLORS[result.family_key] ?? '#888')
                     : '#888';
                   const familyLabel = result.family_key
-                    ? (FAMILY_LABELS[result.family_key] ?? result.family_key.toUpperCase())
+                    ? getFamilyLabelText(result.family_key)
                     : '';
                   const feedbackText = searchAddFeedback?.fragranceId === result.fragrance_id
                     ? searchAddFeedback.text
                     : null;
                   const isAdding = searchAddPendingFragranceId === result.fragrance_id;
-                  const previewRole = result.fragrance_id === activeSearchPreviewTopId
-                    ? 'top'
-                    : result.fragrance_id === activeSearchPreviewLayerId
-                      ? 'layer'
+                  const previewRole = result.fragrance_id === activeSearchPreviewLayerId
+                    ? 'layer'
+                    : result.fragrance_id === activeSearchPreviewTopId
+                      ? 'top'
                       : null;
+                  const buttonTone = previewRole === 'top'
+                    ? {
+                        color: familyColor,
+                        background: `${familyColor}14`,
+                        borderColor: `${familyColor}42`,
+                      }
+                    : previewRole === 'layer'
+                      ? {
+                          color: 'rgba(255,255,255,0.84)',
+                          background: 'rgba(255,255,255,0.09)',
+                          borderColor: 'rgba(255,255,255,0.18)',
+                        }
+                      : {
+                          color: 'rgba(255,255,255,0.74)',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderColor: 'rgba(255,255,255,0.10)',
+                        };
 
                   return (
                     <div
@@ -7092,8 +7217,13 @@ const OdaraScreen = ({
                           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                             {familyLabel ? (
                               <span
-                                className="text-[10px] uppercase tracking-[0.12em]"
-                                style={{ color: familyColor }}
+                                className="rounded-full border px-2 py-0.5 text-[9.5px] uppercase tracking-[0.12em]"
+                                style={{
+                                  color: familyColor,
+                                  borderColor: `${familyColor}36`,
+                                  background: `${familyColor}10`,
+                                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                                }}
                               >
                                 {familyLabel}
                               </span>
@@ -7110,17 +7240,23 @@ const OdaraScreen = ({
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <button
                           type="button"
-                          aria-label={previewRole
-                            ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
-                            : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
+                          aria-label={previewRole === 'top'
+                            ? `Add ${result.title} as layer for ${getDateLabel(currentDateKey)}`
+                            : previewRole === 'layer'
+                              ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
+                              : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
                           onClick={() => void handleAddSearchResultToSelectedDay(result)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-foreground/74 transition-colors hover:text-foreground/96 disabled:cursor-wait disabled:opacity-55"
-                          style={{ WebkitTapHighlightColor: 'transparent' }}
+                          className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-wait disabled:opacity-55"
+                          style={{
+                            WebkitTapHighlightColor: 'transparent',
+                            ...buttonTone,
+                            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                          }}
                           disabled={isAdding}
                         >
                           {isAdding ? (
                             <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
-                          ) : previewRole ? (
+                          ) : previewRole === 'layer' ? (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                               <path d="M6 6l12 12" />
                               <path d="M18 6L6 18" />
@@ -7133,7 +7269,16 @@ const OdaraScreen = ({
                           )}
                         </button>
                         {feedbackText ? (
-                          <span className="text-[10px] uppercase tracking-[0.12em] text-foreground/48">
+                          <span
+                            className="text-[10px] uppercase tracking-[0.12em]"
+                            style={{
+                              color: feedbackText === 'Removed'
+                                ? 'rgba(161,161,170,0.9)'
+                                : previewRole === 'top'
+                                  ? familyColor
+                                  : 'rgba(255,255,255,0.52)',
+                            }}
+                          >
                             {feedbackText}
                           </span>
                         ) : null}
