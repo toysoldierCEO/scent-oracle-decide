@@ -14,6 +14,16 @@ as $$
   select greatest(0::numeric, least(1::numeric, coalesce(p_value, 0::numeric)));
 $$;
 
+revoke all on function public.normalize_performance_term_v1(text) from public;
+revoke all on function public.normalize_performance_term_v1(text) from anon;
+revoke all on function public.normalize_performance_term_v1(text) from authenticated;
+grant execute on function public.normalize_performance_term_v1(text) to service_role;
+
+revoke all on function public.clamp_performance_score_v1(numeric) from public;
+revoke all on function public.clamp_performance_score_v1(numeric) from anon;
+revoke all on function public.clamp_performance_score_v1(numeric) from authenticated;
+grant execute on function public.clamp_performance_score_v1(numeric) to service_role;
+
 create table if not exists public.performance_signal_dictionary_v1 (
   signal_key text primary key,
   match_term text not null,
@@ -715,7 +725,6 @@ create index if not exists performance_feature_refresh_runs_v1_status_idx
 create or replace function public.refresh_fragrance_performance_features_v1(p_fragrance_id uuid default null)
 returns jsonb
 language plpgsql
-security definer
 set search_path to 'public'
 as $function$
 declare
@@ -981,7 +990,10 @@ begin
       on d.is_active
      and (coalesce(array_length(d.detection_source_preference, 1), 0) = 0 or s.detection_source = any(d.detection_source_preference))
      and char_length(d.normalized_term) >= 3
-     and s.normalized_source_value like ('%' || d.normalized_term || '%')
+     and position(
+       ' ' || d.normalized_term || ' '
+       in ' ' || s.normalized_source_value || ' '
+     ) > 0
   ),
   combined_matches as (
     select * from exact_matches
