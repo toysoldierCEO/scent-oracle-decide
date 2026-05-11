@@ -1986,7 +1986,7 @@ type SignedInDayState = {
   manualLayerCard: DisplayCard | null;
 };
 
-type SignedInDayStateMap = Record<string, SignedInDayState>; // key = "dateStr"
+type SignedInDayStateMap = Record<string, SignedInDayState>; // key = "dateStr:context"
 type SignedInResolvedDayDecision = {
   visibleCard: DisplayCard | null;
   forcedLayerCarryCard: DisplayCard | null;
@@ -2020,6 +2020,7 @@ type SignedInResolvedLockTruth = {
 };
 
 const ODARA_SIGNED_IN_DAY_MEMORY_TABLE = 'odara_signed_in_day_memory';
+const ODARA_SIGNED_IN_DAY_MEMORY_DEFAULT_CONTEXT = 'daily';
 
 function createDefaultSignedInDayState(): SignedInDayState {
   return {
@@ -2066,6 +2067,29 @@ function normalizePersistedMood(value: unknown): LayerMood {
 
 function normalizePersistedLockedContext(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function normalizePersistedContextKey(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : ODARA_SIGNED_IN_DAY_MEMORY_DEFAULT_CONTEXT;
+}
+
+function buildSignedInDayStateSlotKey(dateKey: string, contextKey: string) {
+  return `${dateKey}:${normalizePersistedContextKey(contextKey)}`;
+}
+
+function parseSignedInDayStateSlotKey(slotKey: string) {
+  if (typeof slotKey !== 'string' || slotKey.length < 10) {
+    return {
+      dateKey: '',
+      contextKey: ODARA_SIGNED_IN_DAY_MEMORY_DEFAULT_CONTEXT,
+    };
+  }
+
+  const dateKey = slotKey.slice(0, 10);
+  const contextKey = normalizePersistedContextKey(slotKey.slice(11));
+  return { dateKey, contextKey };
 }
 
 function normalizePersistedInteractionType(value: unknown): InteractionType {
@@ -2197,10 +2221,16 @@ function areSameLayerModeSnapshots(
 
 function serializeSignedInDayStateForStorage(state: SignedInDayState) {
   const normalizedLockState = normalizePersistedLockState(state.lockState);
-  const daisyChainEnabled = state.daisyChainEnabled === true ? true : state.daisyChainEnabled === false ? false : null;
-  const carryoverMode = daisyChainEnabled === true ? normalizePersistedCarryoverTarget(state.carryoverMode) : 'off';
-  const carryoverOrigin = daisyChainEnabled === true ? normalizePersistedCarryoverOrigin(state.carryoverOrigin) : null;
-  const carryoverNextDayRole = daisyChainEnabled === true ? normalizePersistedNextDayRole(state.carryoverNextDayRole) : null;
+  const rawDaisyChainEnabled = state.daisyChainEnabled === true ? true : state.daisyChainEnabled === false ? false : null;
+  const persistActiveCarryover = normalizedLockState === 'locked' && rawDaisyChainEnabled === true;
+  const daisyChainEnabled = normalizedLockState === 'locked'
+    ? rawDaisyChainEnabled
+    : rawDaisyChainEnabled === false
+      ? false
+      : null;
+  const carryoverMode = persistActiveCarryover ? normalizePersistedCarryoverTarget(state.carryoverMode) : 'off';
+  const carryoverOrigin = persistActiveCarryover ? normalizePersistedCarryoverOrigin(state.carryoverOrigin) : null;
+  const carryoverNextDayRole = persistActiveCarryover ? normalizePersistedNextDayRole(state.carryoverNextDayRole) : null;
   const lockedCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedCard) : null;
   const lockedLayerCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedLayerCard) : null;
   const lockedLayerMode = normalizedLockState === 'locked' ? toPersistedLayerModeSnapshot(state.lockedLayerMode) : null;
@@ -2211,11 +2241,11 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     carryoverMode,
     carryoverOrigin,
     carryoverNextDayRole,
-    carryoverSelectedCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverSelectedCard) : null,
-    resolvedHeroCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.resolvedHeroCard) : null,
-    resolvedLayerCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.resolvedLayerCard) : null,
-    carryoverHeroCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverHeroCard) : null,
-    carryoverLayerCard: daisyChainEnabled === true ? toPersistedDisplayCard(state.carryoverLayerCard) : null,
+    carryoverSelectedCard: persistActiveCarryover ? toPersistedDisplayCard(state.carryoverSelectedCard) : null,
+    resolvedHeroCard: persistActiveCarryover ? toPersistedDisplayCard(state.resolvedHeroCard) : null,
+    resolvedLayerCard: persistActiveCarryover ? toPersistedDisplayCard(state.resolvedLayerCard) : null,
+    carryoverHeroCard: persistActiveCarryover ? toPersistedDisplayCard(state.carryoverHeroCard) : null,
+    carryoverLayerCard: persistActiveCarryover ? toPersistedDisplayCard(state.carryoverLayerCard) : null,
     lockedCard,
     lockedLayerCard,
     lockedLayerMode,
@@ -2232,25 +2262,31 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
   if (!raw || typeof raw !== 'object') return base;
 
   const lockState = normalizePersistedLockState(raw.lockState);
-  const daisyChainEnabled = raw.daisyChainEnabled === true ? true : raw.daisyChainEnabled === false ? false : null;
+  const rawDaisyChainEnabled = raw.daisyChainEnabled === true ? true : raw.daisyChainEnabled === false ? false : null;
+  const persistedCarryoverAllowed = lockState === 'locked' && rawDaisyChainEnabled === true;
+  const daisyChainEnabled = lockState === 'locked'
+    ? rawDaisyChainEnabled
+    : rawDaisyChainEnabled === false
+      ? false
+      : null;
 
   return {
     lockState,
     daisyChainEnabled,
-    carryoverMode: daisyChainEnabled === true ? normalizePersistedCarryoverTarget(raw.carryoverMode) : 'off',
-    carryoverOrigin: daisyChainEnabled === true ? normalizePersistedCarryoverOrigin(raw.carryoverOrigin) : null,
-    carryoverNextDayRole: daisyChainEnabled === true ? normalizePersistedNextDayRole(raw.carryoverNextDayRole) : null,
-    carryoverSelectedCard: daisyChainEnabled === true ? fromPersistedDisplayCard(raw.carryoverSelectedCard) : null,
-    resolvedHeroCard: daisyChainEnabled === true
+    carryoverMode: persistedCarryoverAllowed ? normalizePersistedCarryoverTarget(raw.carryoverMode) : 'off',
+    carryoverOrigin: persistedCarryoverAllowed ? normalizePersistedCarryoverOrigin(raw.carryoverOrigin) : null,
+    carryoverNextDayRole: persistedCarryoverAllowed ? normalizePersistedNextDayRole(raw.carryoverNextDayRole) : null,
+    carryoverSelectedCard: persistedCarryoverAllowed ? fromPersistedDisplayCard(raw.carryoverSelectedCard) : null,
+    resolvedHeroCard: persistedCarryoverAllowed
       ? (fromPersistedDisplayCard(raw.resolvedHeroCard) ?? fromPersistedDisplayCard(raw.carryoverHeroCard))
       : null,
-    resolvedLayerCard: daisyChainEnabled === true
+    resolvedLayerCard: persistedCarryoverAllowed
       ? (fromPersistedDisplayCard(raw.resolvedLayerCard) ?? fromPersistedDisplayCard(raw.carryoverLayerCard))
       : null,
-    carryoverHeroCard: daisyChainEnabled === true
+    carryoverHeroCard: persistedCarryoverAllowed
       ? (fromPersistedDisplayCard(raw.carryoverHeroCard) ?? fromPersistedDisplayCard(raw.resolvedHeroCard))
       : null,
-    carryoverLayerCard: daisyChainEnabled === true
+    carryoverLayerCard: persistedCarryoverAllowed
       ? (fromPersistedDisplayCard(raw.carryoverLayerCard) ?? fromPersistedDisplayCard(raw.resolvedLayerCard))
       : null,
     lockedCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedCard) : null,
@@ -3558,6 +3594,14 @@ const OdaraScreen = ({
   const [signedInResolvedDayDecisionSource, setSignedInResolvedDayDecisionSource] = useState<SignedInResolvedDayDecision['source']>('oracle');
   const currentDateKey = selectedDate;
   const previousDateKey = useMemo(() => getPreviousDateKey(selectedDate), [selectedDate]);
+  const currentDayStateKey = useMemo(
+    () => buildSignedInDayStateSlotKey(currentDateKey, selectedContext),
+    [currentDateKey, selectedContext],
+  );
+  const previousDayStateKey = useMemo(
+    () => buildSignedInDayStateSlotKey(previousDateKey, selectedContext),
+    [previousDateKey, selectedContext],
+  );
   const currentWeekDateKeys = useMemo(() => currentWeekDays.map((fd) => fd.dateStr), [currentWeekDays]);
   const visibleWeekDateKeys = currentWeekDateKeys;
   const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
@@ -3570,10 +3614,10 @@ const OdaraScreen = ({
     () => signedInWeekHydrationDateKeys.join('|'),
     [signedInWeekHydrationDateKeys]
   );
-  const signedInWeekMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${signedInWeekHydrationDateKeysKey}`;
-  const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDateKey);
-  const signedInDayState = signedInDayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
-  const signedInPreviousDayState = signedInDayStateMap[previousDateKey] ?? createDefaultSignedInDayState();
+  const signedInWeekMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${selectedContext}|${signedInWeekHydrationDateKeysKey}`;
+  const hasStoredSignedInDayState = Object.prototype.hasOwnProperty.call(signedInDayStateMap, currentDayStateKey);
+  const signedInDayState = signedInDayStateMap[currentDayStateKey] ?? createDefaultSignedInDayState();
+  const signedInPreviousDayState = signedInDayStateMap[previousDayStateKey] ?? createDefaultSignedInDayState();
   const signedInVerifiedPredecessorBaton = useMemo(() => {
     if (isGuestMode) return null;
     if (signedInResolvedDayDecisionSource !== 'carryover-main' && signedInResolvedDayDecisionSource !== 'carryover-layer') {
@@ -3598,14 +3642,14 @@ const OdaraScreen = ({
   const [signedInWeekMemoryReadyScopeKey, setSignedInWeekMemoryReadyScopeKey] = useState<string>(isGuestMode ? 'guest' : '');
   const signedInWeekMemoryReady = isGuestMode || signedInWeekMemoryReadyScopeKey === signedInWeekMemoryScopeKey;
   const [signedInHistoryMemoryReadyScopeKey, setSignedInHistoryMemoryReadyScopeKey] = useState<string>(isGuestMode ? 'guest' : '');
-  const signedInHistoryMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${currentWeekStartDateKey}`;
+  const signedInHistoryMemoryScopeKey = isGuestMode ? 'guest' : `${userId}|${selectedContext}|${currentWeekStartDateKey}`;
   const signedInHistoryMemoryReady = isGuestMode || signedInHistoryMemoryReadyScopeKey === signedInHistoryMemoryScopeKey;
   const selectedDateNeedsHistoryMemory = !isGuestMode && currentDateKey < currentWeekStartDateKey;
   const signedInResolvedMemoryReady = isGuestMode
     || (signedInWeekMemoryReady && (!selectedDateNeedsHistoryMemory || signedInHistoryMemoryReady));
   const setLockState = useCallback((ls: LockState) => {
     setSignedInDayStateMap(prev => {
-      const current = prev[currentDateKey] ?? createDefaultSignedInDayState();
+      const current = prev[currentDayStateKey] ?? createDefaultSignedInDayState();
       const next: SignedInDayState = ls === 'locked'
         ? { ...current, lockState: ls }
         : {
@@ -3629,9 +3673,9 @@ const OdaraScreen = ({
       ) {
         return prev;
       }
-      return { ...prev, [currentDateKey]: next };
+      return { ...prev, [currentDayStateKey]: next };
     });
-  }, [currentDateKey]);
+  }, [currentDayStateKey]);
 
   const [lockPulse, setLockPulse] = useState(false);
   const [unlockFlash, setUnlockFlash] = useState(false);
@@ -3664,23 +3708,29 @@ const OdaraScreen = ({
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
   const [signedInCarryoverCloseFlash, setSignedInCarryoverCloseFlash] = useState(false);
   const signedInLockedLaneByDate = useMemo(() => {
-    if (isGuestMode) return {} as Record<string, { mainColor: string; layerColor: string | null; lockedContext: string | null }>;
+    if (isGuestMode) return {} as Record<string, Record<string, { mainColor: string; layerColor: string | null }>>;
 
-    return Object.fromEntries(
-      Object.entries(signedInDayStateMap).flatMap(([dateKey, dayState]) => {
-        const lockTruth = resolveSignedInLockedTruth(dayState);
-        if (!lockTruth) return [];
+    const next: Record<string, Record<string, { mainColor: string; layerColor: string | null }>> = {};
 
-        const mainColor = lockTruth.lockedCard.family
-          ? (FAMILY_COLORS[lockTruth.lockedCard.family] ?? '#888')
-          : '#888';
-        const layerColor = lockTruth.lockedLayerCard?.family
-          ? (FAMILY_COLORS[lockTruth.lockedLayerCard.family] ?? '#888')
-          : null;
+    for (const [slotKey, dayState] of Object.entries(signedInDayStateMap)) {
+      const lockTruth = resolveSignedInLockedTruth(dayState);
+      if (!lockTruth) continue;
 
-        return [[dateKey, { mainColor, layerColor, lockedContext: lockTruth.lockedContext }]];
-      })
-    );
+      const { dateKey, contextKey } = parseSignedInDayStateSlotKey(slotKey);
+      if (!dateKey) continue;
+
+      const mainColor = lockTruth.lockedCard.family
+        ? (FAMILY_COLORS[lockTruth.lockedCard.family] ?? '#888')
+        : '#888';
+      const layerColor = lockTruth.lockedLayerCard?.family
+        ? (FAMILY_COLORS[lockTruth.lockedLayerCard.family] ?? '#888')
+        : null;
+
+      if (!next[dateKey]) next[dateKey] = {};
+      next[dateKey][contextKey] = { mainColor, layerColor };
+    }
+
+    return next;
   }, [isGuestMode, signedInDayStateMap]);
   const updateSignedInDayState = useCallback((
     key: string,
@@ -3766,8 +3816,9 @@ const OdaraScreen = ({
       try {
         const { data, error } = await odaraSupabase
           .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
-          .select('date_key, state_json, updated_at')
+          .select('date_key, context_key, state_json, updated_at')
           .eq('user_id', userId)
+          .eq('context_key', normalizePersistedContextKey(selectedContext))
           .in('date_key', signedInWeekHydrationDateKeys);
 
         if (cancelled || signedInWeekMemoryRequestIdRef.current !== requestId) return;
@@ -3778,15 +3829,17 @@ const OdaraScreen = ({
         const loadedStates: SignedInDayStateMap = {};
         const persistedEntries: Record<string, string | null> = {};
         for (const dateKey of signedInWeekHydrationDateKeys) {
-          persistedEntries[dateKey] = null;
+          persistedEntries[buildSignedInDayStateSlotKey(dateKey, selectedContext)] = null;
         }
 
         for (const row of Array.isArray(data) ? data : []) {
           const dateKey = typeof row?.date_key === 'string' ? row.date_key : '';
+          const contextKey = normalizePersistedContextKey(row?.context_key);
+          const slotKey = buildSignedInDayStateSlotKey(dateKey, contextKey);
           if (!dateKey) continue;
           const state = deserializeSignedInDayStateFromStorage(row?.state_json);
-          loadedStates[dateKey] = state;
-          persistedEntries[dateKey] = stableSerializeSignedInDayState(state);
+          loadedStates[slotKey] = state;
+          persistedEntries[slotKey] = stableSerializeSignedInDayState(state);
         }
 
         persistedSignedInDayStateRef.current = {
@@ -3799,10 +3852,11 @@ const OdaraScreen = ({
           const next = { ...prev };
 
           for (const dateKey of signedInWeekHydrationDateKeys) {
-            const loaded = loadedStates[dateKey];
+            const slotKey = buildSignedInDayStateSlotKey(dateKey, selectedContext);
+            const loaded = loadedStates[slotKey];
             if (!loaded) continue;
 
-            const existing = prev[dateKey];
+            const existing = prev[slotKey];
             if (existing && isPersistableSignedInDayState(existing)) {
               continue;
             }
@@ -3811,7 +3865,7 @@ const OdaraScreen = ({
             const serializedExisting = existing ? stableSerializeSignedInDayState(existing) : null;
             if (serializedExisting === serializedLoaded) continue;
 
-            next[dateKey] = loaded;
+            next[slotKey] = loaded;
             changed = true;
           }
 
@@ -3822,7 +3876,7 @@ const OdaraScreen = ({
         console.error('[Odara] signed-in week memory hydrate failed', error);
         const clearedEntries: Record<string, string | null> = {};
         for (const dateKey of signedInWeekHydrationDateKeys) {
-          clearedEntries[dateKey] = null;
+          clearedEntries[buildSignedInDayStateSlotKey(dateKey, selectedContext)] = null;
         }
         persistedSignedInDayStateRef.current = {
           ...persistedSignedInDayStateRef.current,
@@ -3841,6 +3895,7 @@ const OdaraScreen = ({
   }, [
     isGuestMode,
     userId,
+    selectedContext,
     signedInWeekHydrationDateKeysKey,
     signedInWeekMemoryScopeKey,
   ]);
@@ -3868,8 +3923,9 @@ const OdaraScreen = ({
       try {
         const { data, error } = await odaraSupabase
           .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
-          .select('date_key, state_json, updated_at')
+          .select('date_key, context_key, state_json, updated_at')
           .eq('user_id', userId)
+          .eq('context_key', normalizePersistedContextKey(selectedContext))
           .lt('date_key', currentWeekStartDateKey);
 
         if (cancelled || signedInHistoryMemoryRequestIdRef.current !== requestId) return;
@@ -3881,13 +3937,15 @@ const OdaraScreen = ({
 
         for (const row of Array.isArray(data) ? data : []) {
           const dateKey = typeof row?.date_key === 'string' ? row.date_key : '';
+          const contextKey = normalizePersistedContextKey(row?.context_key);
+          const slotKey = buildSignedInDayStateSlotKey(dateKey, contextKey);
           if (!dateKey) continue;
           const state = deserializeSignedInDayStateFromStorage(row?.state_json);
           const lockTruth = resolveSignedInLockedTruth(state);
           if (!lockTruth) continue;
-          loadedStates[dateKey] = state;
+          loadedStates[slotKey] = state;
           lockedHistoryKeys.push(dateKey);
-          persistedEntries[dateKey] = stableSerializeSignedInDayState(state);
+          persistedEntries[slotKey] = stableSerializeSignedInDayState(state);
         }
 
         persistedSignedInDayStateRef.current = {
@@ -3902,12 +3960,12 @@ const OdaraScreen = ({
           let changed = false;
           const next = { ...prev };
 
-          for (const [dateKey, loaded] of Object.entries(loadedStates)) {
+          for (const [slotKey, loaded] of Object.entries(loadedStates)) {
             const serializedLoaded = stableSerializeSignedInDayState(loaded);
-            const existing = prev[dateKey];
+            const existing = prev[slotKey];
             const serializedExisting = existing ? stableSerializeSignedInDayState(existing) : null;
             if (serializedExisting === serializedLoaded) continue;
-            next[dateKey] = loaded;
+            next[slotKey] = loaded;
             changed = true;
           }
 
@@ -3930,6 +3988,7 @@ const OdaraScreen = ({
   }, [
     isGuestMode,
     userId,
+    selectedContext,
     currentWeekStartDateKey,
     signedInHistoryMemoryScopeKey,
   ]);
@@ -3939,20 +3998,22 @@ const OdaraScreen = ({
       return;
     }
 
-    const upsertRows: Array<{ dateKey: string; state: SignedInDayState; serialized: string }> = [];
-    const deleteKeys: string[] = [];
+    const upsertRows: Array<{ dateKey: string; contextKey: string; slotKey: string; state: SignedInDayState; serialized: string }> = [];
+    const deleteKeys: Array<{ dateKey: string; slotKey: string }> = [];
+    const storageContextKey = normalizePersistedContextKey(selectedContext);
 
     for (const dateKey of visibleWeekDateKeys) {
-      const current = signedInDayStateMap[dateKey];
-      const persistedSerialized = persistedSignedInDayStateRef.current[dateKey] ?? null;
+      const slotKey = buildSignedInDayStateSlotKey(dateKey, selectedContext);
+      const current = signedInDayStateMap[slotKey];
+      const persistedSerialized = persistedSignedInDayStateRef.current[slotKey] ?? null;
 
       if (current && isPersistableSignedInDayState(current)) {
         const serialized = stableSerializeSignedInDayState(current);
         if (serialized !== persistedSerialized) {
-          upsertRows.push({ dateKey, state: current, serialized });
+          upsertRows.push({ dateKey, contextKey: storageContextKey, slotKey, state: current, serialized });
         }
       } else if (persistedSerialized !== null) {
-        deleteKeys.push(dateKey);
+        deleteKeys.push({ dateKey, slotKey });
       }
     }
 
@@ -3973,18 +4034,19 @@ const OdaraScreen = ({
             .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
             .upsert(
               upsertRows.map(({ dateKey, state }) => ({
+                context_key: storageContextKey,
                 user_id: userId,
                 date_key: dateKey,
                 state_json: serializeSignedInDayStateForStorage(state),
                 updated_at: new Date().toISOString(),
               })),
-              { onConflict: 'user_id,date_key' }
+              { onConflict: 'user_id,date_key,context_key' }
             );
 
           if (error) throw error;
 
           for (const row of upsertRows) {
-            nextPersistedEntries[row.dateKey] = row.serialized;
+            nextPersistedEntries[row.slotKey] = row.serialized;
           }
         }
 
@@ -3993,12 +4055,13 @@ const OdaraScreen = ({
             .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
             .delete()
             .eq('user_id', userId)
-            .in('date_key', deleteKeys);
+            .eq('context_key', storageContextKey)
+            .in('date_key', deleteKeys.map(({ dateKey }) => dateKey));
 
           if (error) throw error;
 
-          for (const dateKey of deleteKeys) {
-            nextPersistedEntries[dateKey] = null;
+          for (const { slotKey } of deleteKeys) {
+            nextPersistedEntries[slotKey] = null;
           }
         }
 
@@ -4024,6 +4087,7 @@ const OdaraScreen = ({
     userId,
     signedInWeekMemoryReady,
     visibleWeekDateKeysKey,
+    selectedContext,
     signedInDayStateMap,
   ]);
 
@@ -4379,7 +4443,7 @@ const OdaraScreen = ({
         source: 'manual',
       };
     }
-    const previousDayState = signedInDayStateMapRef.current[previousDateKey] ?? createDefaultSignedInDayState();
+    const previousDayState = signedInDayStateMapRef.current[previousDayStateKey] ?? createDefaultSignedInDayState();
     return resolveSignedInDayDecision(
       nextDayState,
       true,
@@ -4387,7 +4451,7 @@ const OdaraScreen = ({
       activeSignedInOracle.today_pick,
       defaultMood,
     );
-  }, [activeOracle, oracle, previousDateKey, resolveActiveSignedInDefaultMood]);
+  }, [activeOracle, oracle, previousDayStateKey, resolveActiveSignedInDefaultMood]);
 
   const applySignedInSearchPreviewDecision = useCallback((
     decision: SignedInResolvedDayDecision | null,
@@ -4439,7 +4503,7 @@ const OdaraScreen = ({
   ) => {
     if (isGuestMode) return false;
 
-    const current = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+    const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
     if (!current.manualHeroCard && !current.manualLayerCard) return false;
 
     const shouldClearTop = target === 'all' || target === 'top';
@@ -4451,7 +4515,7 @@ const OdaraScreen = ({
     };
 
     const capturedSlot = stateKey;
-    updateSignedInDayState(currentDateKey, () => nextDayState);
+    updateSignedInDayState(currentDayStateKey, () => nextDayState);
 
     const decision = resolveSearchPreviewDecision(nextDayState);
     applySignedInSearchPreviewDecision(decision);
@@ -4466,7 +4530,7 @@ const OdaraScreen = ({
     return true;
   }, [
     applySignedInSearchPreviewDecision,
-    currentDateKey,
+    currentDayStateKey,
     isGuestMode,
     primeSignedInPreviewTopCard,
     resolveSearchPreviewDecision,
@@ -4487,7 +4551,7 @@ const OdaraScreen = ({
       return;
     }
 
-    const current = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+    const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
     const isActiveTop = current.manualHeroCard?.fragrance_id === result.fragrance_id;
     const isActiveLayer = current.manualLayerCard?.fragrance_id === result.fragrance_id;
     if (isActiveTop) {
@@ -4546,7 +4610,7 @@ const OdaraScreen = ({
 
       if (activeSlotRef.current !== capturedSlot) return;
 
-      updateSignedInDayState(currentDateKey, () => nextDayState);
+      updateSignedInDayState(currentDayStateKey, () => nextDayState);
       const decision = resolveSearchPreviewDecision(nextDayState);
       applySignedInSearchPreviewDecision(decision, { prefetchedAlternates });
       showSearchFeedback(result.fragrance_id, feedbackText);
@@ -4559,7 +4623,7 @@ const OdaraScreen = ({
   }, [
     applySignedInSearchPreviewDecision,
     clearSearchPreviewFromSelectedDay,
-    currentDateKey,
+    currentDayStateKey,
     fetchFragranceDetail,
     isGuestMode,
     primeSignedInPreviewTopCard,
@@ -4660,9 +4724,9 @@ const OdaraScreen = ({
     setActiveOracle(oracle);
 
     const dayStateMap = signedInDayStateMapRef.current;
-    const hasCurrentDayState = Object.prototype.hasOwnProperty.call(dayStateMap, currentDateKey);
-    const currentDayState = dayStateMap[currentDateKey] ?? createDefaultSignedInDayState();
-    const previousDayState = dayStateMap[previousDateKey] ?? createDefaultSignedInDayState();
+    const hasCurrentDayState = Object.prototype.hasOwnProperty.call(dayStateMap, currentDayStateKey);
+    const currentDayState = dayStateMap[currentDayStateKey] ?? createDefaultSignedInDayState();
+    const previousDayState = dayStateMap[previousDayStateKey] ?? createDefaultSignedInDayState();
 
     // 3) Initialize from v6 contract: ui_default_mode + reset all mode indexes to 0
     const v6 = (oracle as any)?.__v6 ?? null;
@@ -4782,7 +4846,7 @@ const OdaraScreen = ({
       setQueuePointer(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracle, stateKey, currentDateKey, previousDateKey, queueRowsToDisplay, isGuestMode, signedInResolvedMemoryReady]);
+  }, [oracle, stateKey, currentDayStateKey, previousDayStateKey, queueRowsToDisplay, isGuestMode, signedInResolvedMemoryReady]);
 
   // No eager modes fetch — moods load lazily on user tap
 
@@ -4863,7 +4927,7 @@ const OdaraScreen = ({
   const getPreviewTone = (dateStr: string) => {
     const lane = isGuestMode
       ? (lockedSelections[`${dateStr}:${selectedContext}`] ?? null)
-      : (signedInLockedLaneByDate[dateStr] ?? null);
+      : (signedInLockedLaneByDate[dateStr]?.[normalizePersistedContextKey(selectedContext)] ?? null);
     return {
       accent: lane?.mainColor ?? familyColor,
       glow: lane?.layerColor ?? lane?.mainColor ?? familyColor,
@@ -5297,7 +5361,7 @@ const OdaraScreen = ({
     }
 
     if (lockState === 'locked') {
-      updateSignedInDayState(currentDateKey, (current) => (
+      updateSignedInDayState(currentDayStateKey, (current) => (
         current.lockedLayerCard || current.lockedLayerMode
           ? { ...current, lockedLayerCard: null, lockedLayerMode: null }
           : current
@@ -5437,7 +5501,7 @@ const OdaraScreen = ({
       || !!signedInDayState.manualLayerCard;
 
     if (hasManualPreview) {
-      const currentDayState = signedInDayStateMapRef.current[currentDateKey] ?? createDefaultSignedInDayState();
+      const currentDayState = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
       const clearedDayState: SignedInDayState = {
         ...currentDayState,
         manualHeroCard: null,
@@ -5445,7 +5509,7 @@ const OdaraScreen = ({
       };
       const previewClearedDecision = resolveSearchPreviewDecision(clearedDayState);
 
-      updateSignedInDayState(currentDateKey, (current) => (
+      updateSignedInDayState(currentDayStateKey, (current) => (
         current.manualHeroCard || current.manualLayerCard
           ? { ...current, manualHeroCard: null, manualLayerCard: null }
           : current
@@ -6040,7 +6104,7 @@ const OdaraScreen = ({
     // 2. Clear stale state completely
     setLayerExpanded(false);
     setLockState('neutral');
-    updateSignedInDayState(currentDateKey, (current) => (
+    updateSignedInDayState(currentDayStateKey, (current) => (
       current.manualHeroCard || current.manualLayerCard
         ? { ...current, manualHeroCard: null, manualLayerCard: null }
         : current
@@ -6544,12 +6608,25 @@ const OdaraScreen = ({
           )
         : null;
 
+    const heroCarryMatchesCurrent = enabled
+      && origin === 'manual'
+      && mode === 'hero'
+      && !!selectedCard
+      && !!signedInCurrentHeroCarryCard
+      && isSameRenderableFragranceIdentity(selectedCard, signedInCurrentHeroCarryCard);
+    const layerCarryMatchesCurrent = enabled
+      && origin === 'manual'
+      && mode === 'layer'
+      && !!selectedCard
+      && !!signedInCurrentLayerCarryCard
+      && isSameRenderableFragranceIdentity(selectedCard, signedInCurrentLayerCarryCard);
+
     return {
       enabled,
       mode,
       origin,
       selectedCard,
-      visualTarget: (enabled && origin === 'manual' && mode !== 'off' && selectedCard ? mode : 'off') as SignedInCarryoverTarget,
+      visualTarget: (heroCarryMatchesCurrent ? 'hero' : layerCarryMatchesCurrent ? 'layer' : 'off') as SignedInCarryoverTarget,
     };
   }, [
     isGuestMode,
@@ -6661,7 +6738,7 @@ const OdaraScreen = ({
       inheritedSelectedCard = signedInCurrentHeroCarryCard;
     } else {
       if (signedInCarryoverOrigin === 'inherited') {
-        updateSignedInDayState(currentDateKey, (current) => ({
+        updateSignedInDayState(currentDayStateKey, (current) => ({
           ...current,
           daisyChainEnabled: null,
           carryoverMode: 'off',
@@ -6677,7 +6754,7 @@ const OdaraScreen = ({
 
     if (!inheritedSelectedCard) return;
 
-    updateSignedInDayState(currentDateKey, (current) => ({
+    updateSignedInDayState(currentDayStateKey, (current) => ({
       ...current,
       daisyChainEnabled: true,
       carryoverMode: inheritedSource,
@@ -6702,7 +6779,7 @@ const OdaraScreen = ({
     signedInDayState.daisyChainEnabled,
     signedInCarryoverOrigin,
     signedInResolvedDayDecisionSource,
-    currentDateKey,
+    currentDayStateKey,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
     updateSignedInDayState,
@@ -6711,7 +6788,7 @@ const OdaraScreen = ({
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
     if (signedInManualPreviewActive && lockState !== 'locked') return;
-    updateSignedInDayState(currentDateKey, (current) => {
+    updateSignedInDayState(currentDayStateKey, (current) => {
       let next = {
         ...current,
         resolvedHeroCard: signedInCurrentHeroCarryCard ?? current.resolvedHeroCard,
@@ -6754,7 +6831,7 @@ const OdaraScreen = ({
     });
   }, [
     isGuestMode,
-    currentDateKey,
+    currentDayStateKey,
     slotChangedSinceLastCommit,
     updateSignedInDayState,
     signedInManualPreviewActive,
@@ -6777,7 +6854,7 @@ const OdaraScreen = ({
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
     const turningOff = signedInResolvedSequelState.origin === 'manual' && signedInResolvedSequelState.enabled && nextTarget === 'off';
-    updateSignedInDayState(currentDateKey, (current) => ({
+    updateSignedInDayState(currentDayStateKey, (current) => ({
       ...current,
       daisyChainEnabled: nextTarget === 'off' ? false : true,
       carryoverMode: nextTarget,
@@ -6808,7 +6885,7 @@ const OdaraScreen = ({
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
     signedInResolvedSequelState,
-    currentDateKey,
+    currentDayStateKey,
     triggerSignedInCarryoverPulse,
     triggerSignedInCarryoverCloseFlash,
     updateSignedInDayState,
@@ -7624,43 +7701,45 @@ const OdaraScreen = ({
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                     Alternatives
                   </span>
-                  <div className="flex gap-2 overflow-x-auto w-full pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                    {visibleAlternateRailItems.map((item, index) => {
-                      const altColor = FAMILY_COLORS[item.family] ?? '#888';
-                      const promotionDisabled = !!item.disabled;
-                      return (
-                        <button
-                          key={item.key || index}
-                          type="button"
-                          aria-disabled={promotionDisabled || isCardLocked || undefined}
-                          data-alternate-chip
-                          onPointerDown={(e) => {
-                            if (!isCardLocked) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isCardLocked || promotionDisabled) return;
-                            if (item.source === 'guest') {
-                              cardController.actions.promoteAlternate(item.alternate, item.originalIdx);
-                            } else {
-                              cardController.actions.promoteAlternate(item.alternate);
-                            }
-                          }}
-                          disabled={promotionDisabled}
-                          className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
-                            text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
-                            ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
-                          style={{
-                            border: `1px solid ${altColor}44`,
-                            background: `${altColor}0A`,
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
+                  <div className="hide-horizontal-scrollbar w-full overflow-x-auto pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                    <div className="inline-flex min-w-full items-center justify-center gap-2">
+                      {visibleAlternateRailItems.map((item, index) => {
+                        const altColor = FAMILY_COLORS[item.family] ?? '#888';
+                        const promotionDisabled = !!item.disabled;
+                        return (
+                          <button
+                            key={item.key || index}
+                            type="button"
+                            aria-disabled={promotionDisabled || isCardLocked || undefined}
+                            data-alternate-chip
+                            onPointerDown={(e) => {
+                              if (!isCardLocked) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isCardLocked || promotionDisabled) return;
+                              if (item.source === 'guest') {
+                                cardController.actions.promoteAlternate(item.alternate, item.originalIdx);
+                              } else {
+                                cardController.actions.promoteAlternate(item.alternate);
+                              }
+                            }}
+                            disabled={promotionDisabled}
+                            className={`flex-shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-all duration-200
+                              text-foreground/70 ${promotionDisabled ? 'cursor-default' : 'hover:text-foreground/90 active:scale-95'}
+                              ${isCardLocked ? 'opacity-30 pointer-events-none' : ''}`}
+                            style={{
+                              border: `1px solid ${altColor}44`,
+                              background: `${altColor}0A`,
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -7865,10 +7944,9 @@ const OdaraScreen = ({
                       return lockedSelections[key] ?? null;
                     })
                   : forecastLaneContexts.map((ctx) => {
-                      const lane = signedInLockedLaneByDate[fd.dateStr] ?? null;
-                      if (!lane) return null;
-                      const laneContext = lane.lockedContext ?? selectedContext;
-                      return laneContext === ctx
+                      const normalizedContext = normalizePersistedContextKey(ctx);
+                      const lane = signedInLockedLaneByDate[fd.dateStr]?.[normalizedContext] ?? null;
+                      return lane
                         ? { mainColor: lane.mainColor, layerColor: lane.layerColor }
                         : null;
                     });
