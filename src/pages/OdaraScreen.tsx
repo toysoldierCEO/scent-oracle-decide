@@ -2374,10 +2374,6 @@ function resolveNextSignedInCarryoverTarget(
     return 'hero';
   }
 
-  if (state.origin === 'inherited') {
-    return state.mode === 'layer' && hasLayer ? 'layer' : 'hero';
-  }
-
   if (state.mode === 'hero') {
     return hasLayer ? 'layer' : 'off';
   }
@@ -2386,8 +2382,8 @@ function resolveNextSignedInCarryoverTarget(
 }
 
 function getSignedInCarryoverFeedbackLabel(target: SignedInCarryoverTarget): string {
-  if (target === 'hero') return 'Daisy Chain';
-  if (target === 'layer') return 'Layer Carry';
+  if (target === 'hero') return 'Carry main';
+  if (target === 'layer') return 'Carry layer';
   return 'Off';
 }
 
@@ -6819,67 +6815,28 @@ const OdaraScreen = ({
   const bottomCarryoverButtonStyle = signedInCarryoverButtonStyle;
   useEffect(() => {
     if (isGuestMode) return;
-    if (slotChangedSinceLastCommit) return;
-    if (lockState === 'locked') return;
-    if (signedInManualPreviewActive) return;
-    if (hasStoredSignedInDayState && signedInDayState.daisyChainEnabled === false) return;
-    if (hasStoredSignedInDayState && signedInCarryoverOrigin === 'manual') return;
+    if (signedInCarryoverOrigin !== 'inherited') return;
 
-    let inheritedSource: SignedInCarryoverTarget = 'off';
-    let inheritedSelectedCard: DisplayCard | null = null;
-
-    if (signedInResolvedDayDecisionSource === 'carryover-main') {
-      inheritedSource = 'layer';
-      inheritedSelectedCard = signedInCurrentLayerCarryCard;
-    } else if (signedInResolvedDayDecisionSource === 'carryover-layer') {
-      inheritedSource = 'hero';
-      inheritedSelectedCard = signedInCurrentHeroCarryCard;
-    } else {
-      if (signedInCarryoverOrigin === 'inherited') {
-        updateSignedInDayState(currentDayStateKey, (current) => ({
-          ...current,
-          daisyChainEnabled: null,
-          carryoverMode: 'off',
-          carryoverOrigin: null,
-          carryoverNextDayRole: null,
-          carryoverSelectedCard: null,
-          carryoverHeroCard: null,
-          carryoverLayerCard: null,
-        }));
+    updateSignedInDayState(currentDayStateKey, (current) => {
+      if (current.carryoverOrigin !== 'inherited') {
+        return current;
       }
-      return;
-    }
 
-    if (!inheritedSelectedCard) return;
-
-    updateSignedInDayState(currentDayStateKey, (current) => ({
-      ...current,
-      daisyChainEnabled: true,
-      carryoverMode: inheritedSource,
-      carryoverOrigin: 'inherited',
-      carryoverNextDayRole: resolveCarryoverNextDayRole(inheritedSource),
-      carryoverSelectedCard: inheritedSelectedCard,
-      resolvedHeroCard: signedInCurrentHeroCarryCard ?? current.resolvedHeroCard,
-      resolvedLayerCard: signedInCurrentLayerCarryCard ?? current.resolvedLayerCard,
-      carryoverHeroCard: inheritedSource === 'hero'
-        ? (signedInCurrentHeroCarryCard ?? current.carryoverHeroCard)
-        : current.carryoverHeroCard,
-      carryoverLayerCard: inheritedSource === 'layer'
-        ? (signedInCurrentLayerCarryCard ?? current.carryoverLayerCard)
-        : current.carryoverLayerCard,
-    }));
+      return {
+        ...current,
+        daisyChainEnabled: null,
+        carryoverMode: 'off',
+        carryoverOrigin: null,
+        carryoverNextDayRole: null,
+        carryoverSelectedCard: null,
+        carryoverHeroCard: null,
+        carryoverLayerCard: null,
+      };
+    });
   }, [
     isGuestMode,
-    slotChangedSinceLastCommit,
-    lockState,
-    signedInManualPreviewActive,
-    hasStoredSignedInDayState,
-    signedInDayState.daisyChainEnabled,
     signedInCarryoverOrigin,
-    signedInResolvedDayDecisionSource,
     currentDayStateKey,
-    signedInCurrentHeroCarryCard,
-    signedInCurrentLayerCarryCard,
     updateSignedInDayState,
   ]);
   useEffect(() => {
@@ -7846,8 +7803,16 @@ const OdaraScreen = ({
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/40">
                     Alternatives
                   </span>
-                  <div className="hide-horizontal-scrollbar w-full overflow-x-auto pb-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                    <div className="inline-flex min-w-full items-center justify-center gap-2">
+                  <div
+                    className="hide-horizontal-scrollbar w-full overflow-x-auto pb-1"
+                    style={{
+                      scrollbarWidth: 'none',
+                      WebkitOverflowScrolling: 'touch',
+                      scrollPaddingLeft: '12px',
+                      scrollPaddingRight: '12px',
+                    }}
+                  >
+                    <div className="flex w-max min-w-full items-center justify-center gap-2 px-1.5">
                       {visibleAlternateRailItems.map((item, index) => {
                         const altColor = FAMILY_COLORS[item.family] ?? '#888';
                         const promotionDisabled = !!item.disabled;
