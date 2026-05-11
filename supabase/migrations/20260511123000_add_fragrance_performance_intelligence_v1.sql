@@ -735,6 +735,7 @@ declare
   v_warning_count integer := 0;
   v_signal_model text := 'performance_signal_v1';
   v_feature_model text := 'performance_features_v1';
+  v_has_text_enrichment boolean := to_regclass('public.fragrance_text_enrichment') is not null;
 begin
   insert into public.performance_feature_refresh_runs_v1 (
     target_fragrance_id,
@@ -790,25 +791,88 @@ begin
     and s.model_version = v_signal_model
     and (p_fragrance_id is null or f.id = p_fragrance_id);
 
+  create temporary table if not exists pg_temp.odara_performance_target_fragrances_v1 (
+    fragrance_id uuid primary key,
+    name text,
+    brand text,
+    family_key text,
+    notes text[] not null,
+    accords text[] not null,
+    enrichment_notes text[] not null,
+    enrichment_accords text[] not null,
+    proposed_family_key text,
+    concentration text,
+    source_url text,
+    source_confidence numeric,
+    provider_payload jsonb
+  ) on commit drop;
+
+  truncate table pg_temp.odara_performance_target_fragrances_v1;
+
+  insert into pg_temp.odara_performance_target_fragrances_v1 (
+    fragrance_id,
+    name,
+    brand,
+    family_key,
+    notes,
+    accords,
+    enrichment_notes,
+    enrichment_accords,
+    proposed_family_key,
+    concentration,
+    source_url,
+    source_confidence,
+    provider_payload
+  )
+  select
+    f.id,
+    f.name,
+    f.brand,
+    f.family_key,
+    coalesce(f.notes, '{}'::text[]),
+    coalesce(f.accords, '{}'::text[]),
+    '{}'::text[],
+    '{}'::text[],
+    null::text,
+    f.concentration,
+    f.source_url,
+    null::numeric,
+    null::jsonb
+  from public.fragrances f
+  where p_fragrance_id is null or f.id = p_fragrance_id;
+
+  if v_has_text_enrichment then
+    execute $enrichment$
+      update pg_temp.odara_performance_target_fragrances_v1 tf
+      set
+        enrichment_notes = coalesce(te.notes, '{}'::text[]),
+        enrichment_accords = coalesce(te.accords, '{}'::text[]),
+        proposed_family_key = te.proposed_family_key,
+        concentration = coalesce(te.concentration, tf.concentration),
+        source_url = coalesce(te.source_url, tf.source_url),
+        source_confidence = te.source_confidence,
+        provider_payload = te.provider_payload
+      from public.fragrance_text_enrichment te
+      where te.fragrance_id = tf.fragrance_id
+    $enrichment$;
+  end if;
+
   with target_fragrances as (
     select
-      f.id as fragrance_id,
-      f.name,
-      f.brand,
-      f.family_key,
-      coalesce(f.notes, '{}'::text[]) as notes,
-      coalesce(f.accords, '{}'::text[]) as accords,
-      coalesce(te.notes, '{}'::text[]) as enrichment_notes,
-      coalesce(te.accords, '{}'::text[]) as enrichment_accords,
-      te.proposed_family_key,
-      te.concentration,
-      te.source_url,
-      te.source_confidence,
-      te.provider_payload
-    from public.fragrances f
-    left join public.fragrance_text_enrichment te
-      on te.fragrance_id = f.id
-    where p_fragrance_id is null or f.id = p_fragrance_id
+      tf.fragrance_id,
+      tf.name,
+      tf.brand,
+      tf.family_key,
+      tf.notes,
+      tf.accords,
+      tf.enrichment_notes,
+      tf.enrichment_accords,
+      tf.proposed_family_key,
+      tf.concentration,
+      tf.source_url,
+      tf.source_confidence,
+      tf.provider_payload
+    from pg_temp.odara_performance_target_fragrances_v1 tf
   ),
   exact_sources as (
     select
@@ -1220,6 +1284,7 @@ begin
         when s.beast_mode_score >= 0.84 then 'avoid_stacking_loud'
         when s.beast_mode_score >= 0.66 then 'one_spray_anchor'
         when s.beast_mode_score >= 0.45 then 'start_light'
+        when s.projection_confidence >= 0.74 and s.odor_impact_confidence >= 0.60 then 'start_light'
         when s.diffusion_bridge and s.projection_confidence >= 0.56 and s.density_score >= 0.56 then 'separate_placement'
         else 'none'
       end as recommended_spray_caution,
@@ -1387,7 +1452,8 @@ begin
     metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
       'target_scope', case when p_fragrance_id is null then 'all' else 'single' end,
       'signal_model_version', v_signal_model,
-      'feature_model_version', v_feature_model
+      'feature_model_version', v_feature_model,
+      'has_text_enrichment_source', v_has_text_enrichment
     )
   where id = v_run_id;
 
