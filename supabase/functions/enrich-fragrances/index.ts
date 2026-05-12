@@ -46,6 +46,9 @@ type TextEnrichmentRow = {
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.78;
 const REVIEW_CONFIDENCE_THRESHOLD = 0.58;
+const FUNCTION_VERSION = "enrich-fragrances_v2";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function norm(value: unknown): string {
   return String(value ?? "")
@@ -243,6 +246,10 @@ function hasMeaningfulArray(values: string[]): boolean {
   return Array.isArray(values) && values.length > 0;
 }
 
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -258,24 +265,54 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const body = await req.json().catch(() => ({}));
-    const fragranceIds = Array.isArray(body?.fragranceIds)
+    const requestedFragranceIds = Array.isArray(body?.fragranceIds)
       ? body.fragranceIds.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
       : [];
+    const fragranceIds = [...new Set(requestedFragranceIds.map((value) => value.trim()))];
+    const invalidIds = fragranceIds.filter((value) => !isUuid(value));
+    const validFragranceIds = fragranceIds.filter((value) => isUuid(value));
     const limit = Math.min(10, Math.max(1, Number(body?.limit ?? 5)));
     const dryRun = Boolean(body?.dryRun ?? true);
     const force = Boolean(body?.force ?? false);
     const minConfidence = Number(body?.minConfidence ?? REVIEW_CONFIDENCE_THRESHOLD);
     const writeThreshold = Number(body?.writeThreshold ?? HIGH_CONFIDENCE_THRESHOLD);
+    const scopeMode = fragranceIds.length > 0 ? "explicit_ids" : "default_queue";
 
     let targets: FragRow[] = [];
+    let missingIds: string[] = [];
 
     if (fragranceIds.length > 0) {
+      if (validFragranceIds.length === 0) {
+        return new Response(JSON.stringify({
+          ok: true,
+          dryRun,
+          force,
+          requested_count: fragranceIds.length,
+          picked: 0,
+          results_count: 0,
+          updated: 0,
+          skipped_count: invalidIds.length,
+          invalid_ids: invalidIds,
+          missing_ids: [],
+          function_version: FUNCTION_VERSION,
+          scope_mode: scopeMode,
+          results: [],
+        }, null, 2), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       const { data, error } = await supabase
         .from("fragrances")
         .select("id, name, brand, family_key, notes, accords")
-        .in("id", fragranceIds);
+        .in("id", validFragranceIds);
       if (error) throw error;
-      targets = (data ?? []) as FragRow[];
+      const byId = new Map<string, FragRow>(((data ?? []) as FragRow[]).map((row) => [row.id, row]));
+      missingIds = validFragranceIds.filter((value) => !byId.has(value));
+      targets = validFragranceIds.flatMap((value) => {
+        const row = byId.get(value);
+        return row ? [row] : [];
+      });
     } else {
       const { data, error } = await supabase
         .from("fragrances_missing_enrichment_v1")
@@ -303,7 +340,21 @@ serve(async (req) => {
     }
 
     if (targets.length === 0) {
-      return new Response(JSON.stringify({ ok: true, picked: 0, updated: 0, dryRun, results: [] }, null, 2), {
+      return new Response(JSON.stringify({
+        ok: true,
+        dryRun,
+        force,
+        requested_count: fragranceIds.length,
+        picked: 0,
+        results_count: 0,
+        updated: 0,
+        skipped_count: invalidIds.length + missingIds.length,
+        invalid_ids: invalidIds,
+        missing_ids: missingIds,
+        function_version: FUNCTION_VERSION,
+        scope_mode: scopeMode,
+        results: [],
+      }, null, 2), {
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -344,11 +395,18 @@ serve(async (req) => {
         const errorText = await response.text().catch(() => "");
         const status = "error";
         const resultRow = {
-          fragrance_id: target.id,
+          id: target.id,
           name: target.name,
           brand: target.brand,
+          ok: false,
           status,
           dryRun,
+          source_confidence: null,
+          source_url: null,
+          match_name: null,
+          match_brand: null,
+          proposed_notes_count: 0,
+          proposed_accords_count: 0,
           error: errorText.slice(0, 300),
         };
         if (!dryRun) {
@@ -386,11 +444,18 @@ serve(async (req) => {
           }, { onConflict: "fragrance_id" });
         }
         results.push({
-          fragrance_id: target.id,
+          id: target.id,
           name: target.name,
           brand: target.brand,
+          ok: true,
           status,
           dryRun,
+          source_confidence: null,
+          source_url: null,
+          match_name: null,
+          match_brand: null,
+          proposed_notes_count: 0,
+          proposed_accords_count: 0,
           error: "No Fragella matches found",
         });
         continue;
@@ -432,24 +497,27 @@ serve(async (req) => {
       }
 
       const preview = {
-        fragrance_id: target.id,
+        id: target.id,
         name: target.name,
         brand: target.brand,
+        ok: true,
         dryRun,
         status,
-        confidence,
+        source_confidence: confidence,
         source_url: sourceUrl,
         match_name: matchName,
         match_brand: matchBrand,
-        existing_notes: existingNotes,
-        existing_accords: existingAccords,
-        proposed_notes: proposedNotes,
-        proposed_accords: proposedAccords,
-        merged_notes: mergedNotes,
-        merged_accords: mergedAccords,
-        concentration: extracted.concentration,
-        proposed_family_key: familyCandidate,
+        proposed_notes_count: proposedNotes.length,
+        proposed_accords_count: proposedAccords.length,
         will_write: status === "enriched" && !dryRun,
+        patch: {
+          notes: proposedNotes,
+          accords: proposedAccords,
+          merged_notes: mergedNotes,
+          merged_accords: mergedAccords,
+          concentration: extracted.concentration,
+          proposed_family_key: familyCandidate,
+        },
       };
 
       if (!dryRun) {
@@ -520,10 +588,17 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true,
-      picked: targets.length,
-      updated,
       dryRun,
       force,
+      requested_count: fragranceIds.length,
+      picked: targets.length,
+      results_count: results.length,
+      updated,
+      skipped_count: invalidIds.length + missingIds.length,
+      invalid_ids: invalidIds,
+      missing_ids: missingIds,
+      function_version: FUNCTION_VERSION,
+      scope_mode: scopeMode,
       minConfidence,
       writeThreshold,
       results,
