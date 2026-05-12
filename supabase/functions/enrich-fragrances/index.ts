@@ -68,7 +68,7 @@ type ExtractedEnrichment = {
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.78;
 const REVIEW_CONFIDENCE_THRESHOLD = 0.58;
-const FUNCTION_VERSION = "enrich-fragrances_v2";
+const FUNCTION_VERSION = "enrich-fragrances_v3";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -377,6 +377,23 @@ function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
+function getStageReviewContext(stageReview: boolean, hasExplicitIds: boolean, dryRun: boolean) {
+  const stageReviewAllowed = stageReview && hasExplicitIds;
+  const stageReviewReason = !stageReview
+    ? "stage_review_disabled"
+    : !hasExplicitIds
+      ? "explicit_ids_required"
+      : dryRun
+        ? "dry_run_preview_only"
+        : "review_stage_write_only";
+
+  return {
+    stageReviewAllowed,
+    stageReviewReason,
+    wouldStageReview: stageReviewAllowed,
+  };
+}
+
 serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -401,9 +418,36 @@ serve(async (req) => {
     const limit = Math.min(10, Math.max(1, Number(body?.limit ?? 5)));
     const dryRun = Boolean(body?.dryRun ?? true);
     const force = Boolean(body?.force ?? false);
+    const stageReview = Boolean(body?.stageReview ?? false);
     const minConfidence = Number(body?.minConfidence ?? REVIEW_CONFIDENCE_THRESHOLD);
     const writeThreshold = Number(body?.writeThreshold ?? HIGH_CONFIDENCE_THRESHOLD);
     const scopeMode = fragranceIds.length > 0 ? "explicit_ids" : "default_queue";
+    const stageReviewContext = getStageReviewContext(stageReview, fragranceIds.length > 0, dryRun);
+
+    if (stageReview && fragranceIds.length === 0) {
+      return new Response(JSON.stringify({
+        ok: false,
+        dryRun,
+        force,
+        stageReview,
+        requested_count: 0,
+        picked: 0,
+        results_count: 0,
+        updated: 0,
+        skipped_count: 0,
+        invalid_ids: [],
+        missing_ids: [],
+        function_version: FUNCTION_VERSION,
+        scope_mode: scopeMode,
+        stage_review_allowed: stageReviewContext.stageReviewAllowed,
+        stage_review_reason: stageReviewContext.stageReviewReason,
+        error: "stageReview:true requires a non-empty fragranceIds array; default queue and batch review staging are disabled.",
+        results: [],
+      }, null, 2), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     let targets: FragRow[] = [];
     let missingIds: string[] = [];
@@ -414,6 +458,7 @@ serve(async (req) => {
           ok: true,
           dryRun,
           force,
+          stageReview,
           requested_count: fragranceIds.length,
           picked: 0,
           results_count: 0,
@@ -423,6 +468,8 @@ serve(async (req) => {
           missing_ids: [],
           function_version: FUNCTION_VERSION,
           scope_mode: scopeMode,
+          stage_review_allowed: stageReviewContext.stageReviewAllowed,
+          stage_review_reason: stageReviewContext.stageReviewReason,
           results: [],
         }, null, 2), {
           headers: { "Content-Type": "application/json" },
@@ -471,6 +518,7 @@ serve(async (req) => {
         ok: true,
         dryRun,
         force,
+        stageReview,
         requested_count: fragranceIds.length,
         picked: 0,
         results_count: 0,
@@ -480,6 +528,8 @@ serve(async (req) => {
         missing_ids: missingIds,
         function_version: FUNCTION_VERSION,
         scope_mode: scopeMode,
+        stage_review_allowed: stageReviewContext.stageReviewAllowed,
+        stage_review_reason: stageReviewContext.stageReviewReason,
         results: [],
       }, null, 2), {
         headers: { "Content-Type": "application/json" },
@@ -543,6 +593,10 @@ serve(async (req) => {
           ok: false,
           status,
           dryRun,
+          stageReview,
+          would_stage_review: stageReviewContext.wouldStageReview,
+          stage_review_allowed: stageReviewContext.stageReviewAllowed,
+          stage_review_reason: stageReviewContext.stageReviewReason,
           source_confidence: null,
           source_url: null,
           match_name: null,
@@ -592,6 +646,10 @@ serve(async (req) => {
           ok: true,
           status,
           dryRun,
+          stageReview,
+          would_stage_review: stageReviewContext.wouldStageReview,
+          stage_review_allowed: stageReviewContext.stageReviewAllowed,
+          stage_review_reason: stageReviewContext.stageReviewReason,
           source_confidence: null,
           source_url: null,
           match_name: null,
@@ -651,6 +709,7 @@ serve(async (req) => {
         brand: target.brand,
         ok: true,
         dryRun,
+        stageReview,
         status,
         source_confidence: confidence,
         source_url: sourceUrl,
@@ -659,7 +718,10 @@ serve(async (req) => {
         provider_confidence_label: extracted.providerConfidenceLabel,
         proposed_notes_count: proposedNotes.length,
         proposed_accords_count: proposedAccords.length,
-        will_write: status === "enriched" && !dryRun,
+        will_write: status === "enriched" && !dryRun && !stageReview,
+        would_stage_review: stageReviewContext.wouldStageReview,
+        stage_review_allowed: stageReviewContext.stageReviewAllowed,
+        stage_review_reason: stageReviewContext.stageReviewReason,
         debug: {
           candidate_count: hits.length,
           best_candidate_score: score,
@@ -722,7 +784,7 @@ serve(async (req) => {
           continue;
         }
 
-        if (status === "enriched") {
+        if (!stageReview && status === "enriched") {
           const fragrancePatch: Record<string, unknown> = {};
           if (notesImproved) fragrancePatch.notes = mergedNotes;
           if (accordsImproved) fragrancePatch.accords = mergedAccords;
@@ -756,6 +818,7 @@ serve(async (req) => {
       ok: true,
       dryRun,
       force,
+      stageReview,
       requested_count: fragranceIds.length,
       picked: targets.length,
       results_count: results.length,
@@ -765,6 +828,8 @@ serve(async (req) => {
       missing_ids: missingIds,
       function_version: FUNCTION_VERSION,
       scope_mode: scopeMode,
+      stage_review_allowed: stageReviewContext.stageReviewAllowed,
+      stage_review_reason: stageReviewContext.stageReviewReason,
       minConfidence,
       writeThreshold,
       results,
