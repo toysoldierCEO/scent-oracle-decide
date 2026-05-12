@@ -44,6 +44,28 @@ type TextEnrichmentRow = {
   updated_at: string;
 };
 
+type ImageAssetPayloadRow = {
+  fragrance_id: string;
+  provider_payload: Record<string, any> | null;
+};
+
+type ExtractedEnrichment = {
+  notes: string[];
+  accords: string[];
+  concentration: string | null;
+  proposedFamilyKey: string | null;
+  sourceUrl: string | null;
+  topNotes: string[];
+  middleNotes: string[];
+  baseNotes: string[];
+  providerConfidenceLabel: string | null;
+  extractionPaths: {
+    notes: string[];
+    accords: string[];
+    sourceUrl: string[];
+  };
+};
+
 const HIGH_CONFIDENCE_THRESHOLD = 0.78;
 const REVIEW_CONFIDENCE_THRESHOLD = 0.58;
 const FUNCTION_VERSION = "enrich-fragrances_v2";
@@ -145,6 +167,36 @@ function normalizeStringList(...sources: unknown[]): string[] {
 }
 
 function extractTextEnrichment(hit: FragellaHit) {
+  const topNotes = normalizeStringList(
+    hit["top_notes"],
+    hit["topNotes"],
+    hit["Top Notes"],
+    readNestedValue(hit, ["Notes", "Top"]),
+    readNestedValue(hit, ["notes", "top"]),
+    readNestedValue(hit, ["details", "notes", "top"]),
+  );
+  const middleNotes = normalizeStringList(
+    hit["middle_notes"],
+    hit["middleNotes"],
+    hit["heart_notes"],
+    hit["heartNotes"],
+    hit["Middle Notes"],
+    hit["Heart Notes"],
+    readNestedValue(hit, ["Notes", "Middle"]),
+    readNestedValue(hit, ["Notes", "Heart"]),
+    readNestedValue(hit, ["notes", "middle"]),
+    readNestedValue(hit, ["notes", "heart"]),
+    readNestedValue(hit, ["details", "notes", "middle"]),
+    readNestedValue(hit, ["details", "notes", "heart"]),
+  );
+  const baseNotes = normalizeStringList(
+    hit["base_notes"],
+    hit["baseNotes"],
+    hit["Base Notes"],
+    readNestedValue(hit, ["Notes", "Base"]),
+    readNestedValue(hit, ["notes", "base"]),
+    readNestedValue(hit, ["details", "notes", "base"]),
+  );
   const notes = normalizeStringList(
     hit["notes"],
     hit["Notes"],
@@ -152,9 +204,15 @@ function extractTextEnrichment(hit: FragellaHit) {
     hit["noteList"],
     hit["fragrance_notes"],
     hit["fragranceNotes"],
+    hit["General Notes"],
+    hit["general_notes"],
+    hit["generalNotes"],
     readNestedValue(hit, ["notes"]),
     readNestedValue(hit, ["fragrance", "notes"]),
     readNestedValue(hit, ["details", "notes"]),
+    topNotes,
+    middleNotes,
+    baseNotes,
   );
   const accords = normalizeStringList(
     hit["accords"],
@@ -163,6 +221,9 @@ function extractTextEnrichment(hit: FragellaHit) {
     hit["accordList"],
     hit["main_accords"],
     hit["mainAccords"],
+    hit["Main Accords"],
+    hit["main accords"],
+    Object.keys((hit["Main Accords Percentage"] && typeof hit["Main Accords Percentage"] === "object") ? hit["Main Accords Percentage"] : {}),
     readNestedValue(hit, ["accords"]),
     readNestedValue(hit, ["main_accords"]),
     readNestedValue(hit, ["details", "accords"]),
@@ -183,11 +244,21 @@ function extractTextEnrichment(hit: FragellaHit) {
     ),
   );
   const sourceUrl = firstNonEmptyString(
+    hit["Purchase URL"],
+    hit["purchase_url"],
+    hit["purchaseUrl"],
     hit["URL"],
     hit["url"],
     hit["Link"],
     hit["link"],
+    hit["Image URL"],
+    hit["image_url"],
     readNestedValue(hit, ["links", "web"]),
+  );
+  const providerConfidenceLabel = firstNonEmptyString(
+    hit["Confidence"],
+    hit["confidence"],
+    readNestedValue(hit, ["details", "confidence"]),
   );
 
   return {
@@ -196,7 +267,63 @@ function extractTextEnrichment(hit: FragellaHit) {
     concentration,
     proposedFamilyKey,
     sourceUrl,
+    topNotes,
+    middleNotes,
+    baseNotes,
+    providerConfidenceLabel,
+    extractionPaths: {
+      notes: [
+        "notes",
+        "Notes",
+        "note_list",
+        "noteList",
+        "fragrance_notes",
+        "fragranceNotes",
+        "General Notes",
+        "general_notes",
+        "generalNotes",
+        "Notes.Top",
+        "Notes.Middle",
+        "Notes.Heart",
+        "Notes.Base",
+      ],
+      accords: [
+        "accords",
+        "Accords",
+        "accord_list",
+        "accordList",
+        "main_accords",
+        "mainAccords",
+        "Main Accords",
+        "Main Accords Percentage",
+      ],
+      sourceUrl: [
+        "Purchase URL",
+        "URL",
+        "Link",
+        "Image URL",
+        "links.web",
+      ],
+    },
   };
+}
+
+function extractionStrength(extracted: ExtractedEnrichment): number {
+  return extracted.notes.length * 10
+    + extracted.accords.length * 10
+    + extracted.topNotes.length * 3
+    + extracted.middleNotes.length * 3
+    + extracted.baseNotes.length * 3
+    + (extracted.sourceUrl ? 2 : 0)
+    + (extracted.concentration ? 2 : 0);
+}
+
+function chooseBestExtraction(primary: ExtractedEnrichment, fallback: ExtractedEnrichment | null) {
+  if (!fallback) return { extracted: primary, extractionSource: "search_hit" as const };
+  if (extractionStrength(fallback) > extractionStrength(primary)) {
+    return { extracted: fallback, extractionSource: "image_asset_payload" as const };
+  }
+  return { extracted: primary, extractionSource: "search_hit" as const };
 }
 
 function pickBestHit(
@@ -372,6 +499,21 @@ serve(async (req) => {
       ((existingEnrichmentRows ?? []) as TextEnrichmentRow[]).map((row) => [row.fragrance_id, row]),
     );
 
+    const { data: imageAssetRows, error: imageAssetReadError } = await supabase
+      .from("fragrance_image_assets")
+      .select("fragrance_id, provider_payload")
+      .in("fragrance_id", targets.map((row) => row.id));
+
+    if (imageAssetReadError && !/relation .* does not exist/i.test(imageAssetReadError.message ?? "")) {
+      throw imageAssetReadError;
+    }
+
+    const imagePayloadById = new Map<string, Record<string, any>>(
+      ((imageAssetRows ?? []) as ImageAssetPayloadRow[])
+        .filter((row) => !!row.provider_payload)
+        .map((row) => [row.fragrance_id, row.provider_payload as Record<string, any>]),
+    );
+
     const results: any[] = [];
     let updated = 0;
 
@@ -462,8 +604,15 @@ serve(async (req) => {
       }
 
       const { hit, score } = bestMatch;
-      const extracted = extractTextEnrichment(hit);
-      const confidence = Number((Math.min(score / 28, 1)).toFixed(3));
+      const primaryExtracted = extractTextEnrichment(hit);
+      const imagePayload = imagePayloadById.get(target.id) ?? null;
+      const fallbackExtracted = imagePayload ? extractTextEnrichment(imagePayload) : null;
+      const { extracted, extractionSource } = chooseBestExtraction(primaryExtracted, fallbackExtracted);
+      let confidenceScore = score;
+      if (extracted.notes.length > 0) confidenceScore += 2;
+      if (extracted.accords.length > 0) confidenceScore += 2;
+      if (extracted.concentration) confidenceScore += 1;
+      const confidence = Number((Math.min(confidenceScore / 28, 1)).toFixed(3));
       const proposedNotes = extracted.notes;
       const proposedAccords = extracted.accords;
       const mergedNotes = mergeUnique(existingNotes, proposedNotes);
@@ -507,9 +656,23 @@ serve(async (req) => {
         source_url: sourceUrl,
         match_name: matchName,
         match_brand: matchBrand,
+        provider_confidence_label: extracted.providerConfidenceLabel,
         proposed_notes_count: proposedNotes.length,
         proposed_accords_count: proposedAccords.length,
         will_write: status === "enriched" && !dryRun,
+        debug: {
+          candidate_count: hits.length,
+          best_candidate_score: score,
+          extraction_status: hasUsableText ? "usable_text_found" : "no_usable_text",
+          extraction_source: extractionSource,
+          provider_payload_keys: Object.keys(hit).slice(0, 25),
+          fallback_payload_keys: imagePayload ? Object.keys(imagePayload).slice(0, 25) : [],
+          notes_extraction_paths_tried: extracted.extractionPaths.notes,
+          accords_extraction_paths_tried: extracted.extractionPaths.accords,
+          source_url_paths_tried: extracted.extractionPaths.sourceUrl,
+          detail_fetch_attempted: false,
+          detail_fetch_status: "not_implemented",
+        },
         patch: {
           notes: proposedNotes,
           accords: proposedAccords,
@@ -517,6 +680,9 @@ serve(async (req) => {
           merged_accords: mergedAccords,
           concentration: extracted.concentration,
           proposed_family_key: familyCandidate,
+          top_notes: extracted.topNotes,
+          middle_notes: extracted.middleNotes,
+          base_notes: extracted.baseNotes,
         },
       };
 
