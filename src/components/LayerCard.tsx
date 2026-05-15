@@ -150,13 +150,6 @@ function splitDetailSentences(value: string) {
     .filter(Boolean);
 }
 
-function stripMaskingRiskSentences(value: string) {
-  return splitDetailSentences(value)
-    .filter((sentence) => !/masking risk/i.test(sentence))
-    .join(' ')
-    .trim();
-}
-
 function buildAllowedReferenceSet(
   mainName: string | null | undefined,
   mainBrand: string | null | undefined,
@@ -240,11 +233,10 @@ function sanitizeLayerDetailCopy(
   layerName: string | null | undefined,
   layerBrand: string | null | undefined,
 ) {
-  const withoutMaskingRisk = stripMaskingRiskSentences(value);
-  if (!withoutMaskingRisk) return '';
+  if (!value) return '';
 
   const allowedReferences = buildAllowedReferenceSet(mainName, mainBrand, layerName, layerBrand);
-  const sanitizedSentences = splitDetailSentences(withoutMaskingRisk).filter((sentence) => (
+  const sanitizedSentences = splitDetailSentences(value).filter((sentence) => (
     sentenceReferencesVisiblePair(sentence, allowedReferences)
     && !sentenceContainsForeignFragrancePhrase(sentence, allowedReferences)
   ));

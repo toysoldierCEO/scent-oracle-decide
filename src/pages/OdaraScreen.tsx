@@ -196,6 +196,49 @@ function normalizeLayerTeachingFields(value: any) {
   };
 }
 
+function layerTextSignalsDominanceFailure(...values: unknown[]) {
+  return values.some((value) => {
+    if (typeof value !== 'string') return false;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized.includes('dominance swap')
+      || normalized.includes('likely to dominate the blend')
+      || normalized.includes('become the dominant scent')
+      || normalized.includes('replace the anchor')
+      || normalized.includes('take over the anchor')
+      || normalized.includes('take over the blend')
+      || normalized.includes('overpower the anchor')
+      || normalized.includes('overpower the main scent')
+      || normalized.includes('scent mutiny')
+    );
+  });
+}
+
+function isUnsafeDominanceSwapLayerPayload(value: any) {
+  if (!value || typeof value !== 'object') return false;
+  const teaching = normalizeLayerTeachingFields(value);
+  return layerTextSignalsDominanceFailure(
+    teaching.reason,
+    teaching.why_it_works,
+    teaching.ratio_hint,
+    teaching.application_style,
+    teaching.placement_hint,
+    teaching.spray_guidance,
+    value?.reason,
+    value?.why_it_works,
+    value?.whyItWorks,
+    value?.why,
+    value?.explanation,
+    value?.support_role_estimate,
+    value?.supportRoleEstimate,
+    value?.dominant_name_estimate,
+    value?.dominantNameEstimate,
+    value?.masking_risk_band_estimate,
+    value?.maskingRiskBandEstimate,
+  );
+}
+
 function readTrimmedImageUrl(...values: unknown[]) {
   for (const value of values) {
     if (typeof value !== 'string') continue;
@@ -391,6 +434,7 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
   const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
   const name = layer.name ?? layer.layer_name ?? '';
   if (!id && !name) return null;
+  if (isUnsafeDominanceSwapLayerPayload(layer)) return null;
   const teaching = normalizeLayerTeachingFields(layer);
   return {
     id,
@@ -1189,6 +1233,7 @@ function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
 ): NonNullable<LayerModes[LayerMood]> | null {
   if (!entry) return null;
+  if (isUnsafeDominanceSwapLayerPayload(entry)) return null;
 
   return {
     id: entry.layer_fragrance_id,
@@ -1226,6 +1271,7 @@ function modeValueToBackendModeEntry(
   mood: LayerMood,
 ): BackendModeEntry | null {
   if (!value || typeof value !== 'object') return null;
+  if (isUnsafeDominanceSwapLayerPayload(value)) return null;
 
   const layerFragranceId = value.layer_fragrance_id ?? value.fragrance_id ?? value.id ?? '';
   const layerName = value.layer_name ?? value.name ?? '';
@@ -1294,6 +1340,7 @@ function v6LayerToLayerMode(
   mood: LayerMood,
 ): NonNullable<LayerModes[LayerMood]> | null {
   if (!layer || typeof layer !== 'object') return null;
+  if (isUnsafeDominanceSwapLayerPayload(layer)) return null;
   const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
   const name = layer.name ?? layer.layer_name ?? '';
   if (!id && !name) return null;
