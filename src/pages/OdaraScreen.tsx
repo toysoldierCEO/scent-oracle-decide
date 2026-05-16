@@ -7865,6 +7865,7 @@ const OdaraScreen = ({
                       WebkitOverflowScrolling: 'touch',
                       scrollPaddingLeft: '12px',
                       scrollPaddingRight: '12px',
+                      touchAction: 'pan-x',
                     }}
                   >
                     <div className="flex w-max min-w-full items-center justify-center gap-2 px-1.5">
