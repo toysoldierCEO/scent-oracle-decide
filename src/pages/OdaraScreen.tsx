@@ -8037,7 +8037,7 @@ const OdaraScreen = ({
           <div
             ref={navigationStripRef}
             className="hide-horizontal-scrollbar overflow-x-auto pb-0.5"
-            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
           >
             <div
               ref={navigationContentRef}
