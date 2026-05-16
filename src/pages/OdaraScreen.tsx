@@ -7462,6 +7462,13 @@ const OdaraScreen = ({
                   // page still scrolls naturally from the card, while
                   // downward-skip and horizontal day-swipe stay reliable.
                   touchAction: 'none',
+                  // iOS Safari: suppress the long-press callout, text selection,
+                  // and tap highlight so the hero card behaves like a native
+                  // gesture surface (no blue flash, no magnifier, no copy menu).
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  WebkitTapHighlightColor: 'transparent',
                   ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
                 }}
                 onClickCapture={handleCardClickCapture}
