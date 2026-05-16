@@ -5961,10 +5961,11 @@ const OdaraScreen = ({
     active: boolean;
     startX: number;
     startY: number;
+    lastY: number;
     direction: 'none' | 'vertical' | 'horizontal';
     fired: boolean;
     pointerId: number | null;
-  }>({ active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null });
+  }>({ active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null });
   const lastCardPointerTypeRef = useRef<string>('');
 
   // ── SKIP GESTURE LIFECYCLE RESET ──
