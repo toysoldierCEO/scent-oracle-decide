@@ -7457,11 +7457,11 @@ const OdaraScreen = ({
                   background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
                   border: `1px solid ${tint.border}`,
                   boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-                  // Allow native vertical page scrolling to win when the gesture
-                  // is primarily vertical. Horizontal swipe intent still reaches
-                  // the pointer handlers (and the browser cancels the gesture
-                  // with pointercancel if it decides to scroll vertically).
-                  touchAction: 'pan-y',
+                  // Hero card owns the gesture. The pointermove handler
+                  // forwards upward finger motion to window.scrollBy so the
+                  // page still scrolls naturally from the card, while
+                  // downward-skip and horizontal day-swipe stay reliable.
+                  touchAction: 'none',
                   ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
                 }}
                 onClickCapture={handleCardClickCapture}
