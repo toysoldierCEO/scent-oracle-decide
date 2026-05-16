@@ -5978,6 +5978,7 @@ const OdaraScreen = ({
       active: false,
       startX: 0,
       startY: 0,
+      lastY: 0,
       direction: 'none',
       fired: false,
       pointerId: null,
