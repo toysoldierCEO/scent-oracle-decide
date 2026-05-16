@@ -6009,15 +6009,16 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
     lastCardPointerTypeRef.current = e.pointerType;
-    // Do NOT setPointerCapture here. Capturing on pointerdown traps the
-    // browser's native vertical scrolling. Instead, capture lazily once we
-    // detect dominant horizontal intent in pointermove. Until then, the
-    // browser is free to claim the gesture for vertical page scrolling
-    // (and will fire pointercancel, which ends the swipe cleanly).
+    // The hero card uses touchAction: 'none' so it owns the gesture. We
+    // re-introduce natural vertical page scrolling by manually forwarding
+    // upward finger motion to window.scrollBy below. Downward intent is
+    // reserved for the skip gesture and never steals page scroll because
+    // page scroll cannot move "down past the bottom" the same way.
     swipeRef.current = {
       active: true,
       startX: e.clientX,
       startY: e.clientY,
+      lastY: e.clientY,
       direction: 'none',
       fired: false,
       pointerId: e.pointerId,
@@ -6029,18 +6030,27 @@ const OdaraScreen = ({
     if (!s.active || s.pointerId !== e.pointerId || s.fired) return;
     const dx = e.clientX - s.startX;
     const dy = e.clientY - s.startY;
+    const frameDy = e.clientY - s.lastY;
+    s.lastY = e.clientY;
     if (s.direction === 'none') {
+      // Wait for a clear intent before claiming. Require stronger dominance
+      // on the chosen axis so weak/ambiguous motion stays free (page scroll
+      // or no-op) and does not jitter into the wrong gesture.
       if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
-      s.direction = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
-      // Now that we know intent, only claim the pointer for horizontal swipes.
-      // Vertical intent is left to the browser for natural page scrolling.
-      if (s.direction === 'horizontal') {
-        try {
-          if (e.currentTarget.setPointerCapture) {
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }
-        } catch { /* noop */ }
+      const axisRatio = 1.25;
+      if (Math.abs(dy) > Math.abs(dx) * axisRatio) {
+        s.direction = 'vertical';
+      } else if (Math.abs(dx) > Math.abs(dy) * axisRatio) {
+        s.direction = 'horizontal';
+      } else {
+        // Ambiguous — keep waiting for a clearer signal.
+        return;
       }
+      try {
+        if (e.currentTarget.setPointerCapture) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      } catch { /* noop */ }
     }
     const surfaceType = isGuestMode ? 'guest' : 'signed_in';
     const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
@@ -6077,8 +6087,16 @@ const OdaraScreen = ({
       return;
     }
     // vertical
-    if (dy < 0) return; // upward — ignored silently
-    if (!downwardOk) return; // not far enough yet
+    if (dy < 0) {
+      // Upward finger motion → forward to page scroll. This restores the
+      // natural mobile scrolling feel from the hero card without ceding
+      // ownership of the gesture (downward skip stays reliable).
+      if (frameDy < 0) {
+        try { window.scrollBy(0, -frameDy); } catch { /* noop */ }
+      }
+      return;
+    }
+    if (!downwardOk) return; // not far enough yet — weak downward is ignored
 
     // Threshold reached: fire the state-aware swipe-down action ONCE.
     s.fired = true;
