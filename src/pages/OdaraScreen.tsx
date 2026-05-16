@@ -6030,6 +6030,15 @@ const OdaraScreen = ({
     if (s.direction === 'none') {
       if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
       s.direction = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+      // Now that we know intent, only claim the pointer for horizontal swipes.
+      // Vertical intent is left to the browser for natural page scrolling.
+      if (s.direction === 'horizontal') {
+        try {
+          if (e.currentTarget.setPointerCapture) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+        } catch { /* noop */ }
+      }
     }
     const surfaceType = isGuestMode ? 'guest' : 'signed_in';
     const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
