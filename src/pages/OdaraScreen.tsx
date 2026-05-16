@@ -6007,16 +6007,11 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
     lastCardPointerTypeRef.current = e.pointerType;
-    // Capture the pointer so the gesture stays attached to the card shell
-    // until pointer up/cancel — prevents the browser/scroll container from
-    // stealing vertical motion mid-swipe.
-    try {
-      if (e.currentTarget.setPointerCapture) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }
-    } catch {
-      /* setPointerCapture can throw if pointer is already captured elsewhere */
-    }
+    // Do NOT setPointerCapture here. Capturing on pointerdown traps the
+    // browser's native vertical scrolling. Instead, capture lazily once we
+    // detect dominant horizontal intent in pointermove. Until then, the
+    // browser is free to claim the gesture for vertical page scrolling
+    // (and will fire pointercancel, which ends the swipe cleanly).
     swipeRef.current = {
       active: true,
       startX: e.clientX,
