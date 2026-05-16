@@ -7715,7 +7715,7 @@ const OdaraScreen = ({
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
                           className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
-                          style={{ WebkitOverflowScrolling: 'touch' }}
+                          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                         >
                           {activeReasonChip && (
                             <button
