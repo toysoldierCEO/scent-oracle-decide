@@ -6228,10 +6228,10 @@ const OdaraScreen = ({
         haptic('selection');
         onDateChange(targetDate);
       }
-      swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
+      swipeRef.current = { active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null };
       return;
     }
-    swipeRef.current = { active: false, startX: 0, startY: 0, direction: 'none', fired: false, pointerId: null };
+    swipeRef.current = { active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null };
   }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
