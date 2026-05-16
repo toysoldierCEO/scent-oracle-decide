@@ -6007,16 +6007,11 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
     lastCardPointerTypeRef.current = e.pointerType;
-    // Capture the pointer so the gesture stays attached to the card shell
-    // until pointer up/cancel — prevents the browser/scroll container from
-    // stealing vertical motion mid-swipe.
-    try {
-      if (e.currentTarget.setPointerCapture) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }
-    } catch {
-      /* setPointerCapture can throw if pointer is already captured elsewhere */
-    }
+    // Do NOT setPointerCapture here. Capturing on pointerdown traps the
+    // browser's native vertical scrolling. Instead, capture lazily once we
+    // detect dominant horizontal intent in pointermove. Until then, the
+    // browser is free to claim the gesture for vertical page scrolling
+    // (and will fire pointercancel, which ends the swipe cleanly).
     swipeRef.current = {
       active: true,
       startX: e.clientX,
@@ -6035,6 +6030,15 @@ const OdaraScreen = ({
     if (s.direction === 'none') {
       if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
       s.direction = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+      // Now that we know intent, only claim the pointer for horizontal swipes.
+      // Vertical intent is left to the browser for natural page scrolling.
+      if (s.direction === 'horizontal') {
+        try {
+          if (e.currentTarget.setPointerCapture) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+        } catch { /* noop */ }
+      }
     }
     const surfaceType = isGuestMode ? 'guest' : 'signed_in';
     const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
@@ -7433,7 +7437,11 @@ const OdaraScreen = ({
                   background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
                   border: `1px solid ${tint.border}`,
                   boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-                  touchAction: 'none',
+                  // Allow native vertical page scrolling to win when the gesture
+                  // is primarily vertical. Horizontal swipe intent still reaches
+                  // the pointer handlers (and the browser cancels the gesture
+                  // with pointercancel if it decides to scroll vertically).
+                  touchAction: 'pan-y',
                   ...(skipAnimating ? { animation: 'cardSlideDown 0.35s ease-in forwards' } : {}),
                 }}
                 onClickCapture={handleCardClickCapture}
@@ -7707,7 +7715,7 @@ const OdaraScreen = ({
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
                           className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
-                          style={{ WebkitOverflowScrolling: 'touch' }}
+                          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                         >
                           {activeReasonChip && (
                             <button
@@ -7857,6 +7865,7 @@ const OdaraScreen = ({
                       WebkitOverflowScrolling: 'touch',
                       scrollPaddingLeft: '12px',
                       scrollPaddingRight: '12px',
+                      touchAction: 'pan-x',
                     }}
                   >
                     <div className="flex w-max min-w-full items-center justify-center gap-2 px-1.5">
@@ -8028,7 +8037,7 @@ const OdaraScreen = ({
           <div
             ref={navigationStripRef}
             className="hide-horizontal-scrollbar overflow-x-auto pb-0.5"
-            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
           >
             <div
               ref={navigationContentRef}
