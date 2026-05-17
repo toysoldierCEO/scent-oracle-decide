@@ -4367,9 +4367,19 @@ const OdaraScreen = ({
     signedInDayStateMap,
   ]);
 
+  // Hoisted above lazy mood fetcher and signed-in resolvers to avoid TDZ on
+  // `signedInResolvedOracle` (previously declared later in render but read in
+  // useCallback dependency arrays evaluated earlier).
+  const signedInResolvedOracle = useMemo(() => {
+    if (isGuestMode) return null;
+    const candidate: any = activeOracle ?? oracle ?? null;
+    if (!candidate) return null;
+    return signedInOracleMatchesRequestedSlot(candidate, selectedContext, selectedDate)
+      ? candidate
+      : null;
+  }, [isGuestMode, activeOracle, oracle, selectedContext, selectedDate]);
+
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
-  // Ref-bridge to avoid TDZ on `signedInResolvedOracle` (declared later in render).
-  const signedInResolvedOracleRef = useRef<any>(null);
   const fetchMoodForCard = useCallback(async (
     fragranceId: string,
     mood: LayerMood,
