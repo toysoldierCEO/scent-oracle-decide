@@ -5213,14 +5213,8 @@ const OdaraScreen = ({
 
   // No eager modes fetch — moods load lazily on user tap
 
-  const signedInResolvedOracle = useMemo(() => {
-    if (isGuestMode) return null;
-    const candidate: any = activeOracle ?? oracle ?? null;
-    if (!candidate) return null;
-    return signedInOracleMatchesRequestedSlot(candidate, selectedContext, selectedDate)
-      ? candidate
-      : null;
-  }, [isGuestMode, activeOracle, oracle, selectedContext, selectedDate]);
+  // `signedInResolvedOracle` hoisted earlier (see fetchMoodForCard region) to
+  // avoid TDZ during useCallback dep evaluation.
   const v6Payload: any = (signedInResolvedOracle as any)?.__v6 ?? null;
   const backendCardUnavailable = useMemo(() => {
     if (isGuestMode) return null;
