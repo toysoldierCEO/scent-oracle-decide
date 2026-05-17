@@ -13,7 +13,7 @@
  * The frontend must collapse these into ONE stable shape and never treat them
  * as loosely interchangeable. This helper is the single source of truth.
  */
-import type { LayerMood } from '@/components/ModeSelector';
+import type { LayerMood, SprayPattern } from '@/components/ModeSelector';
 import type { OraclePick, OracleAlternate, OracleLayer } from '@/pages/OdaraScreen';
 
 export interface NormalizedHomeLayer {
@@ -32,6 +32,13 @@ export interface NormalizedHomeLayer {
   layerScore: number | null;
   whyItWorks: string | null;
   interactionType: string | null;
+  sprayPattern: SprayPattern | null;
+  sprayPatternKey: string | null;
+  sprayPatternName: string | null;
+  halo: string | null;
+  trail: string | null;
+  anchorSprays: number | null;
+  layerSprays: number | null;
 }
 
 export interface NormalizedOracleHome {
@@ -52,6 +59,17 @@ function pickFirst<T>(...vals: (T | null | undefined)[]): T | null {
 
 function toLayerMood(v: any): LayerMood | null {
   return v === 'balance' || v === 'bold' || v === 'smooth' || v === 'wild' ? v : null;
+}
+
+function readPositiveCount(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
+    if (typeof value === 'string') {
+      const match = value.trim().match(/^(\d{1,2})$/);
+      if (match) return Number.parseInt(match[1], 10);
+    }
+  }
+  return null;
 }
 
 function shapeLayer(raw: any, fallbackMode: LayerMood): NormalizedHomeLayer | null {
@@ -77,6 +95,13 @@ function shapeLayer(raw: any, fallbackMode: LayerMood): NormalizedHomeLayer | nu
     layerScore: typeof raw.layer_score === 'number' ? raw.layer_score : null,
     whyItWorks: pickFirst<string>(raw.why_it_works),
     interactionType: pickFirst<string>(raw.interaction_type, raw.layer_mode, raw.mode),
+    sprayPattern: raw.spray_pattern && typeof raw.spray_pattern === 'object' ? raw.spray_pattern as SprayPattern : null,
+    sprayPatternKey: pickFirst<string>(raw.spray_pattern_key, raw.sprayPatternKey),
+    sprayPatternName: pickFirst<string>(raw.spray_pattern_name, raw.sprayPatternName),
+    halo: pickFirst<string>(raw.halo),
+    trail: pickFirst<string>(raw.trail),
+    anchorSprays: readPositiveCount(raw.anchor_sprays, raw.anchorSprays),
+    layerSprays: readPositiveCount(raw.layer_sprays, raw.layerSprays),
   };
 }
 
@@ -130,5 +155,12 @@ export function normalizedToOracleLayer(n: NormalizedHomeLayer | null): OracleLa
     why_it_works: n.whyItWorks ?? undefined,
     layer_score: n.layerScore ?? undefined,
     layer_mode: n.layerMode ?? undefined,
+    spray_pattern: n.sprayPattern ?? undefined,
+    spray_pattern_key: n.sprayPatternKey ?? undefined,
+    spray_pattern_name: n.sprayPatternName ?? undefined,
+    halo: n.halo ?? undefined,
+    trail: n.trail ?? undefined,
+    anchor_sprays: n.anchorSprays ?? undefined,
+    layer_sprays: n.layerSprays ?? undefined,
   };
 }

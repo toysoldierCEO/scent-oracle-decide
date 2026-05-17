@@ -9,6 +9,19 @@ export const LAYER_MOODS: LayerMood[] = [...LAYER_MODE_ORDER];
 
 export type InteractionType = 'amplify' | 'balance' | 'contrast';
 
+export interface SprayPattern {
+  key: string;
+  name: string;
+  placement: string;
+  halo: string;
+  trail: string;
+  why_it_works: string;
+  anchor_sprays?: number | null;
+  layer_sprays?: number | null;
+  spray_ratio?: string | null;
+  is_layer_allowed?: boolean;
+}
+
 export interface LayerModeEntry {
   id: string;
   name: string;
@@ -25,6 +38,15 @@ export interface LayerModeEntry {
   application_style?: string;
   placement_hint?: string;
   spray_guidance?: string;
+  spray_pattern?: SprayPattern | null;
+  spray_pattern_key?: string | null;
+  spray_pattern_name?: string | null;
+  halo?: string | null;
+  trail?: string | null;
+  anchor_sprays?: number | null;
+  layer_sprays?: number | null;
+  spray_map?: unknown;
+  zone_spray_map?: unknown;
 }
 
 export type LayerModes = Record<LayerMood, LayerModeEntry | null>;

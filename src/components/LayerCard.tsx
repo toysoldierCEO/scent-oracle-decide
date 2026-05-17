@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, LAYER_MOODS } from "./ModeSelector";
+import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 
@@ -139,6 +139,41 @@ function combinePlacementAndRatioText(placement: string, ratio: string) {
   return placement || ratio;
 }
 
+function readTrimmedDisplayText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeSprayPatternForDisplay(
+  pattern: SprayPattern | null | undefined,
+  _mainName: string | null | undefined,
+  _mainBrand: string | null | undefined,
+  _layerName: string | null | undefined,
+  _layerBrand: string | null | undefined,
+): SprayPattern | null {
+  if (!pattern || pattern.is_layer_allowed === false || pattern.key === 'not_a_layer') return null;
+  const name = readTrimmedDisplayText(pattern.name);
+  const key = readTrimmedDisplayText(pattern.key);
+  if (!name || !key) return null;
+
+  const sanitize = (value: unknown) => splitDetailSentences(readTrimmedDisplayText(value))
+    .filter((sentence) => !sentenceContainsRawDiagnosticLabel(sentence))
+    .join(' ')
+    .trim();
+
+  return {
+    key,
+    name,
+    placement: sanitize(pattern.placement),
+    halo: sanitize(pattern.halo),
+    trail: sanitize(pattern.trail),
+    why_it_works: sanitize(pattern.why_it_works),
+    anchor_sprays: pattern.anchor_sprays ?? null,
+    layer_sprays: pattern.layer_sprays ?? null,
+    spray_ratio: readTrimmedDisplayText(pattern.spray_ratio),
+    is_layer_allowed: pattern.is_layer_allowed,
+  };
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -239,9 +274,26 @@ function sanitizeLayerDetailCopy(
   const sanitizedSentences = splitDetailSentences(value).filter((sentence) => (
     sentenceReferencesVisiblePair(sentence, allowedReferences)
     && !sentenceContainsForeignFragrancePhrase(sentence, allowedReferences)
+    && !sentenceContainsRawDiagnosticLabel(sentence)
   ));
 
   return sanitizedSentences.join(' ').trim();
+}
+
+function sentenceContainsRawDiagnosticLabel(sentence: string) {
+  const normalized = sentence.trim().toLowerCase();
+  return (
+    normalized.includes('masking risk')
+    || normalized.includes('dominance risk')
+    || normalized.includes('fatigue risk')
+    || normalized.includes('projection score')
+    || normalized.includes('beast mode score')
+    || normalized.includes('support_role')
+    || normalized.includes('support role estimate')
+    || normalized.includes('layer_dominates_anchor')
+    || normalized.includes('not_recommended')
+    || normalized.includes('driver')
+  );
 }
 
 /** Generic notes to filter out */
@@ -662,6 +714,13 @@ const LayerCard = ({
     activeModeEntry?.name,
     activeModeEntry?.brand,
   );
+  const sprayPattern = normalizeSprayPatternForDisplay(
+    activeModeEntry?.spray_pattern ?? null,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
   const derivedSprayCounts = deriveSprayCountsFromLayerMode(activeModeEntry as any);
   const resolvedMainSprayCount = mainSprayCount ?? derivedSprayCounts.main;
   const resolvedLayerSprayCount = layerSprayCount ?? derivedSprayCounts.layer;
@@ -675,10 +734,18 @@ const LayerCard = ({
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
-  const detailSections = [
-    whyText ? { label: 'Why It Works', value: whyText } : null,
-    placementWithRatio ? { label: 'Placement', value: placementWithRatio } : null,
-  ].filter((section): section is { label: string; value: string } => !!section);
+  const detailSections = sprayPattern
+    ? [
+        { label: 'Spray Pattern', value: sprayPattern.spray_ratio ? `${sprayPattern.name} · ${sprayPattern.spray_ratio}` : sprayPattern.name },
+        sprayPattern.placement ? { label: 'Placement', value: sprayPattern.placement } : null,
+        sprayPattern.halo ? { label: 'Halo', value: sprayPattern.halo } : null,
+        sprayPattern.trail ? { label: 'Trail', value: sprayPattern.trail } : null,
+        sprayPattern.why_it_works ? { label: 'Why it works', value: sprayPattern.why_it_works } : null,
+      ].filter((section): section is { label: string; value: string } => !!section)
+    : [
+        whyText ? { label: 'Why it works', value: whyText } : null,
+        placementWithRatio ? { label: 'Placement', value: placementWithRatio } : null,
+      ].filter((section): section is { label: string; value: string } => !!section);
 
   return (
     <div
@@ -843,18 +910,18 @@ const LayerCard = ({
             <motion.div
               key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
               initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="pt-3 mt-2 text-left"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
-            >
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+            className="pt-3 mt-2"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
+          >
               {activeModeEntry && detailSections.length > 0 && (
                 <div className="space-y-3">
                   {detailSections.map((section) => (
-                    <div key={section.label}>
-                      <span className="block text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
-                      <p className="mt-1 text-sm leading-relaxed text-white/80">{section.value}</p>
+                    <div key={section.label} className="flex flex-col items-center">
+                      <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
+                      <p className="mt-1 max-w-[24rem] text-center text-sm leading-relaxed text-white/80">{section.value}</p>
                     </div>
                   ))}
                 </div>

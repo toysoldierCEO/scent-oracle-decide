@@ -7,7 +7,7 @@ import HeartReactionButton, { type HeartState } from "@/components/card-system/H
 import ActionMicroLabel from "@/components/card-system/ActionMicroLabel";
 import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
-import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType } from "@/components/ModeSelector";
+import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType, type SprayPattern } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
 
@@ -171,6 +171,86 @@ function readPositiveLayerCount(...values: unknown[]) {
   return null;
 }
 
+const SPRAY_PATTERN_NAME_TO_KEY: Record<string, string> = {
+  'anchor halo': 'anchor_halo',
+  'split trail': 'split_trail',
+  'soft veil': 'soft_veil',
+  'wrist accent': 'wrist_accent',
+  'trail boost': 'trail_boost',
+  'skin lock': 'skin_lock',
+  'bright lift': 'bright_lift',
+  deepen: 'deepen',
+  'not a layer': 'not_a_layer',
+};
+
+const SPRAY_PATTERN_KEY_TO_NAME: Record<string, string> = {
+  anchor_halo: 'Anchor Halo',
+  split_trail: 'Split Trail',
+  soft_veil: 'Soft Veil',
+  wrist_accent: 'Wrist Accent',
+  trail_boost: 'Trail Boost',
+  skin_lock: 'Skin Lock',
+  bright_lift: 'Bright Lift',
+  deepen: 'Deepen',
+  not_a_layer: 'Not a Layer',
+};
+
+function normalizeSprayPatternKey(value: unknown) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return SPRAY_PATTERN_KEY_TO_NAME[normalized] ? normalized : '';
+}
+
+function normalizeSprayPatternName(value: unknown) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const fromKey = SPRAY_PATTERN_KEY_TO_NAME[normalizeSprayPatternKey(trimmed)];
+  if (fromKey) return fromKey;
+  const fromNameKey = SPRAY_PATTERN_NAME_TO_KEY[trimmed.toLowerCase()];
+  return fromNameKey ? SPRAY_PATTERN_KEY_TO_NAME[fromNameKey] : '';
+}
+
+function readSprayPatternBoolean(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
+}
+
+function normalizeLayerSprayPattern(value: any): SprayPattern | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const rawPattern = value.spray_pattern ?? value.sprayPattern ?? null;
+  const rawObject = rawPattern && typeof rawPattern === 'object' ? rawPattern : null;
+  const rawKey = rawObject?.key ?? rawObject?.pattern_key ?? value.spray_pattern_key ?? value.sprayPatternKey;
+  const rawName = rawObject?.name ?? rawObject?.display_name ?? value.spray_pattern_name ?? value.sprayPatternName ?? value.application_style;
+  const keyFromName = typeof rawName === 'string' ? SPRAY_PATTERN_NAME_TO_KEY[rawName.trim().toLowerCase()] : '';
+  const key = normalizeSprayPatternKey(rawKey) || keyFromName || '';
+  const name = normalizeSprayPatternName(rawName) || (key ? SPRAY_PATTERN_KEY_TO_NAME[key] : '');
+  if (!key || !name) return null;
+
+  const isLayerAllowed = readSprayPatternBoolean(rawObject?.is_layer_allowed ?? rawObject?.isLayerAllowed ?? value.is_layer_allowed);
+  const anchorSprays = readPositiveLayerCount(rawObject?.anchor_sprays, rawObject?.anchorSprays, value.anchor_sprays, value.anchorSprays);
+  const layerSprays = readPositiveLayerCount(rawObject?.layer_sprays, rawObject?.layerSprays, value.layer_sprays, value.layerSprays);
+
+  return {
+    key,
+    name,
+    placement: readTrimmedLayerText(rawObject?.placement, rawObject?.placement_hint, value.placement_hint, value.placementHint),
+    halo: readTrimmedLayerText(rawObject?.halo, value.halo),
+    trail: readTrimmedLayerText(rawObject?.trail, value.trail),
+    why_it_works: readTrimmedLayerText(rawObject?.why_it_works, rawObject?.whyItWorks, value.why_it_works, value.whyItWorks, value.reason),
+    anchor_sprays: anchorSprays,
+    layer_sprays: layerSprays,
+    spray_ratio: readTrimmedLayerText(rawObject?.spray_ratio, rawObject?.sprayRatio, value.ratio_hint, value.ratioHint),
+    is_layer_allowed: isLayerAllowed,
+  };
+}
+
 function normalizeLayerTeachingFields(value: any) {
   return {
     reason: readTrimmedLayerText(value?.reason, value?.explanation),
@@ -218,6 +298,10 @@ function layerTextSignalsDominanceFailure(...values: unknown[]) {
 function isUnsafeDominanceSwapLayerPayload(value: any) {
   if (!value || typeof value !== 'object') return false;
   const teaching = normalizeLayerTeachingFields(value);
+  const sprayPattern = normalizeLayerSprayPattern(value);
+  if (sprayPattern?.key === 'not_a_layer' || sprayPattern?.is_layer_allowed === false) {
+    return true;
+  }
   return layerTextSignalsDominanceFailure(
     teaching.reason,
     teaching.why_it_works,
@@ -436,6 +520,7 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
   if (!id && !name) return null;
   if (isUnsafeDominanceSwapLayerPayload(layer)) return null;
   const teaching = normalizeLayerTeachingFields(layer);
+  const sprayPattern = normalizeLayerSprayPattern(layer);
   return {
     id,
     name,
@@ -452,7 +537,13 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
     application_style: teaching.application_style || undefined,
     placement_hint: teaching.placement_hint || undefined,
     spray_guidance: teaching.spray_guidance || undefined,
+    spray_pattern: sprayPattern,
+    spray_pattern_key: layer.spray_pattern_key ?? layer.sprayPatternKey ?? sprayPattern?.key ?? null,
+    spray_pattern_name: layer.spray_pattern_name ?? layer.sprayPatternName ?? sprayPattern?.name ?? null,
+    halo: layer.halo ?? sprayPattern?.halo ?? null,
+    trail: layer.trail ?? sprayPattern?.trail ?? null,
     anchor_sprays: readPositiveLayerCount(
+      sprayPattern?.anchor_sprays,
       layer.anchor_sprays,
       layer.anchorSprays,
       layer.hero_sprays,
@@ -467,6 +558,7 @@ function guestLayerToModeEntry(layer: any): NonNullable<LayerModes[LayerMood]> |
       layer?.base?.sprays,
     ),
     layer_sprays: readPositiveLayerCount(
+      sprayPattern?.layer_sprays,
       layer.layer_sprays,
       layer.layerSprays,
       layer.top_sprays,
@@ -928,6 +1020,13 @@ export interface OracleLayer {
   why_it_works?: string;
   layer_score?: number;
   layer_mode?: string;
+  spray_pattern?: SprayPattern | null;
+  spray_pattern_key?: string | null;
+  spray_pattern_name?: string | null;
+  halo?: string | null;
+  trail?: string | null;
+  anchor_sprays?: number | null;
+  layer_sprays?: number | null;
 }
 
 export interface OracleAlternate {
@@ -994,6 +1093,11 @@ interface BackendModeEntry {
   application_style: string;
   placement_hint: string;
   spray_guidance: string;
+  spray_pattern?: SprayPattern | null;
+  spray_pattern_key?: string | null;
+  spray_pattern_name?: string | null;
+  halo?: string | null;
+  trail?: string | null;
   anchor_sprays?: number | null;
   layer_sprays?: number | null;
   spray_map?: unknown;
@@ -1234,6 +1338,7 @@ function backendModeEntryToLayerMode(
 ): NonNullable<LayerModes[LayerMood]> | null {
   if (!entry) return null;
   if (isUnsafeDominanceSwapLayerPayload(entry)) return null;
+  const sprayPattern = normalizeLayerSprayPattern(entry);
 
   return {
     id: entry.layer_fragrance_id,
@@ -1251,8 +1356,13 @@ function backendModeEntryToLayerMode(
     application_style: entry.application_style || '',
     placement_hint: entry.placement_hint || '',
     spray_guidance: entry.spray_guidance || '',
-    anchor_sprays: entry.anchor_sprays ?? null,
-    layer_sprays: entry.layer_sprays ?? null,
+    spray_pattern: sprayPattern,
+    spray_pattern_key: entry.spray_pattern_key ?? sprayPattern?.key ?? null,
+    spray_pattern_name: entry.spray_pattern_name ?? sprayPattern?.name ?? null,
+    halo: entry.halo ?? sprayPattern?.halo ?? null,
+    trail: entry.trail ?? sprayPattern?.trail ?? null,
+    anchor_sprays: entry.anchor_sprays ?? sprayPattern?.anchor_sprays ?? null,
+    layer_sprays: entry.layer_sprays ?? sprayPattern?.layer_sprays ?? null,
     spray_map: entry.spray_map ?? null,
     zone_spray_map: entry.zone_spray_map ?? null,
   };
@@ -1284,6 +1394,7 @@ function modeValueToBackendModeEntry(
     return null;
   }
   const teaching = normalizeLayerTeachingFields(value);
+  const sprayPattern = normalizeLayerSprayPattern(value);
 
   return {
     mode: mood,
@@ -1301,7 +1412,13 @@ function modeValueToBackendModeEntry(
     application_style: teaching.application_style,
     placement_hint: teaching.placement_hint,
     spray_guidance: teaching.spray_guidance,
+    spray_pattern: sprayPattern,
+    spray_pattern_key: value.spray_pattern_key ?? value.sprayPatternKey ?? sprayPattern?.key ?? null,
+    spray_pattern_name: value.spray_pattern_name ?? value.sprayPatternName ?? sprayPattern?.name ?? null,
+    halo: value.halo ?? sprayPattern?.halo ?? null,
+    trail: value.trail ?? sprayPattern?.trail ?? null,
     anchor_sprays: readPositiveLayerCount(
+      sprayPattern?.anchor_sprays,
       value.anchor_sprays,
       value.anchorSprays,
       value.hero_sprays,
@@ -1316,6 +1433,7 @@ function modeValueToBackendModeEntry(
       value?.base?.sprays,
     ),
     layer_sprays: readPositiveLayerCount(
+      sprayPattern?.layer_sprays,
       value.layer_sprays,
       value.layerSprays,
       value.top_sprays,
@@ -1352,6 +1470,7 @@ function v6LayerToLayerMode(
     return null;
   }
   const teaching = normalizeLayerTeachingFields(layer);
+  const sprayPattern = normalizeLayerSprayPattern(layer);
   return {
     id,
     name,
@@ -1368,7 +1487,13 @@ function v6LayerToLayerMode(
     application_style: teaching.application_style,
     placement_hint: teaching.placement_hint,
     spray_guidance: teaching.spray_guidance,
+    spray_pattern: sprayPattern,
+    spray_pattern_key: layer.spray_pattern_key ?? layer.sprayPatternKey ?? sprayPattern?.key ?? null,
+    spray_pattern_name: layer.spray_pattern_name ?? layer.sprayPatternName ?? sprayPattern?.name ?? null,
+    halo: layer.halo ?? sprayPattern?.halo ?? null,
+    trail: layer.trail ?? sprayPattern?.trail ?? null,
     anchor_sprays: readPositiveLayerCount(
+      sprayPattern?.anchor_sprays,
       layer.anchor_sprays,
       layer.anchorSprays,
       layer.hero_sprays,
@@ -1383,6 +1508,7 @@ function v6LayerToLayerMode(
       layer?.base?.sprays,
     ),
     layer_sprays: readPositiveLayerCount(
+      sprayPattern?.layer_sprays,
       layer.layer_sprays,
       layer.layerSprays,
       layer.top_sprays,
@@ -2140,6 +2266,49 @@ function normalizePersistedContextKey(value: unknown): string {
     : ODARA_SIGNED_IN_DAY_MEMORY_DEFAULT_CONTEXT;
 }
 
+function readSignedInOracleSlotMeta(value: unknown): { contextKey: string | null; wearDate: string | null } {
+  if (!value || typeof value !== 'object') {
+    return { contextKey: null, wearDate: null };
+  }
+
+  const top = value as Record<string, unknown>;
+  const raw = top.__v6 && typeof top.__v6 === 'object'
+    ? top.__v6 as Record<string, unknown>
+    : top;
+
+  const rawContext = (
+    (typeof raw.requested_context === 'string' && raw.requested_context.trim().length > 0 ? raw.requested_context : null)
+    ?? (typeof raw.context_key === 'string' && raw.context_key.trim().length > 0 ? raw.context_key : null)
+    ?? (typeof top.requested_context === 'string' && top.requested_context.trim().length > 0 ? top.requested_context : null)
+    ?? (typeof top.context_key === 'string' && top.context_key.trim().length > 0 ? top.context_key : null)
+  );
+
+  const rawWearDate = (
+    (typeof raw.wear_date === 'string' && raw.wear_date.trim().length > 0 ? raw.wear_date : null)
+    ?? (typeof top.wear_date === 'string' && top.wear_date.trim().length > 0 ? top.wear_date : null)
+  );
+
+  return {
+    contextKey: rawContext ? normalizePersistedContextKey(rawContext) : null,
+    wearDate: rawWearDate,
+  };
+}
+
+function signedInOracleMatchesRequestedSlot(
+  value: unknown,
+  selectedContext: string,
+  selectedDate: string,
+) {
+  const meta = readSignedInOracleSlotMeta(value);
+  if (meta.contextKey && meta.contextKey !== normalizePersistedContextKey(selectedContext)) {
+    return false;
+  }
+  if (meta.wearDate && meta.wearDate !== selectedDate) {
+    return false;
+  }
+  return true;
+}
+
 function buildSignedInDayStateSlotKey(dateKey: string, contextKey: string) {
   return `${dateKey}:${normalizePersistedContextKey(contextKey)}`;
 }
@@ -2220,6 +2389,11 @@ function toPersistedLayerModeSnapshot(
     application_style: layer.application_style ?? '',
     placement_hint: layer.placement_hint ?? '',
     spray_guidance: layer.spray_guidance ?? '',
+    spray_pattern: (layer as any).spray_pattern ?? null,
+    spray_pattern_key: (layer as any).spray_pattern_key ?? (layer as any).sprayPatternKey ?? null,
+    spray_pattern_name: (layer as any).spray_pattern_name ?? (layer as any).sprayPatternName ?? null,
+    halo: (layer as any).halo ?? null,
+    trail: (layer as any).trail ?? null,
     anchor_sprays: readPositiveLayerCount((layer as any).anchor_sprays, (layer as any).anchorSprays),
     layer_sprays: readPositiveLayerCount((layer as any).layer_sprays, (layer as any).layerSprays),
     spray_map: (layer as any).spray_map ?? (layer as any).sprayMap ?? null,
@@ -2248,6 +2422,11 @@ function fromPersistedLayerModeSnapshot(raw: any): PersistedLayerModeSnapshot | 
     application_style: typeof raw.application_style === 'string' ? raw.application_style : '',
     placement_hint: typeof raw.placement_hint === 'string' ? raw.placement_hint : '',
     spray_guidance: typeof raw.spray_guidance === 'string' ? raw.spray_guidance : '',
+    spray_pattern: normalizeLayerSprayPattern(raw),
+    spray_pattern_key: typeof raw.spray_pattern_key === 'string' ? raw.spray_pattern_key : null,
+    spray_pattern_name: typeof raw.spray_pattern_name === 'string' ? raw.spray_pattern_name : null,
+    halo: typeof raw.halo === 'string' ? raw.halo : null,
+    trail: typeof raw.trail === 'string' ? raw.trail : null,
     anchor_sprays: readPositiveLayerCount(raw.anchor_sprays, raw.anchorSprays),
     layer_sprays: readPositiveLayerCount(raw.layer_sprays, raw.layerSprays),
     spray_map: raw.spray_map ?? raw.sprayMap ?? null,
@@ -2275,6 +2454,11 @@ function areSameLayerModeSnapshots(
     a.application_style === b.application_style &&
     a.placement_hint === b.placement_hint &&
     a.spray_guidance === b.spray_guidance &&
+    JSON.stringify((a as any).spray_pattern ?? null) === JSON.stringify((b as any).spray_pattern ?? null) &&
+    ((a as any).spray_pattern_key ?? null) === ((b as any).spray_pattern_key ?? null) &&
+    ((a as any).spray_pattern_name ?? null) === ((b as any).spray_pattern_name ?? null) &&
+    ((a as any).halo ?? null) === ((b as any).halo ?? null) &&
+    ((a as any).trail ?? null) === ((b as any).trail ?? null) &&
     ((a as any).anchor_sprays ?? null) === ((b as any).anchor_sprays ?? null) &&
     ((a as any).layer_sprays ?? null) === ((b as any).layer_sprays ?? null) &&
     JSON.stringify((a as any).spray_map ?? null) === JSON.stringify((b as any).spray_map ?? null) &&
@@ -4259,7 +4443,7 @@ const OdaraScreen = ({
           // from there instead of surfacing a hard error to the user. This
           // keeps mode buttons functional even when the per-mode RPC is
           // unavailable on the backend.
-          const hp: any = activeOracle ?? oracle ?? {};
+          const hp: any = signedInResolvedOracle ?? {};
           const heroIdHp = hp?.today_pick?.fragrance_id ?? null;
           const seed: any = heroIdHp === fragranceId
             ? getNormalizedLayerModeBlock(hp?.layer_modes ?? null, mood)
@@ -4354,7 +4538,7 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, activeOracle, oracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
+  }, [userId, selectedContext, selectedDate, signedInResolvedOracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
 
   const ensureMoodLaneDepth = useCallback(async (
     fragranceId: string,
@@ -4513,17 +4697,17 @@ const OdaraScreen = ({
   }, []);
 
   const resolveActiveSignedInDefaultMood = useCallback((): LayerMood => {
-    const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
+    const activeSignedInOracle: any = signedInResolvedOracle ?? null;
     const normalized = activeSignedInOracle ? normalizeOracleHomePayload(activeSignedInOracle) : null;
     const v6 = activeSignedInOracle?.__v6 ?? null;
     return normalizeLayerMoodKey(v6?.ui_default_mode ?? normalized?.defaultMode)
       ?? (normalized?.defaultMode ?? 'balance');
-  }, [activeOracle, oracle]);
+  }, [signedInResolvedOracle]);
 
   const resolveSearchPreviewDecision = useCallback((
     nextDayState: SignedInDayState,
   ): SignedInResolvedDayDecision | null => {
-    const activeSignedInOracle: any = activeOracle ?? oracle ?? null;
+    const activeSignedInOracle: any = signedInResolvedOracle ?? null;
     const defaultMood = resolveActiveSignedInDefaultMood();
     if (!activeSignedInOracle?.today_pick) {
       if (nextDayState.manualHeroCard) {
@@ -4574,7 +4758,7 @@ const OdaraScreen = ({
       activeSignedInOracle.today_pick,
       defaultMood,
     );
-  }, [activeOracle, oracle, previousDayStateKey, resolveActiveSignedInDefaultMood, visibleCard]);
+  }, [signedInResolvedOracle, previousDayStateKey, resolveActiveSignedInDefaultMood, visibleCard]);
 
   const applySignedInSearchPreviewDecision = useCallback((
     decision: SignedInResolvedDayDecision | null,
@@ -4849,6 +5033,25 @@ const OdaraScreen = ({
       return;
     }
 
+    const capturedSlot = stateKey;
+    if (!isGuestMode && !signedInOracleMatchesRequestedSlot(oracle, selectedContext, selectedDate)) {
+      console.log('[Odara] ignoring stale signed-in oracle payload for slot', {
+        requestedContext: readSignedInOracleSlotMeta(oracle).contextKey,
+        requestedDate: readSignedInOracleSlotMeta(oracle).wearDate,
+        selectedContext,
+        selectedDate,
+        capturedSlot,
+      });
+      setActiveOracle(null);
+      setVisibleCard(null);
+      setLayerDebugSource('none');
+      setQueue([]);
+      setQueuePointer(0);
+      setSignedInForcedLayerCarryCard(null);
+      setSignedInResolvedDayDecisionSource('oracle');
+      return;
+    }
+
     // ── Normalize raw payload ONCE — single source of truth ──
     const normalized = normalizeOracleHomePayload(oracle);
 
@@ -4936,6 +5139,13 @@ const OdaraScreen = ({
           application_style: sb.applicationStyle,
           placement_hint: sb.placementHint,
           spray_guidance: sb.sprayGuidance,
+          spray_pattern: sb.sprayPattern,
+          spray_pattern_key: sb.sprayPatternKey,
+          spray_pattern_name: sb.sprayPatternName,
+          halo: sb.halo,
+          trail: sb.trail,
+          anchor_sprays: sb.anchorSprays,
+          layer_sprays: sb.layerSprays,
           interaction_type: sb.interactionType ?? 'balance',
         }, 'balance');
         if (balanceEntry) {
@@ -4991,22 +5201,46 @@ const OdaraScreen = ({
 
   // No eager modes fetch — moods load lazily on user tap
 
-  const v6Payload: any = (activeOracle as any)?.__v6 ?? (oracle as any)?.__v6 ?? null;
-  const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (activeOracle as any)?.today_pick?.fragrance_id ?? (oracle as any)?.today_pick?.fragrance_id ?? null;
+  const signedInResolvedOracle = useMemo(() => {
+    if (isGuestMode) return null;
+    const candidate: any = activeOracle ?? oracle ?? null;
+    if (!candidate) return null;
+    return signedInOracleMatchesRequestedSlot(candidate, selectedContext, selectedDate)
+      ? candidate
+      : null;
+  }, [isGuestMode, activeOracle, oracle, selectedContext, selectedDate]);
+  const v6Payload: any = (signedInResolvedOracle as any)?.__v6 ?? null;
+  const backendCardUnavailable = useMemo(() => {
+    if (isGuestMode) return null;
+
+    const raw =
+      v6Payload?.card_unavailable ??
+      (signedInResolvedOracle as any)?.card_unavailable ??
+      null;
+
+    if (!raw || typeof raw !== 'object' || raw.is_unavailable !== true) {
+      return null;
+    }
+
+    const message = typeof raw.message === 'string' && raw.message.trim().length > 0
+      ? raw.message.trim()
+      : 'No card is ready for this context yet. Try another context or check back after the next refresh.';
+
+    return { message };
+  }, [isGuestMode, v6Payload, signedInResolvedOracle]);
+  const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (signedInResolvedOracle as any)?.today_pick?.fragrance_id ?? null;
   const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
   const signedInPayloadAlternates = useMemo(() => {
     if (isGuestMode) return [];
     const raw = Array.isArray(v6Payload?.alternates)
       ? v6Payload.alternates
-      : Array.isArray((activeOracle as any)?.alternates)
-        ? (activeOracle as any).alternates
-        : Array.isArray((oracle as any)?.alternates)
-          ? (oracle as any).alternates
+      : Array.isArray((signedInResolvedOracle as any)?.alternates)
+        ? (signedInResolvedOracle as any).alternates
           : [];
     return raw
       .map((row: any) => normalizeAlternateRow(row))
       .filter((alt): alt is OracleAlternate => !!alt);
-  }, [isGuestMode, v6Payload, activeOracle, oracle]);
+  }, [isGuestMode, v6Payload, signedInResolvedOracle]);
 
   useEffect(() => {
     if (!visibleCard) {
@@ -5048,7 +5282,9 @@ const OdaraScreen = ({
   const DOUBLE_TAP_MS = 320;
   const DOUBLE_TAP_DIST = 32;
 
-  const oracleHeroId = activeOracle?.today_pick?.fragrance_id ?? null;
+  const oracleHeroId = isGuestMode
+    ? (activeOracle?.today_pick?.fragrance_id ?? null)
+    : ((signedInResolvedOracle as any)?.today_pick?.fragrance_id ?? null);
   const isShowingHeroCard =
     !!visibleCard &&
     (
@@ -5104,7 +5340,7 @@ const OdaraScreen = ({
   // stack) instead of the slot-scoped mood cache. The cache is still used as
   // a fallback (legacy/promoted/queue cards).
   const modeResults: LayerModes = useMemo(() => {
-    const lm: any = v6Payload?.layer_modes ?? (activeOracle as any)?.layer_modes ?? null;
+    const lm: any = v6Payload?.layer_modes ?? (signedInResolvedOracle as any)?.layer_modes ?? null;
     const fromLane = (mood: LayerMood) => {
       const moodKey = buildMoodLaneKey(slotPrefix, cardId, mood);
       const stack = readMoodLaneStack(moodKey);
@@ -5132,7 +5368,7 @@ const OdaraScreen = ({
     };
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v6Payload, activeOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack]);
+  }, [v6Payload, signedInResolvedOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack]);
   const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
@@ -5207,7 +5443,7 @@ const OdaraScreen = ({
     // Prefer the v6 raw payload (carries hero_tokens / layer_tokens / per-mode
     // tokens). Fall back to legacy oracle prop for non-v6 paths.
     const v6: any = v6Payload;
-    const o: any = activeOracle ?? oracle ?? {};
+    const o: any = signedInResolvedOracle ?? {};
     const heroId = (v6?.hero?.fragrance_id ?? o?.today_pick?.fragrance_id) ?? null;
     const manualHeroCard = signedInResolvedDayDecisionSource === 'manual'
       ? (signedInDayState.manualHeroCard ?? visibleCard)
@@ -5468,7 +5704,7 @@ const OdaraScreen = ({
       duplicateResolution,
       resolvedCurrentCard,
     };
-  }, [isGuestMode, visibleCard, queue, v6Payload, activeOracle, oracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, signedInResolvedOracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
 
   useEffect(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard || !activeMainCardRender || !visibleCard) return;
@@ -7359,6 +7595,25 @@ const OdaraScreen = ({
         {queueError && (
           <div className="rounded-xl px-4 py-2 text-[10px] mt-1" style={{ background: 'rgba(220,160,60,0.08)', border: '1px solid rgba(220,160,60,0.15)', color: '#da3' }}>
             Queue: {queueError}
+          </div>
+        )}
+        {!oracleLoading && !oracleError && !visibleCard && (
+          <div
+            className="relative mt-1 overflow-hidden rounded-[24px] px-6 py-10 text-center"
+            data-card-unavailable-state
+            style={{
+              background: 'linear-gradient(165deg, rgba(255,255,255,0.08) 0%, rgba(15,12,8,0.96) 72%)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              boxShadow: '0 22px 54px rgba(0,0,0,0.46), inset 0 1px 1px rgba(255,255,255,0.06)',
+            }}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
+            <div className="relative z-[1] mx-auto flex max-w-[320px] flex-col items-center gap-3">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-white/45">No card ready</span>
+              <p className="text-[15px] leading-relaxed text-white/78">
+                {backendCardUnavailable?.message ?? 'No card is ready for this context yet. Try another context or check back after the next refresh.'}
+              </p>
+            </div>
           </div>
         )}
 

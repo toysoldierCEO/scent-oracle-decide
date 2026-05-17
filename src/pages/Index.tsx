@@ -213,8 +213,25 @@ const Index = () => {
         data = result.data;
         rpcUsed = result.rpcUsed;
 
+        const slotTaggedData = data && typeof data === 'object'
+          ? {
+              ...data,
+              requested_context: (data as any).requested_context ?? selectedContext,
+              context_key: (data as any).context_key ?? selectedContext,
+              wear_date: (data as any).wear_date ?? selectedDate,
+              __v6: (data as any).__v6 && typeof (data as any).__v6 === 'object'
+                ? {
+                    ...(data as any).__v6,
+                    requested_context: (data as any).__v6.requested_context ?? (data as any).requested_context ?? selectedContext,
+                    context_key: (data as any).__v6.context_key ?? (data as any).context_key ?? selectedContext,
+                    wear_date: (data as any).__v6.wear_date ?? (data as any).wear_date ?? selectedDate,
+                  }
+                : (data as any).__v6,
+            }
+          : data;
+
         console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
-        setOracle(data as unknown as OracleResult);
+        setOracle(slotTaggedData as unknown as OracleResult);
         setOracleError(null);
         setOracleLoading(false);
         oracleSuccessKeyRef.current = oracleKey;
