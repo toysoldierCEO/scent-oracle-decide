@@ -122,23 +122,6 @@ function buildFallbackLayerTokens(
   }));
 }
 
-function combinePlacementAndRatioText(placement: string, ratio: string) {
-  const normalizedPlacement = normalizeComparisonText(placement);
-  const normalizedRatio = normalizeComparisonText(ratio);
-
-  if (placement && ratio) {
-    if (
-      normalizedRatio
-      && (normalizedPlacement.includes(normalizedRatio) || normalizedRatio.includes(normalizedPlacement))
-    ) {
-      return placement;
-    }
-    return `${placement} · ${ratio}`;
-  }
-
-  return placement || ratio;
-}
-
 function readTrimmedDisplayText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -164,6 +147,8 @@ function normalizeSprayPatternForDisplay(
     key,
     name,
     placement: sanitize(pattern.placement),
+    anchor_placement_text: sanitize(pattern.anchor_placement_text),
+    layer_placement_text: sanitize(pattern.layer_placement_text),
     halo: sanitize(pattern.halo),
     trail: sanitize(pattern.trail),
     why_it_works: sanitize(pattern.why_it_works),
@@ -171,6 +156,40 @@ function normalizeSprayPatternForDisplay(
     layer_sprays: pattern.layer_sprays ?? null,
     spray_ratio: readTrimmedDisplayText(pattern.spray_ratio),
     is_layer_allowed: pattern.is_layer_allowed,
+  };
+}
+
+function parsePlacementRowsFromText(value: string) {
+  const lines = value
+    .split(/\n+/)
+    .flatMap((line) => line.split(/\s+\|\s+/))
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let anchor = '';
+  let layer = '';
+
+  for (const line of lines) {
+    if (!anchor) {
+      const anchorMatch = line.match(/^anchor\s*:\s*(.+)$/i);
+      if (anchorMatch) {
+        anchor = anchorMatch[1].trim();
+        continue;
+      }
+    }
+
+    if (!layer) {
+      const layerMatch = line.match(/^layer\s*:\s*(.+)$/i);
+      if (layerMatch) {
+        layer = layerMatch[1].trim();
+      }
+    }
+  }
+
+  return {
+    anchor,
+    layer,
+    remainder: (!anchor && !layer) ? value.trim() : '',
   };
 }
 
@@ -730,22 +749,56 @@ const LayerCard = ({
         resolvedLayerSprayCount ? `Layer: ${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : null,
       ].filter(Boolean).join(' · ')
     : '';
-  const placementWithRatio = combinePlacementAndRatioText(sanitizedPlacementText, sanitizedRatioText) || fallbackPlacementText;
+  const rawPatternName = sprayPattern?.name
+    || sanitizeLayerDetailCopy(
+      activeModeEntry?.spray_pattern_name?.trim()
+        || activeModeEntry?.application_style?.trim()
+        || '',
+      mainName,
+      mainBrand,
+      activeModeEntry?.name,
+      activeModeEntry?.brand,
+    );
+  const patternRatioText = sprayPattern?.spray_ratio?.trim() || sanitizedRatioText;
+  const sprayPatternDisplay = rawPatternName
+    ? (patternRatioText ? `${rawPatternName} · ${patternRatioText}` : rawPatternName)
+    : '';
+  const placementRowsFromPattern = sprayPattern
+    ? {
+        anchor: sprayPattern.anchor_placement_text?.trim() || '',
+        layer: sprayPattern.layer_placement_text?.trim() || '',
+      }
+    : null;
+  const parsedPlacementRows = parsePlacementRowsFromText(sanitizedPlacementText);
+  const placementRows = {
+    anchor: placementRowsFromPattern?.anchor || parsedPlacementRows.anchor || (resolvedMainSprayCount ? `${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : ''),
+    layer: placementRowsFromPattern?.layer || parsedPlacementRows.layer || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : ''),
+  };
+  const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
-  const detailSections = sprayPattern
-    ? [
-        { label: 'Spray Pattern', value: sprayPattern.spray_ratio ? `${sprayPattern.name} · ${sprayPattern.spray_ratio}` : sprayPattern.name },
-        sprayPattern.placement ? { label: 'Placement', value: sprayPattern.placement } : null,
-        sprayPattern.halo ? { label: 'Halo', value: sprayPattern.halo } : null,
-        sprayPattern.trail ? { label: 'Trail', value: sprayPattern.trail } : null,
-        sprayPattern.why_it_works ? { label: 'Why it works', value: sprayPattern.why_it_works } : null,
-      ].filter((section): section is { label: string; value: string } => !!section)
-    : [
-        whyText ? { label: 'Why it works', value: whyText } : null,
-        placementWithRatio ? { label: 'Placement', value: placementWithRatio } : null,
-      ].filter((section): section is { label: string; value: string } => !!section);
+  const detailSections = [
+    sprayPatternDisplay ? { label: 'Spray Pattern', value: sprayPatternDisplay } : null,
+    (placementRows.anchor || placementRows.layer || placementFallbackText)
+      ? {
+          label: 'Placement',
+          placementRows,
+          value: placementFallbackText,
+        }
+      : null,
+    (sprayPattern?.why_it_works || whyText)
+      ? { label: 'Why it works', value: sprayPattern?.why_it_works || whyText }
+      : null,
+  ].filter(
+    (
+      section,
+    ): section is {
+      label: string;
+      value?: string;
+      placementRows?: { anchor: string; layer: string };
+    } => !!section,
+  );
 
   return (
     <div
@@ -919,9 +972,31 @@ const LayerCard = ({
               {activeModeEntry && detailSections.length > 0 && (
                 <div className="space-y-3">
                   {detailSections.map((section) => (
-                    <div key={section.label} className="flex flex-col items-center">
+                    <div key={section.label} className="space-y-1">
                       <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
-                      <p className="mt-1 max-w-[24rem] text-center text-sm leading-relaxed text-white/80">{section.value}</p>
+                      {section.label === 'Placement' && section.placementRows ? (
+                        <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-sm leading-relaxed text-white/80">
+                          {section.placementRows.anchor && (
+                            <p className="text-left">
+                              <span className="font-medium text-white/90">Anchor:</span>{' '}
+                              {section.placementRows.anchor}
+                            </p>
+                          )}
+                          {section.placementRows.layer && (
+                            <p className="text-left">
+                              <span className="font-medium text-white/90">Layer:</span>{' '}
+                              {section.placementRows.layer}
+                            </p>
+                          )}
+                          {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
+                            <p className="text-left">{section.value}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mx-auto max-w-[24rem] text-left text-sm leading-relaxed text-white/80">
+                          {section.value}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -13,8 +13,10 @@ export interface SprayPattern {
   key: string;
   name: string;
   placement: string;
-  halo: string;
-  trail: string;
+  anchor_placement_text?: string | null;
+  layer_placement_text?: string | null;
+  halo?: string | null;
+  trail?: string | null;
   why_it_works: string;
   anchor_sprays?: number | null;
   layer_sprays?: number | null;
