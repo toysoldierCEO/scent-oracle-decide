@@ -4368,6 +4368,8 @@ const OdaraScreen = ({
   ]);
 
   // ── Lazy per-mood fetcher via get_layer_for_card_mode_v1 (slot-scoped) ──
+  // Ref-bridge to avoid TDZ on `signedInResolvedOracle` (declared later in render).
+  const signedInResolvedOracleRef = useRef<any>(null);
   const fetchMoodForCard = useCallback(async (
     fragranceId: string,
     mood: LayerMood,
