@@ -3568,43 +3568,233 @@ const OdaraInsetRow: React.FC<{
 /* ------------------------------------------------------------------
  * OdaraProfilePage — premium scent dossier
  * ------------------------------------------------------------------ */
-const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [displayName, setDisplayName] = useState<string>('');
-  const [monogram, setMonogram] = useState<string>('');
+type OdaraProfileInsight = {
+  value: string | null;
+  confidence: string | null;
+  source: string | null;
+  empty_reason: string | null;
+};
+
+type OdaraProfileDossierPayload = {
+  profile_contract_version: string;
+  surface_type: 'signed_in' | 'guest';
+  computed_at: string;
+  profile_identity: {
+    display_name: string | null;
+    initials: string | null;
+    status_label: string | null;
+  };
+  collection_summary: {
+    bottle_count: number;
+    source: string | null;
+    enough_data: boolean;
+    empty_reason: string | null;
+  };
+  family_balance: {
+    dominant_family: string | null;
+    dominant_family_key: string | null;
+    family_counts: Array<{ family_key: string; label: string; count: number; pct: number }>;
+    coverage_copy: string | null;
+    enough_data: boolean;
+    empty_reason: string | null;
+  };
+  insights: {
+    lean: OdaraProfileInsight;
+    texture: OdaraProfileInsight;
+    dominant_family: OdaraProfileInsight;
+    layering: OdaraProfileInsight;
+    day_night: OdaraProfileInsight;
+    signature_gravity: OdaraProfileInsight;
+  };
+  library: {
+    collection_count: number;
+    saved_count: number;
+    history_count: number;
+    recipes_count: number;
+    saved_empty_reason: string | null;
+    history_empty_reason: string | null;
+  };
+  data_quality: {
+    has_collection: boolean;
+    has_history: boolean;
+    has_wear_trials: boolean;
+    has_saved: boolean;
+    has_guest_collection: boolean;
+  };
+};
+
+function deriveProfileMonogram(value: string | null | undefined): string {
+  const label = String(value ?? '').trim();
+  if (!label) return '—';
+  const parts = label.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase() || '—';
+  }
+  return label.slice(0, 2).toUpperCase() || '—';
+}
+
+function formatProfileCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function resolveProfileInsightText(
+  insight: OdaraProfileInsight | null | undefined,
+  loading: boolean,
+): { value: string; isEmpty: boolean } {
+  if (loading) {
+    return { value: 'Loading real signal…', isEmpty: true };
+  }
+  if (!insight) {
+    return { value: 'Not enough signal yet', isEmpty: true };
+  }
+  if (insight.value) {
+    return { value: insight.value, isEmpty: false };
+  }
+  return { value: insight.empty_reason ?? 'Not enough signal yet', isEmpty: true };
+}
+
+const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; isGuestMode: boolean }> = ({
+  onClose,
+  userId,
+  isGuestMode,
+}) => {
+  const [profilePayload, setProfilePayload] = useState<OdaraProfileDossierPayload | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
+
+    if (!isGuestMode && !userId) {
+      setProfilePayload(null);
+      setProfileLoading(false);
+      setProfileError('No signed-in profile is available yet.');
+      return () => {
+        active = false;
+      };
+    }
+
+    setProfileLoading(true);
+    setProfileError(null);
+    setProfilePayload(null);
+
     (async () => {
-      try {
-        const { data } = await odaraSupabase.auth.getUser();
-        if (!active) return;
-        const user = data?.user;
-        const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
-        const raw =
-          (typeof meta.full_name === 'string' && meta.full_name) ||
-          (typeof meta.name === 'string' && meta.name) ||
-          (typeof user?.email === 'string' && user.email.split('@')[0]) ||
-          '';
-        const name = String(raw).trim();
-        if (name) {
-          setDisplayName(name);
-          const parts = name.split(/[\s._-]+/).filter(Boolean);
-          const initials = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
-          setMonogram(initials.toUpperCase() || name[0]?.toUpperCase() || '');
-        }
-      } catch {
-        /* silent — render empty-state header */
+      const { data, error } = await odaraSupabase.rpc('get_odara_profile_dossier_v1' as any, {
+        p_user_id: isGuestMode ? null : userId,
+        p_surface: isGuestMode ? 'guest' : 'signed_in',
+      } as any);
+
+      if (!active) return;
+
+      if (error) {
+        setProfilePayload(null);
+        setProfileError(error.message || 'Could not load the live dossier.');
+        setProfileLoading(false);
+        return;
       }
+
+      setProfilePayload((data ?? null) as OdaraProfileDossierPayload | null);
+      setProfileLoading(false);
     })();
+
     return () => {
       active = false;
     };
-  }, []);
+  }, [isGuestMode, userId]);
 
-  // Collection truth is not wired into this surface yet. Render elegant
-  // empty/loading state without inventing analytics.
-  const bottleCount: number | null = null;
-  const familySegments: Array<{ key: string; label: string; pct: number; color: string }> = [];
+  const displayName =
+    profilePayload?.profile_identity?.display_name
+    ?? (isGuestMode ? 'Guest Preview' : '');
+  const monogram =
+    profilePayload?.profile_identity?.initials
+    ?? deriveProfileMonogram(displayName);
+  const statusLabel =
+    profilePayload?.profile_identity?.status_label
+    ?? (isGuestMode ? 'Demo wardrobe' : 'Signed in');
+  const bottleCount = profilePayload?.collection_summary?.bottle_count ?? null;
+  const familySegments = useMemo(
+    () =>
+      (profilePayload?.family_balance?.family_counts ?? []).slice(0, 6).map((segment) => ({
+        key: segment.family_key,
+        label: segment.label,
+        pct: Number(segment.pct ?? 0),
+        color: FAMILY_COLORS[segment.family_key] ?? '#888',
+      })),
+    [profilePayload]
+  );
+  const insightCells = [
+    {
+      label: 'Lean',
+      ...resolveProfileInsightText(profilePayload?.insights?.lean, profileLoading),
+    },
+    {
+      label: 'Texture',
+      ...resolveProfileInsightText(profilePayload?.insights?.texture, profileLoading),
+    },
+    {
+      label: 'Dominant family',
+      ...resolveProfileInsightText(profilePayload?.insights?.dominant_family, profileLoading),
+    },
+    {
+      label: 'Layering',
+      ...resolveProfileInsightText(profilePayload?.insights?.layering, profileLoading),
+    },
+    {
+      label: 'Day / Night',
+      ...resolveProfileInsightText(profilePayload?.insights?.day_night, profileLoading),
+    },
+    {
+      label: 'Signature gravity',
+      ...resolveProfileInsightText(profilePayload?.insights?.signature_gravity, profileLoading),
+    },
+  ];
+  const insightNote = profileError
+    ? profileError
+    : profileLoading
+      ? 'Reading the real collection, save, and wear signals now.'
+      : isGuestMode
+        ? 'Guest preview is computed from the live demo wardrobe only.'
+        : 'Signed-in insight comes only from real collection, save, and history signal.';
+  const collectionCoverageCopy = profileError
+    ? 'Could not load live collection coverage yet.'
+    : profileLoading
+      ? 'Building family coverage from the real wardrobe…'
+      : profilePayload?.family_balance?.coverage_copy
+        ?? profilePayload?.family_balance?.empty_reason
+        ?? profilePayload?.collection_summary?.empty_reason
+        ?? 'No live collection coverage yet.';
+  const collectionHint = profileLoading
+    ? 'Loading real collection…'
+    : bottleCount && bottleCount > 0
+      ? formatProfileCount(bottleCount, 'bottle')
+      : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
+  const tasteHint = profileLoading
+    ? 'Reading profile signal…'
+    : [
+        profilePayload?.insights?.dominant_family?.value,
+        profilePayload?.insights?.texture?.value,
+      ].filter(Boolean).join(' · ')
+      || profilePayload?.insights?.lean?.value
+      || profilePayload?.insights?.lean?.empty_reason
+      || 'Not enough signal yet.';
+  const savedHint = profileLoading
+    ? 'Loading saved signal…'
+    : profilePayload
+      ? (
+          profilePayload.library.saved_count > 0
+            ? formatProfileCount(profilePayload.library.saved_count, 'saved item')
+            : profilePayload.library.saved_empty_reason ?? 'No real saved items yet.'
+        )
+      : 'No real saved items yet.';
+  const historyHint = profileLoading
+    ? 'Loading scent history…'
+    : profilePayload
+      ? (
+          profilePayload.library.history_count > 0
+            ? formatProfileCount(profilePayload.library.history_count, 'history event')
+            : profilePayload.library.history_empty_reason ?? 'No real scent history yet.'
+        )
+      : 'No real scent history yet.';
 
   return (
     <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
@@ -3622,7 +3812,7 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           {monogram || '—'}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">Signed in</div>
+          <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">{statusLabel}</div>
           <div
             className="truncate text-[17px] leading-tight text-foreground/92"
             style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
@@ -3649,14 +3839,7 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             }}
           >
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Lean', value: '—' },
-                { label: 'Texture', value: '—' },
-                { label: 'Dominant family', value: '—' },
-                { label: 'Layering', value: '—' },
-                { label: 'Day / Night', value: '—' },
-                { label: 'Signature gravity', value: '—' },
-              ].map((cell) => (
+              {insightCells.map((cell) => (
                 <div
                   key={cell.label}
                   className="rounded-[14px] px-3 py-3"
@@ -3667,8 +3850,8 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 >
                   <div className="text-[9.5px] uppercase tracking-[0.26em] text-foreground/38">{cell.label}</div>
                   <div
-                    className="mt-1 text-[14px] text-foreground/82"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                    className={cell.isEmpty ? 'mt-1 text-[11px] leading-[1.45] text-foreground/48' : 'mt-1 text-[14px] text-foreground/82'}
+                    style={cell.isEmpty ? undefined : { fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
                   >
                     {cell.value}
                   </div>
@@ -3676,7 +3859,7 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               ))}
             </div>
             <div className="mt-4 text-[11px] leading-[1.55] text-foreground/40">
-              Signals will appear here once ODARA has read enough of your wear and reactions.
+              {insightNote}
             </div>
           </div>
         </div>
@@ -3733,14 +3916,14 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     })()}
                 </svg>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <div
-                    className="text-[26px] leading-none text-foreground/92"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-                  >
-                    {bottleCount ?? '—'}
-                  </div>
-                  <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
-                    Bottles
+                <div
+                  className="text-[26px] leading-none text-foreground/92"
+                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                >
+                    {profileLoading ? '…' : (bottleCount ?? '—')}
+                </div>
+                <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
+                  Bottles
                   </div>
                 </div>
               </div>
@@ -3749,10 +3932,10 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   className="text-[15px] text-foreground/85"
                   style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
                 >
-                  Family balance
+                  {profilePayload?.family_balance?.dominant_family ?? 'Family balance'}
                 </div>
                 <div className="mt-1.5 text-[11.5px] leading-[1.55] text-foreground/45">
-                  Coverage will draw across your owned families as your wardrobe takes shape.
+                  {collectionCoverageCopy}
                 </div>
               </div>
             </div>
@@ -3761,17 +3944,13 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         {/* Prioritized identity blocks. */}
         <OdaraInsetGroup eyebrow="Identity" emphasis>
-          <OdaraInsetRow label="Collection" hint="Owned wardrobe" emphasis isFirst />
-          <OdaraInsetRow label="Taste Identity" hint="Lanes, textures, signature lean" emphasis />
+          <OdaraInsetRow label="Collection" hint={collectionHint} emphasis isFirst />
+          <OdaraInsetRow label="Taste Identity" hint={tasteHint} emphasis />
         </OdaraInsetGroup>
 
         <OdaraInsetGroup eyebrow="Library">
-          <OdaraInsetRow label="Saved" isFirst />
-          <OdaraInsetRow label="Scent History" />
-        </OdaraInsetGroup>
-
-        <OdaraInsetGroup>
-          <OdaraInsetRow label="Preferences" isFirst />
+          <OdaraInsetRow label="Saved" hint={savedHint} isFirst />
+          <OdaraInsetRow label="Scent History" hint={historyHint} />
         </OdaraInsetGroup>
       </div>
     </OdaraDestinationChrome>
@@ -3779,9 +3958,14 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 /* Planner / Settings — keep the existing simple inset list layout. */
-const OdaraMenuDestination: React.FC<{ page: OdaraMenuPage; onClose: () => void }> = ({ page, onClose }) => {
+const OdaraMenuDestination: React.FC<{
+  page: OdaraMenuPage;
+  onClose: () => void;
+  userId: string | null;
+  isGuestMode: boolean;
+}> = ({ page, onClose, userId, isGuestMode }) => {
   if (page === 'profile') {
-    return <OdaraProfilePage onClose={onClose} />;
+    return <OdaraProfilePage onClose={onClose} userId={userId} isGuestMode={isGuestMode} />;
   }
   const config = ODARA_MENU_PAGE_CONFIG[page];
   return (
@@ -8413,6 +8597,8 @@ const OdaraScreen = ({
         <OdaraMenuDestination
           page={menuPage}
           onClose={() => setMenuPage(null)}
+          userId={userId}
+          isGuestMode={isGuestMode}
         />
       )}
 
