@@ -2862,6 +2862,186 @@ function findFirstAllowedLayerModeCandidate(
   return null;
 }
 
+/* ------------------------------------------------------------------
+ * OdaraMenuDestination — Profile / Planner / Settings pages
+ * Inherits ODARA home visual language: dark atmosphere, restrained
+ * glow, grouped inset blocks, calm hierarchy. Not a generic settings
+ * clone.
+ * ------------------------------------------------------------------ */
+type OdaraMenuPage = 'profile' | 'planner' | 'settings';
+
+interface OdaraMenuRow {
+  label: string;
+  hint?: string;
+}
+interface OdaraMenuGroup {
+  eyebrow?: string;
+  emphasis?: boolean;
+  rows: OdaraMenuRow[];
+}
+
+const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
+  profile: {
+    title: 'Profile',
+    subtitle: 'Your scent intelligence',
+    groups: [
+      {
+        eyebrow: 'Identity',
+        emphasis: true,
+        rows: [
+          { label: 'Collection' },
+          { label: 'Taste Identity' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'Saved' },
+          { label: 'Scent History' },
+          { label: 'Preferences' },
+        ],
+      },
+    ],
+  },
+  planner: {
+    title: 'Planner',
+    subtitle: 'Forecast and intention',
+    groups: [
+      {
+        eyebrow: 'Forecast',
+        emphasis: true,
+        rows: [{ label: 'This Week' }],
+      },
+      {
+        eyebrow: 'Controls',
+        rows: [
+          { label: 'Locked Days' },
+          { label: 'Daisy Chain' },
+        ],
+      },
+    ],
+  },
+  settings: {
+    title: 'Settings',
+    subtitle: 'App and account',
+    groups: [
+      {
+        rows: [
+          { label: 'Help' },
+          { label: 'Feedback' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'App Settings' },
+          { label: 'Account' },
+        ],
+      },
+    ],
+  },
+};
+
+const OdaraMenuDestination: React.FC<{ page: OdaraMenuPage; onClose: () => void }> = ({ page, onClose }) => {
+  const config = ODARA_MENU_PAGE_CONFIG[page];
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex flex-col"
+      style={{
+        background:
+          'radial-gradient(120% 80% at 50% -10%, rgba(28,26,32,0.92) 0%, rgba(10,10,12,0.96) 55%, rgba(6,6,8,0.98) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        fontFamily: "'Geist Sans', system-ui, sans-serif",
+      }}
+      role="dialog"
+      aria-label={config.title}
+    >
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+        {/* Header — close + centered wordmark, matching home topbar rhythm */}
+        <div className="relative mb-5 flex items-center justify-between min-h-[40px]">
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <div
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
+          >
+            ODARA
+          </div>
+          <div className="h-10 w-10" />
+        </div>
+
+        {/* Page title */}
+        <div className="mb-6 px-1">
+          <h1
+            className="text-[28px] leading-[1.05] text-foreground/95"
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+          >
+            {config.title}
+          </h1>
+          <p className="mt-1.5 text-[12px] tracking-[0.08em] text-foreground/40">
+            {config.subtitle}
+          </p>
+        </div>
+
+        {/* Grouped inset blocks */}
+        <div className="flex flex-col gap-4">
+          {config.groups.map((group, gi) => (
+            <div key={gi}>
+              {group.eyebrow && (
+                <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+                  {group.eyebrow}
+                </div>
+              )}
+              <div
+                className="overflow-hidden rounded-[20px] border"
+                style={{
+                  borderColor: group.emphasis ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.07)',
+                  background: group.emphasis
+                    ? 'linear-gradient(180deg, rgba(26,27,32,0.78) 0%, rgba(16,17,21,0.78) 100%)'
+                    : 'linear-gradient(180deg, rgba(20,21,26,0.62) 0%, rgba(12,13,17,0.62) 100%)',
+                  backdropFilter: 'blur(18px)',
+                  WebkitBackdropFilter: 'blur(18px)',
+                  boxShadow: group.emphasis
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px rgba(0,0,0,0.32)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 26px rgba(0,0,0,0.22)',
+                }}
+              >
+                {group.rows.map((row, ri) => (
+                  <button
+                    key={row.label}
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] active:bg-white/[0.05]"
+                    style={{
+                      borderTop: ri === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <span
+                      className={`text-[15px] ${group.emphasis ? 'text-foreground/95' : 'text-foreground/82'}`}
+                      style={{ letterSpacing: '0.005em' }}
+                    >
+                      {row.label}
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/28">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
@@ -3658,186 +3838,6 @@ const OdaraScreen = ({
     const payloadDate = o?.wear_date ?? o?.main_bundle?.wear_date ?? null;
     if (payloadCtx && payloadCtx !== selectedContext) return null;
     if (payloadDate && payloadDate !== selectedDate) return null;
-
-/* ------------------------------------------------------------------
- * OdaraMenuDestination — Profile / Planner / Settings pages
- * Inherits ODARA home visual language: dark atmosphere, restrained
- * glow, grouped inset blocks, calm hierarchy. Not a generic settings
- * clone.
- * ------------------------------------------------------------------ */
-type OdaraMenuPage = 'profile' | 'planner' | 'settings';
-
-interface OdaraMenuRow {
-  label: string;
-  hint?: string;
-}
-interface OdaraMenuGroup {
-  eyebrow?: string;
-  emphasis?: boolean;
-  rows: OdaraMenuRow[];
-}
-
-const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
-  profile: {
-    title: 'Profile',
-    subtitle: 'Your scent intelligence',
-    groups: [
-      {
-        eyebrow: 'Identity',
-        emphasis: true,
-        rows: [
-          { label: 'Collection' },
-          { label: 'Taste Identity' },
-        ],
-      },
-      {
-        rows: [
-          { label: 'Saved' },
-          { label: 'Scent History' },
-          { label: 'Preferences' },
-        ],
-      },
-    ],
-  },
-  planner: {
-    title: 'Planner',
-    subtitle: 'Forecast and intention',
-    groups: [
-      {
-        eyebrow: 'Forecast',
-        emphasis: true,
-        rows: [{ label: 'This Week' }],
-      },
-      {
-        eyebrow: 'Controls',
-        rows: [
-          { label: 'Locked Days' },
-          { label: 'Daisy Chain' },
-        ],
-      },
-    ],
-  },
-  settings: {
-    title: 'Settings',
-    subtitle: 'App and account',
-    groups: [
-      {
-        rows: [
-          { label: 'Help' },
-          { label: 'Feedback' },
-        ],
-      },
-      {
-        rows: [
-          { label: 'App Settings' },
-          { label: 'Account' },
-        ],
-      },
-    ],
-  },
-};
-
-const OdaraMenuDestination: React.FC<{ page: OdaraMenuPage; onClose: () => void }> = ({ page, onClose }) => {
-  const config = ODARA_MENU_PAGE_CONFIG[page];
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex flex-col"
-      style={{
-        background:
-          'radial-gradient(120% 80% at 50% -10%, rgba(28,26,32,0.92) 0%, rgba(10,10,12,0.96) 55%, rgba(6,6,8,0.98) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        fontFamily: "'Geist Sans', system-ui, sans-serif",
-      }}
-      role="dialog"
-      aria-label={config.title}
-    >
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
-        {/* Header — close + centered wordmark, matching home topbar rhythm */}
-        <div className="relative mb-5 flex items-center justify-between min-h-[40px]">
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
-            style={{ WebkitTapHighlightColor: 'transparent' }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <div
-            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
-          >
-            ODARA
-          </div>
-          <div className="h-10 w-10" />
-        </div>
-
-        {/* Page title */}
-        <div className="mb-6 px-1">
-          <h1
-            className="text-[28px] leading-[1.05] text-foreground/95"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-          >
-            {config.title}
-          </h1>
-          <p className="mt-1.5 text-[12px] tracking-[0.08em] text-foreground/40">
-            {config.subtitle}
-          </p>
-        </div>
-
-        {/* Grouped inset blocks */}
-        <div className="flex flex-col gap-4">
-          {config.groups.map((group, gi) => (
-            <div key={gi}>
-              {group.eyebrow && (
-                <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
-                  {group.eyebrow}
-                </div>
-              )}
-              <div
-                className="overflow-hidden rounded-[20px] border"
-                style={{
-                  borderColor: group.emphasis ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.07)',
-                  background: group.emphasis
-                    ? 'linear-gradient(180deg, rgba(26,27,32,0.78) 0%, rgba(16,17,21,0.78) 100%)'
-                    : 'linear-gradient(180deg, rgba(20,21,26,0.62) 0%, rgba(12,13,17,0.62) 100%)',
-                  backdropFilter: 'blur(18px)',
-                  WebkitBackdropFilter: 'blur(18px)',
-                  boxShadow: group.emphasis
-                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px rgba(0,0,0,0.32)'
-                    : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 26px rgba(0,0,0,0.22)',
-                }}
-              >
-                {group.rows.map((row, ri) => (
-                  <button
-                    key={row.label}
-                    type="button"
-                    className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] active:bg-white/[0.05]"
-                    style={{
-                      borderTop: ri === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <span
-                      className={`text-[15px] ${group.emphasis ? 'text-foreground/95' : 'text-foreground/82'}`}
-                      style={{ letterSpacing: '0.005em' }}
-                    >
-                      {row.label}
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/28">
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
