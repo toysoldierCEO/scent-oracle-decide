@@ -2905,6 +2905,7 @@ const OdaraScreen = ({
     [signedInLockedHistoryDays, earlierCurrentWeekDays, forwardRailDays]
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPage, setMenuPage] = useState<null | 'profile' | 'planner' | 'settings'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
