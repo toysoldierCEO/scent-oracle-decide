@@ -790,15 +790,7 @@ const LayerCard = ({
     (sprayPattern?.why_it_works || whyText)
       ? { label: 'Why it works', value: sprayPattern?.why_it_works || whyText }
       : null,
-  ].filter(
-    (
-      section,
-    ): section is {
-      label: string;
-      value?: string;
-      placementRows?: { anchor: string; layer: string };
-    } => !!section,
-  );
+  ].filter((section): section is NonNullable<typeof section> => !!section);
 
   return (
     <div

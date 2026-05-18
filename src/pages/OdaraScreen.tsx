@@ -11,7 +11,7 @@ import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
@@ -1044,7 +1044,7 @@ export interface OracleLayer {
 
 export interface OracleAlternate {
   fragrance_id: string; name: string; family: string; reason: string;
-  brand?: string; notes?: string[]; accords?: string[];
+  brand?: string; notes?: string[]; accords?: string[]; image_url?: string;
   reason_chip_label?: string | null;
   reason_chip_explanation?: string | null;
 }
@@ -3365,6 +3365,445 @@ function findFirstAllowedLayerModeCandidate(
   return null;
 }
 
+/* ------------------------------------------------------------------
+ * OdaraMenuDestination — Profile / Planner / Settings pages
+ * Inherits ODARA home visual language: dark atmosphere, restrained
+ * glow, grouped inset blocks, calm hierarchy. Not a generic settings
+ * clone.
+ * ------------------------------------------------------------------ */
+type OdaraMenuPage = 'profile' | 'planner' | 'settings';
+
+interface OdaraMenuRow {
+  label: string;
+  hint?: string;
+}
+interface OdaraMenuGroup {
+  eyebrow?: string;
+  emphasis?: boolean;
+  rows: OdaraMenuRow[];
+}
+
+const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
+  profile: {
+    title: 'Profile',
+    subtitle: 'Your scent intelligence',
+    groups: [
+      {
+        eyebrow: 'Identity',
+        emphasis: true,
+        rows: [
+          { label: 'Collection' },
+          { label: 'Taste Identity' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'Saved' },
+          { label: 'Scent History' },
+          { label: 'Preferences' },
+        ],
+      },
+    ],
+  },
+  planner: {
+    title: 'Planner',
+    subtitle: 'Forecast and intention',
+    groups: [
+      {
+        eyebrow: 'Forecast',
+        emphasis: true,
+        rows: [{ label: 'This Week' }],
+      },
+      {
+        eyebrow: 'Controls',
+        rows: [
+          { label: 'Locked Days' },
+          { label: 'Daisy Chain' },
+        ],
+      },
+    ],
+  },
+  settings: {
+    title: 'Settings',
+    subtitle: 'App and account',
+    groups: [
+      {
+        rows: [
+          { label: 'Help' },
+          { label: 'Feedback' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'App Settings' },
+          { label: 'Account' },
+        ],
+      },
+    ],
+  },
+};
+
+/* Shared chrome for menu destination pages — back + ODARA wordmark + title. */
+const OdaraDestinationChrome: React.FC<{
+  title?: string;
+  eyebrow?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}> = ({ title, eyebrow, onClose, children }) => (
+  <div
+    className="fixed inset-0 z-[60] overflow-y-auto"
+    style={{
+      background:
+        'radial-gradient(120% 80% at 50% -10%, rgba(28,26,32,0.92) 0%, rgba(10,10,12,0.96) 55%, rgba(6,6,8,0.98) 100%)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      fontFamily: "'Geist Sans', system-ui, sans-serif",
+    }}
+    role="dialog"
+    aria-label={title || eyebrow || 'ODARA'}
+  >
+    <div
+      className="mx-auto flex w-full max-w-md flex-col px-4 pb-12"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+    >
+      <div className="relative mb-5 flex items-center justify-between min-h-[40px]">
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </button>
+        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90">
+          ODARA
+        </div>
+        <div className="h-10 w-10" />
+      </div>
+      {(eyebrow || title) && (
+        <div className={title ? 'mb-6 px-1' : 'mb-4 px-1'}>
+          {eyebrow && (
+            <div className={`${title ? 'mb-1.5' : ''} text-[10px] font-medium uppercase tracking-[0.36em] text-foreground/40`}>
+              {eyebrow}
+            </div>
+          )}
+          {title && (
+            <h1
+              className="text-[28px] leading-[1.05] text-foreground/95"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+            >
+              {title}
+            </h1>
+          )}
+        </div>
+      )}
+      {children}
+    </div>
+  </div>
+);
+
+const OdaraInsetGroup: React.FC<{
+  eyebrow?: string;
+  emphasis?: boolean;
+  children: React.ReactNode;
+}> = ({ eyebrow, emphasis, children }) => (
+  <div>
+    {eyebrow && (
+      <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+        {eyebrow}
+      </div>
+    )}
+    <div
+      className="overflow-hidden rounded-[20px] border"
+      style={{
+        borderColor: emphasis ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.07)',
+        background: emphasis
+          ? 'linear-gradient(180deg, rgba(26,27,32,0.78) 0%, rgba(16,17,21,0.78) 100%)'
+          : 'linear-gradient(180deg, rgba(20,21,26,0.62) 0%, rgba(12,13,17,0.62) 100%)',
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
+        boxShadow: emphasis
+          ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px rgba(0,0,0,0.32)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 26px rgba(0,0,0,0.22)',
+      }}
+    >
+      {children}
+    </div>
+  </div>
+);
+
+const OdaraInsetRow: React.FC<{
+  label: string;
+  hint?: string;
+  emphasis?: boolean;
+  isFirst?: boolean;
+}> = ({ label, hint, emphasis, isFirst }) => (
+  <button
+    type="button"
+    className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] active:bg-white/[0.05]"
+    style={{ borderTop: isFirst ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
+  >
+    <div className="flex min-w-0 flex-col">
+      <span
+        className={`text-[15px] ${emphasis ? 'text-foreground/95' : 'text-foreground/82'}`}
+        style={{ letterSpacing: '0.005em' }}
+      >
+        {label}
+      </span>
+      {hint && (
+        <span className="mt-0.5 text-[11px] text-foreground/40" style={{ letterSpacing: '0.01em' }}>
+          {hint}
+        </span>
+      )}
+    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/28">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  </button>
+);
+
+/* ------------------------------------------------------------------
+ * OdaraProfilePage — premium scent dossier
+ * ------------------------------------------------------------------ */
+const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [displayName, setDisplayName] = useState<string>('');
+  const [monogram, setMonogram] = useState<string>('');
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await odaraSupabase.auth.getUser();
+        if (!active) return;
+        const user = data?.user;
+        const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
+        const raw =
+          (typeof meta.full_name === 'string' && meta.full_name) ||
+          (typeof meta.name === 'string' && meta.name) ||
+          (typeof user?.email === 'string' && user.email.split('@')[0]) ||
+          '';
+        const name = String(raw).trim();
+        if (name) {
+          setDisplayName(name);
+          const parts = name.split(/[\s._-]+/).filter(Boolean);
+          const initials = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
+          setMonogram(initials.toUpperCase() || name[0]?.toUpperCase() || '');
+        }
+      } catch {
+        /* silent — render empty-state header */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Collection truth is not wired into this surface yet. Render elegant
+  // empty/loading state without inventing analytics.
+  const bottleCount: number | null = null;
+  const familySegments: Array<{ key: string; label: string; pct: number; color: string }> = [];
+
+  return (
+    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
+      {/* Single compact identity row — sits tight under DOSSIER label. */}
+      <div className="mb-6 flex items-center gap-3.5 px-1">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
+          style={{
+            border: '1px solid rgba(255,255,255,0.10)',
+            background:
+              'radial-gradient(80% 80% at 30% 20%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%, rgba(0,0,0,0) 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+          }}
+        >
+          {monogram || '—'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">Signed in</div>
+          <div
+            className="truncate text-[17px] leading-tight text-foreground/92"
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+          >
+            {displayName || '\u00A0'}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        {/* Insights — empty state until backend wires real signals. */}
+        <div>
+          <div className="mb-2 flex items-baseline justify-between px-2">
+            <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">Insights</div>
+          </div>
+          <div
+            className="rounded-[20px] border px-5 py-6"
+            style={{
+              borderColor: 'rgba(255,255,255,0.08)',
+              background: 'linear-gradient(180deg, rgba(22,23,28,0.7) 0%, rgba(13,14,18,0.7) 100%)',
+              backdropFilter: 'blur(18px)',
+              WebkitBackdropFilter: 'blur(18px)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Lean', value: '—' },
+                { label: 'Texture', value: '—' },
+                { label: 'Dominant family', value: '—' },
+                { label: 'Layering', value: '—' },
+                { label: 'Day / Night', value: '—' },
+                { label: 'Signature gravity', value: '—' },
+              ].map((cell) => (
+                <div
+                  key={cell.label}
+                  className="rounded-[14px] px-3 py-3"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    background: 'rgba(255,255,255,0.018)',
+                  }}
+                >
+                  <div className="text-[9.5px] uppercase tracking-[0.26em] text-foreground/38">{cell.label}</div>
+                  <div
+                    className="mt-1 text-[14px] text-foreground/82"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                  >
+                    {cell.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 text-[11px] leading-[1.55] text-foreground/40">
+              Signals will appear here once ODARA has read enough of your wear and reactions.
+            </div>
+          </div>
+        </div>
+
+        {/* Collection Coverage — donut with bottle total ONLY in center. */}
+        <div>
+          <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+            Collection Coverage
+          </div>
+          <div
+            className="rounded-[20px] border px-5 py-6"
+            style={{
+              borderColor: 'rgba(255,255,255,0.08)',
+              background: 'linear-gradient(180deg, rgba(22,23,28,0.7) 0%, rgba(13,14,18,0.7) 100%)',
+              backdropFilter: 'blur(18px)',
+              WebkitBackdropFilter: 'blur(18px)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
+            }}
+          >
+            <div className="flex items-center gap-5">
+              <div className="relative h-[124px] w-[124px] shrink-0">
+                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    fill="none"
+                    stroke="rgba(255,255,255,0.06)"
+                    strokeWidth="8"
+                  />
+                  {familySegments.length > 0 &&
+                    (() => {
+                      const circumference = 2 * Math.PI * 42;
+                      let offset = 0;
+                      return familySegments.map((seg) => {
+                        const len = (seg.pct / 100) * circumference;
+                        const el = (
+                          <circle
+                            key={seg.key}
+                            cx="50"
+                            cy="50"
+                            r="42"
+                            fill="none"
+                            stroke={seg.color}
+                            strokeWidth="8"
+                            strokeDasharray={`${len} ${circumference - len}`}
+                            strokeDashoffset={-offset}
+                            strokeLinecap="butt"
+                          />
+                        );
+                        offset += len;
+                        return el;
+                      });
+                    })()}
+                </svg>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <div
+                    className="text-[26px] leading-none text-foreground/92"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                  >
+                    {bottleCount ?? '—'}
+                  </div>
+                  <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
+                    Bottles
+                  </div>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div
+                  className="text-[15px] text-foreground/85"
+                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                >
+                  Family balance
+                </div>
+                <div className="mt-1.5 text-[11.5px] leading-[1.55] text-foreground/45">
+                  Coverage will draw across your owned families as your wardrobe takes shape.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Prioritized identity blocks. */}
+        <OdaraInsetGroup eyebrow="Identity" emphasis>
+          <OdaraInsetRow label="Collection" hint="Owned wardrobe" emphasis isFirst />
+          <OdaraInsetRow label="Taste Identity" hint="Lanes, textures, signature lean" emphasis />
+        </OdaraInsetGroup>
+
+        <OdaraInsetGroup eyebrow="Library">
+          <OdaraInsetRow label="Saved" isFirst />
+          <OdaraInsetRow label="Scent History" />
+        </OdaraInsetGroup>
+
+        <OdaraInsetGroup>
+          <OdaraInsetRow label="Preferences" isFirst />
+        </OdaraInsetGroup>
+      </div>
+    </OdaraDestinationChrome>
+  );
+};
+
+/* Planner / Settings — keep the existing simple inset list layout. */
+const OdaraMenuDestination: React.FC<{ page: OdaraMenuPage; onClose: () => void }> = ({ page, onClose }) => {
+  if (page === 'profile') {
+    return <OdaraProfilePage onClose={onClose} />;
+  }
+  const config = ODARA_MENU_PAGE_CONFIG[page];
+  return (
+    <OdaraDestinationChrome title={config.title} eyebrow={config.subtitle} onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        {config.groups.map((group, gi) => (
+          <OdaraInsetGroup key={gi} eyebrow={group.eyebrow} emphasis={group.emphasis}>
+            {group.rows.map((row, ri) => (
+              <OdaraInsetRow
+                key={row.label}
+                label={row.label}
+                emphasis={group.emphasis}
+                isFirst={ri === 0}
+              />
+            ))}
+          </OdaraInsetGroup>
+        ))}
+      </div>
+    </OdaraDestinationChrome>
+  );
+};
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
@@ -3408,6 +3847,7 @@ const OdaraScreen = ({
     [signedInLockedHistoryDays, earlierCurrentWeekDays, forwardRailDays]
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPage, setMenuPage] = useState<null | 'profile' | 'planner' | 'settings'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
@@ -7417,7 +7857,7 @@ const OdaraScreen = ({
       .filter((item) => item.label && item.originalIdx !== selectedAlternateIdx);
     const filteredGuestAlternates = filterAlternatesAgainstVisibleScents(
       guestAlternates,
-      (item) => item?.alternate?.hero ?? null,
+      (item: any) => item?.alternate?.hero ?? null,
       [hero, layer],
     );
 
@@ -7650,7 +8090,7 @@ const OdaraScreen = ({
       return Array.isArray(guestResolvedCurrentCard?.alternates) ? guestResolvedCurrentCard.alternates : [];
     }
 
-    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt, index) => ({
+    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt: any, index: number) => ({
       key: alt.fragrance_id || `signed-in-alt-${index}`,
       label: getDisplayName(alt.name, alt.brand ?? null),
       family: alt.family ?? '',
@@ -7890,63 +8330,91 @@ const OdaraScreen = ({
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-      <Sheet
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open);
-          if (open) setSearchOpen(false);
-        }}
-      >
-        <SheetContent
-          side="left"
-          className="w-[86vw] border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-[360px]"
-        >
-          <SheetHeader className="space-y-1 text-left">
-            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
-              Odara
-            </SheetTitle>
-            <SheetDescription className="text-[12px] text-foreground/48">
-              Quiet tools for the scent world.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 flex flex-col gap-1">
-            {ODARA_MENU_ITEMS.map((item) => {
-              const disabledForGuest = isGuestMode && item.guestRestricted;
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  disabled={disabledForGuest}
-                  onClick={() => setMenuOpen(false)}
-                  className={`flex items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] transition-colors ${
-                    disabledForGuest
-                      ? 'cursor-not-allowed text-foreground/30'
-                      : 'text-foreground/82 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {disabledForGuest && (
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/28">
-                      Sign-in required
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 border-t border-white/8 pt-4">
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="flex w-full items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] text-foreground/82 transition-colors hover:bg-white/[0.04]"
+      {/* Compact ODARA root menu — floating overlay anchored to the menu button.
+          Home stays visible behind. No full-screen takeover. */}
+      {menuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)' }}
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            className="fixed z-50 overflow-hidden"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 56px)',
+              left: 12,
+              width: 236,
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'linear-gradient(180deg, rgba(20,21,26,0.94) 0%, rgba(11,12,16,0.94) 100%)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              boxShadow: '0 28px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
+            }}
+            role="menu"
+          >
+            <div
+              className="px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
+              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
-              <span>Sign out</span>
-            </button>
+              ODARA
+            </div>
+            <div className="px-2 pb-1.5">
+              {([
+                { key: 'profile', label: 'Profile' },
+                { key: 'planner', label: 'Planner' },
+                { key: 'settings', label: 'Settings' },
+              ] as const).map((item) => {
+                const disabled = isGuestMode;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMenuPage(item.key);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors ${
+                      disabled
+                        ? 'cursor-not-allowed text-foreground/25'
+                        : 'text-foreground/88 hover:bg-white/[0.04] active:bg-white/[0.07]'
+                    }`}
+                  >
+                    <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
+                    {item.key !== 'profile' && (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-white/[0.06] px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onSignOut();
+                }}
+                className="flex w-full items-center rounded-[14px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.04] hover:text-foreground/85"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </>
+      )}
+
+      {/* Destination pages opened from the root menu. ODARA-native styling. */}
+      {menuPage && (
+        <OdaraMenuDestination
+          page={menuPage}
+          onClose={() => setMenuPage(null)}
+        />
+      )}
 
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
         {/* Top bar — chrome-less icons, inline expanding search. */}
