@@ -16,6 +16,7 @@ interface HeartReactionButtonProps {
   /** Optional haptic hook — fired after each state change. */
   onHaptic?: (intensity: 'light' | 'medium') => void;
   disabled?: boolean;
+  showInternalFeedback?: boolean;
 }
 
 /**
@@ -30,6 +31,7 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
   onChange,
   onHaptic,
   disabled,
+  showInternalFeedback = true,
 }) => {
   const [flashAt, setFlashAt] = useState<number>(0);
   const [labelTick, setLabelTick] = useState(0);
@@ -47,10 +49,14 @@ const HeartReactionButton: React.FC<HeartReactionButtonProps> = ({
     setFlashAt(Date.now());
     onHaptic?.(next === 2 ? 'medium' : 'light');
 
-    if (next === 1) setLabelText('Like');
-    else if (next === 2) setLabelText('Love');
-    else setLabelText('Off');
-    setLabelTick((t) => t + 1);
+    if (showInternalFeedback) {
+      if (next === 1) setLabelText('Like');
+      else if (next === 2) setLabelText('Love');
+      else setLabelText('Off');
+      setLabelTick((t) => t + 1);
+    } else {
+      setLabelText(null);
+    }
   };
 
   const flashing = flashAt && Date.now() - flashAt < 320;

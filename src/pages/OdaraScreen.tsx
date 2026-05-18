@@ -3371,7 +3371,8 @@ function findFirstAllowedLayerModeCandidate(
  * glow, grouped inset blocks, calm hierarchy. Not a generic settings
  * clone.
  * ------------------------------------------------------------------ */
-type OdaraMenuPage = 'profile' | 'planner' | 'settings';
+type OdaraMenuPage = 'profile' | 'planner' | 'settings' | 'collection';
+type OdaraMenuRootPage = Exclude<OdaraMenuPage, 'collection'>;
 
 interface OdaraMenuRow {
   label: string;
@@ -3383,7 +3384,7 @@ interface OdaraMenuGroup {
   rows: OdaraMenuRow[];
 }
 
-const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
+const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuRootPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
   profile: {
     title: 'Profile',
     subtitle: 'Your scent intelligence',
@@ -3540,9 +3541,11 @@ const OdaraInsetRow: React.FC<{
   hint?: string;
   emphasis?: boolean;
   isFirst?: boolean;
-}> = ({ label, hint, emphasis, isFirst }) => (
+  onClick?: () => void;
+}> = ({ label, hint, emphasis, isFirst, onClick }) => (
   <button
     type="button"
+    onClick={onClick}
     className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] active:bg-white/[0.05]"
     style={{ borderTop: isFirst ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
   >
@@ -3611,16 +3614,80 @@ type OdaraProfileDossierPayload = {
     saved_count: number;
     history_count: number;
     recipes_count: number;
+    liked_count?: number;
+    loved_count?: number;
+    preference_count?: number;
     saved_empty_reason: string | null;
     history_empty_reason: string | null;
+  };
+  preference_summary?: {
+    liked_count: number;
+    loved_count: number;
+    preference_count: number;
+    favorite_lane: string | null;
+    favorite_lane_confidence: string | null;
+    favorite_lane_empty_reason: string | null;
+    house_gravity: string | null;
+    house_gravity_confidence: string | null;
+    house_gravity_empty_reason: string | null;
+  };
+  mode_context_summary?: {
+    mode_lock_counts: Record<string, number>;
+    context_lock_counts: Record<string, number>;
+    most_locked_mode: string | null;
+    most_locked_context: string | null;
+    enough_data: boolean;
+    empty_reason: string | null;
   };
   data_quality: {
     has_collection: boolean;
     has_history: boolean;
     has_wear_trials: boolean;
     has_saved: boolean;
+    has_preferences?: boolean;
     has_guest_collection: boolean;
   };
+};
+
+type OdaraCollectionPreferenceState = 'neutral' | 'liked' | 'loved';
+
+type OdaraCollectionItem = {
+  fragrance_id: string | null;
+  name: string | null;
+  brand: string | null;
+  family_key: string | null;
+  family_label: string | null;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  collection_status: string | null;
+  preference_state: OdaraCollectionPreferenceState;
+};
+
+type OdaraCollectionPayload = {
+  collection_contract_version: string;
+  surface_type: 'signed_in' | 'guest';
+  read_only?: boolean;
+  items: OdaraCollectionItem[];
+  summary: {
+    owned_count: number;
+    signature_count?: number;
+    liked_count: number;
+    loved_count: number;
+    preference_count: number;
+  };
+  empty_reason: string | null;
+};
+
+type OdaraCollectionPreferenceWriteResult = {
+  fragrance_id: string;
+  preference_state: OdaraCollectionPreferenceState;
+  removed: boolean;
+  source: string | null;
+  updated_at: string | null;
+  last_event_at: string | null;
+  liked_count: number;
+  loved_count: number;
+  preference_count: number;
 };
 
 function deriveProfileMonogram(value: string | null | undefined): string {
@@ -3653,8 +3720,49 @@ function resolveProfileInsightText(
   return { value: insight.empty_reason ?? 'Not enough signal yet', isEmpty: true };
 }
 
-const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; isGuestMode: boolean }> = ({
+function getPreferenceStateFromHeartState(state: HeartState): OdaraCollectionPreferenceState {
+  if (state === 2) return 'loved';
+  if (state === 1) return 'liked';
+  return 'neutral';
+}
+
+function getHeartStateFromPreferenceState(state: OdaraCollectionPreferenceState | null | undefined): HeartState {
+  if (state === 'loved') return 2;
+  if (state === 'liked') return 1;
+  return 0;
+}
+
+function getCollectionPreferenceFeedback(state: OdaraCollectionPreferenceState): string {
+  if (state === 'loved') return 'Loved';
+  if (state === 'liked') return 'Liked';
+  return 'Removed';
+}
+
+function sortCollectionItems(items: OdaraCollectionItem[]): OdaraCollectionItem[] {
+  return [...items].sort((a, b) => {
+    const preferenceRank = (value: OdaraCollectionPreferenceState) => {
+      if (value === 'loved') return 0;
+      if (value === 'liked') return 1;
+      return 2;
+    };
+    const statusRank = (value: string | null | undefined) => (value === 'signature' ? 0 : 1);
+    return (
+      preferenceRank(a.preference_state) - preferenceRank(b.preference_state)
+      || statusRank(a.collection_status) - statusRank(b.collection_status)
+      || (a.brand ?? '').localeCompare(b.brand ?? '', undefined, { sensitivity: 'base' })
+      || (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' })
+    );
+  });
+}
+
+const OdaraProfilePage: React.FC<{
+  onClose: () => void;
+  onOpenCollection: () => void;
+  userId: string | null;
+  isGuestMode: boolean;
+}> = ({
   onClose,
+  onOpenCollection,
   userId,
   isGuestMode,
 }) => {
@@ -3766,17 +3874,25 @@ const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; i
   const collectionHint = profileLoading
     ? 'Loading real collection…'
     : bottleCount && bottleCount > 0
-      ? formatProfileCount(bottleCount, 'bottle')
+      ? [
+          formatProfileCount(bottleCount, 'bottle'),
+          !isGuestMode ? `${profilePayload?.preference_summary?.liked_count ?? 0} liked` : null,
+          !isGuestMode ? `${profilePayload?.preference_summary?.loved_count ?? 0} loved` : null,
+        ].filter(Boolean).join(' · ')
       : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
   const tasteHint = profileLoading
     ? 'Reading profile signal…'
-    : [
-        profilePayload?.insights?.dominant_family?.value,
-        profilePayload?.insights?.texture?.value,
-      ].filter(Boolean).join(' · ')
-      || profilePayload?.insights?.lean?.value
-      || profilePayload?.insights?.lean?.empty_reason
-      || 'Not enough signal yet.';
+    : profilePayload?.preference_summary?.favorite_lane
+      ?? (
+        [
+          profilePayload?.insights?.dominant_family?.value,
+          profilePayload?.insights?.texture?.value,
+        ].filter(Boolean).join(' · ')
+        || profilePayload?.preference_summary?.favorite_lane_empty_reason
+        || profilePayload?.insights?.lean?.value
+        || profilePayload?.insights?.lean?.empty_reason
+        || 'Not enough signal yet.'
+      );
   const savedHint = profileLoading
     ? 'Loading saved signal…'
     : profilePayload
@@ -3795,6 +3911,16 @@ const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; i
             : profilePayload.library.history_empty_reason ?? 'No real scent history yet.'
         )
       : 'No real scent history yet.';
+  const preferenceHint = !isGuestMode
+    ? (
+        (profilePayload?.preference_summary?.preference_count ?? 0) > 0
+          ? `${profilePayload?.preference_summary?.preference_count ?? 0} real preference signals`
+          : profilePayload?.preference_summary?.favorite_lane_empty_reason ?? 'Like or love bottles in Collection to sharpen this.'
+      )
+    : 'Guest preview stays read-only.';
+  const preferenceNudge = !isGuestMode && (profilePayload?.preference_summary?.preference_count ?? 0) < 3
+    ? ' Like or love bottles in Collection to sharpen this.'
+    : '';
 
   return (
     <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
@@ -3859,7 +3985,7 @@ const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; i
               ))}
             </div>
             <div className="mt-4 text-[11px] leading-[1.55] text-foreground/40">
-              {insightNote}
+              {`${insightNote}${preferenceNudge}`}
             </div>
           </div>
         </div>
@@ -3944,13 +4070,239 @@ const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; i
 
         {/* Prioritized identity blocks. */}
         <OdaraInsetGroup eyebrow="Identity" emphasis>
-          <OdaraInsetRow label="Collection" hint={collectionHint} emphasis isFirst />
+          <OdaraInsetRow label="Collection" hint={collectionHint} emphasis isFirst onClick={onOpenCollection} />
           <OdaraInsetRow label="Taste Identity" hint={tasteHint} emphasis />
         </OdaraInsetGroup>
 
         <OdaraInsetGroup eyebrow="Library">
           <OdaraInsetRow label="Saved" hint={savedHint} isFirst />
           <OdaraInsetRow label="Scent History" hint={historyHint} />
+          <OdaraInsetRow label="Preferences" hint={preferenceHint} />
+        </OdaraInsetGroup>
+      </div>
+    </OdaraDestinationChrome>
+  );
+};
+
+const OdaraCollectionPage: React.FC<{
+  onClose: () => void;
+  userId: string | null;
+  isGuestMode: boolean;
+}> = ({ onClose, userId, isGuestMode }) => {
+  const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
+  const [feedbackById, setFeedbackById] = useState<Record<string, { text: string; tone: 'success' | 'error' }>>({});
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isGuestMode && !userId) {
+      setPayload(null);
+      setLoading(false);
+      setError('No signed-in collection is available yet.');
+      return () => {
+        active = false;
+      };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      const rpcName = isGuestMode ? 'get_guest_collection_preview_v1' : 'get_user_collection_preferences_v1';
+      const rpcArgs = isGuestMode ? {} : { p_user_id: userId };
+      const { data, error: rpcError } = await odaraSupabase.rpc(rpcName as any, rpcArgs as any);
+
+      if (!active) return;
+
+      if (rpcError) {
+        setPayload(null);
+        setError(rpcError.message || 'Could not load the live collection yet.');
+        setLoading(false);
+        return;
+      }
+
+      const nextPayload = (data ?? null) as OdaraCollectionPayload | null;
+      setPayload(
+        nextPayload
+          ? { ...nextPayload, items: sortCollectionItems(nextPayload.items ?? []) }
+          : null
+      );
+      setLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isGuestMode, userId]);
+
+  const handlePreferenceChange = useCallback(async (item: OdaraCollectionItem, nextHeartState: HeartState) => {
+    if (isGuestMode || !item.fragrance_id) return;
+    const nextState = getPreferenceStateFromHeartState(nextHeartState);
+
+    setPendingById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
+    setFeedbackById((prev) => {
+      const next = { ...prev };
+      delete next[item.fragrance_id as string];
+      return next;
+    });
+
+    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
+      p_fragrance_id: item.fragrance_id,
+      p_next_state: nextState,
+      p_source: 'collection',
+    } as any);
+
+    if (rpcError || !data) {
+      setPendingById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+      setFeedbackById((prev) => ({
+        ...prev,
+        [item.fragrance_id as string]: {
+          text: rpcError?.message || 'Could not save preference.',
+          tone: 'error',
+        },
+      }));
+      return;
+    }
+
+    const result = data as OdaraCollectionPreferenceWriteResult;
+    setPayload((prev) => {
+      if (!prev) return prev;
+      const nextItems = sortCollectionItems(
+        (prev.items ?? []).map((entry) => (
+          entry.fragrance_id === result.fragrance_id
+            ? { ...entry, preference_state: result.preference_state }
+            : entry
+        ))
+      );
+      return {
+        ...prev,
+        items: nextItems,
+        summary: {
+          ...prev.summary,
+          liked_count: result.liked_count,
+          loved_count: result.loved_count,
+          preference_count: result.preference_count,
+        },
+      };
+    });
+    setPendingById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+    setFeedbackById((prev) => ({
+      ...prev,
+      [item.fragrance_id as string]: {
+        text: getCollectionPreferenceFeedback(result.preference_state),
+        tone: 'success',
+      },
+    }));
+  }, [isGuestMode]);
+
+  const headline = isGuestMode ? 'Demo Collection' : 'My Collection';
+  const subtitle = loading
+    ? 'Reading the real wardrobe…'
+    : error
+      ? error
+      : isGuestMode
+        ? 'Guest preview uses the real demo wardrobe and stays read-only.'
+        : [
+            formatProfileCount(payload?.summary?.owned_count ?? 0, 'bottle'),
+            `${payload?.summary?.liked_count ?? 0} liked`,
+            `${payload?.summary?.loved_count ?? 0} loved`,
+          ].join(' · ');
+
+  return (
+    <OdaraDestinationChrome eyebrow="Collection" title={headline} onClose={onClose}>
+      <div className="mb-5 px-1 text-[11px] leading-[1.55] text-foreground/42">
+        {subtitle}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <OdaraInsetGroup emphasis>
+          <div className="px-4 py-3.5 text-[10px] uppercase tracking-[0.28em] text-foreground/38">
+            {loading
+              ? 'Loading real collection'
+              : isGuestMode
+                ? 'Demo wardrobe'
+                : 'Owned bottles and preference signal'}
+          </div>
+          {(payload?.items?.length ?? 0) === 0 && (
+            <div className="px-4 pb-4 text-[12px] leading-[1.55] text-foreground/46">
+              {error ?? payload?.empty_reason ?? 'No real bottles are available yet.'}
+            </div>
+          )}
+          {(payload?.items ?? []).map((item, index) => {
+            const itemKey = item.fragrance_id ?? `${item.brand ?? 'brand'}|${item.name ?? 'name'}|${index}`;
+            const feedback = feedbackById[itemKey];
+            const statusLabel = item.collection_status === 'signature' ? 'Signature' : item.collection_status === 'guest_demo' ? 'Demo' : 'Owned';
+            const imageUrl = item.thumbnail_url ?? item.image_url ?? null;
+            return (
+              <div
+                key={itemKey}
+                className="flex items-center gap-3 px-4 py-3.5"
+                style={{ borderTop: index === 0 ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(255,255,255,0.05)' }}
+              >
+                <div
+                  className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border text-[12px] uppercase tracking-[0.14em] text-foreground/42"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+                  }}
+                >
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={item.name ?? 'Fragrance bottle'} className="h-full w-full object-cover" />
+                  ) : (
+                    deriveProfileMonogram(item.name ?? item.brand ?? 'Bottle')
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="truncate text-[16px] text-foreground/92"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                    >
+                      {item.name ?? 'Unnamed fragrance'}
+                    </div>
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] text-foreground/42"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.025)',
+                      }}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.24em] text-foreground/38">
+                    {item.brand ?? 'Brand unavailable'}
+                  </div>
+                  <div className="mt-1 text-[11px] leading-[1.45] text-foreground/48">
+                    {item.family_label ?? 'Family still labeling.'}
+                  </div>
+                  {feedback && (
+                    <div className={`mt-1 text-[10px] ${feedback.tone === 'error' ? 'text-rose-300/80' : 'text-foreground/54'}`}>
+                      {feedback.text}
+                    </div>
+                  )}
+                </div>
+                {isGuestMode ? (
+                  <div className="text-[9px] uppercase tracking-[0.22em] text-foreground/34">
+                    Read only
+                  </div>
+                ) : (
+                  <HeartReactionButton
+                    state={getHeartStateFromPreferenceState(item.preference_state)}
+                    disabled={!!pendingById[itemKey] || !item.fragrance_id}
+                    showInternalFeedback={false}
+                    onChange={(next) => {
+                      void handlePreferenceChange(item, next);
+                    }}
+                    onHaptic={(intensity) => haptic(intensity === 'medium' ? 'success' : 'selection')}
+                  />
+                )}
+              </div>
+            );
+          })}
         </OdaraInsetGroup>
       </div>
     </OdaraDestinationChrome>
@@ -3961,11 +4313,22 @@ const OdaraProfilePage: React.FC<{ onClose: () => void; userId: string | null; i
 const OdaraMenuDestination: React.FC<{
   page: OdaraMenuPage;
   onClose: () => void;
+  onOpenCollection: () => void;
   userId: string | null;
   isGuestMode: boolean;
-}> = ({ page, onClose, userId, isGuestMode }) => {
+}> = ({ page, onClose, onOpenCollection, userId, isGuestMode }) => {
   if (page === 'profile') {
-    return <OdaraProfilePage onClose={onClose} userId={userId} isGuestMode={isGuestMode} />;
+    return (
+      <OdaraProfilePage
+        onClose={onClose}
+        onOpenCollection={onOpenCollection}
+        userId={userId}
+        isGuestMode={isGuestMode}
+      />
+    );
+  }
+  if (page === 'collection') {
+    return <OdaraCollectionPage onClose={onClose} userId={userId} isGuestMode={isGuestMode} />;
   }
   const config = ODARA_MENU_PAGE_CONFIG[page];
   return (
@@ -4031,7 +4394,7 @@ const OdaraScreen = ({
     [signedInLockedHistoryDays, earlierCurrentWeekDays, forwardRailDays]
   );
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPage, setMenuPage] = useState<null | 'profile' | 'planner' | 'settings'>(null);
+  const [menuPage, setMenuPage] = useState<OdaraMenuPage | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
@@ -8596,7 +8959,8 @@ const OdaraScreen = ({
       {menuPage && (
         <OdaraMenuDestination
           page={menuPage}
-          onClose={() => setMenuPage(null)}
+          onClose={() => setMenuPage(menuPage === 'collection' ? 'profile' : null)}
+          onOpenCollection={() => setMenuPage('collection')}
           userId={userId}
           isGuestMode={isGuestMode}
         />
