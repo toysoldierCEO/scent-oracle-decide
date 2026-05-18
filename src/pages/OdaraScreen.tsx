@@ -11,7 +11,7 @@ import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
@@ -2862,6 +2862,186 @@ function findFirstAllowedLayerModeCandidate(
   return null;
 }
 
+/* ------------------------------------------------------------------
+ * OdaraMenuDestination — Profile / Planner / Settings pages
+ * Inherits ODARA home visual language: dark atmosphere, restrained
+ * glow, grouped inset blocks, calm hierarchy. Not a generic settings
+ * clone.
+ * ------------------------------------------------------------------ */
+type OdaraMenuPage = 'profile' | 'planner' | 'settings';
+
+interface OdaraMenuRow {
+  label: string;
+  hint?: string;
+}
+interface OdaraMenuGroup {
+  eyebrow?: string;
+  emphasis?: boolean;
+  rows: OdaraMenuRow[];
+}
+
+const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
+  profile: {
+    title: 'Profile',
+    subtitle: 'Your scent intelligence',
+    groups: [
+      {
+        eyebrow: 'Identity',
+        emphasis: true,
+        rows: [
+          { label: 'Collection' },
+          { label: 'Taste Identity' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'Saved' },
+          { label: 'Scent History' },
+          { label: 'Preferences' },
+        ],
+      },
+    ],
+  },
+  planner: {
+    title: 'Planner',
+    subtitle: 'Forecast and intention',
+    groups: [
+      {
+        eyebrow: 'Forecast',
+        emphasis: true,
+        rows: [{ label: 'This Week' }],
+      },
+      {
+        eyebrow: 'Controls',
+        rows: [
+          { label: 'Locked Days' },
+          { label: 'Daisy Chain' },
+        ],
+      },
+    ],
+  },
+  settings: {
+    title: 'Settings',
+    subtitle: 'App and account',
+    groups: [
+      {
+        rows: [
+          { label: 'Help' },
+          { label: 'Feedback' },
+        ],
+      },
+      {
+        rows: [
+          { label: 'App Settings' },
+          { label: 'Account' },
+        ],
+      },
+    ],
+  },
+};
+
+const OdaraMenuDestination: React.FC<{ page: OdaraMenuPage; onClose: () => void }> = ({ page, onClose }) => {
+  const config = ODARA_MENU_PAGE_CONFIG[page];
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex flex-col"
+      style={{
+        background:
+          'radial-gradient(120% 80% at 50% -10%, rgba(28,26,32,0.92) 0%, rgba(10,10,12,0.96) 55%, rgba(6,6,8,0.98) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        fontFamily: "'Geist Sans', system-ui, sans-serif",
+      }}
+      role="dialog"
+      aria-label={config.title}
+    >
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+        {/* Header — close + centered wordmark, matching home topbar rhythm */}
+        <div className="relative mb-5 flex items-center justify-between min-h-[40px]">
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <div
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
+          >
+            ODARA
+          </div>
+          <div className="h-10 w-10" />
+        </div>
+
+        {/* Page title */}
+        <div className="mb-6 px-1">
+          <h1
+            className="text-[28px] leading-[1.05] text-foreground/95"
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+          >
+            {config.title}
+          </h1>
+          <p className="mt-1.5 text-[12px] tracking-[0.08em] text-foreground/40">
+            {config.subtitle}
+          </p>
+        </div>
+
+        {/* Grouped inset blocks */}
+        <div className="flex flex-col gap-4">
+          {config.groups.map((group, gi) => (
+            <div key={gi}>
+              {group.eyebrow && (
+                <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+                  {group.eyebrow}
+                </div>
+              )}
+              <div
+                className="overflow-hidden rounded-[20px] border"
+                style={{
+                  borderColor: group.emphasis ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.07)',
+                  background: group.emphasis
+                    ? 'linear-gradient(180deg, rgba(26,27,32,0.78) 0%, rgba(16,17,21,0.78) 100%)'
+                    : 'linear-gradient(180deg, rgba(20,21,26,0.62) 0%, rgba(12,13,17,0.62) 100%)',
+                  backdropFilter: 'blur(18px)',
+                  WebkitBackdropFilter: 'blur(18px)',
+                  boxShadow: group.emphasis
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px rgba(0,0,0,0.32)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 26px rgba(0,0,0,0.22)',
+                }}
+              >
+                {group.rows.map((row, ri) => (
+                  <button
+                    key={row.label}
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] active:bg-white/[0.05]"
+                    style={{
+                      borderTop: ri === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <span
+                      className={`text-[15px] ${group.emphasis ? 'text-foreground/95' : 'text-foreground/82'}`}
+                      style={{ letterSpacing: '0.005em' }}
+                    >
+                      {row.label}
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/28">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OdaraScreen = ({
   oracle, oracleLoading, oracleError, onSignOut,
   selectedContext, onContextChange,
@@ -2905,6 +3085,7 @@ const OdaraScreen = ({
     [signedInLockedHistoryDays, earlierCurrentWeekDays, forwardRailDays]
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPage, setMenuPage] = useState<null | 'profile' | 'planner' | 'settings'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
@@ -7275,63 +7456,89 @@ const OdaraScreen = ({
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-      <Sheet
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open);
-          if (open) setSearchOpen(false);
-        }}
-      >
-        <SheetContent
-          side="left"
-          className="w-[86vw] border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-[360px]"
-        >
-          <SheetHeader className="space-y-1 text-left">
-            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
-              Odara
-            </SheetTitle>
-            <SheetDescription className="text-[12px] text-foreground/48">
-              Quiet tools for the scent world.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 flex flex-col gap-1">
-            {ODARA_MENU_ITEMS.map((item) => {
-              const disabledForGuest = isGuestMode && item.guestRestricted;
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  disabled={disabledForGuest}
-                  onClick={() => setMenuOpen(false)}
-                  className={`flex items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] transition-colors ${
-                    disabledForGuest
-                      ? 'cursor-not-allowed text-foreground/30'
-                      : 'text-foreground/82 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {disabledForGuest && (
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/28">
-                      Sign-in required
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 border-t border-white/8 pt-4">
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="flex w-full items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] text-foreground/82 transition-colors hover:bg-white/[0.04]"
+      {/* Compact ODARA root menu — floating overlay anchored to the menu button.
+          Home stays visible behind. No full-screen takeover. */}
+      {menuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)' }}
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            className="fixed z-50 overflow-hidden"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 56px)',
+              left: 12,
+              width: 236,
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'linear-gradient(180deg, rgba(20,21,26,0.94) 0%, rgba(11,12,16,0.94) 100%)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              boxShadow: '0 28px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
+            }}
+            role="menu"
+          >
+            <div
+              className="px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
+              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
-              <span>Sign out</span>
-            </button>
+              ODARA
+            </div>
+            <div className="px-2 pb-1.5">
+              {([
+                { key: 'profile', label: 'Profile' },
+                { key: 'planner', label: 'Planner' },
+                { key: 'settings', label: 'Settings' },
+              ] as const).map((item) => {
+                const disabled = isGuestMode;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMenuPage(item.key);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors ${
+                      disabled
+                        ? 'cursor-not-allowed text-foreground/25'
+                        : 'text-foreground/88 hover:bg-white/[0.04] active:bg-white/[0.07]'
+                    }`}
+                  >
+                    <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-white/[0.06] px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onSignOut();
+                }}
+                className="flex w-full items-center rounded-[14px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.04] hover:text-foreground/85"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </>
+      )}
+
+      {/* Destination pages opened from the root menu. ODARA-native styling. */}
+      {menuPage && (
+        <OdaraMenuDestination
+          page={menuPage}
+          onClose={() => setMenuPage(null)}
+        />
+      )}
 
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
         {/* Top bar — chrome-less icons, inline expanding search. */}
