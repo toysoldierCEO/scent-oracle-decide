@@ -1044,7 +1044,7 @@ export interface OracleLayer {
 
 export interface OracleAlternate {
   fragrance_id: string; name: string; family: string; reason: string;
-  brand?: string; notes?: string[]; accords?: string[];
+  brand?: string; notes?: string[]; accords?: string[]; image_url?: string;
   reason_chip_label?: string | null;
   reason_chip_explanation?: string | null;
 }
@@ -7064,7 +7064,7 @@ const OdaraScreen = ({
       .filter((item) => item.label && item.originalIdx !== selectedAlternateIdx);
     const filteredGuestAlternates = filterAlternatesAgainstVisibleScents(
       guestAlternates,
-      (item) => item?.alternate?.hero ?? null,
+      (item: any) => item?.alternate?.hero ?? null,
       [hero, layer],
     );
 
@@ -7240,7 +7240,7 @@ const OdaraScreen = ({
       return Array.isArray(guestResolvedCurrentCard?.alternates) ? guestResolvedCurrentCard.alternates : [];
     }
 
-    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt, index) => ({
+    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt: any, index: number) => ({
       key: alt.fragrance_id || `signed-in-alt-${index}`,
       label: getDisplayName(alt.name, alt.brand ?? null),
       family: alt.family ?? '',
