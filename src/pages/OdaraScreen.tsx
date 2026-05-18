@@ -7276,63 +7276,89 @@ const OdaraScreen = ({
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-      <Sheet
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open);
-          if (open) setSearchOpen(false);
-        }}
-      >
-        <SheetContent
-          side="left"
-          className="w-[86vw] border-white/10 bg-[#11100e] px-5 pt-12 pb-5 text-foreground sm:max-w-[360px]"
-        >
-          <SheetHeader className="space-y-1 text-left">
-            <SheetTitle className="text-[12px] font-medium uppercase tracking-[0.24em] text-foreground/86">
-              Odara
-            </SheetTitle>
-            <SheetDescription className="text-[12px] text-foreground/48">
-              Quiet tools for the scent world.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 flex flex-col gap-1">
-            {ODARA_MENU_ITEMS.map((item) => {
-              const disabledForGuest = isGuestMode && item.guestRestricted;
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  disabled={disabledForGuest}
-                  onClick={() => setMenuOpen(false)}
-                  className={`flex items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] transition-colors ${
-                    disabledForGuest
-                      ? 'cursor-not-allowed text-foreground/30'
-                      : 'text-foreground/82 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {disabledForGuest && (
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/28">
-                      Sign-in required
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 border-t border-white/8 pt-4">
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="flex w-full items-center justify-between rounded-[16px] px-3.5 py-3 text-left text-[14px] text-foreground/82 transition-colors hover:bg-white/[0.04]"
+      {/* Compact ODARA root menu — floating overlay anchored to the menu button.
+          Home stays visible behind. No full-screen takeover. */}
+      {menuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)' }}
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            className="fixed z-50 overflow-hidden"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 56px)',
+              left: 12,
+              width: 236,
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'linear-gradient(180deg, rgba(20,21,26,0.94) 0%, rgba(11,12,16,0.94) 100%)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              boxShadow: '0 28px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
+            }}
+            role="menu"
+          >
+            <div
+              className="px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
+              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
-              <span>Sign out</span>
-            </button>
+              ODARA
+            </div>
+            <div className="px-2 pb-1.5">
+              {([
+                { key: 'profile', label: 'Profile' },
+                { key: 'planner', label: 'Planner' },
+                { key: 'settings', label: 'Settings' },
+              ] as const).map((item) => {
+                const disabled = isGuestMode;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMenuPage(item.key);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors ${
+                      disabled
+                        ? 'cursor-not-allowed text-foreground/25'
+                        : 'text-foreground/88 hover:bg-white/[0.04] active:bg-white/[0.07]'
+                    }`}
+                  >
+                    <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-white/[0.06] px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onSignOut();
+                }}
+                className="flex w-full items-center rounded-[14px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.04] hover:text-foreground/85"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </>
+      )}
+
+      {/* Destination pages opened from the root menu. ODARA-native styling. */}
+      {menuPage && (
+        <OdaraMenuDestination
+          page={menuPage}
+          onClose={() => setMenuPage(null)}
+        />
+      )}
 
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
         {/* Top bar — chrome-less icons, inline expanding search. */}
