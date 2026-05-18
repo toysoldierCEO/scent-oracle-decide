@@ -11,7 +11,7 @@ import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { haptic } from "@/lib/haptics";
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
 // NOTE: guest-content.ts is INTENTIONALLY no longer imported.
 // Guest mode renders strictly from the backend payload returned by
 // get_guest_oracle_home_v1 (today_pick, layer, alternates, layer_modes,
