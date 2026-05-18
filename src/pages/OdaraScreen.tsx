@@ -7064,7 +7064,7 @@ const OdaraScreen = ({
       .filter((item) => item.label && item.originalIdx !== selectedAlternateIdx);
     const filteredGuestAlternates = filterAlternatesAgainstVisibleScents(
       guestAlternates,
-      (item) => item?.alternate?.hero ?? null,
+      (item: any) => item?.alternate?.hero ?? null,
       [hero, layer],
     );
 
