@@ -7240,7 +7240,7 @@ const OdaraScreen = ({
       return Array.isArray(guestResolvedCurrentCard?.alternates) ? guestResolvedCurrentCard.alternates : [];
     }
 
-    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt, index) => ({
+    return (signedInResolvedCurrentCard?.alternates ?? []).map((alt: any, index: number) => ({
       key: alt.fragrance_id || `signed-in-alt-${index}`,
       label: getDisplayName(alt.name, alt.brand ?? null),
       family: alt.family ?? '',
