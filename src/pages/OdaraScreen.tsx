@@ -7764,9 +7764,11 @@ const OdaraScreen = ({
                     }`}
                   >
                     <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
+                    {item.key !== 'profile' && (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    )}
                   </button>
                 );
               })}
