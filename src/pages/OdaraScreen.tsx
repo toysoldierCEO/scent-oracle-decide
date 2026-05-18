@@ -1329,6 +1329,12 @@ function getPreviousDateKey(dateStr: string) {
   return fmtLocalDateStr(d);
 }
 
+function getNextDateKey(dateStr: string) {
+  const d = parseLocalDateKey(dateStr);
+  d.setDate(d.getDate() + 1);
+  return fmtLocalDateStr(d);
+}
+
 /* ── Lock state type ── */
 type LockState = 'neutral' | 'locked' | 'skipping';
 type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
@@ -1945,6 +1951,7 @@ function mergeQueuedHeroCardSources(
 }
 
 function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard | null | undefined) {
+  if (a === b) return true;
   if (!a || !b) return false;
   return (
     a.fragrance_id === b.fragrance_id &&
@@ -1958,6 +1965,134 @@ function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard |
     a.notes.every((note, idx) => note === b.notes[idx]) &&
     a.accords.length === b.accords.length &&
     a.accords.every((accord, idx) => accord === b.accords[idx])
+  );
+}
+
+function areSameDisplayCardLists(
+  a: Array<DisplayCard | null | undefined> | null | undefined,
+  b: Array<DisplayCard | null | undefined> | null | undefined,
+) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => areSameDisplayCards(entry ?? null, right[index] ?? null));
+}
+
+function areSameOracleAlternates(
+  a: OracleAlternate[] | null | undefined,
+  b: OracleAlternate[] | null | undefined,
+) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => {
+    const other = right[index];
+    return (
+      (entry?.fragrance_id ?? null) === (other?.fragrance_id ?? null)
+      && (entry?.name ?? '') === (other?.name ?? '')
+      && (entry?.brand ?? '') === (other?.brand ?? '')
+      && (entry?.family ?? '') === (other?.family ?? '')
+      && (entry?.reason ?? '') === (other?.reason ?? '')
+      && (entry?.reason_chip_label ?? null) === (other?.reason_chip_label ?? null)
+      && (entry?.reason_chip_explanation ?? null) === (other?.reason_chip_explanation ?? null)
+    );
+  });
+}
+
+function areSameLayerIndexMap(
+  current: Record<LayerMood, number>,
+  next: Record<LayerMood, number>,
+) {
+  return (
+    current.balance === next.balance
+    && current.bold === next.bold
+    && current.smooth === next.smooth
+    && current.wild === next.wild
+  );
+}
+
+const DEFAULT_LAYER_INDEX_MAP: Record<LayerMood, number> = {
+  balance: 0,
+  bold: 0,
+  smooth: 0,
+  wild: 0,
+};
+
+const DEFAULT_MODE_LOADING_STATE: Record<LayerMood, boolean> = {
+  balance: false,
+  bold: false,
+  smooth: false,
+  wild: false,
+};
+
+const DEFAULT_MODE_ERROR_STATE: Record<LayerMood, string | null> = {
+  balance: null,
+  bold: null,
+  smooth: null,
+  wild: null,
+};
+
+function areSameModeLoadingMap(
+  current: Record<LayerMood, boolean>,
+  next: Record<LayerMood, boolean>,
+) {
+  return (
+    current.balance === next.balance
+    && current.bold === next.bold
+    && current.smooth === next.smooth
+    && current.wild === next.wild
+  );
+}
+
+function areSameModeErrorMap(
+  current: Record<LayerMood, string | null>,
+  next: Record<LayerMood, string | null>,
+) {
+  return (
+    current.balance === next.balance
+    && current.bold === next.bold
+    && current.smooth === next.smooth
+    && current.wild === next.wild
+  );
+}
+
+function areSameStringLists(
+  current: string[] | null | undefined,
+  next: string[] | null | undefined,
+) {
+  const left = Array.isArray(current) ? current : [];
+  const right = Array.isArray(next) ? next : [];
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => entry === right[index]);
+}
+
+function areSameMoonMarkerState(
+  current: {
+    left: number;
+    topY: number;
+    weekNotches: number[];
+    moonLitFrac: number;
+    moonWaxing: boolean;
+  } | null,
+  next: {
+    left: number;
+    topY: number;
+    weekNotches: number[];
+    moonLitFrac: number;
+    moonWaxing: boolean;
+  } | null,
+) {
+  if (current === next) return true;
+  if (!current || !next) return false;
+  return (
+    Math.abs(current.left - next.left) < 0.25
+    && Math.abs(current.topY - next.topY) < 0.25
+    && areSameStringLists(
+      current.weekNotches.map((value) => value.toFixed(2)),
+      next.weekNotches.map((value) => value.toFixed(2)),
+    )
+    && Math.abs(current.moonLitFrac - next.moonLitFrac) < 0.0001
+    && current.moonWaxing === next.moonWaxing
   );
 }
 
@@ -2168,6 +2303,35 @@ type FavoriteCombo = {
 };
 type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 type PersistedLayerModeSnapshot = NonNullable<LayerModes[LayerMood]>;
+type PersistedResolvedHeroRailSnapshot = {
+  familyLabel: string;
+  familyColor: string;
+  reasonChip: { label: string; explanation: string | null } | null;
+  tokens: any[];
+};
+type PersistedResolvedCurrentCardSnapshot = {
+  fragrance_id: string;
+  name: string;
+  brand: string;
+  family: string;
+  image_url: string | null;
+  familyLabel: string;
+  familyColor: string;
+  reason_chip_label: string | null;
+  reason_chip_explanation: string | null;
+  notes: string[];
+  accords: string[];
+  layer: PersistedLayerModeSnapshot | null;
+  layerFamilyKey: string;
+  layerFamilyLabel: string;
+  layerTokens: any[];
+  layerModes: Record<LayerMood, PersistedLayerModeSnapshot | null>;
+  alternates: OracleAlternate[];
+  selectedMode: LayerMood;
+  resolvedHeroRail: PersistedResolvedHeroRailSnapshot | null;
+  visibleCardId: string;
+  isHeroCard: boolean;
+};
 
 type SignedInDayState = {
   lockState: LockState;
@@ -2175,6 +2339,9 @@ type SignedInDayState = {
   carryoverMode: SignedInCarryoverTarget;
   carryoverOrigin: 'manual' | 'inherited' | null;
   carryoverNextDayRole: 'main' | 'layer' | null;
+  carryoverSourceDateKey: string | null;
+  carryoverTargetDateKey: string | null;
+  carryoverContextKey: string | null;
   carryoverSelectedCard: DisplayCard | null;
   resolvedHeroCard: DisplayCard | null;
   resolvedLayerCard: DisplayCard | null;
@@ -2183,6 +2350,7 @@ type SignedInDayState = {
   lockedCard: DisplayCard | null;
   lockedLayerCard: DisplayCard | null;
   lockedLayerMode: PersistedLayerModeSnapshot | null;
+  lockedResolvedCurrentCard: PersistedResolvedCurrentCardSnapshot | null;
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
@@ -2218,6 +2386,7 @@ type SignedInResolvedLockTruth = {
   lockedCard: DisplayCard;
   lockedLayerCard: DisplayCard | null;
   lockedLayerMode: PersistedLayerModeSnapshot | null;
+  lockedResolvedCurrentCard: PersistedResolvedCurrentCardSnapshot | null;
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
@@ -2233,6 +2402,9 @@ function createDefaultSignedInDayState(): SignedInDayState {
     carryoverMode: 'off',
     carryoverOrigin: null,
     carryoverNextDayRole: null,
+    carryoverSourceDateKey: null,
+    carryoverTargetDateKey: null,
+    carryoverContextKey: null,
     carryoverSelectedCard: null,
     resolvedHeroCard: null,
     resolvedLayerCard: null,
@@ -2241,6 +2413,7 @@ function createDefaultSignedInDayState(): SignedInDayState {
     lockedCard: null,
     lockedLayerCard: null,
     lockedLayerMode: null,
+    lockedResolvedCurrentCard: null,
     lockedContext: null,
     lockedMood: 'balance',
     lockedPromotedAltId: null,
@@ -2414,6 +2587,175 @@ function toPersistedLayerModeSnapshot(
   };
 }
 
+function clonePersistableUnknownArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    try {
+      return JSON.parse(JSON.stringify(entry));
+    } catch {
+      return entry;
+    }
+  });
+}
+
+function toPersistedOracleAlternate(alternate: OracleAlternate | null | undefined) {
+  if (!alternate?.fragrance_id || !alternate?.name) return null;
+  return {
+    fragrance_id: alternate.fragrance_id,
+    name: alternate.name,
+    family: alternate.family ?? '',
+    reason: alternate.reason ?? '',
+    brand: alternate.brand ?? '',
+    notes: sanitizeTokenSource(alternate.notes),
+    accords: sanitizeTokenSource(alternate.accords),
+    reason_chip_label: alternate.reason_chip_label ?? null,
+    reason_chip_explanation: alternate.reason_chip_explanation ?? null,
+  };
+}
+
+function fromPersistedOracleAlternate(raw: any): OracleAlternate | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const fragrance_id = typeof raw.fragrance_id === 'string' ? raw.fragrance_id.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!fragrance_id || !name) return null;
+  return {
+    fragrance_id,
+    name,
+    family: typeof raw.family === 'string' ? raw.family : '',
+    reason: typeof raw.reason === 'string' ? raw.reason : '',
+    brand: typeof raw.brand === 'string' ? raw.brand : '',
+    notes: sanitizeTokenSource(raw.notes),
+    accords: sanitizeTokenSource(raw.accords),
+    reason_chip_label: typeof raw.reason_chip_label === 'string' ? raw.reason_chip_label : null,
+    reason_chip_explanation: typeof raw.reason_chip_explanation === 'string' ? raw.reason_chip_explanation : null,
+  };
+}
+
+function toPersistedResolvedHeroRailSnapshot(value: any): PersistedResolvedHeroRailSnapshot | null {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    familyLabel: typeof value.familyLabel === 'string' ? value.familyLabel : '',
+    familyColor: typeof value.familyColor === 'string' ? value.familyColor : '#888',
+    reasonChip: value.reasonChip && typeof value.reasonChip === 'object'
+      ? {
+          label: typeof value.reasonChip.label === 'string' ? value.reasonChip.label : '',
+          explanation: typeof value.reasonChip.explanation === 'string'
+            ? value.reasonChip.explanation
+            : null,
+        }
+      : null,
+    tokens: clonePersistableUnknownArray(value.tokens),
+  };
+}
+
+function fromPersistedResolvedHeroRailSnapshot(value: any): PersistedResolvedHeroRailSnapshot | null {
+  if (!value || typeof value !== 'object') return null;
+  const familyColor = typeof value.familyColor === 'string' && value.familyColor.trim().length > 0
+    ? value.familyColor
+    : '#888';
+  const reasonChip = value.reasonChip && typeof value.reasonChip === 'object'
+    ? {
+        label: typeof value.reasonChip.label === 'string' ? value.reasonChip.label : '',
+        explanation: typeof value.reasonChip.explanation === 'string'
+          ? value.reasonChip.explanation
+          : null,
+      }
+    : null;
+  return {
+    familyLabel: typeof value.familyLabel === 'string' ? value.familyLabel : '',
+    familyColor,
+    reasonChip: reasonChip?.label ? reasonChip : null,
+    tokens: clonePersistableUnknownArray(value.tokens),
+  };
+}
+
+function toPersistedResolvedCurrentCardSnapshot(value: any): PersistedResolvedCurrentCardSnapshot | null {
+  if (!value || typeof value !== 'object') return null;
+  const fragrance_id = typeof value.fragrance_id === 'string' ? value.fragrance_id.trim() : '';
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  if (!fragrance_id || !name) return null;
+  return {
+    fragrance_id,
+    name,
+    brand: typeof value.brand === 'string' ? value.brand : '',
+    family: typeof value.family === 'string' ? value.family : '',
+    image_url: readBottleImageUrlFromObject(value),
+    familyLabel: typeof value.familyLabel === 'string' ? value.familyLabel : '',
+    familyColor: typeof value.familyColor === 'string' ? value.familyColor : '#888',
+    reason_chip_label: typeof value.reason_chip_label === 'string' ? value.reason_chip_label : null,
+    reason_chip_explanation: typeof value.reason_chip_explanation === 'string'
+      ? value.reason_chip_explanation
+      : null,
+    notes: sanitizeTokenSource(value.notes),
+    accords: sanitizeTokenSource(value.accords),
+    layer: toPersistedLayerModeSnapshot(value.layer),
+    layerFamilyKey: typeof value.layerFamilyKey === 'string' ? value.layerFamilyKey : '',
+    layerFamilyLabel: typeof value.layerFamilyLabel === 'string' ? value.layerFamilyLabel : '',
+    layerTokens: clonePersistableUnknownArray(value.layerTokens),
+    layerModes: {
+      balance: toPersistedLayerModeSnapshot(value.layerModes?.balance),
+      bold: toPersistedLayerModeSnapshot(value.layerModes?.bold),
+      smooth: toPersistedLayerModeSnapshot(value.layerModes?.smooth),
+      wild: toPersistedLayerModeSnapshot(value.layerModes?.wild),
+    },
+    alternates: Array.isArray(value.alternates)
+      ? value.alternates
+          .map((alternate: any) => fromPersistedOracleAlternate(toPersistedOracleAlternate(alternate)))
+          .filter((alternate: OracleAlternate | null): alternate is OracleAlternate => !!alternate)
+      : [],
+    selectedMode: normalizePersistedMood(value.selectedMode),
+    resolvedHeroRail: toPersistedResolvedHeroRailSnapshot(value.resolvedHeroRail),
+    visibleCardId: typeof value.visibleCardId === 'string' && value.visibleCardId.trim().length > 0
+      ? value.visibleCardId
+      : fragrance_id,
+    isHeroCard: value.isHeroCard === true,
+  };
+}
+
+function fromPersistedResolvedCurrentCardSnapshot(value: any): PersistedResolvedCurrentCardSnapshot | null {
+  if (!value || typeof value !== 'object') return null;
+  const fragrance_id = typeof value.fragrance_id === 'string' ? value.fragrance_id.trim() : '';
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  if (!fragrance_id || !name) return null;
+  return {
+    fragrance_id,
+    name,
+    brand: typeof value.brand === 'string' ? value.brand : '',
+    family: typeof value.family === 'string' ? value.family : '',
+    image_url: readBottleImageUrlFromObject(value),
+    familyLabel: typeof value.familyLabel === 'string' ? value.familyLabel : '',
+    familyColor: typeof value.familyColor === 'string' ? value.familyColor : '#888',
+    reason_chip_label: typeof value.reason_chip_label === 'string' ? value.reason_chip_label : null,
+    reason_chip_explanation: typeof value.reason_chip_explanation === 'string'
+      ? value.reason_chip_explanation
+      : null,
+    notes: sanitizeTokenSource(value.notes),
+    accords: sanitizeTokenSource(value.accords),
+    layer: fromPersistedLayerModeSnapshot(value.layer),
+    layerFamilyKey: typeof value.layerFamilyKey === 'string' ? value.layerFamilyKey : '',
+    layerFamilyLabel: typeof value.layerFamilyLabel === 'string' ? value.layerFamilyLabel : '',
+    layerTokens: clonePersistableUnknownArray(value.layerTokens),
+    layerModes: {
+      balance: fromPersistedLayerModeSnapshot(value.layerModes?.balance),
+      bold: fromPersistedLayerModeSnapshot(value.layerModes?.bold),
+      smooth: fromPersistedLayerModeSnapshot(value.layerModes?.smooth),
+      wild: fromPersistedLayerModeSnapshot(value.layerModes?.wild),
+    },
+    alternates: Array.isArray(value.alternates)
+      ? value.alternates
+          .map((alternate: any) => fromPersistedOracleAlternate(alternate))
+          .filter((alternate: OracleAlternate | null): alternate is OracleAlternate => !!alternate)
+      : [],
+    selectedMode: normalizePersistedMood(value.selectedMode),
+    resolvedHeroRail: fromPersistedResolvedHeroRailSnapshot(value.resolvedHeroRail),
+    visibleCardId: typeof value.visibleCardId === 'string' && value.visibleCardId.trim().length > 0
+      ? value.visibleCardId
+      : fragrance_id,
+    isHeroCard: value.isHeroCard === true,
+  };
+}
+
 function fromPersistedLayerModeSnapshot(raw: any): PersistedLayerModeSnapshot | null {
   if (!raw || typeof raw !== 'object') return null;
   const id = typeof raw.id === 'string' ? raw.id.trim() : '';
@@ -2481,21 +2823,42 @@ function areSameLayerModeSnapshots(
   );
 }
 
+function areSameResolvedCurrentCardSnapshots(
+  a: PersistedResolvedCurrentCardSnapshot | null | undefined,
+  b: PersistedResolvedCurrentCardSnapshot | null | undefined,
+) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function serializeSignedInDayStateForStorage(state: SignedInDayState) {
   const normalizedLockState = normalizePersistedLockState(state.lockState);
   const rawDaisyChainEnabled = state.daisyChainEnabled === true ? true : state.daisyChainEnabled === false ? false : null;
-  const persistActiveCarryover = normalizedLockState === 'locked' && rawDaisyChainEnabled === true;
-  const daisyChainEnabled = normalizedLockState === 'locked'
-    ? rawDaisyChainEnabled
-    : rawDaisyChainEnabled === false
-      ? false
-      : null;
+  const normalizedCarryoverMode = normalizePersistedCarryoverTarget(state.carryoverMode);
+  const carryoverSourceDateKey = typeof state.carryoverSourceDateKey === 'string' && state.carryoverSourceDateKey.trim().length > 0
+    ? state.carryoverSourceDateKey
+    : null;
+  const carryoverTargetDateKey = typeof state.carryoverTargetDateKey === 'string' && state.carryoverTargetDateKey.trim().length > 0
+    ? state.carryoverTargetDateKey
+    : null;
+  const carryoverContextKey = typeof state.carryoverContextKey === 'string' && state.carryoverContextKey.trim().length > 0
+    ? normalizePersistedContextKey(state.carryoverContextKey)
+    : null;
+  const persistActiveCarryover = rawDaisyChainEnabled === true
+    && normalizedCarryoverMode !== 'off'
+    && !!carryoverSourceDateKey
+    && !!carryoverTargetDateKey;
+  const daisyChainEnabled = rawDaisyChainEnabled;
   const carryoverMode = persistActiveCarryover ? normalizePersistedCarryoverTarget(state.carryoverMode) : 'off';
   const carryoverOrigin = persistActiveCarryover ? normalizePersistedCarryoverOrigin(state.carryoverOrigin) : null;
   const carryoverNextDayRole = persistActiveCarryover ? normalizePersistedNextDayRole(state.carryoverNextDayRole) : null;
   const lockedCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedCard) : null;
   const lockedLayerCard = normalizedLockState === 'locked' ? toPersistedDisplayCard(state.lockedLayerCard) : null;
   const lockedLayerMode = normalizedLockState === 'locked' ? toPersistedLayerModeSnapshot(state.lockedLayerMode) : null;
+  const lockedResolvedCurrentCard = normalizedLockState === 'locked'
+    ? toPersistedResolvedCurrentCardSnapshot(state.lockedResolvedCurrentCard)
+    : null;
 
   return {
     lockState: normalizedLockState,
@@ -2503,6 +2866,9 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     carryoverMode,
     carryoverOrigin,
     carryoverNextDayRole,
+    carryoverSourceDateKey: persistActiveCarryover ? carryoverSourceDateKey : null,
+    carryoverTargetDateKey: persistActiveCarryover ? carryoverTargetDateKey : null,
+    carryoverContextKey: persistActiveCarryover ? carryoverContextKey : null,
     carryoverSelectedCard: persistActiveCarryover ? toPersistedDisplayCard(state.carryoverSelectedCard) : null,
     resolvedHeroCard: persistActiveCarryover ? toPersistedDisplayCard(state.resolvedHeroCard) : null,
     resolvedLayerCard: persistActiveCarryover ? toPersistedDisplayCard(state.resolvedLayerCard) : null,
@@ -2511,6 +2877,7 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     lockedCard,
     lockedLayerCard,
     lockedLayerMode,
+    lockedResolvedCurrentCard,
     lockedContext: normalizedLockState === 'locked' ? normalizePersistedLockedContext(state.lockedContext) : null,
     lockedMood: normalizedLockState === 'locked' ? normalizePersistedMood(state.lockedMood) : 'balance',
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
@@ -2525,12 +2892,20 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
 
   const lockState = normalizePersistedLockState(raw.lockState);
   const rawDaisyChainEnabled = raw.daisyChainEnabled === true ? true : raw.daisyChainEnabled === false ? false : null;
-  const persistedCarryoverAllowed = lockState === 'locked' && rawDaisyChainEnabled === true;
-  const daisyChainEnabled = lockState === 'locked'
-    ? rawDaisyChainEnabled
-    : rawDaisyChainEnabled === false
-      ? false
-      : null;
+  const carryoverSourceDateKey = typeof raw.carryoverSourceDateKey === 'string' && raw.carryoverSourceDateKey.trim().length > 0
+    ? raw.carryoverSourceDateKey
+    : null;
+  const carryoverTargetDateKey = typeof raw.carryoverTargetDateKey === 'string' && raw.carryoverTargetDateKey.trim().length > 0
+    ? raw.carryoverTargetDateKey
+    : null;
+  const carryoverContextKey = typeof raw.carryoverContextKey === 'string' && raw.carryoverContextKey.trim().length > 0
+    ? normalizePersistedContextKey(raw.carryoverContextKey)
+    : null;
+  const persistedCarryoverAllowed = rawDaisyChainEnabled === true
+    && normalizePersistedCarryoverTarget(raw.carryoverMode) !== 'off'
+    && !!carryoverSourceDateKey
+    && !!carryoverTargetDateKey;
+  const daisyChainEnabled = rawDaisyChainEnabled;
 
   return {
     lockState,
@@ -2538,6 +2913,9 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
     carryoverMode: persistedCarryoverAllowed ? normalizePersistedCarryoverTarget(raw.carryoverMode) : 'off',
     carryoverOrigin: persistedCarryoverAllowed ? normalizePersistedCarryoverOrigin(raw.carryoverOrigin) : null,
     carryoverNextDayRole: persistedCarryoverAllowed ? normalizePersistedNextDayRole(raw.carryoverNextDayRole) : null,
+    carryoverSourceDateKey: persistedCarryoverAllowed ? carryoverSourceDateKey : null,
+    carryoverTargetDateKey: persistedCarryoverAllowed ? carryoverTargetDateKey : null,
+    carryoverContextKey: persistedCarryoverAllowed ? carryoverContextKey : null,
     carryoverSelectedCard: persistedCarryoverAllowed ? fromPersistedDisplayCard(raw.carryoverSelectedCard) : null,
     resolvedHeroCard: persistedCarryoverAllowed
       ? (fromPersistedDisplayCard(raw.resolvedHeroCard) ?? fromPersistedDisplayCard(raw.carryoverHeroCard))
@@ -2554,6 +2932,9 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
     lockedCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedCard) : null,
     lockedLayerCard: lockState === 'locked' ? fromPersistedDisplayCard(raw.lockedLayerCard) : null,
     lockedLayerMode: lockState === 'locked' ? fromPersistedLayerModeSnapshot(raw.lockedLayerMode) : null,
+    lockedResolvedCurrentCard: lockState === 'locked'
+      ? fromPersistedResolvedCurrentCardSnapshot(raw.lockedResolvedCurrentCard)
+      : null,
     lockedContext: lockState === 'locked' ? normalizePersistedLockedContext(raw.lockedContext) : null,
     lockedMood: lockState === 'locked' ? normalizePersistedMood(raw.lockedMood) : 'balance',
     lockedPromotedAltId: lockState === 'locked' && typeof raw.lockedPromotedAltId === 'string'
@@ -2572,13 +2953,28 @@ function isPersistableSignedInDayState(state: SignedInDayState): boolean {
     || serialized.carryoverMode !== 'off'
     || serialized.carryoverOrigin !== null
     || serialized.carryoverNextDayRole !== null
+    || !!serialized.carryoverSourceDateKey
+    || !!serialized.carryoverTargetDateKey
+    || !!serialized.carryoverContextKey
     || !!serialized.carryoverSelectedCard
     || !!serialized.carryoverHeroCard
     || !!serialized.carryoverLayerCard
     || !!serialized.lockedCard
     || !!serialized.lockedLayerCard
     || !!serialized.lockedLayerMode
+    || !!serialized.lockedResolvedCurrentCard
     || serialized.lockedPromotedAltId !== null
+  );
+}
+
+function hasHydratedRuntimeSignedInDayState(state: SignedInDayState | null | undefined): boolean {
+  if (!state) return false;
+  return (
+    isPersistableSignedInDayState(state)
+    || !!state.resolvedHeroCard
+    || !!state.resolvedLayerCard
+    || !!state.manualHeroCard
+    || !!state.manualLayerCard
   );
 }
 
@@ -2633,8 +3029,18 @@ function getSignedInCarryoverFeedbackLabel(target: SignedInCarryoverTarget): str
 
 function resolveVerifiedPredecessorBaton(
   dayState: SignedInDayState | null | undefined,
+  expectedTargetDateKey: string,
+  expectedContextKey: string,
 ): SignedInVerifiedPredecessorBaton | null {
   if (!dayState || dayState.daisyChainEnabled !== true) return null;
+  if (!dayState.carryoverSourceDateKey || !dayState.carryoverTargetDateKey) return null;
+  if (dayState.carryoverTargetDateKey !== expectedTargetDateKey) return null;
+  if (dayState.carryoverSourceDateKey !== getPreviousDateKey(expectedTargetDateKey)) return null;
+
+  const normalizedExpectedContextKey = normalizePersistedContextKey(expectedContextKey);
+  if (dayState.carryoverContextKey && dayState.carryoverContextKey !== normalizedExpectedContextKey) {
+    return null;
+  }
 
   const selectedSource = dayState.carryoverMode === 'hero' || dayState.carryoverMode === 'layer'
     ? dayState.carryoverMode
@@ -2676,9 +3082,104 @@ function resolveSignedInLockedTruth(
     lockedCard: dayState.lockedCard,
     lockedLayerCard: dayState.lockedLayerCard ?? null,
     lockedLayerMode,
+    lockedResolvedCurrentCard: dayState.lockedResolvedCurrentCard ?? null,
     lockedContext: normalizePersistedLockedContext(dayState.lockedContext),
     lockedMood,
     lockedPromotedAltId: dayState.lockedPromotedAltId ?? null,
+  };
+}
+
+function buildLockedMainCardRender(
+  lockedTruth: SignedInResolvedLockTruth,
+): {
+  activeHero: DisplayCard;
+  heroFamilyKey: string;
+  heroFamilyColor: string;
+  heroFamilyLabel: string;
+  activeHeroTokens: any[];
+  activeReasonChip: { label: string; explanation: string | null } | null;
+  activeLayer: PersistedLayerModeSnapshot | null;
+  activeLayerFamilyKey: string;
+  activeLayerFamilyLabel: string;
+  activeLayerTokens: any[];
+  layerModes: LayerModes;
+  selectedMode: LayerMood;
+  visibleCardId: string;
+  isLocked: true;
+  activeAlternates: OracleAlternate[];
+  reasonChipLabel: string | null;
+  reasonChipExplanation: string | null;
+  queuedSurfacesReady: true;
+  duplicateResolution: {
+    kind: 'none';
+    replacementMain: null;
+    preferredLayerIndex: null;
+  };
+  resolvedCurrentCard: PersistedResolvedCurrentCardSnapshot & { resolvedHeroRail: PersistedResolvedHeroRailSnapshot | null };
+} | null {
+  const snapshot = lockedTruth.lockedResolvedCurrentCard;
+  if (!snapshot) return null;
+
+  const heroFamilyKey = snapshot.family || lockedTruth.lockedCard.family || '';
+  const heroFamilyColor = snapshot.resolvedHeroRail?.familyColor
+    ?? snapshot.familyColor
+    ?? (heroFamilyKey ? (FAMILY_COLORS[heroFamilyKey] ?? '#888') : '#888');
+  const heroFamilyLabel = snapshot.resolvedHeroRail?.familyLabel
+    ?? snapshot.familyLabel
+    ?? (heroFamilyKey ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase()) : '');
+  const activeHero: DisplayCard = {
+    ...lockedTruth.lockedCard,
+    family: heroFamilyKey,
+    image_url: snapshot.image_url ?? lockedTruth.lockedCard.image_url ?? null,
+    notes: sanitizeTokenSource(snapshot.notes),
+    accords: sanitizeTokenSource(snapshot.accords),
+    reason_chip_label: snapshot.reason_chip_label ?? lockedTruth.lockedCard.reason_chip_label ?? null,
+    reason_chip_explanation: snapshot.reason_chip_explanation ?? lockedTruth.lockedCard.reason_chip_explanation ?? null,
+    isHero: snapshot.isHeroCard || lockedTruth.lockedCard.isHero,
+  };
+  const activeLayer = lockedTruth.lockedLayerMode ?? snapshot.layer ?? toLayerModeFromDisplayCard(lockedTruth.lockedLayerCard, lockedTruth.lockedMood);
+  const activeAlternates = filterAlternatesAgainstVisibleScents(
+    Array.isArray(snapshot.alternates) ? snapshot.alternates : [],
+    (alternate) => alternate,
+    [activeHero, activeLayer],
+  );
+  const resolvedCurrentCard = {
+    ...snapshot,
+    notes: sanitizeTokenSource(snapshot.notes),
+    accords: sanitizeTokenSource(snapshot.accords),
+    layer: activeLayer ?? null,
+    layerModes: snapshot.layerModes ?? { balance: null, bold: null, smooth: null, wild: null },
+    alternates: activeAlternates,
+    selectedMode: lockedTruth.lockedMood,
+    resolvedHeroRail: snapshot.resolvedHeroRail ?? null,
+  };
+
+  return {
+    activeHero,
+    heroFamilyKey,
+    heroFamilyColor,
+    heroFamilyLabel,
+    activeHeroTokens: Array.isArray(snapshot.resolvedHeroRail?.tokens) ? snapshot.resolvedHeroRail.tokens : [],
+    activeReasonChip: snapshot.resolvedHeroRail?.reasonChip ?? null,
+    activeLayer: activeLayer ?? null,
+    activeLayerFamilyKey: snapshot.layerFamilyKey ?? activeLayer?.family_key ?? '',
+    activeLayerFamilyLabel: snapshot.layerFamilyLabel
+      || (snapshot.layerFamilyKey ? (FAMILY_LABELS[snapshot.layerFamilyKey] ?? snapshot.layerFamilyKey.toUpperCase()) : ''),
+    activeLayerTokens: Array.isArray(snapshot.layerTokens) ? snapshot.layerTokens : [],
+    layerModes: resolvedCurrentCard.layerModes,
+    selectedMode: lockedTruth.lockedMood,
+    visibleCardId: snapshot.visibleCardId || activeHero.fragrance_id,
+    isLocked: true,
+    activeAlternates,
+    reasonChipLabel: snapshot.resolvedHeroRail?.reasonChip?.label ?? snapshot.reason_chip_label ?? null,
+    reasonChipExplanation: snapshot.resolvedHeroRail?.reasonChip?.explanation ?? snapshot.reason_chip_explanation ?? null,
+    queuedSurfacesReady: true,
+    duplicateResolution: {
+      kind: 'none',
+      replacementMain: null,
+      preferredLayerIndex: null,
+    },
+    resolvedCurrentCard,
   };
 }
 
@@ -2688,6 +3189,8 @@ function resolveSignedInDayDecision(
   previousDayState: SignedInDayState,
   oraclePick: OraclePick | null | undefined,
   defaultMood: LayerMood,
+  currentDateKey: string,
+  currentContextKey: string,
 ): SignedInResolvedDayDecision {
   const oracleVisibleCard = oraclePick ? heroToDisplay(oraclePick) : null;
   const eligibleOracleVisibleCard = oracleVisibleCard && !isTemporarilySuppressedRotationFragrance(oracleVisibleCard)
@@ -2724,7 +3227,7 @@ function resolveSignedInDayDecision(
     };
   }
 
-  const predecessorBaton = resolveVerifiedPredecessorBaton(previousDayState);
+  const predecessorBaton = resolveVerifiedPredecessorBaton(previousDayState, currentDateKey, currentContextKey);
 
   if (predecessorBaton?.nextDayRole === 'main') {
     return {
@@ -3048,7 +3551,10 @@ const OdaraScreen = ({
       const todayNavIdx = navigationDays.findIndex((fd) => fd.isToday);
       const todayBtn = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx] : null;
       const nextBtn  = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx + 1] : null;
-      if (!strip || !content || !todayBtn || !nextBtn) { setMoonMarker(null); return; }
+      if (!strip || !content || !todayBtn || !nextBtn) {
+        setMoonMarker((current) => (current === null ? current : null));
+        return;
+      }
       const cRect = content.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
       const bRect = nextBtn.getBoundingClientRect();
@@ -3083,13 +3589,16 @@ const OdaraScreen = ({
       const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC;
       const moonLitFrac = (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2;
       const moonWaxing = phaseFrac < 0.5;
-      setMoonMarker({
+      const nextMarker = {
         left: markerX,
         topY: dayDigitCenterY,
         weekNotches,
         moonLitFrac,
         moonWaxing,
-      });
+      };
+      setMoonMarker((current) => (
+        areSameMoonMarkerState(current, nextMarker) ? current : nextMarker
+      ));
     };
     compute();
     const strip = navigationStripRef.current;
@@ -3912,8 +4421,8 @@ const OdaraScreen = ({
     if (signedInResolvedDayDecisionSource !== 'carryover-main' && signedInResolvedDayDecisionSource !== 'carryover-layer') {
       return null;
     }
-    return resolveVerifiedPredecessorBaton(signedInPreviousDayState);
-  }, [isGuestMode, signedInResolvedDayDecisionSource, signedInPreviousDayState]);
+    return resolveVerifiedPredecessorBaton(signedInPreviousDayState, currentDateKey, selectedContext);
+  }, [currentDateKey, isGuestMode, selectedContext, signedInResolvedDayDecisionSource, signedInPreviousDayState]);
   const signedInResolvedLockTruth = useMemo(
     () => (isGuestMode ? null : resolveSignedInLockedTruth(signedInDayState)),
     [isGuestMode, signedInDayState]
@@ -3947,6 +4456,7 @@ const OdaraScreen = ({
             lockedCard: null,
             lockedLayerCard: null,
             lockedLayerMode: null,
+            lockedResolvedCurrentCard: null,
             lockedContext: null,
             lockedMood: 'balance',
             lockedPromotedAltId: null,
@@ -3956,6 +4466,7 @@ const OdaraScreen = ({
         current.lockedCard === next.lockedCard &&
         current.lockedLayerCard === next.lockedLayerCard &&
         current.lockedLayerMode === next.lockedLayerMode &&
+        current.lockedResolvedCurrentCard === next.lockedResolvedCurrentCard &&
         current.lockedContext === next.lockedContext &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId
@@ -4034,6 +4545,9 @@ const OdaraScreen = ({
         current.carryoverMode === next.carryoverMode &&
         current.carryoverOrigin === next.carryoverOrigin &&
         current.carryoverNextDayRole === next.carryoverNextDayRole &&
+        current.carryoverSourceDateKey === next.carryoverSourceDateKey &&
+        current.carryoverTargetDateKey === next.carryoverTargetDateKey &&
+        current.carryoverContextKey === next.carryoverContextKey &&
         current.lockedContext === next.lockedContext &&
         current.lockedMood === next.lockedMood &&
         current.lockedPromotedAltId === next.lockedPromotedAltId &&
@@ -4045,6 +4559,7 @@ const OdaraScreen = ({
         areSameDisplayCards(current.lockedCard, next.lockedCard) &&
         areSameDisplayCards(current.lockedLayerCard, next.lockedLayerCard) &&
         areSameLayerModeSnapshots(current.lockedLayerMode, next.lockedLayerMode) &&
+        areSameResolvedCurrentCardSnapshots(current.lockedResolvedCurrentCard, next.lockedResolvedCurrentCard) &&
         areSameDisplayCards(current.manualHeroCard, next.manualHeroCard) &&
         areSameDisplayCards(current.manualLayerCard, next.manualLayerCard)
       ) {
@@ -4078,8 +4593,8 @@ const OdaraScreen = ({
     }
 
     persistedSignedInDayStateRef.current = {};
-    setSignedInDayStateMap({});
-    setSignedInLockedHistoryDateKeys([]);
+    setSignedInDayStateMap((current) => (Object.keys(current).length === 0 ? current : {}));
+    setSignedInLockedHistoryDateKeys((current) => (current.length === 0 ? current : []));
     setSignedInWeekMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
     setSignedInHistoryMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
   }, [isGuestMode, userId]);
@@ -4146,7 +4661,7 @@ const OdaraScreen = ({
             if (!loaded) continue;
 
             const existing = prev[slotKey];
-            if (existing && isPersistableSignedInDayState(existing)) {
+            if (hasHydratedRuntimeSignedInDayState(existing)) {
               continue;
             }
 
@@ -4191,13 +4706,13 @@ const OdaraScreen = ({
 
   useEffect(() => {
     if (isGuestMode) {
-      setSignedInLockedHistoryDateKeys([]);
+      setSignedInLockedHistoryDateKeys((current) => (current.length === 0 ? current : []));
       setSignedInHistoryMemoryReadyScopeKey('guest');
       return;
     }
 
     if (!userId) {
-      setSignedInLockedHistoryDateKeys([]);
+      setSignedInLockedHistoryDateKeys((current) => (current.length === 0 ? current : []));
       setSignedInHistoryMemoryReadyScopeKey('');
       return;
     }
@@ -4242,9 +4757,10 @@ const OdaraScreen = ({
           ...persistedEntries,
         };
 
-        setSignedInLockedHistoryDateKeys(
-          lockedHistoryKeys.sort((a, b) => a.localeCompare(b))
-        );
+        const sortedLockedHistoryKeys = lockedHistoryKeys.sort((a, b) => a.localeCompare(b));
+        setSignedInLockedHistoryDateKeys((current) => (
+          areSameStringLists(current, sortedLockedHistoryKeys) ? current : sortedLockedHistoryKeys
+        ));
         setSignedInDayStateMap((prev) => {
           let changed = false;
           const next = { ...prev };
@@ -4766,6 +5282,8 @@ const OdaraScreen = ({
       previousDayState,
       activeSignedInOracle.today_pick,
       defaultMood,
+      currentDateKey,
+      selectedContext,
     );
     if (nextDayState.manualLayerCard) {
       return {
@@ -4782,8 +5300,10 @@ const OdaraScreen = ({
       previousDayState,
       activeSignedInOracle.today_pick,
       defaultMood,
+      currentDateKey,
+      selectedContext,
     );
-  }, [signedInResolvedOracle, previousDayStateKey, resolveActiveSignedInDefaultMood, visibleCard]);
+  }, [currentDateKey, signedInResolvedOracle, previousDayStateKey, resolveActiveSignedInDefaultMood, selectedContext, visibleCard]);
 
   const applySignedInSearchPreviewDecision = useCallback((
     decision: SignedInResolvedDayDecision | null,
@@ -4920,6 +5440,7 @@ const OdaraScreen = ({
         lockedCard: null,
         lockedLayerCard: null,
         lockedLayerMode: null,
+        lockedResolvedCurrentCard: null,
         lockedContext: null,
         lockedMood: 'balance',
         lockedPromotedAltId: null,
@@ -5044,13 +5565,13 @@ const OdaraScreen = ({
   // Queue is fetched in the BACKGROUND after hero is set.
   useEffect(() => {
     if (!oracle) {
-      setActiveOracle(null);
-      setVisibleCard(null);
+      setActiveOracle((current) => (current === null ? current : null));
+      setVisibleCard((current) => (current === null ? current : null));
       setLayerDebugSource('none');
-      setQueue([]);
-      setQueuePointer(0);
-      setSignedInForcedLayerCarryCard(null);
-      setSignedInResolvedDayDecisionSource('oracle');
+      setQueue((current) => (current.length === 0 ? current : []));
+      setQueuePointer((current) => (current === 0 ? current : 0));
+      setSignedInForcedLayerCarryCard((current) => (current === null ? current : null));
+      setSignedInResolvedDayDecisionSource((current) => (current === 'oracle' ? current : 'oracle'));
       return;
     }
 
@@ -5067,13 +5588,13 @@ const OdaraScreen = ({
         selectedDate,
         capturedSlot,
       });
-      setActiveOracle(null);
-      setVisibleCard(null);
+      setActiveOracle((current) => (current === null ? current : null));
+      setVisibleCard((current) => (current === null ? current : null));
       setLayerDebugSource('none');
-      setQueue([]);
-      setQueuePointer(0);
-      setSignedInForcedLayerCarryCard(null);
-      setSignedInResolvedDayDecisionSource('oracle');
+      setQueue((current) => (current.length === 0 ? current : []));
+      setQueuePointer((current) => (current === 0 ? current : 0));
+      setSignedInForcedLayerCarryCard((current) => (current === null ? current : null));
+      setSignedInResolvedDayDecisionSource((current) => (current === 'oracle' ? current : 'oracle'));
       return;
     }
 
@@ -5082,15 +5603,19 @@ const OdaraScreen = ({
 
     // 1) Clear ALL stale state first
     // viewHistory is NOT cleared here — slot changes clear it in Effect 1 above
-    setPromotedAltId(null);
-    setLayerExpanded(false);
-    setCurrentCardAlternates([]);
-    setCurrentCardAlternatesOwnerId(null);
-    setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
-    setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
+    setPromotedAltId((current) => (current === null ? current : null));
+    setLayerExpanded((current) => (current ? false : current));
+    setCurrentCardAlternates((current) => (current.length === 0 ? current : []));
+    setCurrentCardAlternatesOwnerId((current) => (current === null ? current : null));
+    setModeLoading((current) => (
+      areSameModeLoadingMap(current, DEFAULT_MODE_LOADING_STATE) ? current : DEFAULT_MODE_LOADING_STATE
+    ));
+    setModeErrors((current) => (
+      areSameModeErrorMap(current, DEFAULT_MODE_ERROR_STATE) ? current : DEFAULT_MODE_ERROR_STATE
+    ));
 
     // 2) Set oracle
-    setActiveOracle(oracle);
+    setActiveOracle((current) => (current === oracle ? current : oracle));
 
     const dayStateMap = signedInDayStateMapRef.current;
     const hasCurrentDayState = Object.prototype.hasOwnProperty.call(dayStateMap, currentDayStateKey);
@@ -5109,18 +5634,30 @@ const OdaraScreen = ({
       previousDayState,
       oracle.today_pick,
       v6DefaultMood,
+      currentDateKey,
+      selectedContext,
     );
     const initialVisibleCard = resolvedDayDecision.visibleCard;
     const initialForcedLayerCarryCard = resolvedDayDecision.forcedLayerCarryCard;
     const initialMood: LayerMood = resolvedDayDecision.selectedMood;
-    setSelectedMood(initialMood);
-    setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
+    setSelectedMood((current) => (current === initialMood ? current : initialMood));
+    setSignedInLayerIdxByMood((current) => (
+      areSameLayerIndexMap(current, DEFAULT_LAYER_INDEX_MAP) ? current : DEFAULT_LAYER_INDEX_MAP
+    ));
 
     if (oracle.today_pick) {
-      setVisibleCard(initialVisibleCard);
-      setSignedInForcedLayerCarryCard(initialForcedLayerCarryCard);
-      setSignedInResolvedDayDecisionSource(resolvedDayDecision.source);
-      setPromotedAltId(resolvedDayDecision.promotedAltId);
+      setVisibleCard((current) => (
+        areSameDisplayCards(current, initialVisibleCard) ? current : initialVisibleCard
+      ));
+      setSignedInForcedLayerCarryCard((current) => (
+        areSameDisplayCards(current, initialForcedLayerCarryCard) ? current : initialForcedLayerCarryCard
+      ));
+      setSignedInResolvedDayDecisionSource((current) => (
+        current === resolvedDayDecision.source ? current : resolvedDayDecision.source
+      ));
+      setPromotedAltId((current) => (
+        current === resolvedDayDecision.promotedAltId ? current : resolvedDayDecision.promotedAltId
+      ));
 
       // 4) Pre-seed mood cache from normalized payload for hero card
       const slotPfx = `${selectedDate}|${selectedContext}`;
@@ -5195,31 +5732,45 @@ const OdaraScreen = ({
         initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id,
       );
       if (seededQueue.length > 0) {
-        setQueue(seededQueue);
+        setQueue((current) => (
+          areSameDisplayCardLists(current, seededQueue) ? current : seededQueue
+        ));
         if (!initialVisibleCard) {
-          setVisibleCard(seededQueue[0] ?? null);
-          setQueuePointer(seededQueue.length > 1 ? 1 : 0);
+          const seededHero = seededQueue[0] ?? null;
+          const seededPointer = seededQueue.length > 1 ? 1 : 0;
+          setVisibleCard((current) => (
+            areSameDisplayCards(current, seededHero) ? current : seededHero
+          ));
+          setQueuePointer((current) => (current === seededPointer ? current : seededPointer));
         } else {
-          setQueuePointer(0);
+          setQueuePointer((current) => (current === 0 ? current : 0));
         }
       } else {
         fetchQueueRef.current(initialVisibleCard?.fragrance_id ?? oracle.today_pick.fragrance_id).then(q => {
           if (activeSlotRef.current !== capturedSlot) return;
           if (!initialVisibleCard && q.length > 0) {
-            setVisibleCard(q[0] ?? null);
-            setQueuePointer(q.length > 1 ? 1 : 0);
-            setQueue(q);
+            const queuedHero = q[0] ?? null;
+            const queuedPointer = q.length > 1 ? 1 : 0;
+            setVisibleCard((current) => (
+              areSameDisplayCards(current, queuedHero) ? current : queuedHero
+            ));
+            setQueuePointer((current) => (current === queuedPointer ? current : queuedPointer));
+            setQueue((current) => (
+              areSameDisplayCardLists(current, q) ? current : q
+            ));
             return;
           }
-          setQueue(q);
-          setQueuePointer(0);
+          setQueue((current) => (
+            areSameDisplayCardLists(current, q) ? current : q
+          ));
+          setQueuePointer((current) => (current === 0 ? current : 0));
         });
       }
     } else {
-      setVisibleCard(null);
+      setVisibleCard((current) => (current === null ? current : null));
       setLayerDebugSource('none');
-      setQueue([]);
-      setQueuePointer(0);
+      setQueue((current) => (current.length === 0 ? current : []));
+      setQueuePointer((current) => (current === 0 ? current : 0));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracle, stateKey, currentDayStateKey, previousDayStateKey, queueRowsToDisplay, isGuestMode, signedInResolvedMemoryReady]);
@@ -5263,27 +5814,35 @@ const OdaraScreen = ({
 
   useEffect(() => {
     if (!visibleCard) {
-      setCurrentCardAlternates([]);
-      setCurrentCardAlternatesOwnerId(null);
+      setCurrentCardAlternates((current) => (current.length === 0 ? current : []));
+      setCurrentCardAlternatesOwnerId((current) => (current === null ? current : null));
       return;
     }
 
     if (!isGuestMode && signedInVisibleIsHeroCard) {
-      setCurrentCardAlternates(signedInPayloadAlternates);
-      setCurrentCardAlternatesOwnerId(visibleCard.fragrance_id);
+      setCurrentCardAlternates((current) => (
+        areSameOracleAlternates(current, signedInPayloadAlternates) ? current : signedInPayloadAlternates
+      ));
+      setCurrentCardAlternatesOwnerId((current) => (
+        current === visibleCard.fragrance_id ? current : visibleCard.fragrance_id
+      ));
       return;
     }
 
     const capturedSlot = stateKey;
     const capturedCardId = visibleCard.fragrance_id;
     let isActive = true;
-    setCurrentCardAlternates([]);
-    setCurrentCardAlternatesOwnerId(null);
+    setCurrentCardAlternates((current) => (current.length === 0 ? current : []));
+    setCurrentCardAlternatesOwnerId((current) => (current === null ? current : null));
 
     resolveAlternatesForCard(visibleCard).then((alternates) => {
       if (isActive && activeSlotRef.current === capturedSlot) {
-        setCurrentCardAlternates(alternates);
-        setCurrentCardAlternatesOwnerId(capturedCardId);
+        setCurrentCardAlternates((current) => (
+          areSameOracleAlternates(current, alternates) ? current : alternates
+        ));
+        setCurrentCardAlternatesOwnerId((current) => (
+          current === capturedCardId ? current : capturedCardId
+        ));
       }
     });
 
@@ -5459,6 +6018,10 @@ const OdaraScreen = ({
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
     if (isGuestMode || !visibleCard) return null;
+    if (signedInResolvedDayDecisionSource === 'locked' && signedInResolvedLockTruth) {
+      const lockedRender = buildLockedMainCardRender(signedInResolvedLockTruth);
+      if (lockedRender) return lockedRender;
+    }
     // Prefer the v6 raw payload (carries hero_tokens / layer_tokens / per-mode
     // tokens). Fall back to legacy oracle prop for non-v6 paths.
     const v6: any = v6Payload;
@@ -5758,8 +6321,21 @@ const OdaraScreen = ({
 
     if (lockState === 'locked') {
       updateSignedInDayState(currentDayStateKey, (current) => (
-        current.lockedLayerCard || current.lockedLayerMode
-          ? { ...current, lockedLayerCard: null, lockedLayerMode: null }
+        current.lockedLayerCard || current.lockedLayerMode || current.lockedResolvedCurrentCard?.layer
+          ? {
+              ...current,
+              lockedLayerCard: null,
+              lockedLayerMode: null,
+              lockedResolvedCurrentCard: current.lockedResolvedCurrentCard
+                ? {
+                    ...current.lockedResolvedCurrentCard,
+                    layer: null,
+                    layerFamilyKey: '',
+                    layerFamilyLabel: '',
+                    layerTokens: [],
+                  }
+                : null,
+            }
           : current
       ));
     }
@@ -6163,8 +6739,8 @@ const OdaraScreen = ({
     // Second tap → like + lock together.
     lastTapRef.current = { time: 0, x: 0, y: 0 };
     clearUnlockTimeout();
-    setLockState('locked');
-    recordLockedSelection();
+    const didLock = engageSignedInLock();
+    if (!didLock) return;
     haptic('medium');
 
     // Visual confirmation: like pulse + lock burst.
@@ -6192,8 +6768,7 @@ const OdaraScreen = ({
     signedInIsReadOnlyHistoryCard,
     lockState,
     clearUnlockTimeout,
-    setLockState,
-    recordLockedSelection,
+    engageSignedInLock,
     pulseLock,
     onAccept,
   ]);
@@ -6606,22 +7181,6 @@ const OdaraScreen = ({
     showHistoryBack,
   };
 
-  if (isGuestMode) {
-    console.info('[ODARA_LOCK_DEBUG] render state', {
-      guestLocked,
-      guestStarKey,
-      starMapValue: guestStarredByKey?.[guestStarKey],
-      guestLockedForCurrentCard,
-      isCardLocked,
-      actionRailLocked: actionRailState?.locked,
-      activeHeroName: activeGuestRender?.activeHero?.name,
-      selectedAlternateIdx,
-      guestSelectedMood,
-      selectedDate,
-      selectedContext,
-    });
-  }
-
   // (4) cardController — single behavior contract for both modes.
   //     Each action enforces isCardLocked before delegating to the existing
   //     mode-specific handler. JSX must call these — not the raw handlers.
@@ -6636,25 +7195,15 @@ const OdaraScreen = ({
           // Guest lock is an engage-only latch from the icon. Unlocking is
           // swipe-down only so the guest card stays read-only and predictable.
           if (guestLocked) {
-            console.info('[ODARA_LOCK_DEBUG] guest lock click ignored_already_locked', {
-              guestLocked,
-              isCardLocked,
-              selectedAlternateIdx,
-              guestSelectedMood,
-              activeHeroName: visibleGuestRender?.activeHero?.name,
-            });
             return;
           }
           if (!activeGuestRender) {
-            console.warn('[ODARA_LOCK_DEBUG] guest lock ignored_no_active_guest_render');
             return;
           }
           engageGuestLock();
           return;
         }
         if (isReadOnlyHistoryCard) return;
-        // Signed-in: only the unlock half is exposed via tap (lock is engaged
-        // by gestures). Preserve existing behavior.
         if (lockState === 'locked') {
           setLockState('neutral');
           clearLockedSelection();
@@ -6662,7 +7211,15 @@ const OdaraScreen = ({
           window.setTimeout(() => setUnlockFlash(false), 700);
           pulseLock();
           haptic('success');
+          return;
         }
+        clearUnlockTimeout();
+        const didLock = engageSignedInLock();
+        if (!didLock) return;
+        setLockFlash(true);
+        window.setTimeout(() => setLockFlash(false), 700);
+        pulseLock();
+        haptic('success');
       },
       toggleStar: () => {
         if (isGuestMode) {
@@ -6699,18 +7256,6 @@ const OdaraScreen = ({
         haptic(isFavorited ? 'light' : 'success');
       },
       selectMood: (mood: any) => {
-        if (isGuestMode) {
-          console.info('[ODARA_LOCK_DEBUG] mood click', {
-            mood,
-            isCardLocked,
-            guestLocked,
-            guestStarKey,
-            guestLockedForCurrentCard,
-            actionRailLocked: actionRailState?.locked,
-            activeHeroName: activeGuestRender?.activeHero?.name,
-            guestSelectedMood,
-          });
-        }
         if (isCardLocked || isReadOnlyHistoryCard) return;
         if (isGuestMode) {
           handleGuestModeTap(mood as GuestModeKey);
@@ -6719,17 +7264,6 @@ const OdaraScreen = ({
         }
       },
       promoteAlternate: (alt: any, idx?: number) => {
-        if (isGuestMode) {
-          console.info('[ODARA_LOCK_DEBUG] alternate click', {
-            altName: alt?.hero?.name ?? alt?.name ?? null,
-            isCardLocked,
-            guestLocked,
-            guestStarKey,
-            guestLockedForCurrentCard,
-            actionRailLocked: actionRailState?.locked,
-            selectedAlternateIdx,
-          });
-        }
         if (isCardLocked || isReadOnlyHistoryCard) return;
         if (isGuestMode) {
           if (typeof idx === 'number') handleGuestAlternateTap(idx);
@@ -6997,6 +7531,63 @@ const OdaraScreen = ({
     () => toDisplayCardFromLayerMode(signedInVisibleLayer),
     [signedInVisibleLayer]
   );
+  function buildCurrentSignedInLockedSnapshot(): Partial<SignedInDayState> | null {
+    if (isGuestMode || slotChangedSinceLastCommit) return null;
+
+    const lockedCard = signedInCurrentHeroCarryCard;
+    if (!lockedCard) return null;
+
+    const snapshotSource = signedInResolvedCurrentCard ?? activeMainCardRender?.resolvedCurrentCard ?? {
+      fragrance_id: lockedCard.fragrance_id,
+      name: lockedCard.name,
+      brand: lockedCard.brand,
+      family: lockedCard.family,
+      image_url: lockedCard.image_url ?? null,
+      familyLabel: visibleResolvedHeroRail?.familyLabel ?? (lockedCard.family ? (FAMILY_LABELS[lockedCard.family] ?? lockedCard.family.toUpperCase()) : ''),
+      familyColor: visibleResolvedHeroRail?.familyColor ?? (lockedCard.family ? (FAMILY_COLORS[lockedCard.family] ?? '#888') : '#888'),
+      reason_chip_label: lockedCard.reason_chip_label ?? null,
+      reason_chip_explanation: lockedCard.reason_chip_explanation ?? null,
+      notes: lockedCard.notes,
+      accords: lockedCard.accords,
+      layer: signedInVisibleLayer ?? null,
+      layerFamilyKey: signedInVisibleLayer?.family_key ?? '',
+      layerFamilyLabel: signedInVisibleLayer?.family_key
+        ? (FAMILY_LABELS[signedInVisibleLayer.family_key] ?? signedInVisibleLayer.family_key.toUpperCase())
+        : '',
+      layerTokens: Array.isArray(visibleResolvedCurrentCard?.layerTokens) ? visibleResolvedCurrentCard.layerTokens : [],
+      layerModes: visibleResolvedLayerModes,
+      alternates: signedInVisibleAlternates,
+      selectedMode: visibleResolvedCurrentCard?.selectedMode ?? selectedMood,
+      resolvedHeroRail: visibleResolvedHeroRail,
+      visibleCardId: lockedCard.fragrance_id,
+      isHeroCard: true,
+    };
+
+    return {
+      lockState: 'locked' as const,
+      lockedCard,
+      lockedLayerCard: signedInCurrentLayerCarryCard,
+      lockedLayerMode: toPersistedLayerModeSnapshot(signedInVisibleLayer),
+      lockedResolvedCurrentCard: toPersistedResolvedCurrentCardSnapshot(snapshotSource),
+      lockedContext: selectedContext,
+      lockedMood: normalizeLayerMoodKey(visibleResolvedCurrentCard?.selectedMode) ?? selectedMood,
+      lockedPromotedAltId: promotedAltId,
+      resolvedHeroCard: lockedCard,
+      resolvedLayerCard: signedInCurrentLayerCarryCard ?? null,
+      manualHeroCard: null,
+      manualLayerCard: null,
+    };
+  }
+  function engageSignedInLock(): boolean {
+    const snapshot = buildCurrentSignedInLockedSnapshot();
+    if (!snapshot) return false;
+
+    updateSignedInDayState(currentDayStateKey, (current) => ({
+      ...current,
+      ...snapshot,
+    }));
+    return true;
+  }
   const signedInResolvedSequelState = useMemo(() => {
     if (isGuestMode) {
       return {
@@ -7154,6 +7745,9 @@ const OdaraScreen = ({
         carryoverMode: 'off',
         carryoverOrigin: null,
         carryoverNextDayRole: null,
+        carryoverSourceDateKey: null,
+        carryoverTargetDateKey: null,
+        carryoverContextKey: null,
         carryoverSelectedCard: null,
         carryoverHeroCard: null,
         carryoverLayerCard: null,
@@ -7168,43 +7762,60 @@ const OdaraScreen = ({
   useEffect(() => {
     if (isGuestMode) return;
     if (slotChangedSinceLastCommit) return;
-    if (signedInManualPreviewActive && lockState !== 'locked') return;
+    if (signedInManualPreviewActive) return;
+
+    const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
+    if (current.carryoverMode === 'off' || current.daisyChainEnabled !== true) {
+      return;
+    }
+    if (current.lockState === 'locked' || signedInResolvedDayDecisionSource === 'locked') {
+      return;
+    }
+    const nextResolvedHeroCard = signedInCurrentHeroCarryCard ?? current.resolvedHeroCard;
+    const nextResolvedLayerCard = signedInCurrentLayerCarryCard ?? current.resolvedLayerCard;
+    const nextCarryoverSelectedCard = current.carryoverMode === 'hero' && signedInCurrentHeroCarryCard
+      ? signedInCurrentHeroCarryCard
+      : current.carryoverMode === 'layer' && signedInCurrentLayerCarryCard
+        ? signedInCurrentLayerCarryCard
+        : current.carryoverSelectedCard;
+    const nextCarryoverHeroCard = current.carryoverMode === 'hero' && signedInCurrentHeroCarryCard
+      ? signedInCurrentHeroCarryCard
+      : current.carryoverHeroCard;
+    const nextCarryoverLayerCard = current.carryoverMode === 'layer' && signedInCurrentLayerCarryCard
+      ? signedInCurrentLayerCarryCard
+      : current.carryoverLayerCard;
+
+    const alreadySynced =
+      areSameDisplayCards(current.resolvedHeroCard, nextResolvedHeroCard) &&
+      areSameDisplayCards(current.resolvedLayerCard, nextResolvedLayerCard) &&
+      areSameDisplayCards(current.carryoverSelectedCard, nextCarryoverSelectedCard) &&
+      areSameDisplayCards(current.carryoverHeroCard, nextCarryoverHeroCard) &&
+      areSameDisplayCards(current.carryoverLayerCard, nextCarryoverLayerCard);
+
+    if (alreadySynced) return;
+
     updateSignedInDayState(currentDayStateKey, (current) => {
       let next = {
         ...current,
-        resolvedHeroCard: signedInCurrentHeroCarryCard ?? current.resolvedHeroCard,
-        resolvedLayerCard: signedInCurrentLayerCarryCard ?? current.resolvedLayerCard,
+        resolvedHeroCard: nextResolvedHeroCard,
+        resolvedLayerCard: nextResolvedLayerCard,
       };
-
-      if (lockState === 'locked' && signedInCurrentHeroCarryCard) {
-        next = {
-          ...next,
-          lockedCard: signedInCurrentHeroCarryCard,
-          lockedLayerCard: signedInCurrentLayerCarryCard,
-          lockedLayerMode: toPersistedLayerModeSnapshot(signedInVisibleLayer),
-          lockedContext: selectedContext,
-          lockedMood: selectedMood,
-          lockedPromotedAltId: promotedAltId,
-          manualHeroCard: null,
-          manualLayerCard: null,
-        };
-      }
 
       if (current.carryoverMode === 'hero' && signedInCurrentHeroCarryCard) {
         next = {
           ...next,
-          carryoverSelectedCard: signedInCurrentHeroCarryCard,
-          resolvedHeroCard: signedInCurrentHeroCarryCard,
-          carryoverHeroCard: signedInCurrentHeroCarryCard,
+          carryoverSelectedCard: nextCarryoverSelectedCard,
+          resolvedHeroCard: nextResolvedHeroCard,
+          carryoverHeroCard: nextCarryoverHeroCard,
         };
       }
 
       if (current.carryoverMode === 'layer' && signedInCurrentLayerCarryCard) {
         next = {
           ...next,
-          carryoverSelectedCard: signedInCurrentLayerCarryCard,
-          resolvedLayerCard: signedInCurrentLayerCarryCard,
-          carryoverLayerCard: signedInCurrentLayerCarryCard,
+          carryoverSelectedCard: nextCarryoverSelectedCard,
+          resolvedLayerCard: nextResolvedLayerCard,
+          carryoverLayerCard: nextCarryoverLayerCard,
         };
       }
 
@@ -7216,12 +7827,9 @@ const OdaraScreen = ({
     slotChangedSinceLastCommit,
     updateSignedInDayState,
     signedInManualPreviewActive,
-    lockState,
+    signedInResolvedDayDecisionSource,
     signedInCurrentHeroCarryCard,
     signedInCurrentLayerCarryCard,
-    signedInVisibleLayer,
-    selectedMood,
-    promotedAltId,
   ]);
   const handleSignedInCarryoverToggle = useCallback(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard) return 'off' as SignedInCarryoverTarget;
@@ -7234,6 +7842,8 @@ const OdaraScreen = ({
         ? signedInCurrentLayerCarryCard
         : null;
     const nextDayRole = resolveCarryoverNextDayRole(nextTarget);
+    const nextTargetDateKey = nextTarget === 'off' ? null : getNextDateKey(currentDateKey);
+    const normalizedContextKey = normalizePersistedContextKey(selectedContext);
     const turningOff = signedInResolvedSequelState.origin === 'manual' && signedInResolvedSequelState.enabled && nextTarget === 'off';
     updateSignedInDayState(currentDayStateKey, (current) => ({
       ...current,
@@ -7241,6 +7851,9 @@ const OdaraScreen = ({
       carryoverMode: nextTarget,
       carryoverOrigin: nextTarget === 'off' ? null : 'manual',
       carryoverNextDayRole: nextDayRole,
+      carryoverSourceDateKey: nextTarget === 'off' ? null : currentDateKey,
+      carryoverTargetDateKey: nextTargetDateKey,
+      carryoverContextKey: nextTarget === 'off' ? null : normalizedContextKey,
       carryoverSelectedCard: nextSelectedCard,
       resolvedHeroCard: signedInCurrentHeroCarryCard ?? current.resolvedHeroCard,
       resolvedLayerCard: signedInCurrentLayerCarryCard ?? current.resolvedLayerCard,
@@ -7267,6 +7880,8 @@ const OdaraScreen = ({
     signedInCurrentLayerCarryCard,
     signedInResolvedSequelState,
     currentDayStateKey,
+    currentDateKey,
+    selectedContext,
     triggerSignedInCarryoverPulse,
     triggerSignedInCarryoverCloseFlash,
     updateSignedInDayState,
@@ -7806,7 +8421,7 @@ const OdaraScreen = ({
                     Guest writes only to local guestLocked boolean (no Supabase). */}
                 <button
                   type="button"
-                  aria-label="Lock"
+                  aria-label={lockActive ? 'Unlock card' : 'Lock card'}
                   onClick={() => cardController.actions.toggleLock()}
                   className="relative flex items-center justify-center w-8 h-8 touch-manipulation text-foreground/70"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
