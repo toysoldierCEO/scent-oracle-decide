@@ -1044,7 +1044,7 @@ export interface OracleLayer {
 
 export interface OracleAlternate {
   fragrance_id: string; name: string; family: string; reason: string;
-  brand?: string; notes?: string[]; accords?: string[];
+  brand?: string; notes?: string[]; accords?: string[]; image_url?: string;
   reason_chip_label?: string | null;
   reason_chip_explanation?: string | null;
 }
