@@ -2942,7 +2942,7 @@ const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuPage, { title: string; subtitle: s
 
 /* Shared chrome for menu destination pages — back + ODARA wordmark + title. */
 const OdaraDestinationChrome: React.FC<{
-  title: string;
+  title?: string;
   eyebrow?: string;
   onClose: () => void;
   children: React.ReactNode;
@@ -2957,7 +2957,7 @@ const OdaraDestinationChrome: React.FC<{
       fontFamily: "'Geist Sans', system-ui, sans-serif",
     }}
     role="dialog"
-    aria-label={title}
+    aria-label={title || eyebrow || 'ODARA'}
   >
     <div
       className="mx-auto flex w-full max-w-md flex-col px-4 pb-12"
@@ -2980,19 +2980,23 @@ const OdaraDestinationChrome: React.FC<{
         </div>
         <div className="h-10 w-10" />
       </div>
-      <div className="mb-6 px-1">
-        {eyebrow && (
-          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.36em] text-foreground/40">
-            {eyebrow}
-          </div>
-        )}
-        <h1
-          className="text-[28px] leading-[1.05] text-foreground/95"
-          style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-        >
-          {title}
-        </h1>
-      </div>
+      {(eyebrow || title) && (
+        <div className={title ? 'mb-6 px-1' : 'mb-4 px-1'}>
+          {eyebrow && (
+            <div className={`${title ? 'mb-1.5' : ''} text-[10px] font-medium uppercase tracking-[0.36em] text-foreground/40`}>
+              {eyebrow}
+            </div>
+          )}
+          {title && (
+            <h1
+              className="text-[28px] leading-[1.05] text-foreground/95"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+            >
+              {title}
+            </h1>
+          )}
+        </div>
+      )}
       {children}
     </div>
   </div>
@@ -3100,11 +3104,11 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const familySegments: Array<{ key: string; label: string; pct: number; color: string }> = [];
 
   return (
-    <OdaraDestinationChrome title={displayName || 'Profile'} eyebrow="ODARA Dossier" onClose={onClose}>
-      {/* Identity header — restrained monogram + name only. */}
-      <div className="mb-7 flex items-center gap-3.5 px-1">
+    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
+      {/* Single compact identity row — sits tight under DOSSIER label. */}
+      <div className="mb-6 flex items-center gap-3.5 px-1">
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-full text-[13px] font-medium uppercase tracking-[0.16em] text-foreground/80"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
           style={{
             border: '1px solid rgba(255,255,255,0.10)',
             background:
@@ -3115,9 +3119,9 @@ const OdaraProfilePage: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           {monogram || '—'}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-[0.36em] text-foreground/40">Signed in</div>
+          <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">Signed in</div>
           <div
-            className="truncate text-[18px] text-foreground/92"
+            className="truncate text-[17px] leading-tight text-foreground/92"
             style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
           >
             {displayName || '\u00A0'}
