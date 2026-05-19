@@ -13,6 +13,8 @@ import {
   CARD_ACTION_BUTTON_BASE_CLASS,
   CARD_ACTION_BUTTON_BASE_STYLE,
   CARD_ACTION_BUTTON_INACTIVE_STYLE,
+  HEART_LIKE_COLOR,
+  HEART_LOVE_COLOR,
 } from "@/components/card-system/tokens";
 
 
@@ -3621,6 +3623,8 @@ type OdaraProfileDossierPayload = {
     liked_count?: number;
     loved_count?: number;
     wear_more_count?: number;
+    favorite_count?: number;
+    retired_count?: number;
     preference_count?: number;
     saved_empty_reason: string | null;
     history_empty_reason: string | null;
@@ -3629,6 +3633,8 @@ type OdaraProfileDossierPayload = {
     liked_count: number;
     loved_count: number;
     wear_more_count?: number;
+    favorite_count?: number;
+    retired_count?: number;
     preference_count: number;
     favorite_lane: string | null;
     favorite_lane_confidence: string | null;
@@ -3668,6 +3674,8 @@ type OdaraCollectionItem = {
   collection_status: string | null;
   preference_state: OdaraCollectionPreferenceState;
   wear_more?: boolean;
+  favorite?: boolean;
+  retired?: boolean;
   default_rank?: number | null;
 };
 
@@ -3682,6 +3690,8 @@ type OdaraCollectionPayload = {
     liked_count: number;
     loved_count: number;
     wear_more_count?: number;
+    favorite_count?: number;
+    retired_count?: number;
     preference_count: number;
   };
   empty_reason: string | null;
@@ -3702,14 +3712,30 @@ type OdaraCollectionPreferenceWriteResult = {
 type OdaraCollectionWearMoreWriteResult = {
   fragrance_id: string;
   wear_more: boolean;
+  favorite?: boolean;
   removed: boolean;
   source: string | null;
   updated_at: string | null;
   wear_more_count: number;
+  favorite_count?: number;
+  retired_count?: number;
 };
 
-type OdaraCollectionFilter = 'all' | 'liked' | 'loved' | 'wear_more' | 'signature' | 'unclassified';
-type OdaraCollectionSort = 'default' | 'name' | 'brand' | 'family' | 'preference' | 'wear_more';
+type OdaraCollectionRetiredWriteResult = {
+  fragrance_id: string;
+  retired: boolean;
+  favorite?: boolean;
+  wear_more?: boolean;
+  removed: boolean;
+  source: string | null;
+  updated_at: string | null;
+  favorite_count?: number;
+  wear_more_count?: number;
+  retired_count: number;
+};
+
+type OdaraCollectionFilter = 'all' | 'liked' | 'loved' | 'favorite' | 'retired' | 'signature';
+type OdaraCollectionSort = '' | 'name' | 'brand' | 'family' | 'preference' | 'favorite' | 'retired';
 
 function deriveProfileMonogram(value: string | null | undefined): string {
   const label = String(value ?? '').trim();
@@ -3786,17 +3812,29 @@ function getCollectionTileTint(item: Pick<OdaraCollectionItem, 'family_key' | 'f
   return FAMILY_TINTS[normalized] ?? DEFAULT_TINT;
 }
 
-function getCollectionWearMoreLabel(wearMore: boolean | null | undefined) {
-  return wearMore ? 'Wear More' : null;
+function getCollectionFavoriteLabel(favorite: boolean | null | undefined) {
+  return favorite ? 'Favorite' : null;
+}
+
+function getCollectionRetiredLabel(retired: boolean | null | undefined) {
+  return retired ? 'Retired' : null;
 }
 
 function normalizeCollectionPayload(payload: OdaraCollectionPayload | null): OdaraCollectionPayload | null {
   if (!payload) return null;
   return {
     ...payload,
+    summary: {
+      ...payload.summary,
+      wear_more_count: Number(payload.summary?.wear_more_count ?? payload.summary?.favorite_count ?? 0),
+      favorite_count: Number(payload.summary?.favorite_count ?? payload.summary?.wear_more_count ?? 0),
+      retired_count: Number(payload.summary?.retired_count ?? 0),
+    },
     items: (payload.items ?? []).map((item, index) => ({
       ...item,
-      wear_more: Boolean(item.wear_more),
+      wear_more: Boolean(item.wear_more ?? item.favorite),
+      favorite: Boolean(item.favorite ?? item.wear_more),
+      retired: Boolean(item.retired),
       default_rank: getCollectionDefaultRank(item, index),
     })),
   };
@@ -3805,7 +3843,7 @@ function normalizeCollectionPayload(payload: OdaraCollectionPayload | null): Oda
 function sortCollectionItemsForView(items: OdaraCollectionItem[], sort: OdaraCollectionSort) {
   return [...items].sort((a, b) => {
     const defaultOrder = (a.default_rank ?? Number.MAX_SAFE_INTEGER) - (b.default_rank ?? Number.MAX_SAFE_INTEGER);
-    if (sort === 'default') {
+    if (!sort) {
       return defaultOrder;
     }
     if (sort === 'name') {
@@ -3839,8 +3877,18 @@ function sortCollectionItemsForView(items: OdaraCollectionItem[], sort: OdaraCol
         || defaultOrder
       );
     }
+    if (sort === 'favorite') {
+      return (
+        Number(Boolean(b.favorite ?? b.wear_more)) - Number(Boolean(a.favorite ?? a.wear_more))
+        || getCollectionPreferenceRank(a.preference_state) - getCollectionPreferenceRank(b.preference_state)
+        || getCollectionStatusRank(a.collection_status) - getCollectionStatusRank(b.collection_status)
+        || (a.brand ?? '').localeCompare(b.brand ?? '', undefined, { sensitivity: 'base' })
+        || (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' })
+        || defaultOrder
+      );
+    }
     return (
-      Number(Boolean(b.wear_more)) - Number(Boolean(a.wear_more))
+      Number(Boolean(b.retired)) - Number(Boolean(a.retired))
       || getCollectionPreferenceRank(a.preference_state) - getCollectionPreferenceRank(b.preference_state)
       || getCollectionStatusRank(a.collection_status) - getCollectionStatusRank(b.collection_status)
       || (a.brand ?? '').localeCompare(b.brand ?? '', undefined, { sensitivity: 'base' })
@@ -3973,7 +4021,8 @@ const OdaraProfilePage: React.FC<{
           formatProfileCount(bottleCount, 'bottle'),
           !isGuestMode ? `${profilePayload?.preference_summary?.liked_count ?? 0} liked` : null,
           !isGuestMode ? `${profilePayload?.preference_summary?.loved_count ?? 0} loved` : null,
-          !isGuestMode ? `${profilePayload?.preference_summary?.wear_more_count ?? 0} wear more` : null,
+          !isGuestMode ? `${profilePayload?.preference_summary?.favorite_count ?? profilePayload?.preference_summary?.wear_more_count ?? 0} favorite` : null,
+          !isGuestMode ? `${profilePayload?.preference_summary?.retired_count ?? 0} retired` : null,
         ].filter(Boolean).join(' · ')
       : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
   const tasteHint = profileLoading
@@ -4012,7 +4061,8 @@ const OdaraProfilePage: React.FC<{
         (profilePayload?.preference_summary?.preference_count ?? 0) > 0
           ? [
               `${profilePayload?.preference_summary?.preference_count ?? 0} real preference signals`,
-              `${profilePayload?.preference_summary?.wear_more_count ?? 0} wear more`,
+              `${profilePayload?.preference_summary?.favorite_count ?? profilePayload?.preference_summary?.wear_more_count ?? 0} favorite`,
+              `${profilePayload?.preference_summary?.retired_count ?? 0} retired`,
             ].join(' · ')
           : profilePayload?.preference_summary?.favorite_lane_empty_reason ?? 'Like or love bottles in Collection to sharpen this.'
       )
@@ -4187,23 +4237,78 @@ const COLLECTION_FILTER_OPTIONS: Array<{ value: OdaraCollectionFilter; label: st
   { value: 'all', label: 'All' },
   { value: 'liked', label: 'Liked' },
   { value: 'loved', label: 'Loved' },
-  { value: 'wear_more', label: 'Wear More' },
+  { value: 'favorite', label: 'Favorite' },
+  { value: 'retired', label: 'Retired' },
   { value: 'signature', label: 'Signature' },
-  { value: 'unclassified', label: 'Unclassified' },
 ];
 
 const COLLECTION_SORT_OPTIONS: Array<{ value: OdaraCollectionSort; label: string }> = [
-  { value: 'default', label: 'Default' },
   { value: 'name', label: 'Name' },
   { value: 'brand', label: 'Brand' },
   { value: 'family', label: 'Family' },
   { value: 'preference', label: 'Preference' },
-  { value: 'wear_more', label: 'Wear More' },
+  { value: 'favorite', label: 'Favorite' },
+  { value: 'retired', label: 'Retired' },
 ];
 
-const WEAR_MORE_ACTIVE_COLOR = '#e7b55f';
+const COLLECTION_FAVORITE_ACTIVE_COLOR = '#e7b55f';
+const COLLECTION_RETIRED_ACTIVE_COLOR = '#e25757';
+const COLLECTION_ACTION_BUTTON_STYLE = {
+  ...CARD_ACTION_BUTTON_BASE_STYLE,
+  width: 34,
+  height: 34,
+  minWidth: 34,
+  minHeight: 34,
+} as const;
 
-const CollectionWearMoreButton: React.FC<{
+const CollectionPreferenceButton: React.FC<{
+  state: HeartState;
+  disabled?: boolean;
+  onChange: (next: HeartState) => void;
+}> = ({ state, disabled, onChange }) => {
+  const liked = state >= 1;
+  const loved = state === 2;
+  const heartColor = loved ? HEART_LOVE_COLOR : liked ? HEART_LIKE_COLOR : undefined;
+
+  return (
+    <button
+      type="button"
+      aria-label={loved ? 'Loved' : liked ? 'Liked' : 'Like'}
+      aria-pressed={liked}
+      disabled={disabled}
+      onClick={() => onChange(state === 0 ? 1 : state === 1 ? 2 : 0)}
+      className={`${CARD_ACTION_BUTTON_BASE_CLASS} relative h-[34px] w-[34px]`}
+      style={{
+        ...COLLECTION_ACTION_BUTTON_STYLE,
+        ...(liked
+          ? {
+              color: heartColor,
+              background: loved ? 'rgba(239,68,68,0.14)' : 'rgba(244,114,182,0.14)',
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px ${
+                loved ? 'rgba(239,68,68,0.15)' : 'rgba(244,114,182,0.13)'
+              }`,
+            }
+          : CARD_ACTION_BUTTON_INACTIVE_STYLE),
+      }}
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill={liked ? heartColor : 'none'}
+        stroke={liked ? heartColor : 'currentColor'}
+        strokeWidth="1.55"
+        style={{
+          filter: liked ? `drop-shadow(0 0 5px ${heartColor}66)` : undefined,
+        }}
+      >
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+      </svg>
+    </button>
+  );
+};
+
+const CollectionFavoriteButton: React.FC<{
   active: boolean;
   disabled?: boolean;
   onToggle: () => void;
@@ -4211,39 +4316,80 @@ const CollectionWearMoreButton: React.FC<{
   return (
     <button
       type="button"
-      aria-label={active ? 'Remove Wear More' : 'Wear More'}
+      aria-label={active ? 'Remove Favorite' : 'Favorite'}
       aria-pressed={active}
       disabled={disabled}
       onClick={onToggle}
-      className={`${CARD_ACTION_BUTTON_BASE_CLASS} relative`}
+      className={`${CARD_ACTION_BUTTON_BASE_CLASS} relative h-[34px] w-[34px]`}
       style={{
-        ...CARD_ACTION_BUTTON_BASE_STYLE,
+        ...COLLECTION_ACTION_BUTTON_STYLE,
         ...(active
           ? {
-              color: WEAR_MORE_ACTIVE_COLOR,
+              color: COLLECTION_FAVORITE_ACTIVE_COLOR,
               background: 'rgba(231,181,95,0.14)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 24px rgba(231,181,95,0.15)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(231,181,95,0.15)',
             }
           : CARD_ACTION_BUTTON_INACTIVE_STYLE),
       }}
     >
       <svg
-        width="16"
-        height="16"
+        width="15"
+        height="15"
         viewBox="0 0 24 24"
-        fill="none"
-        stroke={active ? WEAR_MORE_ACTIVE_COLOR : 'currentColor'}
-        strokeWidth="1.65"
+        fill={active ? COLLECTION_FAVORITE_ACTIVE_COLOR : 'none'}
+        stroke={active ? COLLECTION_FAVORITE_ACTIVE_COLOR : 'currentColor'}
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         style={{
-          filter: active ? `drop-shadow(0 0 5px ${WEAR_MORE_ACTIVE_COLOR}55)` : undefined,
+          filter: active ? `drop-shadow(0 0 5px ${COLLECTION_FAVORITE_ACTIVE_COLOR}55)` : undefined,
         }}
       >
-        <path d="M20 8a7.5 7.5 0 0 0-13-3" />
-        <path d="M4 6v5h5" />
-        <path d="M4 16a7.5 7.5 0 0 0 13 3" />
-        <path d="M20 18v-5h-5" />
+        <path d="M12 3.4l2.67 5.4 5.96.87-4.32 4.2 1.02 5.93L12 17.02 6.67 19.8l1.02-5.93-4.32-4.2 5.96-.87L12 3.4z" />
+      </svg>
+    </button>
+  );
+};
+
+const CollectionRetireButton: React.FC<{
+  active: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}> = ({ active, disabled, onToggle }) => {
+  return (
+    <button
+      type="button"
+      aria-label={active ? 'Unretire bottle' : 'Retire bottle'}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`${CARD_ACTION_BUTTON_BASE_CLASS} relative h-[34px] w-[34px]`}
+      style={{
+        ...COLLECTION_ACTION_BUTTON_STYLE,
+        ...(active
+          ? {
+              color: COLLECTION_RETIRED_ACTIVE_COLOR,
+              background: 'rgba(226,87,87,0.14)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(226,87,87,0.16)',
+            }
+          : CARD_ACTION_BUTTON_INACTIVE_STYLE),
+      }}
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={active ? COLLECTION_RETIRED_ACTIVE_COLOR : 'currentColor'}
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{
+          filter: active ? `drop-shadow(0 0 5px ${COLLECTION_RETIRED_ACTIVE_COLOR}55)` : undefined,
+        }}
+      >
+        <circle cx="12" cy="12" r="8" />
+        <path d="M8.2 15.8l7.6-7.6" />
       </svg>
     </button>
   );
@@ -4258,10 +4404,11 @@ const OdaraCollectionPage: React.FC<{
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingPreferenceById, setPendingPreferenceById] = useState<Record<string, boolean>>({});
-  const [pendingWearMoreById, setPendingWearMoreById] = useState<Record<string, boolean>>({});
+  const [pendingFavoriteById, setPendingFavoriteById] = useState<Record<string, boolean>>({});
+  const [pendingRetiredById, setPendingRetiredById] = useState<Record<string, boolean>>({});
   const [errorById, setErrorById] = useState<Record<string, string>>({});
   const [selectedFilter, setSelectedFilter] = useState<OdaraCollectionFilter>('all');
-  const [selectedSort, setSelectedSort] = useState<OdaraCollectionSort>('default');
+  const [selectedSort, setSelectedSort] = useState<OdaraCollectionSort>('');
 
   useEffect(() => {
     let active = true;
@@ -4301,35 +4448,16 @@ const OdaraCollectionPage: React.FC<{
     };
   }, [isGuestMode, userId]);
 
-  const hasUnclassifiedItems = useMemo(
-    () => (payload?.items ?? []).some((item) => {
-      const familyKey = normalizeSearchFamilyKey(item.family_key ?? item.family_label ?? '');
-      return !familyKey || familyKey === 'unknown';
-    }),
-    [payload]
-  );
-
-  const availableFilterOptions = useMemo(
-    () => COLLECTION_FILTER_OPTIONS.filter((option) => option.value !== 'unclassified' || hasUnclassifiedItems),
-    [hasUnclassifiedItems]
-  );
-
-  useEffect(() => {
-    if (selectedFilter === 'unclassified' && !hasUnclassifiedItems) {
-      setSelectedFilter('all');
-    }
-  }, [hasUnclassifiedItems, selectedFilter]);
-
   const visibleItems = useMemo(() => {
     const baseItems = payload?.items ?? [];
     const filteredItems = baseItems.filter((item) => {
       if (selectedFilter === 'all') return true;
       if (selectedFilter === 'liked') return item.preference_state === 'liked';
       if (selectedFilter === 'loved') return item.preference_state === 'loved';
-      if (selectedFilter === 'wear_more') return Boolean(item.wear_more);
+      if (selectedFilter === 'favorite') return Boolean(item.favorite ?? item.wear_more);
+      if (selectedFilter === 'retired') return Boolean(item.retired);
       if (selectedFilter === 'signature') return item.collection_status === 'signature';
-      const familyKey = normalizeSearchFamilyKey(item.family_key ?? item.family_label ?? '');
-      return !familyKey || familyKey === 'unknown';
+      return true;
     });
     return sortCollectionItemsForView(filteredItems, selectedSort);
   }, [payload, selectedFilter, selectedSort]);
@@ -4381,27 +4509,27 @@ const OdaraCollectionPage: React.FC<{
     setPendingPreferenceById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
   }, [isGuestMode]);
 
-  const handleWearMoreToggle = useCallback(async (item: OdaraCollectionItem) => {
+  const handleFavoriteToggle = useCallback(async (item: OdaraCollectionItem) => {
     if (isGuestMode || !item.fragrance_id) return;
 
-    setPendingWearMoreById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
+    setPendingFavoriteById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
     setErrorById((prev) => {
       const next = { ...prev };
       delete next[item.fragrance_id as string];
       return next;
     });
 
-    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_wear_more_v1' as any, {
+    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_favorite_v1' as any, {
       p_fragrance_id: item.fragrance_id,
-      p_wear_more: !item.wear_more,
+      p_favorite: !(item.favorite ?? item.wear_more),
       p_source: 'collection',
     } as any);
 
     if (rpcError || !data) {
-      setPendingWearMoreById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+      setPendingFavoriteById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
       setErrorById((prev) => ({
         ...prev,
-        [item.fragrance_id as string]: rpcError?.message || 'Could not save wear-more.',
+        [item.fragrance_id as string]: rpcError?.message || 'Could not save favorite.',
       }));
       return;
     }
@@ -4413,16 +4541,73 @@ const OdaraCollectionPage: React.FC<{
         ...prev,
         items: (prev.items ?? []).map((entry) => (
           entry.fragrance_id === result.fragrance_id
-            ? { ...entry, wear_more: result.wear_more }
+            ? {
+                ...entry,
+                wear_more: result.wear_more,
+                favorite: result.favorite ?? result.wear_more,
+              }
             : entry
         )),
         summary: {
           ...prev.summary,
           wear_more_count: result.wear_more_count,
+          favorite_count: result.favorite_count ?? result.wear_more_count,
+          retired_count: result.retired_count ?? prev.summary.retired_count,
         },
       });
     });
-    setPendingWearMoreById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+    setPendingFavoriteById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+  }, [isGuestMode]);
+
+  const handleRetiredToggle = useCallback(async (item: OdaraCollectionItem) => {
+    if (isGuestMode || !item.fragrance_id) return;
+
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
+    setErrorById((prev) => {
+      const next = { ...prev };
+      delete next[item.fragrance_id as string];
+      return next;
+    });
+
+    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_retired_v1' as any, {
+      p_fragrance_id: item.fragrance_id,
+      p_retired: !item.retired,
+      p_source: 'collection',
+    } as any);
+
+    if (rpcError || !data) {
+      setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+      setErrorById((prev) => ({
+        ...prev,
+        [item.fragrance_id as string]: rpcError?.message || 'Could not save retired state.',
+      }));
+      return;
+    }
+
+    const result = data as OdaraCollectionRetiredWriteResult;
+    setPayload((prev) => {
+      if (!prev) return prev;
+      return normalizeCollectionPayload({
+        ...prev,
+        items: (prev.items ?? []).map((entry) => (
+          entry.fragrance_id === result.fragrance_id
+            ? {
+                ...entry,
+                retired: result.retired,
+                favorite: result.favorite ?? result.wear_more ?? false,
+                wear_more: result.wear_more ?? result.favorite ?? false,
+              }
+            : entry
+        )),
+        summary: {
+          ...prev.summary,
+          wear_more_count: result.wear_more_count ?? result.favorite_count ?? prev.summary.wear_more_count,
+          favorite_count: result.favorite_count ?? result.wear_more_count ?? prev.summary.favorite_count,
+          retired_count: result.retired_count,
+        },
+      });
+    });
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
   }, [isGuestMode]);
 
   const headline = 'Collection';
@@ -4436,64 +4621,55 @@ const OdaraCollectionPage: React.FC<{
             formatProfileCount(payload?.summary?.owned_count ?? 0, 'bottle'),
             `${payload?.summary?.liked_count ?? 0} liked`,
             `${payload?.summary?.loved_count ?? 0} loved`,
-            `${payload?.summary?.wear_more_count ?? 0} wear more`,
+            `${payload?.summary?.favorite_count ?? payload?.summary?.wear_more_count ?? 0} favorite`,
+            `${payload?.summary?.retired_count ?? 0} retired`,
           ].join(' · ');
 
   return (
-    <OdaraDestinationChrome eyebrow="Collection" title={headline} onClose={onClose}>
+    <OdaraDestinationChrome title={headline} onClose={onClose}>
       <div className="mb-5 px-1 text-[11px] leading-[1.55] text-foreground/42">
         {subtitle}
       </div>
 
       <div className="flex flex-col gap-4">
         <OdaraInsetGroup emphasis>
-          <div className="px-4 pt-3.5 text-[10px] uppercase tracking-[0.28em] text-foreground/38">
-            {loading
-              ? 'Loading real collection'
-              : isGuestMode
-                ? 'Demo wardrobe'
-                : 'Owned bottles, preference, and rotation signal'}
-          </div>
-
           {(payload?.items?.length ?? 0) > 0 && (
-            <div className="px-4 pb-4 pt-3">
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {availableFilterOptions.map((option) => {
-                  const active = selectedFilter === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setSelectedFilter(option.value)}
-                      className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] transition-all duration-200 ${
-                        active
-                          ? 'text-foreground/88'
-                          : 'text-foreground/44 hover:text-foreground/68'
-                      }`}
-                      style={{
-                        borderColor: active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                        background: active ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.025)',
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mb-4">
-                <label className="mb-1 block text-[9px] uppercase tracking-[0.24em] text-foreground/36">
-                  Sort
-                </label>
+            <div className="px-4 pb-3 pt-3">
+              {!loading && (
+                <div className="mb-3 text-[10px] uppercase tracking-[0.26em] text-foreground/34">
+                  {isGuestMode ? 'Demo wardrobe' : 'Wardrobe'}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
                 <select
-                  value={selectedSort}
-                  onChange={(event) => setSelectedSort(event.target.value as OdaraCollectionSort)}
-                  className="w-full rounded-[16px] border bg-transparent px-3.5 py-2.5 text-[11px] uppercase tracking-[0.18em] text-foreground/78 outline-none"
+                  value={selectedFilter}
+                  onChange={(event) => setSelectedFilter(event.target.value as OdaraCollectionFilter)}
+                  aria-label="Filter collection"
+                  className="w-full rounded-[14px] border bg-transparent px-3 py-2 text-[11px] text-foreground/78 outline-none"
                   style={{
                     borderColor: 'rgba(255,255,255,0.08)',
                     background: 'rgba(255,255,255,0.025)',
                   }}
                 >
+                  {COLLECTION_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selectedSort}
+                  onChange={(event) => setSelectedSort(event.target.value as OdaraCollectionSort)}
+                  aria-label="Sort collection"
+                  className="w-full rounded-[14px] border bg-transparent px-3 py-2 text-[11px] text-foreground/78 outline-none"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    background: 'rgba(255,255,255,0.025)',
+                  }}
+                >
+                  <option value="">
+                    Natural order
+                  </option>
                   {COLLECTION_SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -4517,62 +4693,76 @@ const OdaraCollectionPage: React.FC<{
               {visibleItems.map((item, index) => {
                 const itemKey = item.fragrance_id ?? `${item.brand ?? 'brand'}|${item.name ?? 'name'}|${index}`;
                 const tint = getCollectionTileTint(item);
-                const statusLabel = item.collection_status === 'signature' ? 'Signature' : item.collection_status === 'guest_demo' ? 'Demo' : 'Owned';
+                const statusLabel = item.collection_status === 'signature' ? 'Signature' : item.collection_status === 'guest_demo' ? 'Demo' : null;
                 const imageUrl = item.thumbnail_url ?? item.image_url ?? null;
                 const preferenceLabel = getCollectionPreferenceLabel(item.preference_state);
-                const wearMoreLabel = getCollectionWearMoreLabel(item.wear_more);
+                const favoriteLabel = getCollectionFavoriteLabel(item.favorite ?? item.wear_more);
+                const retiredLabel = getCollectionRetiredLabel(item.retired);
                 const itemError = errorById[itemKey];
+                const isRetired = Boolean(item.retired);
+                const isFavorite = Boolean(item.favorite ?? item.wear_more);
                 return (
                   <div
                     key={itemKey}
-                    className="flex min-h-[255px] flex-col overflow-hidden rounded-[20px] border p-2.5"
+                    className="flex min-h-[272px] flex-col overflow-hidden rounded-[22px] border p-2.5"
                     style={{
-                      borderColor: tint.border,
-                      background: `linear-gradient(180deg, ${tint.bg} 0%, rgba(11,12,16,0.86) 100%)`,
-                      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 30px ${tint.glow}`,
+                      borderColor: isRetired ? 'rgba(255,255,255,0.1)' : tint.border,
+                      background: isRetired
+                        ? 'linear-gradient(180deg, rgba(64,64,68,0.24) 0%, rgba(10,10,12,0.9) 100%)'
+                        : `radial-gradient(circle at top, ${tint.bg} 0%, rgba(255,255,255,0.015) 34%, rgba(11,12,16,0.9) 100%)`,
+                      boxShadow: isRetired
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 30px rgba(0,0,0,0.28)'
+                        : `inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px ${tint.glow}`,
                     }}
                   >
                     <div
-                      className="relative overflow-hidden rounded-[16px] border"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.08)',
-                        aspectRatio: '4 / 5',
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-                      }}
+                      className="flex flex-1 flex-col"
+                      style={isRetired ? { filter: 'grayscale(1) saturate(0.18)', opacity: 0.82 } : undefined}
                     >
-                      {imageUrl ? (
-                        <img src={imageUrl} alt={item.name ?? 'Fragrance bottle'} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[18px] uppercase tracking-[0.16em] text-foreground/44">
-                          {deriveProfileMonogram(item.name ?? item.brand ?? 'Bottle')}
-                        </div>
-                      )}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-2.5 pt-2">
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[8.5px] uppercase tracking-[0.2em] text-foreground/78"
-                          style={{
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            background: 'rgba(8,10,14,0.52)',
-                            backdropFilter: 'blur(10px)',
-                          }}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2.5 flex min-h-[62px] flex-col">
                       <div
-                        className="line-clamp-2 text-[13px] leading-[1.15] text-foreground/92"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                        className="relative overflow-hidden rounded-[16px] border"
+                        style={{
+                          borderColor: isRetired ? 'rgba(255,255,255,0.08)' : tint.border,
+                          aspectRatio: '4 / 5',
+                          background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+                        }}
                       >
-                        {item.name ?? 'Unnamed fragrance'}
+                        {imageUrl ? (
+                          <img src={imageUrl} alt={item.name ?? 'Fragrance bottle'} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[18px] uppercase tracking-[0.12em] text-foreground/44">
+                            {deriveProfileMonogram(item.name ?? item.brand ?? 'Bottle')}
+                          </div>
+                        )}
+                        {statusLabel && (
+                          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-2.5 pt-2">
+                            <span
+                              className="max-w-full truncate rounded-full px-2 py-[3px] text-[7.5px] font-medium text-foreground/78"
+                              style={{
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'rgba(8,10,14,0.56)',
+                                backdropFilter: 'blur(10px)',
+                              }}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-1 truncate text-[9px] uppercase tracking-[0.22em] text-foreground/42">
-                        {item.brand ?? 'Brand unavailable'}
-                      </div>
-                      <div className="mt-1 truncate text-[10px] leading-[1.35] text-foreground/56">
-                        {item.family_label ?? 'Unclassified'}
+
+                      <div className="mt-2.5 flex min-h-[76px] flex-col">
+                        <div
+                          className="line-clamp-2 text-[13px] leading-[1.15] text-foreground/92"
+                          style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                        >
+                          {item.name ?? 'Unnamed fragrance'}
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-[10px] leading-[1.28] text-foreground/56">
+                          {item.brand ?? 'Brand unavailable'}
+                        </div>
+                        <div className="mt-1 line-clamp-1 text-[10px] leading-[1.35] text-foreground/68">
+                          {item.family_label ?? 'Unclassified'}
+                        </div>
                       </div>
                     </div>
 
@@ -4584,36 +4774,77 @@ const OdaraCollectionPage: React.FC<{
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-1.5">
                           <div className="flex flex-col items-center">
-                            <HeartReactionButton
+                            <CollectionPreferenceButton
                               state={getHeartStateFromPreferenceState(item.preference_state)}
-                              disabled={!!pendingPreferenceById[itemKey] || !!pendingWearMoreById[itemKey] || !item.fragrance_id}
-                              showInternalFeedback={false}
+                              disabled={
+                                !!pendingPreferenceById[itemKey]
+                                || !!pendingFavoriteById[itemKey]
+                                || !!pendingRetiredById[itemKey]
+                                || !item.fragrance_id
+                              }
                               onChange={(next) => {
+                                haptic(next === 2 ? 'success' : 'selection');
                                 void handlePreferenceChange(item, next);
                               }}
-                              onHaptic={(intensity) => haptic(intensity === 'medium' ? 'success' : 'selection')}
                             />
-                            <div className="mt-1.5 min-h-[12px] text-center text-[8.5px] uppercase tracking-[0.22em] text-foreground/58">
+                            <div
+                              className="mt-1.5 min-h-[14px] max-w-[42px] text-center text-[7.5px] font-medium leading-none"
+                              style={{
+                                color: item.preference_state === 'loved'
+                                  ? 'rgba(239,68,68,0.88)'
+                                  : item.preference_state === 'liked'
+                                    ? 'rgba(244,114,182,0.88)'
+                                    : 'rgba(255,255,255,0.58)',
+                              }}
+                            >
                               {preferenceLabel ?? ''}
                             </div>
                           </div>
 
                           <div className="flex flex-col items-center">
-                            <CollectionWearMoreButton
-                              active={Boolean(item.wear_more)}
-                              disabled={!!pendingWearMoreById[itemKey] || !!pendingPreferenceById[itemKey] || !item.fragrance_id}
+                            <CollectionFavoriteButton
+                              active={isFavorite}
+                              disabled={
+                                !!pendingFavoriteById[itemKey]
+                                || !!pendingRetiredById[itemKey]
+                                || !!pendingPreferenceById[itemKey]
+                                || !item.fragrance_id
+                                || isRetired
+                              }
                               onToggle={() => {
-                                haptic(item.wear_more ? 'selection' : 'success');
-                                void handleWearMoreToggle(item);
+                                haptic(isFavorite ? 'selection' : 'success');
+                                void handleFavoriteToggle(item);
                               }}
                             />
                             <div
-                              className="mt-1.5 min-h-[12px] text-center text-[8.5px] uppercase tracking-[0.22em]"
-                              style={{ color: wearMoreLabel ? 'rgba(231,181,95,0.88)' : 'rgba(255,255,255,0.58)' }}
+                              className="mt-1.5 min-h-[14px] max-w-[42px] text-center text-[7.5px] font-medium leading-none"
+                              style={{ color: favoriteLabel ? 'rgba(231,181,95,0.88)' : 'rgba(255,255,255,0.58)' }}
                             >
-                              {wearMoreLabel ?? ''}
+                              {favoriteLabel ?? ''}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-center">
+                            <CollectionRetireButton
+                              active={isRetired}
+                              disabled={
+                                !!pendingRetiredById[itemKey]
+                                || !!pendingFavoriteById[itemKey]
+                                || !!pendingPreferenceById[itemKey]
+                                || !item.fragrance_id
+                              }
+                              onToggle={() => {
+                                haptic(isRetired ? 'selection' : 'success');
+                                void handleRetiredToggle(item);
+                              }}
+                            />
+                            <div
+                              className="mt-1.5 min-h-[14px] max-w-[42px] text-center text-[7.5px] font-medium leading-none"
+                              style={{ color: retiredLabel ? 'rgba(226,87,87,0.9)' : 'rgba(255,255,255,0.58)' }}
+                            >
+                              {retiredLabel ?? ''}
                             </div>
                           </div>
                         </div>
