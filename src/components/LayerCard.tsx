@@ -644,6 +644,7 @@ interface LayerCardProps {
   layerSprayCount?: number | null;
   detailIdentityKey?: string;
   showLegacyAccordsText?: boolean;
+  onOpenFragranceDetail?: () => void;
 }
 
 const LayerCard = ({
@@ -673,7 +674,14 @@ const LayerCard = ({
   layerSprayCount = null,
   detailIdentityKey = '',
   showLegacyAccordsText = true,
+  onOpenFragranceDetail,
 }: LayerCardProps) => {
+  const titlePressRef = React.useRef<{
+    pointerId: number;
+    startedAt: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
@@ -792,6 +800,26 @@ const LayerCard = ({
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
 
+  const handleTitlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    titlePressRef.current = {
+      pointerId: event.pointerId,
+      startedAt: Date.now(),
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  };
+
+  const handleTitlePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const current = titlePressRef.current;
+    titlePressRef.current = null;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const duration = Date.now() - current.startedAt;
+    const deltaX = Math.abs(event.clientX - current.startX);
+    const deltaY = Math.abs(event.clientY - current.startY);
+    if (duration > 320 || deltaX > 10 || deltaY > 10) return;
+    onOpenFragranceDetail?.();
+  };
+
   return (
     <div
       className="relative z-10 mb-[14px] flex w-full cursor-pointer select-none flex-col rounded-xl px-5 py-[12px]"
@@ -813,7 +841,20 @@ const LayerCard = ({
         <>
           <div className="flex w-full items-start justify-between gap-4">
             <div className="min-w-0 flex-1 text-left">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-left text-lg font-serif leading-tight tracking-wide text-white">
+            <button
+              type="button"
+              data-odara-layer-title-button
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                }}
+                onPointerDown={handleTitlePointerDown}
+                onPointerUp={handleTitlePointerUp}
+                onPointerCancel={() => {
+                  titlePressRef.current = null;
+                }}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-transparent p-0 text-left text-lg font-serif leading-tight tracking-wide text-white"
+              >
                 <span className="min-w-0">
                   {getDisplayName(activeModeEntry.name, activeModeEntry.brand)}
                 </span>
@@ -822,7 +863,7 @@ const LayerCard = ({
                   color={layerColor}
                   className="inline-flex items-center gap-1 pt-0.5"
                 />
-              </p>
+              </button>
               {activeModeEntry.brand && (
                 <p className="mt-[1px] text-left text-[10px] text-white/50">{activeModeEntry.brand}</p>
               )}
