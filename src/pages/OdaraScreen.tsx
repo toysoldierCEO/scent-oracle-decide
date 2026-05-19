@@ -3807,22 +3807,6 @@ function formatProfileCount(count: number, singular: string, plural = `${singula
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function resolveProfileInsightText(
-  insight: OdaraProfileInsight | null | undefined,
-  loading: boolean,
-): { value: string; isEmpty: boolean } {
-  if (loading) {
-    return { value: 'Loading real signal…', isEmpty: true };
-  }
-  if (!insight) {
-    return { value: 'Not enough signal yet', isEmpty: true };
-  }
-  if (insight.value) {
-    return { value: insight.value, isEmpty: false };
-  }
-  return { value: insight.empty_reason ?? 'Not enough signal yet', isEmpty: true };
-}
-
 function getCollectionDefaultRank(item: OdaraCollectionItem, index: number) {
   return typeof item.default_rank === 'number' && Number.isFinite(item.default_rank)
     ? item.default_rank
@@ -4303,35 +4287,6 @@ const OdaraProfilePage: React.FC<{
       })),
     [profilePayload]
   );
-  const insightCells = [
-    {
-      label: 'Lean',
-      ...resolveProfileInsightText(profilePayload?.insights?.lean, profileLoading),
-    },
-    {
-      label: 'Dominant family',
-      ...resolveProfileInsightText(profilePayload?.insights?.dominant_family, profileLoading),
-    },
-    {
-      label: 'Layering',
-      ...resolveProfileInsightText(profilePayload?.insights?.layering, profileLoading),
-    },
-    {
-      label: 'Day / Night',
-      ...resolveProfileInsightText(profilePayload?.insights?.day_night, profileLoading),
-    },
-    {
-      label: 'Signature gravity',
-      ...resolveProfileInsightText(profilePayload?.insights?.signature_gravity, profileLoading),
-    },
-  ];
-  const insightNote = profileError
-    ? profileError
-    : profileLoading
-      ? 'Reading the real collection, rating, retirement, and wear signals now.'
-      : isGuestMode
-        ? 'Guest preview is computed from the live demo wardrobe only.'
-        : 'Signed-in insight comes from real collection, rating, retirement, and wear history.';
   const collectionCoverageCopy = profileError
     ? 'Could not load live collection coverage yet.'
     : profileLoading
@@ -4350,17 +4305,6 @@ const OdaraProfilePage: React.FC<{
             : null,
         ].filter(Boolean).join(' · ')
       : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
-  const tasteHint = profileLoading
-    ? 'Reading profile signal…'
-    : (
-      [
-        profilePayload?.insights?.dominant_family?.value,
-        profilePayload?.insights?.lean?.value,
-        profilePayload?.insights?.signature_gravity?.value,
-      ].filter(Boolean).join(' · ')
-      || profilePayload?.insights?.lean?.empty_reason
-      || 'Rate bottles in Collection to sharpen your scent profile.'
-    );
   const savedHint = profileLoading
     ? 'Loading saved signal…'
     : profilePayload
@@ -4386,7 +4330,6 @@ const OdaraProfilePage: React.FC<{
           : 'Rate bottles in Collection to sharpen your scent profile.'
       )
     : 'Guest preview stays read-only.';
-  const preferenceNudge = '';
 
   return (
     <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
@@ -4523,62 +4466,6 @@ const OdaraProfilePage: React.FC<{
                 ))}
               </div>
             ) : null}
-          </div>
-        </div>
-
-        {/* Taste / Insights — deliberately lower in the hierarchy than collection proof. */}
-        <div>
-          <div className="mb-2 flex items-baseline justify-between px-2">
-            <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">Taste / Insights</div>
-          </div>
-          <div
-            className="rounded-[20px] border px-5 py-6"
-            style={{
-              borderColor: 'rgba(255,255,255,0.08)',
-              background: 'linear-gradient(180deg, rgba(22,23,28,0.7) 0%, rgba(13,14,18,0.7) 100%)',
-              backdropFilter: 'blur(18px)',
-              WebkitBackdropFilter: 'blur(18px)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
-            }}
-          >
-            <div
-              className="rounded-[14px] px-3.5 py-3.5"
-              style={{
-                border: '1px solid rgba(255,255,255,0.05)',
-                background: 'rgba(255,255,255,0.018)',
-              }}
-            >
-              <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/36">Taste identity</div>
-              <div
-                className="mt-1.5 text-[15px] text-foreground/84"
-                style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.008em' }}
-              >
-                {tasteHint}
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              {insightCells.map((cell) => (
-                <div
-                  key={cell.label}
-                  className="rounded-[14px] px-3 py-3"
-                  style={{
-                    border: '1px solid rgba(255,255,255,0.05)',
-                    background: 'rgba(255,255,255,0.018)',
-                  }}
-                >
-                  <div className="text-[9.5px] uppercase tracking-[0.26em] text-foreground/38">{cell.label}</div>
-                  <div
-                    className={cell.isEmpty ? 'mt-1 text-[11px] leading-[1.45] text-foreground/48' : 'mt-1 text-[14px] text-foreground/82'}
-                    style={cell.isEmpty ? undefined : { fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
-                  >
-                    {cell.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 text-[11px] leading-[1.55] text-foreground/40">
-              {`${insightNote}${preferenceNudge}`}
-            </div>
           </div>
         </div>
 
