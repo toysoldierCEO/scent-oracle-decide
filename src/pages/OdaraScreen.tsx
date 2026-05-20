@@ -3406,17 +3406,18 @@ interface OdaraMenuGroup {
 const ODARA_MENU_PAGE_CONFIG: Record<OdaraMenuRootPage, { title: string; subtitle: string; groups: OdaraMenuGroup[] }> = {
   profile: {
     title: 'Profile',
-    subtitle: 'Your scent intelligence',
+    subtitle: 'Your live wardrobe',
     groups: [
       {
-        eyebrow: 'Identity',
+        eyebrow: 'Dossier',
         emphasis: true,
         rows: [
           { label: 'Collection' },
-          { label: 'Taste Identity' },
+          { label: 'Collection Coverage' },
         ],
       },
       {
+        eyebrow: 'Library',
         rows: [
           { label: 'Saved' },
           { label: 'Scent History' },
@@ -4295,13 +4296,16 @@ const OdaraProfilePage: React.FC<{
         ?? profilePayload?.family_balance?.empty_reason
         ?? profilePayload?.collection_summary?.empty_reason
         ?? 'No live collection coverage yet.';
+  const retiredCount = profilePayload?.preference_summary?.retired_count
+    ?? profilePayload?.library?.retired_count
+    ?? 0;
   const collectionHint = profileLoading
     ? 'Loading real collection…'
     : bottleCount && bottleCount > 0
       ? [
           formatProfileCount(bottleCount, 'bottle'),
-          !isGuestMode && (profilePayload?.preference_summary?.retired_count ?? 0) > 0
-            ? `${profilePayload?.preference_summary?.retired_count ?? 0} retired`
+          !isGuestMode && retiredCount > 0
+            ? `${retiredCount} retired`
             : null,
         ].filter(Boolean).join(' · ')
       : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
@@ -4325,9 +4329,9 @@ const OdaraProfilePage: React.FC<{
       : 'No real scent history yet.';
   const preferenceHint = !isGuestMode
     ? (
-        (profilePayload?.preference_summary?.retired_count ?? 0) > 0
-          ? `${profilePayload?.preference_summary?.retired_count ?? 0} retired ${profilePayload?.preference_summary?.retired_count === 1 ? 'bottle' : 'bottles'} recorded`
-          : 'Rate bottles in Collection to sharpen your scent profile.'
+        retiredCount > 0
+          ? `Ratings and ${retiredCount} retired ${retiredCount === 1 ? 'bottle' : 'bottles'} shape your wardrobe signal.`
+          : 'Ratings and retired bottles shape your wardrobe signal.'
       )
     : 'Guest preview stays read-only.';
 
@@ -4377,95 +4381,105 @@ const OdaraProfilePage: React.FC<{
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
             }}
           >
-            <div className="flex items-center gap-5">
-              <div className="relative h-[124px] w-[124px] shrink-0">
-                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.06)"
-                    strokeWidth="8"
-                  />
-                  {familySegments.length > 0 &&
-                    (() => {
-                      const circumference = 2 * Math.PI * 42;
-                      let offset = 0;
-                      return familySegments.map((seg) => {
-                        const len = (seg.pct / 100) * circumference;
-                        const el = (
-                          <circle
-                            key={seg.key}
-                            cx="50"
-                            cy="50"
-                            r="42"
-                            fill="none"
-                            stroke={seg.color}
-                            strokeWidth="8"
-                            strokeDasharray={`${len} ${circumference - len}`}
-                            strokeDashoffset={-offset}
-                            strokeLinecap="butt"
-                          />
-                        );
-                        offset += len;
-                        return el;
-                      });
-                    })()}
-                </svg>
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <div
-                  className="text-[26px] leading-none text-foreground/92"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-                >
-                    {profileLoading ? '…' : (bottleCount ?? '—')}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="relative h-[124px] w-[124px] shrink-0">
+                  <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.06)"
+                      strokeWidth="8"
+                    />
+                    {familySegments.length > 0 &&
+                      (() => {
+                        const circumference = 2 * Math.PI * 42;
+                        let offset = 0;
+                        return familySegments.map((seg) => {
+                          const len = (seg.pct / 100) * circumference;
+                          const el = (
+                            <circle
+                              key={seg.key}
+                              cx="50"
+                              cy="50"
+                              r="42"
+                              fill="none"
+                              stroke={seg.color}
+                              strokeWidth="8"
+                              strokeDasharray={`${len} ${circumference - len}`}
+                              strokeDashoffset={-offset}
+                              strokeLinecap="butt"
+                            />
+                          );
+                          offset += len;
+                          return el;
+                        });
+                      })()}
+                  </svg>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <div
+                      className="text-[26px] leading-none text-foreground/92"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                    >
+                      {profileLoading ? '…' : (bottleCount ?? '—')}
+                    </div>
+                    <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
+                      Bottles
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
-                  Bottles
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="text-[15px] text-foreground/85"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                  >
+                    Coverage by family
+                  </div>
+                  <div className="mt-1.5 text-[11.5px] leading-[1.55] text-foreground/45">
+                    Family color and count reflect the real signed-in wardrobe.
                   </div>
                 </div>
               </div>
-              <div className="min-w-0 flex-1">
+              {familySegments.length > 0 ? (
+                <div className="grid grid-cols-1 gap-2">
+                  {familySegments.map((segment) => (
+                    <div
+                      key={segment.key}
+                      className="flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5"
+                      style={{
+                        borderColor: 'rgba(255,255,255,0.07)',
+                        background: 'rgba(255,255,255,0.018)',
+                      }}
+                    >
+                      <div className="min-w-0 flex items-center gap-2.5">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{
+                            background: segment.color,
+                            boxShadow: `0 0 0 1px ${segment.color}30, 0 0 14px ${segment.color}40`,
+                          }}
+                        />
+                        <span className="truncate text-[11px] text-foreground/74">{segment.label}</span>
+                      </div>
+                      <div className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-foreground/42">
+                        {segment.count}
+                        {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="min-w-0">
                 <div
-                  className="text-[15px] text-foreground/85"
+                  className="text-[12px] text-foreground/72"
                   style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
                 >
-                  {profilePayload?.family_balance?.dominant_family ?? 'Family balance'}
-                </div>
-                <div className="mt-1.5 text-[11.5px] leading-[1.55] text-foreground/45">
                   {collectionCoverageCopy}
                 </div>
               </div>
             </div>
-            {familySegments.length > 0 ? (
-              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {familySegments.map((segment) => (
-                  <div
-                    key={segment.key}
-                    className="flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5"
-                    style={{
-                      borderColor: 'rgba(255,255,255,0.07)',
-                      background: 'rgba(255,255,255,0.018)',
-                    }}
-                  >
-                    <div className="min-w-0 flex items-center gap-2.5">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{
-                          background: segment.color,
-                          boxShadow: `0 0 0 1px ${segment.color}30, 0 0 14px ${segment.color}40`,
-                        }}
-                      />
-                      <span className="truncate text-[11px] text-foreground/74">{segment.label}</span>
-                    </div>
-                    <div className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-foreground/42">
-                      {segment.count}
-                      {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </div>
         </div>
 
