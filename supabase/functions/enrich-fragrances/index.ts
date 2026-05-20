@@ -71,6 +71,17 @@ type ProductNameCompatibility = {
   overlapCount: number;
   odaraTokenCount: number;
   candidateTokenCount: number;
+  meaningfulOverlapCount: number;
+  meaningfulOdaraTokenCount: number;
+  meaningfulCandidateTokenCount: number;
+  nearExact: boolean;
+  exact: boolean;
+};
+
+type FamilySuggestionResult = {
+  suggestedFamilyKey: string | null;
+  confidence: number | null;
+  why: string | null;
 };
 
 type IdentityDecision = {
@@ -132,14 +143,39 @@ const PRODUCT_NAME_STOPWORDS = new Set([
   "image",
 ]);
 
+const WEAK_IDENTITY_TOKENS = new Set([
+  ...PRODUCT_NAME_STOPWORDS,
+  "x",
+  "noir",
+  "intense",
+  "intenso",
+  "extreme",
+  "elixir",
+  "edition",
+]);
+
+const DISALLOWED_PRODUCT_FAMILY_KEYS = new Set([
+  "misc",
+  "unknown",
+  "uncategorized",
+  "other",
+]);
+
 function tokenizeNormalized(value: string): string[] {
   return value.split(/\s+/g).filter(Boolean);
+}
+
+function meaningfulIdentityTokens(value: string): string[] {
+  return tokenizeNormalized(value)
+    .filter((token) => token.length > 1)
+    .filter((token) => !WEAK_IDENTITY_TOKENS.has(token));
 }
 
 function normalizeProductIdentity(value: unknown, brand: unknown = null): string {
   const brandTokens = new Set(tokenizeNormalized(norm(brand)));
   return tokenizeNormalized(norm(value))
     .filter((token) => !PRODUCT_NAME_STOPWORDS.has(token))
+    .filter((token) => token.length > 1)
     .filter((token) => !/^\d+(ml|oz)$/.test(token))
     .filter((token) => !brandTokens.has(token))
     .join(" ");
@@ -150,15 +186,30 @@ function namesCompatible(odaraName: string, candidateName: string): ProductNameC
   const candidateTokens = tokenizeNormalized(candidateName);
   const candidateSet = new Set(candidateTokens);
   const overlapCount = odaraTokens.filter((token) => candidateSet.has(token)).length;
-  const minTokenCount = Math.min(odaraTokens.length, candidateTokens.length);
   const exact = odaraName.length > 0 && odaraName === candidateName;
-  const strongSubset = minTokenCount >= 2 && overlapCount === minTokenCount;
+  const odaraMeaningfulTokens = meaningfulIdentityTokens(odaraName);
+  const candidateMeaningfulTokens = meaningfulIdentityTokens(candidateName);
+  const candidateMeaningfulSet = new Set(candidateMeaningfulTokens);
+  const meaningfulOverlapCount = odaraMeaningfulTokens
+    .filter((token) => candidateMeaningfulSet.has(token))
+    .length;
+  const minMeaningfulTokenCount = Math.min(odaraMeaningfulTokens.length, candidateMeaningfulTokens.length);
+  const singleTokenExact = odaraMeaningfulTokens.length === 1
+    && candidateMeaningfulTokens.length === 1
+    && meaningfulOverlapCount === 1;
+  const strongSubset = minMeaningfulTokenCount >= 2 && meaningfulOverlapCount === minMeaningfulTokenCount;
+  const nearExact = singleTokenExact || strongSubset;
 
   return {
-    compatible: exact || strongSubset,
+    compatible: exact || nearExact,
     overlapCount,
     odaraTokenCount: odaraTokens.length,
     candidateTokenCount: candidateTokens.length,
+    meaningfulOverlapCount,
+    meaningfulOdaraTokenCount: odaraMeaningfulTokens.length,
+    meaningfulCandidateTokenCount: candidateMeaningfulTokens.length,
+    nearExact,
+    exact,
   };
 }
 
@@ -220,6 +271,71 @@ function collectCandidateSourceUrls(hit: FragellaHit, extracted: ExtractedEnrich
   );
 }
 
+function buildSearchQueries(brand: string | null, name: string): string[] {
+  const queries = normalizeStringList(
+    `${brand ?? ""} ${name}`.trim(),
+    name,
+    normalizeProductIdentity(name),
+  ).filter((query) => query.length > 0);
+
+  return queries.slice(0, 3);
+}
+
+function buildProviderHitKey(hit: FragellaHit, brand: string | null): string {
+  const candidateBrand = firstNonEmptyString(hit.brand, hit.Brand, hit.brand_name);
+  const candidateName = firstNonEmptyString(hit.name, hit.Name, hit.title, hit.fragrance);
+  const extracted = extractTextEnrichment(hit);
+  const sourceSlug = collectCandidateSourceUrls(hit, extracted)
+    .map((url) => extractSourceIdentitySlug(url, brand))
+    .filter((value): value is string => !!value)[0] ?? "";
+
+  return [
+    norm(candidateBrand),
+    normalizeProductIdentity(candidateName, brand),
+    sourceSlug,
+  ].join("|");
+}
+
+async function suggestFamilyCandidate(
+  supabase: ReturnType<typeof createClient>,
+  notes: string[],
+  accords: string[],
+): Promise<FamilySuggestionResult> {
+  if (notes.length === 0 && accords.length === 0) {
+    return {
+      suggestedFamilyKey: null,
+      confidence: null,
+      why: null,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("suggest_family_key_v1", {
+    in_notes: notes,
+    in_accords: accords,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const suggestedFamilyKey = normalizeFamilyKey(row?.suggested_family_key ?? null);
+
+  if (!suggestedFamilyKey || DISALLOWED_PRODUCT_FAMILY_KEYS.has(suggestedFamilyKey)) {
+    return {
+      suggestedFamilyKey: null,
+      confidence: typeof row?.confidence === "number" ? row.confidence : null,
+      why: typeof row?.why === "string" ? row.why : null,
+    };
+  }
+
+  return {
+    suggestedFamilyKey,
+    confidence: typeof row?.confidence === "number" ? row.confidence : null,
+    why: typeof row?.why === "string" ? row.why : null,
+  };
+}
+
 function getProviderProductKey(candidateBrand: string | null, normalizedCandidateName: string, sourceSlug: string | null): string | null {
   const productIdentity = normalizedCandidateName || sourceSlug;
   if (!productIdentity) return null;
@@ -243,6 +359,10 @@ function validateProviderIdentity(
     .filter((value): value is string => !!value);
   const normalizedCandidateSourceSlug = sourceSlugs[0] ?? null;
   const providerProductKey = getProviderProductKey(candidateBrand, normalizedCandidateName, normalizedCandidateSourceSlug);
+  const nameCompatibility = normalizedCandidateName
+    ? namesCompatible(normalizedOdaraName, normalizedCandidateName)
+    : null;
+  const hasStrongNameMatch = !!(nameCompatibility?.exact || nameCompatibility?.nearExact);
 
   const conflict = (reason: string): IdentityDecision => ({
     identityMatchStatus: "conflict",
@@ -267,15 +387,17 @@ function validateProviderIdentity(
   }
 
   if (normalizedCandidateName) {
-    const nameCompatibility = namesCompatible(normalizedOdaraName, normalizedCandidateName);
     if (!nameCompatibility.compatible) {
       return conflict("candidate_name_conflicts_with_odara_name");
+    }
+    if (!nameCompatibility.exact && !nameCompatibility.nearExact) {
+      return conflict("candidate_name_not_near_exact");
     }
   }
 
   for (const sourceSlug of sourceSlugs) {
     const sourceCompatibility = namesCompatible(normalizedOdaraName, sourceSlug);
-    if (!sourceCompatibility.compatible && sourceCompatibility.candidateTokenCount >= 2) {
+    if (!hasStrongNameMatch && !sourceCompatibility.compatible && sourceCompatibility.meaningfulCandidateTokenCount >= 1) {
       return conflict("source_url_slug_conflicts_with_odara_name");
     }
   }
@@ -603,23 +725,40 @@ function pickBestHit(
   if (!hits.length) return null;
 
   const normalizedBrand = norm(brand);
-  const normalizedName = norm(name);
+  const normalizedName = normalizeProductIdentity(name);
   let best: { hit: FragellaHit; score: number } | null = null;
 
   for (const hit of hits) {
     const hitBrand = norm(hit.brand ?? hit.Brand ?? hit["brand_name"] ?? "");
-    const hitName = norm(hit.name ?? hit.Name ?? hit["title"] ?? hit["fragrance"] ?? "");
+    const hitName = normalizeProductIdentity(
+      firstNonEmptyString(hit.name, hit.Name, hit["title"], hit["fragrance"]),
+      brand,
+    );
     const extracted = extractTextEnrichment(hit);
+    const sourceSlug = collectCandidateSourceUrls(hit, extracted)
+      .map((url) => extractSourceIdentitySlug(url, brand))
+      .filter((value): value is string => !!value)[0] ?? null;
+    const nameCompatibility = hitName ? namesCompatible(normalizedName, hitName) : null;
+    const sourceCompatibility = sourceSlug ? namesCompatible(normalizedName, sourceSlug) : null;
 
     let score = 0;
-    if (hitBrand && hitBrand === normalizedBrand) score += 8;
-    if (hitName && hitName === normalizedName) score += 10;
+    if (hitBrand && hitBrand === normalizedBrand) score += 24;
+    else if (hitBrand && normalizedBrand && (hitBrand.includes(normalizedBrand) || normalizedBrand.includes(hitBrand))) score += 6;
 
-    if (hitBrand && normalizedBrand && (hitBrand.includes(normalizedBrand) || normalizedBrand.includes(hitBrand))) {
-      score += 2;
+    if (hitName && hitName === normalizedName) {
+      score += 40;
+    } else if (nameCompatibility?.nearExact) {
+      score += 28;
+    } else if ((nameCompatibility?.meaningfulOverlapCount ?? 0) >= 2) {
+      score += 10;
     }
-    if (hitName && normalizedName && (hitName.includes(normalizedName) || normalizedName.includes(hitName))) {
-      score += 3;
+
+    if (sourceSlug && sourceSlug === normalizedName) {
+      score += 18;
+    } else if (sourceCompatibility?.nearExact) {
+      score += 10;
+    } else if ((sourceCompatibility?.meaningfulOverlapCount ?? 0) >= 2) {
+      score += 4;
     }
 
     if (extracted.notes.length > 0) score += 2;
@@ -843,18 +982,46 @@ serve(async (req) => {
       const existingAccords = normalizeStringList(target.accords ?? []);
       const existingFamilyKey = normalizeFamilyKey(target.family_key);
 
-      const search = `${target.brand ?? ""} ${target.name}`.trim();
-      const url = `https://api.fragella.com/api/v1/fragrances?search=${encodeURIComponent(search)}&limit=5`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "x-api-key": FRAGELLA_API_KEY,
-          accept: "application/json",
-        },
-      });
+      const searchQueries = buildSearchQueries(target.brand, target.name);
+      let hits: FragellaHit[] = [];
+      let providerErrors: string[] = [];
+      const seenHitKeys = new Set<string>();
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
+      for (const search of searchQueries) {
+        const url = `https://api.fragella.com/api/v1/fragrances?search=${encodeURIComponent(search)}&limit=5`;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "x-api-key": FRAGELLA_API_KEY,
+            accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "");
+          providerErrors.push(`${search}: ${errorText.slice(0, 120)}`);
+          continue;
+        }
+
+        const payload = await response.json();
+        const queryHits: FragellaHit[] = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.results)
+            ? payload.results
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : [];
+
+        for (const hit of queryHits) {
+          const key = buildProviderHitKey(hit, target.brand);
+          if (seenHitKeys.has(key)) continue;
+          seenHitKeys.add(key);
+          hits.push(hit);
+        }
+      }
+
+      if (hits.length === 0 && providerErrors.length > 0) {
+        const errorText = providerErrors.join(" | ");
         const status = "error";
         const resultRow = {
           id: target.id,
@@ -896,15 +1063,6 @@ serve(async (req) => {
         results.push(resultRow);
         continue;
       }
-
-      const payload = await response.json();
-      const hits: FragellaHit[] = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.results)
-          ? payload.results
-          : Array.isArray(payload?.data)
-            ? payload.data
-            : [];
 
       const bestMatch = pickBestHit(hits, target.brand, target.name);
       if (!bestMatch) {
@@ -963,11 +1121,35 @@ serve(async (req) => {
       const proposedAccords = extracted.accords;
       const mergedNotes = mergeUnique(existingNotes, proposedNotes);
       const mergedAccords = mergeUnique(existingAccords, proposedAccords);
-      const familyCandidate = !existingFamilyKey ? extracted.proposedFamilyKey : null;
+      let familyCandidate = !existingFamilyKey ? extracted.proposedFamilyKey : null;
+      let familyCandidateSource: string | null = familyCandidate ? "provider_payload.family_key" : null;
+      let familyCandidateConfidence: number | null = familyCandidate ? confidence : null;
+      let familyCandidateReason: string | null = familyCandidate ? "provider supplied family_key" : null;
+      let familySuggestion: FamilySuggestionResult | null = null;
+      if (!familyCandidate && !existingFamilyKey && (mergedNotes.length > 0 || mergedAccords.length > 0)) {
+        familySuggestion = await suggestFamilyCandidate(supabase, mergedNotes, mergedAccords);
+        if (
+          familySuggestion.suggestedFamilyKey
+          && typeof familySuggestion.confidence === "number"
+          && familySuggestion.confidence >= writeThreshold
+        ) {
+          familyCandidate = familySuggestion.suggestedFamilyKey;
+          familyCandidateSource = "suggest_family_key_v1";
+          familyCandidateConfidence = familySuggestion.confidence;
+          familyCandidateReason = familySuggestion.why ?? "source-backed notes/accords support family assignment";
+        }
+      }
       const sourceUrl = extracted.sourceUrl;
       const matchName = firstNonEmptyString(hit.name, hit.Name, hit.title, hit.fragrance);
       const matchBrand = firstNonEmptyString(hit.brand, hit.Brand, hit.brand_name);
       const identityDecision = validateProviderIdentity(target, hit, extracted, score);
+      const nameCompatibility = identityDecision.normalizedCandidateName
+        ? namesCompatible(identityDecision.normalizedOdaraName, identityDecision.normalizedCandidateName)
+        : null;
+      const sourceCompatibility = identityDecision.normalizedCandidateSourceSlug
+        ? namesCompatible(identityDecision.normalizedOdaraName, identityDecision.normalizedCandidateSourceSlug)
+        : null;
+      const exactIdentityMatch = !!(nameCompatibility?.exact || sourceCompatibility?.exact);
       const identityStageable = identityDecision.identityMatchStatus === "matched";
       const hasUsableText = hasMeaningfulArray(proposedNotes) || hasMeaningfulArray(proposedAccords) || !!extracted.concentration || !!familyCandidate;
       const notesImproved = mergedNotes.length > existingNotes.length;
@@ -983,6 +1165,8 @@ serve(async (req) => {
       } else if (confidence < minConfidence) {
         status = "low_confidence";
       } else if (confidence < writeThreshold) {
+        status = "needs_review";
+      } else if (!exactIdentityMatch) {
         status = "needs_review";
       } else if (!shouldWriteToFragrance) {
         const providerAlreadyApplied = !!existing
@@ -1030,6 +1214,11 @@ serve(async (req) => {
         identity_match_status: identityDecision.identityMatchStatus,
         identity_conflict_reason: identityDecision.identityConflictReason,
         provider_confidence_label: extracted.providerConfidenceLabel,
+        family_candidate_source: familyCandidateSource,
+        family_candidate_confidence: familyCandidateConfidence,
+        family_candidate_reason: familyCandidateReason,
+        exact_identity_match: exactIdentityMatch,
+        eligible_for_write: identityStageable && status === "enriched",
         proposed_notes_count: proposedNotes.length,
         proposed_accords_count: proposedAccords.length,
         will_write: status === "enriched" && !dryRun && !stageReview && identityStageable,
@@ -1041,6 +1230,7 @@ serve(async (req) => {
           best_candidate_score: score,
           extraction_status: hasUsableText ? "usable_text_found" : "no_usable_text",
           extraction_source: extractionSource,
+          search_queries: searchQueries,
           provider_payload_keys: Object.keys(hit).slice(0, 25),
           fallback_payload_keys: imagePayload ? Object.keys(imagePayload).slice(0, 25) : [],
           notes_extraction_paths_tried: extracted.extractionPaths.notes,
@@ -1056,6 +1246,9 @@ serve(async (req) => {
           merged_accords: mergedAccords,
           concentration: extracted.concentration,
           proposed_family_key: familyCandidate,
+          family_suggestion_key: familySuggestion?.suggestedFamilyKey ?? null,
+          family_suggestion_confidence: familySuggestion?.confidence ?? null,
+          family_suggestion_why: familySuggestion?.why ?? null,
           top_notes: extracted.topNotes,
           middle_notes: extracted.middleNotes,
           base_notes: extracted.baseNotes,
@@ -1128,6 +1321,46 @@ serve(async (req) => {
                 will_write: false,
               });
               continue;
+            }
+
+            if (familyImproved && !existingFamilyKey) {
+              const auditPatch = {
+                fragrance_id: target.id,
+                fragrance_name: target.name,
+                fragrance_brand: target.brand,
+                old_family_key: existingFamilyKey,
+                new_family_key: familyCandidate,
+                evidence_source: familyCandidateSource,
+                evidence_confidence: familyCandidateConfidence,
+                evidence_json: {
+                  match_name: matchName,
+                  match_brand: matchBrand,
+                  source_url: sourceUrl,
+                  source_confidence: confidence,
+                  proposed_notes_count: proposedNotes.length,
+                  proposed_accords_count: proposedAccords.length,
+                  family_candidate_reason: familyCandidateReason,
+                  family_suggestion_key: familySuggestion?.suggestedFamilyKey ?? null,
+                  family_suggestion_confidence: familySuggestion?.confidence ?? null,
+                  family_suggestion_why: familySuggestion?.why ?? null,
+                },
+                assignment_reason: "source-backed enrichment family assignment",
+                assigned_by: FUNCTION_VERSION,
+              };
+
+              const { error: auditWriteError } = await supabase
+                .from("fragrance_family_assignment_audit_v1")
+                .insert(auditPatch);
+
+              if (auditWriteError) {
+                results.push({
+                  ...preview,
+                  status: "error",
+                  error: auditWriteError.message,
+                  will_write: false,
+                });
+                continue;
+              }
             }
           }
 
