@@ -10547,6 +10547,7 @@ const OdaraScreen = ({
             <div className="px-2 pb-1.5">
               {([
                 { key: 'profile', label: 'Profile' },
+                { key: 'collection', label: 'Collection' },
                 { key: 'planner', label: 'Planner' },
                 { key: 'settings', label: 'Settings' },
               ] as const).map((item) => {
