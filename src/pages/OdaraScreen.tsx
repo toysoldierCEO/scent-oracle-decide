@@ -10547,6 +10547,7 @@ const OdaraScreen = ({
             <div className="px-2 pb-1.5">
               {([
                 { key: 'profile', label: 'Profile' },
+                { key: 'collection', label: 'Collection' },
                 { key: 'planner', label: 'Planner' },
                 { key: 'settings', label: 'Settings' },
               ] as const).map((item) => {
@@ -10596,7 +10597,7 @@ const OdaraScreen = ({
       {menuPage && (
         <OdaraMenuDestination
           page={menuPage}
-          onClose={() => setMenuPage(menuPage === 'collection' ? 'profile' : null)}
+          onClose={() => setMenuPage(null)}
           onOpenCollection={() => setMenuPage('collection')}
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
