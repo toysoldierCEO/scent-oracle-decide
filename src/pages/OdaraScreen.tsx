@@ -9869,20 +9869,22 @@ const OdaraScreen = ({
         const label = token?.token_label ?? token?.label ?? token?.name ?? '';
         return typeof label === 'string' && label.trim().length > 0;
       });
+    const currentAny = current as any;
     const resolvedHeroRailReasonChip = current.isHeroCard
       ? (
           resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation)
-          ?? current.reasonChip
+          ?? currentAny.reasonChip
           ?? null
         )
       : resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation);
-    const resolvedHeroRailTokenSource = Array.isArray(current.heroTokens) && current.heroTokens.length > 0
-      ? current.heroTokens
+    const resolvedHeroRailTokenSource = Array.isArray(currentAny.heroTokens) && currentAny.heroTokens.length > 0
+      ? currentAny.heroTokens
       : buildSemanticSurfaceTokens(normalizedNotes, normalizedAccords, new Set(), 4);
     const resolvedHeroRailTokens = resolvedHeroRailTokenSource.filter((token: any) => {
       const label = token?.token_label ?? token?.label ?? token?.name ?? '';
       return typeof label === 'string' && label.trim().length > 0;
     });
+
 
     return {
       ...current,
