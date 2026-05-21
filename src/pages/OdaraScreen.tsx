@@ -9939,7 +9939,7 @@ const OdaraScreen = ({
   const openVisibleHeroDetail = useCallback(() => {
     if (!visibleResolvedCurrentCard) return;
     openFragranceDetailSheet({
-      ...buildFragranceDetailSurfaceStateFromDisplayCard(visibleResolvedCurrentCard),
+      ...buildFragranceDetailSurfaceStateFromDisplayCard(visibleResolvedCurrentCard as any),
       image_url: visibleHeroBottleImageUrl ?? visibleResolvedCurrentCard.image_url ?? null,
     });
   }, [openFragranceDetailSheet, visibleHeroBottleImageUrl, visibleResolvedCurrentCard]);
