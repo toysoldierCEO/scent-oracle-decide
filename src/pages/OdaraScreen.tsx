@@ -4649,12 +4649,90 @@ const OdaraBottomSheet: React.FC<{
   );
 };
 
+type ResolvedTaxonomyFacet = { key?: string | null; display_label?: string | null; label?: string | null };
+type ResolvedTaxonomyRole = { key?: string | null; display_label?: string | null; label?: string | null; role_priority?: number | null; priority?: number | null };
+type ResolvedTaxonomyPayload = {
+  family_display_label?: string | null;
+  universal_family_label?: string | null;
+  universal_family_key?: string | null;
+  legacy_family_key?: string | null;
+  facets?: ResolvedTaxonomyFacet[] | null;
+  wardrobe_roles?: ResolvedTaxonomyRole[] | null;
+  roles?: ResolvedTaxonomyRole[] | null;
+  review_status?: string | null;
+  source_confidence?: number | string | null;
+};
+
+const fragranceTaxonomyCache = new Map<string, ResolvedTaxonomyPayload | null>();
+const fragranceTaxonomyInFlight = new Map<string, Promise<ResolvedTaxonomyPayload | null>>();
+
+async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxonomyPayload | null> {
+  if (fragranceTaxonomyCache.has(fragranceId)) return fragranceTaxonomyCache.get(fragranceId) ?? null;
+  const existing = fragranceTaxonomyInFlight.get(fragranceId);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const { data, error } = await odaraSupabase.rpc('get_fragrance_taxonomy_profile_v1' as any, { p_fragrance_id: fragranceId } as any);
+      if (error) throw error;
+      const payload = (Array.isArray(data) ? data[0] : data) as ResolvedTaxonomyPayload | null;
+      fragranceTaxonomyCache.set(fragranceId, payload ?? null);
+      return payload ?? null;
+    } catch {
+      fragranceTaxonomyCache.set(fragranceId, null);
+      return null;
+    } finally {
+      fragranceTaxonomyInFlight.delete(fragranceId);
+    }
+  })();
+  fragranceTaxonomyInFlight.set(fragranceId, promise);
+  return promise;
+}
+
+function formatTaxonomyReviewStatus(status: string | null | undefined): string | null {
+  if (!status) return null;
+  const s = String(status).toLowerCase();
+  if (s.includes('source') || s.includes('confirm')) return 'Source-backed';
+  if (s.includes('wear') || s.includes('gap') || s.includes('needs')) return 'Needs wear test';
+  return null;
+}
+
 const OdaraFragranceDetailSheet: React.FC<{
   detail: OdaraFragranceDetailSurfaceState | null;
   open: boolean;
   onClose: () => void;
 }> = ({ detail, open, onClose }) => {
+  const fragranceId = detail?.fragrance_id ?? null;
+  const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
+  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !fragranceId) {
+      setTaxonomy(null);
+      setTaxonomyLoading(false);
+      return;
+    }
+    // Reset scroll to top whenever the sheet opens or the fragrance changes.
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    const cached = fragranceTaxonomyCache.get(fragranceId);
+    if (cached !== undefined) {
+      setTaxonomy(cached);
+      setTaxonomyLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTaxonomyLoading(true);
+    setTaxonomy(null);
+    fetchResolvedTaxonomy(fragranceId).then((payload) => {
+      if (cancelled) return;
+      setTaxonomy(payload);
+      setTaxonomyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [open, fragranceId]);
+
   if (!open || !detail) return null;
+
 
   const tint = getEnhancedCollectionTint({
     family_key: detail.family_key,
@@ -4684,7 +4762,17 @@ const OdaraFragranceDetailSheet: React.FC<{
 
   return (
     <OdaraBottomSheet open={open} onClose={onClose}>
-      <div className="px-5 pb-5 pt-4">
+      <div
+        ref={scrollRef}
+        className="px-5 pt-4"
+        style={{
+          maxHeight: 'calc(100dvh - 120px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)',
+        }}
+      >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.28em] text-foreground/38">
@@ -4805,6 +4893,99 @@ const OdaraFragranceDetailSheet: React.FC<{
           </div>
         </div>
 
+        {(() => {
+          const tx = taxonomy;
+          const txFamily = tx?.family_display_label?.trim() || tx?.universal_family_label?.trim() || null;
+          const facetItems = Array.isArray(tx?.facets)
+            ? (tx!.facets as ResolvedTaxonomyFacet[])
+                .map((f) => (f?.display_label || f?.label || '').toString().trim())
+                .filter(Boolean)
+                .slice(0, 6)
+            : [];
+          const rolesRaw = (Array.isArray(tx?.wardrobe_roles) ? tx!.wardrobe_roles : tx?.roles) as ResolvedTaxonomyRole[] | null | undefined;
+          const roleItems = Array.isArray(rolesRaw)
+            ? [...rolesRaw]
+                .map((r) => ({
+                  label: (r?.display_label || r?.label || '').toString().trim(),
+                  priority: typeof r?.role_priority === 'number' ? r.role_priority : (typeof r?.priority === 'number' ? r.priority : 99),
+                }))
+                .filter((r) => r.label)
+                .sort((a, b) => a.priority - b.priority)
+                .slice(0, 2)
+            : [];
+          const reviewLabel = formatTaxonomyReviewStatus(tx?.review_status);
+          const hasContent = Boolean(txFamily || facetItems.length || roleItems.length);
+          if (!taxonomyLoading && !hasContent) return null;
+          return (
+            <div
+              className="mt-4 rounded-[18px] border px-3.5 py-3"
+              style={{
+                borderColor: 'rgba(255,255,255,0.06)',
+                background: 'rgba(255,255,255,0.018)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/40">Scent Map</div>
+                {reviewLabel && hasContent ? (
+                  <div className="text-[9px] uppercase tracking-[0.18em] text-foreground/38">{reviewLabel}</div>
+                ) : null}
+              </div>
+              {taxonomyLoading && !hasContent ? (
+                <div className="mt-2.5 flex gap-1.5">
+                  <div className="h-5 w-16 animate-pulse rounded-full bg-white/[0.04]" />
+                  <div className="h-5 w-12 animate-pulse rounded-full bg-white/[0.04]" />
+                  <div className="h-5 w-14 animate-pulse rounded-full bg-white/[0.04]" />
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {(txFamily || facetItems.length > 0) ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {txFamily ? (
+                        <span
+                          className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.18em] text-foreground/88"
+                          style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.05)' }}
+                        >
+                          {txFamily}
+                        </span>
+                      ) : null}
+                      {facetItems.map((label, i) => (
+                        <span
+                          key={`facet-${label}-${i}`}
+                          className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.04em] text-foreground/74"
+                          style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.022)' }}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {roleItems.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {roleItems.map((r, i) => (
+                        <span
+                          key={`role-${r.label}-${i}`}
+                          className="rounded-full px-2.5 py-[5px] text-[9px] uppercase tracking-[0.2em]"
+                          style={{
+                            border: `1px solid rgba(255,255,255,${i === 0 ? 0.11 : 0.06})`,
+                            background: `rgba(255,255,255,${i === 0 ? 0.038 : 0.018})`,
+                            color: `rgba(255,255,255,${i === 0 ? 0.82 : 0.56})`,
+                          }}
+                        >
+                          {r.label}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+
+
+
         {hasTokenSections ? (
           <div className="mt-4 space-y-3">
             {accordLabels.length > 0 ? (
@@ -4880,7 +5061,7 @@ const OdaraFragranceDetailSheet: React.FC<{
           </div>
         ) : null}
 
-        {(detail.longevity_score != null || detail.projection_score != null || detail.source_confidence) ? (
+        {(detail.longevity_score != null || detail.projection_score != null) ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {detail.longevity_score != null ? (
               <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
@@ -4890,11 +5071,6 @@ const OdaraFragranceDetailSheet: React.FC<{
             {detail.projection_score != null ? (
               <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
                 {`Projection ${Math.round(detail.projection_score * 100)}`}
-              </div>
-            ) : null}
-            {detail.source_confidence ? (
-              <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                {detail.source_confidence}
               </div>
             ) : null}
           </div>
@@ -10371,6 +10547,7 @@ const OdaraScreen = ({
             <div className="px-2 pb-1.5">
               {([
                 { key: 'profile', label: 'Profile' },
+                { key: 'collection', label: 'Collection' },
                 { key: 'planner', label: 'Planner' },
                 { key: 'settings', label: 'Settings' },
               ] as const).map((item) => {
@@ -10420,7 +10597,7 @@ const OdaraScreen = ({
       {menuPage && (
         <OdaraMenuDestination
           page={menuPage}
-          onClose={() => setMenuPage(menuPage === 'collection' ? 'profile' : null)}
+          onClose={() => setMenuPage(null)}
           onOpenCollection={() => setMenuPage('collection')}
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
