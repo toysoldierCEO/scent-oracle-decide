@@ -4704,6 +4704,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   const fragranceId = detail?.fragrance_id ?? null;
   const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
   const [taxonomyLoading, setTaxonomyLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || !fragranceId) {
@@ -4711,6 +4712,8 @@ const OdaraFragranceDetailSheet: React.FC<{
       setTaxonomyLoading(false);
       return;
     }
+    // Reset scroll to top whenever the sheet opens or the fragrance changes.
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
     const cached = fragranceTaxonomyCache.get(fragranceId);
     if (cached !== undefined) {
       setTaxonomy(cached);
@@ -4729,6 +4732,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   }, [open, fragranceId]);
 
   if (!open || !detail) return null;
+
 
   const tint = getEnhancedCollectionTint({
     family_key: detail.family_key,
