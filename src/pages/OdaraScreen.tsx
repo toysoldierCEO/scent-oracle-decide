@@ -4881,6 +4881,106 @@ const OdaraFragranceDetailSheet: React.FC<{
           </div>
         </div>
 
+        {(() => {
+          const tx = taxonomy;
+          const txFamily = tx?.family_display_label?.trim() || tx?.universal_family_label?.trim() || null;
+          const facetItems = Array.isArray(tx?.facets)
+            ? (tx!.facets as ResolvedTaxonomyFacet[])
+                .map((f) => (f?.display_label || f?.label || '').toString().trim())
+                .filter(Boolean)
+                .slice(0, 8)
+            : [];
+          const rolesRaw = (Array.isArray(tx?.wardrobe_roles) ? tx!.wardrobe_roles : tx?.roles) as ResolvedTaxonomyRole[] | null | undefined;
+          const roleItems = Array.isArray(rolesRaw)
+            ? [...rolesRaw]
+                .map((r) => ({
+                  label: (r?.display_label || r?.label || '').toString().trim(),
+                  priority: typeof r?.role_priority === 'number' ? r.role_priority : (typeof r?.priority === 'number' ? r.priority : 99),
+                }))
+                .filter((r) => r.label)
+                .sort((a, b) => a.priority - b.priority)
+                .slice(0, 3)
+            : [];
+          const reviewLabel = formatTaxonomyReviewStatus(tx?.review_status);
+          const hasContent = Boolean(txFamily || facetItems.length || roleItems.length || reviewLabel);
+          if (!taxonomyLoading && !hasContent) return null;
+          return (
+            <div
+              className="mt-4 rounded-[20px] border px-4 py-3.5"
+              style={{
+                borderColor: 'rgba(255,255,255,0.07)',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.012) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+            >
+              <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/40">Scent Map</div>
+              {taxonomyLoading && !hasContent ? (
+                <div className="mt-3 space-y-2">
+                  <div className="h-3 w-24 animate-pulse rounded-full bg-white/[0.04]" />
+                  <div className="h-5 w-48 animate-pulse rounded-full bg-white/[0.04]" />
+                </div>
+              ) : (
+                <div className="mt-2.5 space-y-3">
+                  {txFamily ? (
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.22em] text-foreground/36">Family</div>
+                      <div
+                        className="mt-1 text-[15px] text-foreground/88"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                      >
+                        {txFamily}
+                      </div>
+                    </div>
+                  ) : null}
+                  {facetItems.length > 0 ? (
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.22em] text-foreground/36">Facets</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {facetItems.map((label, i) => (
+                          <span
+                            key={`facet-${label}-${i}`}
+                            className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.06em] text-foreground/78"
+                            style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.025)' }}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {roleItems.length > 0 ? (
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.22em] text-foreground/36">Role</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roleItems.map((r, i) => (
+                          <span
+                            key={`role-${r.label}-${i}`}
+                            className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.16em]"
+                            style={{
+                              border: `1px solid rgba(255,255,255,${i === 0 ? 0.12 : 0.07})`,
+                              background: `rgba(255,255,255,${i === 0 ? 0.045 : 0.02})`,
+                              color: `rgba(255,255,255,${i === 0 ? 0.86 : 0.6})`,
+                            }}
+                          >
+                            {r.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {reviewLabel ? (
+                    <div className="pt-0.5 text-[10px] tracking-[0.04em] text-foreground/42">
+                      {reviewLabel}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+
+
         {hasTokenSections ? (
           <div className="mt-4 space-y-3">
             {accordLabels.length > 0 ? (
