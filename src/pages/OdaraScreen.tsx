@@ -10597,7 +10597,7 @@ const OdaraScreen = ({
       {menuPage && (
         <OdaraMenuDestination
           page={menuPage}
-          onClose={() => setMenuPage(menuPage === 'collection' ? 'profile' : null)}
+          onClose={() => setMenuPage(null)}
           onOpenCollection={() => setMenuPage('collection')}
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
