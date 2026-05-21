@@ -5061,7 +5061,7 @@ const OdaraFragranceDetailSheet: React.FC<{
           </div>
         ) : null}
 
-        {(detail.longevity_score != null || detail.projection_score != null || detail.source_confidence) ? (
+        {(detail.longevity_score != null || detail.projection_score != null) ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {detail.longevity_score != null ? (
               <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
@@ -5071,11 +5071,6 @@ const OdaraFragranceDetailSheet: React.FC<{
             {detail.projection_score != null ? (
               <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
                 {`Projection ${Math.round(detail.projection_score * 100)}`}
-              </div>
-            ) : null}
-            {detail.source_confidence ? (
-              <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                {detail.source_confidence}
               </div>
             ) : null}
           </div>
