@@ -4762,7 +4762,17 @@ const OdaraFragranceDetailSheet: React.FC<{
 
   return (
     <OdaraBottomSheet open={open} onClose={onClose}>
-      <div className="px-5 pb-5 pt-4">
+      <div
+        ref={scrollRef}
+        className="px-5 pt-4"
+        style={{
+          maxHeight: 'calc(100dvh - 120px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)',
+        }}
+      >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.28em] text-foreground/38">
