@@ -4030,13 +4030,6 @@ function sortCollectionItemsForView(items: OdaraCollectionItem[], sort: OdaraCol
         || defaultOrder
       );
     }
-    if (sort === 'brand') {
-      return (
-        (a.brand ?? '').localeCompare(b.brand ?? '', undefined, { sensitivity: 'base' })
-        || (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' })
-        || defaultOrder
-      );
-    }
     return (
       getCollectionRoleRank(a.wardrobe_role_key) - getCollectionRoleRank(b.wardrobe_role_key)
       || getCollectionFamilySortLabel(a).localeCompare(getCollectionFamilySortLabel(b), undefined, { sensitivity: 'base' })
