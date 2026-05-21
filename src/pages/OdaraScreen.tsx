@@ -4649,11 +4649,87 @@ const OdaraBottomSheet: React.FC<{
   );
 };
 
+type ResolvedTaxonomyFacet = { key?: string | null; display_label?: string | null; label?: string | null };
+type ResolvedTaxonomyRole = { key?: string | null; display_label?: string | null; label?: string | null; role_priority?: number | null; priority?: number | null };
+type ResolvedTaxonomyPayload = {
+  family_display_label?: string | null;
+  universal_family_label?: string | null;
+  universal_family_key?: string | null;
+  legacy_family_key?: string | null;
+  facets?: ResolvedTaxonomyFacet[] | null;
+  wardrobe_roles?: ResolvedTaxonomyRole[] | null;
+  roles?: ResolvedTaxonomyRole[] | null;
+  review_status?: string | null;
+  source_confidence?: number | string | null;
+};
+
+const fragranceTaxonomyCache = new Map<string, ResolvedTaxonomyPayload | null>();
+const fragranceTaxonomyInFlight = new Map<string, Promise<ResolvedTaxonomyPayload | null>>();
+
+async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxonomyPayload | null> {
+  if (fragranceTaxonomyCache.has(fragranceId)) return fragranceTaxonomyCache.get(fragranceId) ?? null;
+  const existing = fragranceTaxonomyInFlight.get(fragranceId);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const { data, error } = await odaraSupabase.rpc('get_fragrance_taxonomy_profile_v1' as any, { p_fragrance_id: fragranceId } as any);
+      if (error) throw error;
+      const payload = (Array.isArray(data) ? data[0] : data) as ResolvedTaxonomyPayload | null;
+      fragranceTaxonomyCache.set(fragranceId, payload ?? null);
+      return payload ?? null;
+    } catch {
+      fragranceTaxonomyCache.set(fragranceId, null);
+      return null;
+    } finally {
+      fragranceTaxonomyInFlight.delete(fragranceId);
+    }
+  })();
+  fragranceTaxonomyInFlight.set(fragranceId, promise);
+  return promise;
+}
+
+function formatTaxonomyReviewStatus(status: string | null | undefined): string | null {
+  if (!status) return null;
+  const s = String(status).toLowerCase();
+  if (s.includes('source')) return 'Source-backed';
+  if (s.includes('confirm')) return 'Confirmed';
+  if (s.includes('medium')) return 'Medium confidence';
+  if (s.includes('wear') || s.includes('gap') || s.includes('needs')) return 'Needs wear test';
+  return null;
+}
+
 const OdaraFragranceDetailSheet: React.FC<{
   detail: OdaraFragranceDetailSurfaceState | null;
   open: boolean;
   onClose: () => void;
 }> = ({ detail, open, onClose }) => {
+  const fragranceId = detail?.fragrance_id ?? null;
+  const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
+  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !fragranceId) {
+      setTaxonomy(null);
+      setTaxonomyLoading(false);
+      return;
+    }
+    const cached = fragranceTaxonomyCache.get(fragranceId);
+    if (cached !== undefined) {
+      setTaxonomy(cached);
+      setTaxonomyLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTaxonomyLoading(true);
+    setTaxonomy(null);
+    fetchResolvedTaxonomy(fragranceId).then((payload) => {
+      if (cancelled) return;
+      setTaxonomy(payload);
+      setTaxonomyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [open, fragranceId]);
+
   if (!open || !detail) return null;
 
   const tint = getEnhancedCollectionTint({
