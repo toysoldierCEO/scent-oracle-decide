@@ -4030,13 +4030,6 @@ function sortCollectionItemsForView(items: OdaraCollectionItem[], sort: OdaraCol
         || defaultOrder
       );
     }
-    if (sort === 'brand') {
-      return (
-        (a.brand ?? '').localeCompare(b.brand ?? '', undefined, { sensitivity: 'base' })
-        || (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' })
-        || defaultOrder
-      );
-    }
     return (
       getCollectionRoleRank(a.wardrobe_role_key) - getCollectionRoleRank(b.wardrobe_role_key)
       || getCollectionFamilySortLabel(a).localeCompare(getCollectionFamilySortLabel(b), undefined, { sensitivity: 'base' })
@@ -9876,20 +9869,22 @@ const OdaraScreen = ({
         const label = token?.token_label ?? token?.label ?? token?.name ?? '';
         return typeof label === 'string' && label.trim().length > 0;
       });
+    const currentAny = current as any;
     const resolvedHeroRailReasonChip = current.isHeroCard
       ? (
           resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation)
-          ?? current.reasonChip
+          ?? currentAny.reasonChip
           ?? null
         )
       : resolveReasonChip(current.reason_chip_label, current.reason_chip_explanation);
-    const resolvedHeroRailTokenSource = Array.isArray(current.heroTokens) && current.heroTokens.length > 0
-      ? current.heroTokens
+    const resolvedHeroRailTokenSource = Array.isArray(currentAny.heroTokens) && currentAny.heroTokens.length > 0
+      ? currentAny.heroTokens
       : buildSemanticSurfaceTokens(normalizedNotes, normalizedAccords, new Set(), 4);
     const resolvedHeroRailTokens = resolvedHeroRailTokenSource.filter((token: any) => {
       const label = token?.token_label ?? token?.label ?? token?.name ?? '';
       return typeof label === 'string' && label.trim().length > 0;
     });
+
 
     return {
       ...current,
@@ -9944,7 +9939,7 @@ const OdaraScreen = ({
   const openVisibleHeroDetail = useCallback(() => {
     if (!visibleResolvedCurrentCard) return;
     openFragranceDetailSheet({
-      ...buildFragranceDetailSurfaceStateFromDisplayCard(visibleResolvedCurrentCard),
+      ...buildFragranceDetailSurfaceStateFromDisplayCard(visibleResolvedCurrentCard as any),
       image_url: visibleHeroBottleImageUrl ?? visibleResolvedCurrentCard.image_url ?? null,
     });
   }, [openFragranceDetailSheet, visibleHeroBottleImageUrl, visibleResolvedCurrentCard]);
