@@ -4288,56 +4288,68 @@ const OdaraProfilePage: React.FC<{
       })),
     [profilePayload]
   );
-  const collectionCoverageCopy = profileError
-    ? 'Could not load live collection coverage yet.'
-    : profileLoading
-      ? 'Building family coverage from the real wardrobe…'
-      : profilePayload?.family_balance?.coverage_copy
-        ?? profilePayload?.family_balance?.empty_reason
-        ?? profilePayload?.collection_summary?.empty_reason
-        ?? 'No live collection coverage yet.';
   const retiredCount = profilePayload?.preference_summary?.retired_count
     ?? profilePayload?.library?.retired_count
     ?? 0;
-  const collectionHint = profileLoading
-    ? 'Loading real collection…'
+  const savedCount = profilePayload?.library?.saved_count ?? 0;
+  const historyCount = profilePayload?.library?.history_count ?? 0;
+
+  // Each tile shows one clean metric only — never invented.
+  const collectionMetric = profileLoading
+    ? '…'
     : bottleCount && bottleCount > 0
-      ? [
-          formatProfileCount(bottleCount, 'bottle'),
-          !isGuestMode && retiredCount > 0
-            ? `${retiredCount} retired`
-            : null,
-        ].filter(Boolean).join(' · ')
-      : profilePayload?.collection_summary?.empty_reason ?? 'No real bottles yet.';
-  const savedHint = profileLoading
-    ? 'Loading saved signal…'
-    : profilePayload
-      ? (
-          profilePayload.library.saved_count > 0
-            ? formatProfileCount(profilePayload.library.saved_count, 'saved item')
-            : profilePayload.library.saved_empty_reason ?? 'No real saved items yet.'
-        )
-      : 'No real saved items yet.';
-  const historyHint = profileLoading
-    ? 'Loading scent history…'
-    : profilePayload
-      ? (
-          profilePayload.library.history_count > 0
-            ? formatProfileCount(profilePayload.library.history_count, 'history event')
-            : profilePayload.library.history_empty_reason ?? 'No real scent history yet.'
-        )
-      : 'No real scent history yet.';
-  const preferenceHint = !isGuestMode
-    ? (
-        retiredCount > 0
-          ? `Ratings and ${retiredCount} retired ${retiredCount === 1 ? 'bottle' : 'bottles'} shape your wardrobe signal.`
-          : 'Ratings and retired bottles shape your wardrobe signal.'
-      )
-    : 'Guest preview stays read-only.';
+      ? String(bottleCount)
+      : '—';
+  const collectionSub = profileLoading
+    ? 'Loading'
+    : bottleCount && bottleCount > 0
+      ? (bottleCount === 1 ? 'Bottle' : 'Bottles')
+      : 'Empty';
+  const savedMetric = profileLoading ? '…' : (savedCount > 0 ? String(savedCount) : '—');
+  const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? (savedCount === 1 ? 'Saved' : 'Saved') : 'None yet');
+  const historyMetric = profileLoading ? '…' : (historyCount > 0 ? String(historyCount) : '—');
+  const historySub = profileLoading ? 'Loading' : (historyCount > 0 ? 'Events' : 'None yet');
+  const preferencesMetric = profileLoading
+    ? '…'
+    : (!isGuestMode && retiredCount > 0 ? String(retiredCount) : '—');
+  const preferencesSub = profileLoading
+    ? 'Loading'
+    : (!isGuestMode && retiredCount > 0 ? 'Retired' : 'Signals');
+
+  const tiles: Array<{
+    key: string;
+    label: string;
+    metric: string;
+    sub: string;
+    onClick?: () => void;
+  }> = [
+    { key: 'collection', label: 'Collection', metric: collectionMetric, sub: collectionSub, onClick: onOpenCollection },
+    { key: 'saved', label: 'Saved', metric: savedMetric, sub: savedSub },
+    { key: 'history', label: 'History', metric: historyMetric, sub: historySub },
+    { key: 'preferences', label: 'Preferences', metric: preferencesMetric, sub: preferencesSub },
+  ];
+
+  // Build conic-gradient string for ring rendering — synced with familySegments.
+  const ringGradient = useMemo(() => {
+    if (familySegments.length === 0) return 'conic-gradient(rgba(255,255,255,0.05) 0deg 360deg)';
+    let acc = 0;
+    const stops: string[] = [];
+    familySegments.forEach((seg) => {
+      const start = acc;
+      acc += (seg.pct / 100) * 360;
+      stops.push(`${seg.color} ${start}deg ${acc}deg`);
+    });
+    if (acc < 359.9) {
+      stops.push(`rgba(255,255,255,0.05) ${acc}deg 360deg`);
+    }
+    return `conic-gradient(${stops.join(', ')})`;
+  }, [familySegments]);
+
+  const dominantFamily = familySegments[0] ?? null;
 
   return (
     <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
-      {/* Single compact identity row — sits tight under DOSSIER label. */}
+      {/* Single compact identity row — account identity only. */}
       <div className="mb-6 flex items-center gap-3.5 px-1">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
@@ -4361,18 +4373,49 @@ const OdaraProfilePage: React.FC<{
         </div>
       </div>
 
-      <div className="flex flex-col gap-5">
-        <OdaraInsetGroup eyebrow="Collection" emphasis>
-          <OdaraInsetRow label="Collection" hint={collectionHint} emphasis isFirst onClick={onOpenCollection} />
-        </OdaraInsetGroup>
+      <div className="flex flex-col gap-6">
+        {/* Wardrobe tile group — 2x2 premium tiles. */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {tiles.map((tile) => {
+            const Tag: any = tile.onClick ? 'button' : 'div';
+            return (
+              <Tag
+                key={tile.key}
+                type={tile.onClick ? 'button' : undefined}
+                onClick={tile.onClick}
+                className={`relative rounded-[18px] border px-4 py-4 text-left transition-colors ${tile.onClick ? 'active:bg-white/[0.04]' : ''}`}
+                style={{
+                  borderColor: 'rgba(255,255,255,0.07)',
+                  background: 'linear-gradient(180deg, rgba(24,25,30,0.7) 0%, rgba(13,14,18,0.7) 100%)',
+                  backdropFilter: 'blur(18px)',
+                  WebkitBackdropFilter: 'blur(18px)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 24px rgba(0,0,0,0.22)',
+                }}
+              >
+                <div className="text-[9.5px] uppercase tracking-[0.32em] text-foreground/42">
+                  {tile.label}
+                </div>
+                <div
+                  className="mt-3 text-[24px] leading-none text-foreground/92"
+                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                >
+                  {tile.metric}
+                </div>
+                <div className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                  {tile.sub}
+                </div>
+              </Tag>
+            );
+          })}
+        </div>
 
-        {/* Collection Coverage — donut with bottle total ONLY in center. */}
+        {/* Collection Coverage — centered scent map. */}
         <div>
-          <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+          <div className="mb-3 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
             Collection Coverage
           </div>
           <div
-            className="rounded-[20px] border px-5 py-6"
+            className="rounded-[22px] border px-5 py-7"
             style={{
               borderColor: 'rgba(255,255,255,0.08)',
               background: 'linear-gradient(180deg, rgba(22,23,28,0.7) 0%, rgba(13,14,18,0.7) 100%)',
@@ -4381,113 +4424,85 @@ const OdaraProfilePage: React.FC<{
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
             }}
           >
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-                <div className="relative h-[124px] w-[124px] shrink-0">
-                  <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke="rgba(255,255,255,0.06)"
-                      strokeWidth="8"
-                    />
-                    {familySegments.length > 0 &&
-                      (() => {
-                        const circumference = 2 * Math.PI * 42;
-                        let offset = 0;
-                        return familySegments.map((seg) => {
-                          const len = (seg.pct / 100) * circumference;
-                          const el = (
-                            <circle
-                              key={seg.key}
-                              cx="50"
-                              cy="50"
-                              r="42"
-                              fill="none"
-                              stroke={seg.color}
-                              strokeWidth="8"
-                              strokeDasharray={`${len} ${circumference - len}`}
-                              strokeDashoffset={-offset}
-                              strokeLinecap="butt"
-                            />
-                          );
-                          offset += len;
-                          return el;
-                        });
-                      })()}
-                  </svg>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center gap-6">
+              {/* Centered orb. */}
+              <div className="relative">
+                <div
+                  className="relative h-[176px] w-[176px] rounded-full"
+                  style={{
+                    background: ringGradient,
+                    boxShadow: dominantFamily
+                      ? `0 0 0 1px rgba(255,255,255,0.04), 0 0 60px ${dominantFamily.color}22`
+                      : '0 0 0 1px rgba(255,255,255,0.04)',
+                  }}
+                >
+                  {/* Inner mask to create donut */}
+                  <div
+                    className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full"
+                    style={{
+                      background:
+                        'radial-gradient(80% 80% at 50% 35%, rgba(28,29,34,0.96) 0%, rgba(12,13,17,0.98) 100%)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                    }}
+                  >
                     <div
-                      className="text-[26px] leading-none text-foreground/92"
-                      style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                      className="text-[40px] leading-none text-foreground/92"
+                      style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.015em' }}
                     >
                       {profileLoading ? '…' : (bottleCount ?? '—')}
                     </div>
-                    <div className="mt-1 text-[9.5px] uppercase tracking-[0.28em] text-foreground/42">
+                    <div className="mt-2 text-[9px] uppercase tracking-[0.36em] text-foreground/42">
                       Bottles
                     </div>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="text-[15px] text-foreground/85"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
-                  >
-                    Coverage by family
-                  </div>
-                  <div className="mt-1.5 text-[11.5px] leading-[1.55] text-foreground/45">
-                    Family color and count reflect the real signed-in wardrobe.
+                    {dominantFamily ? (
+                      <div className="mt-2.5 flex items-center gap-1.5">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: dominantFamily.color, boxShadow: `0 0 8px ${dominantFamily.color}80` }}
+                        />
+                        <span className="text-[9.5px] uppercase tracking-[0.24em] text-foreground/55">
+                          {dominantFamily.label}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
+
+              {/* Family map — compact, below the orb. */}
               {familySegments.length > 0 ? (
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid w-full grid-cols-2 gap-x-5 gap-y-3">
                   {familySegments.map((segment) => (
-                    <div
-                      key={segment.key}
-                      className="flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2.5"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.07)',
-                        background: 'rgba(255,255,255,0.018)',
-                      }}
-                    >
-                      <div className="min-w-0 flex items-center gap-2.5">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{
-                            background: segment.color,
-                            boxShadow: `0 0 0 1px ${segment.color}30, 0 0 14px ${segment.color}40`,
-                          }}
-                        />
-                        <span className="truncate text-[11px] text-foreground/74">{segment.label}</span>
-                      </div>
-                      <div className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-foreground/42">
-                        {segment.count}
-                        {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                    <div key={segment.key} className="flex items-center gap-2.5">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          background: segment.color,
+                          boxShadow: `0 0 10px ${segment.color}55`,
+                        }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12px] text-foreground/82">{segment.label}</div>
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-foreground/42">
+                          {segment.count}
+                          {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : null}
-              <div className="min-w-0">
-                <div
-                  className="text-[12px] text-foreground/72"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
-                >
-                  {collectionCoverageCopy}
+              ) : (
+                <div className="text-[11.5px] text-foreground/50">
+                  {profileError
+                    ? 'Could not load live collection coverage yet.'
+                    : profileLoading
+                      ? 'Building coverage from the real wardrobe…'
+                      : 'No real bottles yet.'}
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
-
-        <OdaraInsetGroup eyebrow="Library">
-          <OdaraInsetRow label="Saved" hint={savedHint} isFirst />
-          <OdaraInsetRow label="Scent History" hint={historyHint} />
-          <OdaraInsetRow label="Preferences" hint={preferenceHint} />
-        </OdaraInsetGroup>
       </div>
     </OdaraDestinationChrome>
   );
