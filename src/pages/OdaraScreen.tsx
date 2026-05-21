@@ -4649,11 +4649,87 @@ const OdaraBottomSheet: React.FC<{
   );
 };
 
+type ResolvedTaxonomyFacet = { key?: string | null; display_label?: string | null; label?: string | null };
+type ResolvedTaxonomyRole = { key?: string | null; display_label?: string | null; label?: string | null; role_priority?: number | null; priority?: number | null };
+type ResolvedTaxonomyPayload = {
+  family_display_label?: string | null;
+  universal_family_label?: string | null;
+  universal_family_key?: string | null;
+  legacy_family_key?: string | null;
+  facets?: ResolvedTaxonomyFacet[] | null;
+  wardrobe_roles?: ResolvedTaxonomyRole[] | null;
+  roles?: ResolvedTaxonomyRole[] | null;
+  review_status?: string | null;
+  source_confidence?: number | string | null;
+};
+
+const fragranceTaxonomyCache = new Map<string, ResolvedTaxonomyPayload | null>();
+const fragranceTaxonomyInFlight = new Map<string, Promise<ResolvedTaxonomyPayload | null>>();
+
+async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxonomyPayload | null> {
+  if (fragranceTaxonomyCache.has(fragranceId)) return fragranceTaxonomyCache.get(fragranceId) ?? null;
+  const existing = fragranceTaxonomyInFlight.get(fragranceId);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const { data, error } = await odaraSupabase.rpc('get_fragrance_taxonomy_profile_v1' as any, { p_fragrance_id: fragranceId } as any);
+      if (error) throw error;
+      const payload = (Array.isArray(data) ? data[0] : data) as ResolvedTaxonomyPayload | null;
+      fragranceTaxonomyCache.set(fragranceId, payload ?? null);
+      return payload ?? null;
+    } catch {
+      fragranceTaxonomyCache.set(fragranceId, null);
+      return null;
+    } finally {
+      fragranceTaxonomyInFlight.delete(fragranceId);
+    }
+  })();
+  fragranceTaxonomyInFlight.set(fragranceId, promise);
+  return promise;
+}
+
+function formatTaxonomyReviewStatus(status: string | null | undefined): string | null {
+  if (!status) return null;
+  const s = String(status).toLowerCase();
+  if (s.includes('source')) return 'Source-backed';
+  if (s.includes('confirm')) return 'Confirmed';
+  if (s.includes('medium')) return 'Medium confidence';
+  if (s.includes('wear') || s.includes('gap') || s.includes('needs')) return 'Needs wear test';
+  return null;
+}
+
 const OdaraFragranceDetailSheet: React.FC<{
   detail: OdaraFragranceDetailSurfaceState | null;
   open: boolean;
   onClose: () => void;
 }> = ({ detail, open, onClose }) => {
+  const fragranceId = detail?.fragrance_id ?? null;
+  const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
+  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !fragranceId) {
+      setTaxonomy(null);
+      setTaxonomyLoading(false);
+      return;
+    }
+    const cached = fragranceTaxonomyCache.get(fragranceId);
+    if (cached !== undefined) {
+      setTaxonomy(cached);
+      setTaxonomyLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTaxonomyLoading(true);
+    setTaxonomy(null);
+    fetchResolvedTaxonomy(fragranceId).then((payload) => {
+      if (cancelled) return;
+      setTaxonomy(payload);
+      setTaxonomyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [open, fragranceId]);
+
   if (!open || !detail) return null;
 
   const tint = getEnhancedCollectionTint({
@@ -4804,6 +4880,106 @@ const OdaraFragranceDetailSheet: React.FC<{
             ) : null}
           </div>
         </div>
+
+        {(() => {
+          const tx = taxonomy;
+          const txFamily = tx?.family_display_label?.trim() || tx?.universal_family_label?.trim() || null;
+          const facetItems = Array.isArray(tx?.facets)
+            ? (tx!.facets as ResolvedTaxonomyFacet[])
+                .map((f) => (f?.display_label || f?.label || '').toString().trim())
+                .filter(Boolean)
+                .slice(0, 8)
+            : [];
+          const rolesRaw = (Array.isArray(tx?.wardrobe_roles) ? tx!.wardrobe_roles : tx?.roles) as ResolvedTaxonomyRole[] | null | undefined;
+          const roleItems = Array.isArray(rolesRaw)
+            ? [...rolesRaw]
+                .map((r) => ({
+                  label: (r?.display_label || r?.label || '').toString().trim(),
+                  priority: typeof r?.role_priority === 'number' ? r.role_priority : (typeof r?.priority === 'number' ? r.priority : 99),
+                }))
+                .filter((r) => r.label)
+                .sort((a, b) => a.priority - b.priority)
+                .slice(0, 3)
+            : [];
+          const reviewLabel = formatTaxonomyReviewStatus(tx?.review_status);
+          const hasContent = Boolean(txFamily || facetItems.length || roleItems.length || reviewLabel);
+          if (!taxonomyLoading && !hasContent) return null;
+          return (
+            <div
+              className="mt-4 rounded-[20px] border px-4 py-3.5"
+              style={{
+                borderColor: 'rgba(255,255,255,0.07)',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.012) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+            >
+              <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/40">Scent Map</div>
+              {taxonomyLoading && !hasContent ? (
+                <div className="mt-3 space-y-2">
+                  <div className="h-3 w-24 animate-pulse rounded-full bg-white/[0.04]" />
+                  <div className="h-5 w-48 animate-pulse rounded-full bg-white/[0.04]" />
+                </div>
+              ) : (
+                <div className="mt-2.5 space-y-3">
+                  {txFamily ? (
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.22em] text-foreground/36">Family</div>
+                      <div
+                        className="mt-1 text-[15px] text-foreground/88"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+                      >
+                        {txFamily}
+                      </div>
+                    </div>
+                  ) : null}
+                  {facetItems.length > 0 ? (
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.22em] text-foreground/36">Facets</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {facetItems.map((label, i) => (
+                          <span
+                            key={`facet-${label}-${i}`}
+                            className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.06em] text-foreground/78"
+                            style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.025)' }}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {roleItems.length > 0 ? (
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.22em] text-foreground/36">Role</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roleItems.map((r, i) => (
+                          <span
+                            key={`role-${r.label}-${i}`}
+                            className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.16em]"
+                            style={{
+                              border: `1px solid rgba(255,255,255,${i === 0 ? 0.12 : 0.07})`,
+                              background: `rgba(255,255,255,${i === 0 ? 0.045 : 0.02})`,
+                              color: `rgba(255,255,255,${i === 0 ? 0.86 : 0.6})`,
+                            }}
+                          >
+                            {r.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {reviewLabel ? (
+                    <div className="pt-0.5 text-[10px] tracking-[0.04em] text-foreground/42">
+                      {reviewLabel}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+
 
         {hasTokenSections ? (
           <div className="mt-4 space-y-3">
