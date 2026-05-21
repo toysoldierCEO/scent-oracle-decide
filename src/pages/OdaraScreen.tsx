@@ -4691,9 +4691,7 @@ async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxon
 function formatTaxonomyReviewStatus(status: string | null | undefined): string | null {
   if (!status) return null;
   const s = String(status).toLowerCase();
-  if (s.includes('source')) return 'Source-backed';
-  if (s.includes('confirm')) return 'Confirmed';
-  if (s.includes('medium')) return 'Medium confidence';
+  if (s.includes('source') || s.includes('confirm')) return 'Source-backed';
   if (s.includes('wear') || s.includes('gap') || s.includes('needs')) return 'Needs wear test';
   return null;
 }
