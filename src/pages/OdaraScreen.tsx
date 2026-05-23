@@ -1365,39 +1365,29 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
  *   - locked   → swipe down = unlock
  *   - neutral  → swipe down = skip
  */
-const SWIPE_DOWN_DISTANCE = 110;    // px of downward travel to trigger skip (intentional pull)
+const SWIPE_DOWN_DISTANCE = 90;     // px of downward travel to trigger skip (intentional pull)
 const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
 const SWIPE_HORIZONTAL_TOLERANCE = 1.5; // |dy| must exceed |dx| * this for a skip
 const HORIZONTAL_INTENT_DISTANCE = 40;  // px of |dx| required to claim a horizontal day-swipe
 const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
-const SCROLL_TOP_TOLERANCE = 4;         // px of slack when deciding "near top"
+const SCROLL_TOP_TOLERANCE = 6;         // px of slack when deciding "near top"
 
 /**
- * Robust "is the relevant scroll surface at/near the top?" check.
- * Considers window.scrollY, document.scrollingElement, and the nearest
- * scrollable ancestor of the element where the gesture originated so the
- * skip gesture does not fire mid-scroll inside a preview iframe or
- * embedded scroll container.
+ * Robust "is the page scroll surface at/near the top?" check.
+ * Considers window.scrollY and document.scrollingElement.scrollTop so the
+ * check works inside iframes / preview shells where one of the two may
+ * report 0 while the other lags. Intentionally does NOT walk arbitrary
+ * scrollable ancestors — the hero card itself is never the scroll
+ * container, and over-broad ancestor checks were producing false
+ * negatives that blocked the skip gesture.
  */
-function isScrollSurfaceAtTop(originEl?: Element | null): boolean {
+function isScrollSurfaceAtTop(): boolean {
   if (typeof window === 'undefined') return true;
   const wy = window.scrollY ?? 0;
-  if (wy > SCROLL_TOP_TOLERANCE) return false;
-  const docTop = (document.scrollingElement?.scrollTop ?? document.documentElement?.scrollTop ?? 0);
-  if (docTop > SCROLL_TOP_TOLERANCE) return false;
-  let node: Element | null = originEl ?? null;
-  while (node && node !== document.body && node !== document.documentElement) {
-    const el = node as HTMLElement;
-    const style = (typeof window !== 'undefined') ? window.getComputedStyle(el) : null;
-    const oy = style?.overflowY ?? '';
-    const scrollable = (oy === 'auto' || oy === 'scroll' || oy === 'overlay') && el.scrollHeight > el.clientHeight;
-    if (scrollable) {
-      if (el.scrollTop > SCROLL_TOP_TOLERANCE) return false;
-      break;
-    }
-    node = el.parentElement;
-  }
-  return true;
+  const docTop = document.scrollingElement?.scrollTop
+    ?? document.documentElement?.scrollTop
+    ?? 0;
+  return Math.min(wy, docTop) <= SCROLL_TOP_TOLERANCE;
 }
 const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
 const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
@@ -9514,7 +9504,7 @@ const OdaraScreen = ({
         // when the page is already at the top (so we never fight scrolling).
         dy >= SWIPE_DIRECTION_LOCK &&
         Math.abs(dy) > Math.abs(dx) * HORIZONTAL_AXIS_RATIO &&
-        isScrollSurfaceAtTop(e.currentTarget as Element)
+        isScrollSurfaceAtTop()
       ) {
         s.direction = 'vertical';
       } else {
@@ -9526,7 +9516,7 @@ const OdaraScreen = ({
     const downwardOk =
       dy >= SWIPE_DOWN_DISTANCE &&
       Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE &&
-      isScrollSurfaceAtTop(e.currentTarget as Element);
+      isScrollSurfaceAtTop();
 
     const activeCardNameBefore = visibleCard?.name ?? null;
     const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
