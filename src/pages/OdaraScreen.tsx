@@ -1365,11 +1365,40 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
  *   - locked   → swipe down = unlock
  *   - neutral  → swipe down = skip
  */
-const SWIPE_DOWN_DISTANCE = 80;     // px of downward travel to trigger
+const SWIPE_DOWN_DISTANCE = 110;    // px of downward travel to trigger skip (intentional pull)
 const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
-const SWIPE_HORIZONTAL_TOLERANCE = 1.4; // |dy| must exceed |dx| * this for a skip
-const HORIZONTAL_INTENT_DISTANCE = 32;  // px of |dx| required to claim a horizontal day-swipe
+const SWIPE_HORIZONTAL_TOLERANCE = 1.5; // |dy| must exceed |dx| * this for a skip
+const HORIZONTAL_INTENT_DISTANCE = 40;  // px of |dx| required to claim a horizontal day-swipe
 const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
+const SCROLL_TOP_TOLERANCE = 4;         // px of slack when deciding "near top"
+
+/**
+ * Robust "is the relevant scroll surface at/near the top?" check.
+ * Considers window.scrollY, document.scrollingElement, and the nearest
+ * scrollable ancestor of the element where the gesture originated so the
+ * skip gesture does not fire mid-scroll inside a preview iframe or
+ * embedded scroll container.
+ */
+function isScrollSurfaceAtTop(originEl?: Element | null): boolean {
+  if (typeof window === 'undefined') return true;
+  const wy = window.scrollY ?? 0;
+  if (wy > SCROLL_TOP_TOLERANCE) return false;
+  const docTop = (document.scrollingElement?.scrollTop ?? document.documentElement?.scrollTop ?? 0);
+  if (docTop > SCROLL_TOP_TOLERANCE) return false;
+  let node: Element | null = originEl ?? null;
+  while (node && node !== document.body && node !== document.documentElement) {
+    const el = node as HTMLElement;
+    const style = (typeof window !== 'undefined') ? window.getComputedStyle(el) : null;
+    const oy = style?.overflowY ?? '';
+    const scrollable = (oy === 'auto' || oy === 'scroll' || oy === 'overlay') && el.scrollHeight > el.clientHeight;
+    if (scrollable) {
+      if (el.scrollTop > SCROLL_TOP_TOLERANCE) return false;
+      break;
+    }
+    node = el.parentElement;
+  }
+  return true;
+}
 const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
 const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
 
@@ -9301,29 +9330,44 @@ const OdaraScreen = ({
       Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
 
     if (isGuestMode) {
-      if (guestLocked) return;
-
       if (!within) {
         lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
         return;
       }
-
       lastTapRef.current = { time: 0, x: 0, y: 0 };
+      if (guestLocked) {
+        // Double-tap on locked guest card → unlock (visible scent decision
+        // stays exactly as it currently renders).
+        unlockGuestCard();
+        return;
+      }
       engageGuestLock();
       return;
     }
 
-    // Already locked → no-op (use the lock icon to unlock).
+    // Signed-in
     if (signedInIsReadOnlyHistoryCard) return;
-    if (lockState === 'locked') return;
 
     if (!within) {
       lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
       return;
     }
-
-    // Second tap → like + lock together.
     lastTapRef.current = { time: 0, x: 0, y: 0 };
+
+    if (lockState === 'locked') {
+      // Double-tap on locked signed-in card → unlock only.
+      // Do NOT call onAccept, do NOT change hero/layer/mood/alternates/date/context.
+      clearUnlockTimeout();
+      setLockState('neutral');
+      clearLockedSelection();
+      setUnlockFlash(true);
+      window.setTimeout(() => setUnlockFlash(false), 700);
+      pulseLock();
+      haptic('success');
+      return;
+    }
+
+    // Second tap on unlocked card → like + lock together.
     clearUnlockTimeout();
     const didLock = engageSignedInLock();
     if (!didLock) return;
@@ -9351,10 +9395,12 @@ const OdaraScreen = ({
     isGuestMode,
     guestLocked,
     engageGuestLock,
+    unlockGuestCard,
     signedInIsReadOnlyHistoryCard,
     lockState,
+    setLockState,
+    clearLockedSelection,
     clearUnlockTimeout,
-    engageSignedInLock,
     pulseLock,
     onAccept,
   ]);
@@ -9468,7 +9514,7 @@ const OdaraScreen = ({
         // when the page is already at the top (so we never fight scrolling).
         dy >= SWIPE_DIRECTION_LOCK &&
         Math.abs(dy) > Math.abs(dx) * HORIZONTAL_AXIS_RATIO &&
-        (typeof window === 'undefined' || window.scrollY <= 0)
+        isScrollSurfaceAtTop(e.currentTarget as Element)
       ) {
         s.direction = 'vertical';
       } else {
@@ -9480,7 +9526,7 @@ const OdaraScreen = ({
     const downwardOk =
       dy >= SWIPE_DOWN_DISTANCE &&
       Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE &&
-      (typeof window === 'undefined' || window.scrollY <= 0);
+      isScrollSurfaceAtTop(e.currentTarget as Element);
 
     const activeCardNameBefore = visibleCard?.name ?? null;
     const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
@@ -9523,17 +9569,14 @@ const OdaraScreen = ({
     let activeCardIdAfter: string | null = activeCardIdBefore;
 
     if (isGuestMode && isGuestLocked) {
-      actionTaken = 'unlock_guest';
-      unlockGuestCard();
+      // Locked guest card: swipe-down is NOT an unlock gesture anymore.
+      // Unlock is double-tap on the locked card body.
+      actionTaken = 'locked_no_op_guest';
     } else if (signedInIsReadOnlyHistoryCard) {
       actionTaken = 'history_locked_read_only';
     } else if (lockState === 'locked') {
-      actionTaken = 'unlock';
-      setLockState('neutral');
-      clearLockedSelection();
-      setUnlockFlash(true);
-      window.setTimeout(() => setUnlockFlash(false), 700);
-      pulseLock();
+      // Locked signed-in card: swipe-down does nothing. Unlock is double-tap.
+      actionTaken = 'locked_no_op_signed_in';
     } else if (isGuestMode) {
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
