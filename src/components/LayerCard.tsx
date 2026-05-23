@@ -786,17 +786,19 @@ const LayerCard = ({
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
+  const resolvedWhyText = sprayPattern?.why_it_works || whyText;
+  const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
   const detailSections = [
-    sprayPatternDisplay ? { label: 'Spray Pattern', value: sprayPatternDisplay } : null,
-    (placementRows.anchor || placementRows.layer || placementFallbackText)
+    resolvedWhyText
+      ? { label: 'Why it works', value: resolvedWhyText }
+      : null,
+    hasPlacement
       ? {
           label: 'Placement',
           placementRows,
           value: placementFallbackText,
+          subline: sprayPatternDisplay || '',
         }
-      : null,
-    (sprayPattern?.why_it_works || whyText)
-      ? { label: 'Why it works', value: sprayPattern?.why_it_works || whyText }
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
 
