@@ -9330,29 +9330,44 @@ const OdaraScreen = ({
       Math.hypot(dx, dy) <= DOUBLE_TAP_DIST;
 
     if (isGuestMode) {
-      if (guestLocked) return;
-
       if (!within) {
         lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
         return;
       }
-
       lastTapRef.current = { time: 0, x: 0, y: 0 };
+      if (guestLocked) {
+        // Double-tap on locked guest card → unlock (visible scent decision
+        // stays exactly as it currently renders).
+        unlockGuestCard();
+        return;
+      }
       engageGuestLock();
       return;
     }
 
-    // Already locked → no-op (use the lock icon to unlock).
+    // Signed-in
     if (signedInIsReadOnlyHistoryCard) return;
-    if (lockState === 'locked') return;
 
     if (!within) {
       lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
       return;
     }
-
-    // Second tap → like + lock together.
     lastTapRef.current = { time: 0, x: 0, y: 0 };
+
+    if (lockState === 'locked') {
+      // Double-tap on locked signed-in card → unlock only.
+      // Do NOT call onAccept, do NOT change hero/layer/mood/alternates/date/context.
+      clearUnlockTimeout();
+      setLockState('neutral');
+      clearLockedSelection();
+      setUnlockFlash(true);
+      window.setTimeout(() => setUnlockFlash(false), 700);
+      pulseLock();
+      haptic('success');
+      return;
+    }
+
+    // Second tap on unlocked card → like + lock together.
     clearUnlockTimeout();
     const didLock = engageSignedInLock();
     if (!didLock) return;
@@ -9380,10 +9395,12 @@ const OdaraScreen = ({
     isGuestMode,
     guestLocked,
     engageGuestLock,
+    unlockGuestCard,
     signedInIsReadOnlyHistoryCard,
     lockState,
+    setLockState,
+    clearLockedSelection,
     clearUnlockTimeout,
-    engageSignedInLock,
     pulseLock,
     onAccept,
   ]);
