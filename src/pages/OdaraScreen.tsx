@@ -1381,7 +1381,7 @@ const SCROLL_TOP_TOLERANCE = 6;         // px of slack when deciding "near top"
  * container, and over-broad ancestor checks were producing false
  * negatives that blocked the skip gesture.
  */
-function isScrollSurfaceAtTop(): boolean {
+function isScrollSurfaceAtTop(_originEl?: Element | null): boolean {
   if (typeof window === 'undefined') return true;
   const wy = window.scrollY ?? 0;
   const docTop = document.scrollingElement?.scrollTop
