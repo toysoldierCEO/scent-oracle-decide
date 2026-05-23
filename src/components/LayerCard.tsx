@@ -1011,6 +1011,9 @@ const LayerCard = ({
                       <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
                       {section.label === 'Placement' && section.placementRows ? (
                         <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-sm leading-relaxed text-white/80">
+                          {section.subline && (
+                            <p className="text-left text-white/90">{section.subline}</p>
+                          )}
                           {section.placementRows.anchor && (
                             <p className="text-left">
                               <span className="font-medium text-white/90">Anchor:</span>{' '}
