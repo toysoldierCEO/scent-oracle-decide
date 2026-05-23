@@ -1365,9 +1365,11 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
  *   - locked   → swipe down = unlock
  *   - neutral  → swipe down = skip
  */
-const SWIPE_DOWN_DISTANCE = 60;     // px of downward travel to trigger
-const SWIPE_DIRECTION_LOCK = 8;     // px before we lock direction
-const SWIPE_HORIZONTAL_TOLERANCE = 1.2; // |dy| must exceed |dx| * this
+const SWIPE_DOWN_DISTANCE = 80;     // px of downward travel to trigger
+const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
+const SWIPE_HORIZONTAL_TOLERANCE = 1.4; // |dy| must exceed |dx| * this for a skip
+const HORIZONTAL_INTENT_DISTANCE = 32;  // px of |dx| required to claim a horizontal day-swipe
+const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
 const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
 const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
 
@@ -9444,31 +9446,41 @@ const OdaraScreen = ({
     if (!s.active || s.pointerId !== e.pointerId || s.fired) return;
     const dx = e.clientX - s.startX;
     const dy = e.clientY - s.startY;
-    const frameDy = e.clientY - s.lastY;
     s.lastY = e.clientY;
     if (s.direction === 'none') {
-      // Wait for a clear intent before claiming. Require stronger dominance
-      // on the chosen axis so weak/ambiguous motion stays free (page scroll
-      // or no-op) and does not jitter into the wrong gesture.
+      // Require a CLEAR horizontal intent before claiming a day-swipe. Vertical
+      // motion (including downward) is left to the browser via touch-action:
+      // pan-y so normal page scrolling never feels hijacked. We only lock
+      // horizontal when the gesture is clearly sideways.
       if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
-      const axisRatio = 1.25;
-      if (Math.abs(dy) > Math.abs(dx) * axisRatio) {
-        s.direction = 'vertical';
-      } else if (Math.abs(dx) > Math.abs(dy) * axisRatio) {
+      if (
+        Math.abs(dx) >= HORIZONTAL_INTENT_DISTANCE &&
+        Math.abs(dx) > Math.abs(dy) * HORIZONTAL_AXIS_RATIO
+      ) {
         s.direction = 'horizontal';
+        try {
+          if (e.currentTarget.setPointerCapture) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+        } catch { /* noop */ }
+      } else if (
+        // Lock to vertical only for a strong, clearly-vertical downward gesture
+        // when the page is already at the top (so we never fight scrolling).
+        dy >= SWIPE_DIRECTION_LOCK &&
+        Math.abs(dy) > Math.abs(dx) * HORIZONTAL_AXIS_RATIO &&
+        (typeof window === 'undefined' || window.scrollY <= 0)
+      ) {
+        s.direction = 'vertical';
       } else {
-        // Ambiguous — keep waiting for a clearer signal.
         return;
       }
-      try {
-        if (e.currentTarget.setPointerCapture) {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }
-      } catch { /* noop */ }
     }
     const surfaceType = isGuestMode ? 'guest' : 'signed_in';
     const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
-    const downwardOk = dy >= SWIPE_DOWN_DISTANCE && Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE;
+    const downwardOk =
+      dy >= SWIPE_DOWN_DISTANCE &&
+      Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE &&
+      (typeof window === 'undefined' || window.scrollY <= 0);
 
     const activeCardNameBefore = visibleCard?.name ?? null;
     const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
@@ -9500,17 +9512,9 @@ const OdaraScreen = ({
       if (Math.abs(dx) > 10) suppressCardClickRef.current = true;
       return;
     }
-    // vertical
-    if (dy < 0) {
-      // Upward finger motion → forward to page scroll. This restores the
-      // natural mobile scrolling feel from the hero card without ceding
-      // ownership of the gesture (downward skip stays reliable).
-      if (frameDy < 0) {
-        try { window.scrollBy(0, -frameDy); } catch { /* noop */ }
-      }
-      return;
-    }
-    if (!downwardOk) return; // not far enough yet — weak downward is ignored
+    // vertical (downward skip only — upward is browser-native scroll)
+    if (dy <= 0) return;
+    if (!downwardOk) return;
 
     // Threshold reached: fire the state-aware swipe-down action ONCE.
     s.fired = true;
@@ -11009,11 +11013,10 @@ const OdaraScreen = ({
                   background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
                   border: `1px solid ${tint.border}`,
                   boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-                  // Hero card owns the gesture. The pointermove handler
-                  // forwards upward finger motion to window.scrollBy so the
-                  // page still scrolls naturally from the card, while
-                  // downward-skip and horizontal day-swipe stay reliable.
-                  touchAction: 'none',
+                  // Allow native vertical scroll from the hero card. We only
+                  // claim the gesture on clear horizontal intent (day-swipe)
+                  // or a strong downward pull at the top of the page (skip).
+                  touchAction: 'pan-y',
                   // iOS Safari: suppress the long-press callout, text selection,
                   // and tap highlight so the hero card behaves like a native
                   // gesture surface (no blue flash, no magnifier, no copy menu).
