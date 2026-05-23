@@ -11013,11 +11013,10 @@ const OdaraScreen = ({
                   background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
                   border: `1px solid ${tint.border}`,
                   boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
-                  // Hero card owns the gesture. The pointermove handler
-                  // forwards upward finger motion to window.scrollBy so the
-                  // page still scrolls naturally from the card, while
-                  // downward-skip and horizontal day-swipe stay reliable.
-                  touchAction: 'none',
+                  // Allow native vertical scroll from the hero card. We only
+                  // claim the gesture on clear horizontal intent (day-swipe)
+                  // or a strong downward pull at the top of the page (skip).
+                  touchAction: 'pan-y',
                   // iOS Safari: suppress the long-press callout, text selection,
                   // and tap highlight so the hero card behaves like a native
                   // gesture surface (no blue flash, no magnifier, no copy menu).
