@@ -1189,6 +1189,9 @@ serve(async (req) => {
           : ["no_match", "low_confidence"].includes(status)
             ? `status_${status}_not_stageable`
             : stageReviewContext.stageReviewReason;
+      const reviewStageStatus = stageReview && rowStageReviewAllowed
+        ? "needs_review"
+        : status;
 
       const preview = {
         id: target.id,
@@ -1197,7 +1200,7 @@ serve(async (req) => {
         ok: true,
         dryRun,
         stageReview,
-        status,
+        status: reviewStageStatus,
         source_confidence: confidence,
         source_url: sourceUrl,
         match_name: matchName,
@@ -1261,7 +1264,11 @@ serve(async (req) => {
 
       if (!dryRun) {
         const liveIdentityStageable = preview.identity_match_status === "matched";
-        const persistenceStatus = preview.status === "identity_conflict" ? "low_confidence" : preview.status;
+        const persistenceStatus = stageReview && rowStageReviewAllowed
+          ? "needs_review"
+          : preview.status === "identity_conflict"
+            ? "low_confidence"
+            : preview.status;
         const lastError = preview.status === "identity_conflict"
           ? `identity_conflict:${preview.identity_conflict_reason ?? "candidate_identity_conflict"}`
           : preview.status === "no_match"
