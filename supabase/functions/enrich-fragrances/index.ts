@@ -98,6 +98,27 @@ type IdentityDecision = {
   providerProductKey: string | null;
 };
 
+type CandidateDiagnostic = {
+  candidate_name: string | null;
+  candidate_brand: string | null;
+  source_url: string | null;
+  provider_product_key: string | null;
+  candidate_score: number;
+  brand_compatible: boolean;
+  brand_match_type: "exact" | "partial" | "missing" | "conflict";
+  product_identity_plausible: boolean;
+  rejection_reason: string | null;
+  meaningful_target_tokens: string[];
+  candidate_tokens: string[];
+  slug_tokens: string[];
+  matched_meaningful_tokens: string[];
+  missing_meaningful_tokens: string[];
+  identity_match_status: "matched" | "conflict" | "insufficient_evidence";
+  identity_conflict_reason: string | null;
+  notes_count: number;
+  accords_count: number;
+};
+
 const HIGH_CONFIDENCE_THRESHOLD = 0.78;
 const REVIEW_CONFIDENCE_THRESHOLD = 0.58;
 const FUNCTION_VERSION = "enrich-fragrances_v3";
@@ -132,6 +153,18 @@ const PRODUCT_NAME_STOPWORDS = new Set([
   "cologne",
   "eau",
   "de",
+  "body",
+  "aftershave",
+  "deodorant",
+  "lotion",
+  "shower",
+  "soap",
+  "gift",
+  "set",
+  "tester",
+  "mini",
+  "travel",
+  "pour",
   "the",
   "and",
   "s",
@@ -210,6 +243,20 @@ function namesCompatible(odaraName: string, candidateName: string): ProductNameC
     meaningfulCandidateTokenCount: candidateMeaningfulTokens.length,
     nearExact,
     exact,
+  };
+}
+
+function uniqueValues(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function tokenOverlap(targetTokens: string[], candidateTokens: string[]) {
+  const candidateSet = new Set(candidateTokens);
+  const matched = targetTokens.filter((token) => candidateSet.has(token));
+  const missing = targetTokens.filter((token) => !candidateSet.has(token));
+  return {
+    matched: uniqueValues(matched),
+    missing: uniqueValues(missing),
   };
 }
 
@@ -342,6 +389,87 @@ function getProviderProductKey(candidateBrand: string | null, normalizedCandidat
   return `${norm(candidateBrand)}|${productIdentity}`;
 }
 
+function buildCandidateDiagnostic(
+  target: Pick<FragRow, "name" | "brand">,
+  hit: FragellaHit,
+  extracted: ExtractedEnrichment,
+  candidateScore: number,
+): CandidateDiagnostic {
+  const candidateName = firstNonEmptyString(hit.name, hit.Name, hit.title, hit.fragrance);
+  const candidateBrand = firstNonEmptyString(hit.brand, hit.Brand, hit.brand_name);
+  const providerPayloadName = firstNonEmptyString(hit.Name, hit.name, hit.title, hit.fragrance);
+  const normalizedOdaraName = normalizeProductIdentity(target.name);
+  const normalizedCandidateName = normalizeProductIdentity(candidateName ?? providerPayloadName, target.brand);
+  const sourceUrls = collectCandidateSourceUrls(hit, extracted);
+  const sourceSlugs = uniqueValues(
+    sourceUrls
+      .map((url) => extractSourceIdentitySlug(url, target.brand))
+      .filter((value): value is string => !!value),
+  );
+  const normalizedCandidateSourceSlug = sourceSlugs[0] ?? null;
+  const providerProductKey = getProviderProductKey(candidateBrand, normalizedCandidateName, normalizedCandidateSourceSlug);
+  const targetTokens = uniqueValues(meaningfulIdentityTokens(normalizedOdaraName));
+  const candidateTokens = uniqueValues(meaningfulIdentityTokens(normalizedCandidateName));
+  const slugTokens = uniqueValues(sourceSlugs.flatMap((slug) => meaningfulIdentityTokens(slug)));
+  const combinedTokens = uniqueValues([...candidateTokens, ...slugTokens]);
+  const { matched, missing } = tokenOverlap(targetTokens, combinedTokens);
+  const nameCompatibility = normalizedCandidateName
+    ? namesCompatible(normalizedOdaraName, normalizedCandidateName)
+    : null;
+  const sourceCompatibility = sourceSlugs
+    .map((slug) => namesCompatible(normalizedOdaraName, slug))
+    .find((compatibility) => compatibility.exact || compatibility.nearExact || compatibility.compatible)
+    ?? null;
+  const normalizedOdaraBrand = norm(target.brand);
+  const normalizedCandidateBrand = norm(candidateBrand);
+  const brandMatchType: CandidateDiagnostic["brand_match_type"] = !normalizedOdaraBrand || !normalizedCandidateBrand
+    ? "missing"
+    : normalizedOdaraBrand === normalizedCandidateBrand
+      ? "exact"
+      : normalizedOdaraBrand.includes(normalizedCandidateBrand) || normalizedCandidateBrand.includes(normalizedOdaraBrand)
+        ? "partial"
+        : "conflict";
+  const brandIsCompatible = brandMatchType !== "conflict";
+  const targetTokensCovered = targetTokens.length > 0 && missing.length === 0;
+  const productIdentityPlausible = targetTokensCovered
+    || !!nameCompatibility?.exact
+    || !!nameCompatibility?.nearExact
+    || !!sourceCompatibility?.exact
+    || !!sourceCompatibility?.nearExact;
+  let rejectionReason: string | null = null;
+
+  if (!normalizedOdaraName) {
+    rejectionReason = "odara_name_missing";
+  } else if (!brandIsCompatible) {
+    rejectionReason = "candidate_brand_conflicts_with_odara_brand";
+  } else if (!productIdentityPlausible) {
+    rejectionReason = targetTokens.length > 0
+      ? "missing_meaningful_target_tokens"
+      : "candidate_identity_evidence_missing";
+  }
+
+  return {
+    candidate_name: candidateName,
+    candidate_brand: candidateBrand,
+    source_url: extracted.sourceUrl,
+    provider_product_key: providerProductKey,
+    candidate_score: candidateScore,
+    brand_compatible: brandIsCompatible,
+    brand_match_type: brandMatchType,
+    product_identity_plausible: productIdentityPlausible,
+    rejection_reason: rejectionReason,
+    meaningful_target_tokens: targetTokens,
+    candidate_tokens: candidateTokens,
+    slug_tokens: slugTokens,
+    matched_meaningful_tokens: matched,
+    missing_meaningful_tokens: missing,
+    identity_match_status: rejectionReason ? "conflict" : "matched",
+    identity_conflict_reason: rejectionReason,
+    notes_count: extracted.notes.length,
+    accords_count: extracted.accords.length,
+  };
+}
+
 function validateProviderIdentity(
   target: Pick<FragRow, "name" | "brand">,
   hit: FragellaHit,
@@ -442,10 +570,13 @@ function appendIdentityConflict(row: Record<string, any>, reason: string) {
     ? `${existingReason};${reason}`
     : reason;
   row.status = "identity_conflict";
+  row.source_confidence = null;
+  row.provider_confidence_label = "not_trusted_identity_conflict";
   row.will_write = false;
   row.would_stage_review = false;
   row.stage_review_allowed = false;
   row.stage_review_reason = `identity_conflict:${row.identity_conflict_reason}`;
+  row.resolver_rejection_reason = row.resolver_rejection_reason ?? reason;
 }
 
 function registerProviderProductResult(
@@ -467,8 +598,19 @@ function registerProviderProductResult(
 
   if (distinctOdaraNames.size <= 1) return;
 
+  const affectedIds = bucket
+    .map((entry) => String(entry.id ?? ""))
+    .filter(Boolean);
+
   for (const entry of bucket) {
     appendIdentityConflict(entry, "duplicate_provider_product_reuse_in_request");
+    entry.duplicate_provider_product_reuse_in_request = true;
+    entry.duplicate_provider_product_affected_ids = affectedIds;
+    entry.resolver_diagnostics = {
+      ...(entry.resolver_diagnostics ?? {}),
+      duplicate_provider_product_reuse_in_request: true,
+      duplicate_provider_product_affected_ids: affectedIds,
+    };
   }
 }
 
@@ -721,12 +863,13 @@ function pickBestHit(
   hits: FragellaHit[],
   brand: string | null,
   name: string,
-): { hit: FragellaHit; score: number } | null {
+): { hit: FragellaHit; score: number; diagnostic: CandidateDiagnostic; rejectedCandidates: CandidateDiagnostic[] } | null {
   if (!hits.length) return null;
 
   const normalizedBrand = norm(brand);
   const normalizedName = normalizeProductIdentity(name);
-  let best: { hit: FragellaHit; score: number } | null = null;
+  let best: { hit: FragellaHit; score: number; diagnostic: CandidateDiagnostic } | null = null;
+  const diagnostics: CandidateDiagnostic[] = [];
 
   for (const hit of hits) {
     const hitBrand = norm(hit.brand ?? hit.Brand ?? hit["brand_name"] ?? "");
@@ -740,10 +883,16 @@ function pickBestHit(
       .filter((value): value is string => !!value)[0] ?? null;
     const nameCompatibility = hitName ? namesCompatible(normalizedName, hitName) : null;
     const sourceCompatibility = sourceSlug ? namesCompatible(normalizedName, sourceSlug) : null;
+    const extractedNotesCount = extracted.notes.length;
+    const extractedAccordsCount = extracted.accords.length;
+    const diagnostic = buildCandidateDiagnostic({ name, brand }, hit, extracted, 0);
+    const productIdentityPlausible = diagnostic.product_identity_plausible && diagnostic.brand_compatible;
 
     let score = 0;
-    if (hitBrand && hitBrand === normalizedBrand) score += 24;
-    else if (hitBrand && normalizedBrand && (hitBrand.includes(normalizedBrand) || normalizedBrand.includes(hitBrand))) score += 6;
+    if (productIdentityPlausible) {
+      if (hitBrand && hitBrand === normalizedBrand) score += 24;
+      else if (hitBrand && normalizedBrand && (hitBrand.includes(normalizedBrand) || normalizedBrand.includes(hitBrand))) score += 6;
+    }
 
     if (hitName && hitName === normalizedName) {
       score += 40;
@@ -761,16 +910,38 @@ function pickBestHit(
       score += 4;
     }
 
-    if (extracted.notes.length > 0) score += 2;
-    if (extracted.accords.length > 0) score += 2;
-    if (extracted.concentration) score += 1;
+    if (productIdentityPlausible) {
+      if (extractedNotesCount > 0) score += 2;
+      if (extractedAccordsCount > 0) score += 2;
+      if (extracted.concentration) score += 1;
+    }
+
+    const scoredDiagnostic = {
+      ...diagnostic,
+      candidate_score: score,
+      rejection_reason: diagnostic.rejection_reason
+        ?? (productIdentityPlausible ? null : "missing_meaningful_target_tokens"),
+      identity_match_status: (productIdentityPlausible ? "matched" : "conflict") as CandidateDiagnostic["identity_match_status"],
+      identity_conflict_reason: productIdentityPlausible ? null : (diagnostic.rejection_reason ?? "missing_meaningful_target_tokens"),
+    };
+    diagnostics.push(scoredDiagnostic);
 
     if (!best || score > best.score) {
-      best = { hit, score };
+      best = { hit, score, diagnostic: scoredDiagnostic };
     }
   }
 
-  return best;
+  if (!best) return null;
+
+  const rejectedCandidates = diagnostics
+    .filter((diagnostic) => diagnostic.identity_match_status !== "matched")
+    .sort((a, b) => b.candidate_score - a.candidate_score)
+    .slice(0, 5);
+
+  return {
+    ...best,
+    rejectedCandidates,
+  };
 }
 
 function mergeUnique(existing: string[], proposed: string[]): string[] {
@@ -1107,7 +1278,7 @@ serve(async (req) => {
         continue;
       }
 
-      const { hit, score } = bestMatch;
+      const { hit, score, diagnostic: selectedCandidateDiagnostic, rejectedCandidates } = bestMatch;
       const primaryExtracted = extractTextEnrichment(hit);
       const imagePayload = imagePayloadById.get(target.id) ?? null;
       const fallbackExtracted = imagePayload ? extractTextEnrichment(imagePayload) : null;
@@ -1151,6 +1322,8 @@ serve(async (req) => {
         : null;
       const exactIdentityMatch = !!(nameCompatibility?.exact || sourceCompatibility?.exact);
       const identityStageable = identityDecision.identityMatchStatus === "matched";
+      const resolverRejectionReason = selectedCandidateDiagnostic.rejection_reason
+        ?? (!identityStageable ? identityDecision.identityConflictReason : null);
       const hasUsableText = hasMeaningfulArray(proposedNotes) || hasMeaningfulArray(proposedAccords) || !!extracted.concentration || !!familyCandidate;
       const notesImproved = mergedNotes.length > existingNotes.length;
       const accordsImproved = mergedAccords.length > existingAccords.length;
@@ -1179,6 +1352,13 @@ serve(async (req) => {
         status = "enriched";
       }
 
+      const trustedSourceConfidence = identityStageable && status !== "no_match" ? confidence : null;
+      const trustedProviderConfidenceLabel = !identityStageable
+        ? "not_trusted_identity_conflict"
+        : status === "no_match"
+          ? "not_trusted_no_match"
+          : extracted.providerConfidenceLabel;
+
       const rowStageReviewAllowed = stageReviewContext.stageReviewAllowed
         && identityStageable
         && !["no_match", "low_confidence", "identity_conflict"].includes(status);
@@ -1201,7 +1381,7 @@ serve(async (req) => {
         dryRun,
         stageReview,
         status: reviewStageStatus,
-        source_confidence: confidence,
+        source_confidence: trustedSourceConfidence,
         source_url: sourceUrl,
         match_name: matchName,
         match_brand: matchBrand,
@@ -1216,9 +1396,15 @@ serve(async (req) => {
         provider_product_key: identityDecision.providerProductKey,
         identity_match_status: identityDecision.identityMatchStatus,
         identity_conflict_reason: identityDecision.identityConflictReason,
-        provider_confidence_label: extracted.providerConfidenceLabel,
+        provider_confidence_label: trustedProviderConfidenceLabel,
+        resolver_identity_plausible: selectedCandidateDiagnostic.product_identity_plausible,
+        resolver_rejection_reason: resolverRejectionReason,
+        resolver_diagnostics: {
+          selected_candidate: selectedCandidateDiagnostic,
+          rejected_candidates: rejectedCandidates,
+        },
         family_candidate_source: familyCandidateSource,
-        family_candidate_confidence: familyCandidateConfidence,
+        family_candidate_confidence: identityStageable ? familyCandidateConfidence : null,
         family_candidate_reason: familyCandidateReason,
         exact_identity_match: exactIdentityMatch,
         eligible_for_write: identityStageable && status === "enriched",
@@ -1231,6 +1417,8 @@ serve(async (req) => {
         debug: {
           candidate_count: hits.length,
           best_candidate_score: score,
+          selected_candidate_diagnostics: selectedCandidateDiagnostic,
+          rejected_candidates: rejectedCandidates,
           extraction_status: hasUsableText ? "usable_text_found" : "no_usable_text",
           extraction_source: extractionSource,
           search_queries: searchQueries,
@@ -1279,7 +1467,7 @@ serve(async (req) => {
           provider: "fragella",
           status: persistenceStatus,
           source_url: sourceUrl,
-          source_confidence: confidence,
+          source_confidence: trustedSourceConfidence,
           match_name: matchName,
           match_brand: matchBrand,
           proposed_family_key: familyCandidate,
