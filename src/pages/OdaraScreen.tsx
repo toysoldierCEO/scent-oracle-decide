@@ -9569,17 +9569,14 @@ const OdaraScreen = ({
     let activeCardIdAfter: string | null = activeCardIdBefore;
 
     if (isGuestMode && isGuestLocked) {
-      actionTaken = 'unlock_guest';
-      unlockGuestCard();
+      // Locked guest card: swipe-down is NOT an unlock gesture anymore.
+      // Unlock is double-tap on the locked card body.
+      actionTaken = 'locked_no_op_guest';
     } else if (signedInIsReadOnlyHistoryCard) {
       actionTaken = 'history_locked_read_only';
     } else if (lockState === 'locked') {
-      actionTaken = 'unlock';
-      setLockState('neutral');
-      clearLockedSelection();
-      setUnlockFlash(true);
-      window.setTimeout(() => setUnlockFlash(false), 700);
-      pulseLock();
+      // Locked signed-in card: swipe-down does nothing. Unlock is double-tap.
+      actionTaken = 'locked_no_op_signed_in';
     } else if (isGuestMode) {
       // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
       const o: any = (oracle ?? activeOracle ?? {});
