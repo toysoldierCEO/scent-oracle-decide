@@ -1365,9 +1365,11 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
  *   - locked   → swipe down = unlock
  *   - neutral  → swipe down = skip
  */
-const SWIPE_DOWN_DISTANCE = 60;     // px of downward travel to trigger
-const SWIPE_DIRECTION_LOCK = 8;     // px before we lock direction
-const SWIPE_HORIZONTAL_TOLERANCE = 1.2; // |dy| must exceed |dx| * this
+const SWIPE_DOWN_DISTANCE = 80;     // px of downward travel to trigger
+const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
+const SWIPE_HORIZONTAL_TOLERANCE = 1.4; // |dy| must exceed |dx| * this for a skip
+const HORIZONTAL_INTENT_DISTANCE = 32;  // px of |dx| required to claim a horizontal day-swipe
+const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
 const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
 const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
 
