@@ -9504,7 +9504,7 @@ const OdaraScreen = ({
         // when the page is already at the top (so we never fight scrolling).
         dy >= SWIPE_DIRECTION_LOCK &&
         Math.abs(dy) > Math.abs(dx) * HORIZONTAL_AXIS_RATIO &&
-        isScrollSurfaceAtTop(e.currentTarget as Element)
+        isScrollSurfaceAtTop()
       ) {
         s.direction = 'vertical';
       } else {
@@ -9516,7 +9516,7 @@ const OdaraScreen = ({
     const downwardOk =
       dy >= SWIPE_DOWN_DISTANCE &&
       Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE &&
-      isScrollSurfaceAtTop(e.currentTarget as Element);
+      isScrollSurfaceAtTop();
 
     const activeCardNameBefore = visibleCard?.name ?? null;
     const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
