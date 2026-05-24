@@ -122,6 +122,7 @@ type CandidateDiagnostic = {
 const HIGH_CONFIDENCE_THRESHOLD = 0.78;
 const REVIEW_CONFIDENCE_THRESHOLD = 0.58;
 const FUNCTION_VERSION = "enrich-fragrances_v3";
+const RESOLVER_MODEL_VERSION = "source_resolver_identity_matching_v1_2026_05_24";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -973,6 +974,105 @@ function getStageReviewContext(stageReview: boolean, hasExplicitIds: boolean, dr
   };
 }
 
+function resolverOutcomeFromResult(row: Record<string, any>): string {
+  if (row.duplicate_provider_product_reuse_in_request) return "duplicate_provider_reuse";
+  if (row.identity_match_status === "matched") return "matched";
+  if (row.status === "no_match" || row.identity_conflict_reason === "no_provider_candidate") return "no_match";
+  if (typeof row.identity_conflict_reason === "string" && row.identity_conflict_reason.includes("source_url")) {
+    return "source_url_conflict";
+  }
+  if (row.identity_match_status === "conflict" || row.status === "identity_conflict") return "identity_conflict";
+  if (row.resolver_rejection_reason || row.resolver_diagnostics?.selected_candidate?.rejection_reason) {
+    return "rejected_candidate";
+  }
+  if (row.stage_review_allowed === false) return "manual_review_needed";
+  return "unknown";
+}
+
+function arrayJson(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function buildResolverAttemptAuditRow(
+  row: Record<string, any>,
+  params: {
+    runId: string;
+    actorLabel: string;
+    mode: string;
+    dryRun: boolean;
+    stageReview: boolean;
+    auditResolverAttempt: boolean;
+    updated: number;
+  },
+) {
+  const selectedDiagnostic = row.resolver_diagnostics?.selected_candidate ?? {};
+  const duplicateProviderReuse = Boolean(row.duplicate_provider_product_reuse_in_request);
+  const providerKey = typeof row.provider_product_key === "string" && row.provider_product_key.length > 0
+    ? row.provider_product_key
+    : typeof selectedDiagnostic.provider_product_key === "string"
+      ? selectedDiagnostic.provider_product_key
+      : null;
+
+  return {
+    run_id: params.runId,
+    fragrance_id: row.id,
+    actor_label: params.actorLabel,
+    mode: params.mode,
+    dry_run: params.dryRun,
+    stage_review: params.stageReview,
+    audit_resolver_attempt: params.auditResolverAttempt,
+    target_name: row.name ?? null,
+    target_brand: row.brand ?? null,
+    selected_candidate_name: row.match_name ?? row.candidate_name ?? selectedDiagnostic.candidate_name ?? null,
+    selected_candidate_brand: row.match_brand ?? row.candidate_brand ?? selectedDiagnostic.candidate_brand ?? null,
+    selected_source_url: row.candidate_source_url ?? row.source_url ?? selectedDiagnostic.source_url ?? null,
+    selected_provider_key: providerKey,
+    selected_provider_name: row.provider_payload_name ?? row.candidate_name ?? selectedDiagnostic.candidate_name ?? null,
+    selected_provider_brand: row.candidate_brand ?? row.match_brand ?? selectedDiagnostic.candidate_brand ?? null,
+    identity_match_status: row.identity_match_status ?? null,
+    identity_conflict_reason: row.identity_conflict_reason ?? null,
+    meaningful_target_tokens: arrayJson(selectedDiagnostic.meaningful_target_tokens),
+    candidate_tokens: arrayJson(selectedDiagnostic.candidate_tokens),
+    slug_tokens: arrayJson(selectedDiagnostic.slug_tokens),
+    matched_meaningful_tokens: arrayJson(selectedDiagnostic.matched_meaningful_tokens),
+    missing_meaningful_tokens: arrayJson(selectedDiagnostic.missing_meaningful_tokens),
+    duplicate_provider_key: duplicateProviderReuse ? providerKey : null,
+    duplicate_provider_reuse: duplicateProviderReuse,
+    duplicate_provider_affected_ids: arrayJson(row.duplicate_provider_product_affected_ids),
+    source_confidence: row.source_confidence ?? null,
+    provider_confidence_label: row.provider_confidence_label ?? null,
+    proposed_notes_count: Number.isFinite(Number(row.proposed_notes_count)) ? Number(row.proposed_notes_count) : null,
+    proposed_accords_count: Number.isFinite(Number(row.proposed_accords_count)) ? Number(row.proposed_accords_count) : null,
+    stage_review_allowed: typeof row.stage_review_allowed === "boolean" ? row.stage_review_allowed : null,
+    stage_review_reason: row.stage_review_reason ?? null,
+    would_stage_review: typeof row.would_stage_review === "boolean" ? row.would_stage_review : null,
+    will_write: typeof row.will_write === "boolean" ? row.will_write : null,
+    updated_count: params.updated,
+    result_status: "audit_recorded",
+    resolver_outcome: resolverOutcomeFromResult(row),
+    resolver_diagnostics: row.resolver_diagnostics ?? {},
+    raw_result_summary: {
+      ok: row.ok ?? null,
+      status: row.status ?? null,
+      dryRun: row.dryRun ?? params.dryRun,
+      stageReview: row.stageReview ?? params.stageReview,
+      candidate_score: row.candidate_score ?? selectedDiagnostic.candidate_score ?? null,
+      resolver_rejection_reason: row.resolver_rejection_reason ?? selectedDiagnostic.rejection_reason ?? null,
+      proposed_notes_count: row.proposed_notes_count ?? null,
+      proposed_accords_count: row.proposed_accords_count ?? null,
+      stage_review_allowed: row.stage_review_allowed ?? null,
+      stage_review_reason: row.stage_review_reason ?? null,
+      would_stage_review: row.would_stage_review ?? null,
+      will_write: row.will_write ?? null,
+      source_confidence: row.source_confidence ?? null,
+      provider_confidence_label: row.provider_confidence_label ?? null,
+      error: row.error ?? null,
+    },
+    resolver_model_version: RESOLVER_MODEL_VERSION,
+    function_version: FUNCTION_VERSION,
+  };
+}
+
 serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -998,10 +1098,53 @@ serve(async (req) => {
     const dryRun = Boolean(body?.dryRun ?? true);
     const force = Boolean(body?.force ?? false);
     const stageReview = Boolean(body?.stageReview ?? false);
+    const auditResolverAttempt = Boolean(body?.auditResolverAttempt ?? false);
+    const resolverAuditActorLabel = typeof body?.resolverAuditActorLabel === "string" && body.resolverAuditActorLabel.trim().length > 0
+      ? body.resolverAuditActorLabel.trim()
+      : typeof body?.actorLabel === "string" && body.actorLabel.trim().length > 0
+        ? body.actorLabel.trim()
+        : "enrich-fragrances_resolver_attempt_audit_v1";
     const minConfidence = Number(body?.minConfidence ?? REVIEW_CONFIDENCE_THRESHOLD);
     const writeThreshold = Number(body?.writeThreshold ?? HIGH_CONFIDENCE_THRESHOLD);
     const scopeMode = fragranceIds.length > 0 ? "explicit_ids" : "default_queue";
     const stageReviewContext = getStageReviewContext(stageReview, fragranceIds.length > 0, dryRun);
+    const auditRunId = auditResolverAttempt ? crypto.randomUUID() : null;
+    const auditWriteAllowed = auditResolverAttempt
+      && dryRun
+      && stageReview
+      && scopeMode === "explicit_ids"
+      && fragranceIds.length > 0
+      && validFragranceIds.length > 0;
+
+    if (auditResolverAttempt && !auditWriteAllowed) {
+      return new Response(JSON.stringify({
+        ok: false,
+        dryRun,
+        force,
+        stageReview,
+        auditResolverAttempt,
+        audit_run_id: auditRunId,
+        audit_rows_written: 0,
+        audit_write_status: "blocked_invalid_scope",
+        requested_count: fragranceIds.length,
+        picked: 0,
+        results_count: 0,
+        updated: 0,
+        skipped_count: invalidIds.length,
+        invalid_ids: invalidIds,
+        missing_ids: [],
+        function_version: FUNCTION_VERSION,
+        resolver_model_version: RESOLVER_MODEL_VERSION,
+        scope_mode: scopeMode,
+        stage_review_allowed: stageReviewContext.stageReviewAllowed,
+        stage_review_reason: stageReviewContext.stageReviewReason,
+        error: "auditResolverAttempt:true requires dryRun:true, stageReview:true, and a non-empty explicit fragranceIds array.",
+        results: [],
+      }, null, 2), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     if (stageReview && fragranceIds.length === 0) {
       return new Response(JSON.stringify({
@@ -1109,6 +1252,13 @@ serve(async (req) => {
         scope_mode: scopeMode,
         stage_review_allowed: stageReviewContext.stageReviewAllowed,
         stage_review_reason: stageReviewContext.stageReviewReason,
+        ...(auditResolverAttempt ? {
+          auditResolverAttempt,
+          audit_run_id: auditRunId,
+          audit_rows_written: 0,
+          audit_write_status: "audit_preview",
+          resolver_model_version: RESOLVER_MODEL_VERSION,
+        } : {}),
         results: [],
       }, null, 2), {
         headers: { "Content-Type": "application/json" },
@@ -1566,11 +1716,55 @@ serve(async (req) => {
       results.push(preview);
     }
 
+    let auditRowsWritten = 0;
+    let auditWriteStatus: string | null = auditResolverAttempt ? "audit_preview" : null;
+    let auditRowStatuses: any[] = [];
+
+    if (auditResolverAttempt && auditWriteAllowed) {
+      const auditRows = results
+        .filter((row) => typeof row?.id === "string" && isUuid(row.id))
+        .map((row) =>
+          buildResolverAttemptAuditRow(row, {
+            runId: auditRunId as string,
+            actorLabel: resolverAuditActorLabel,
+            mode: scopeMode,
+            dryRun,
+            stageReview,
+            auditResolverAttempt,
+            updated,
+          })
+        );
+
+      if (auditRows.length > 0) {
+        const { data: auditData, error: auditWriteError } = await supabase
+          .from("fragrance_source_resolver_attempts_v1")
+          .insert(auditRows)
+          .select("id, fragrance_id, resolver_outcome, result_status");
+
+        if (auditWriteError) throw auditWriteError;
+
+        auditRowsWritten = (auditData ?? []).length;
+        auditWriteStatus = "audit_recorded";
+        auditRowStatuses = auditData ?? [];
+      }
+    } else if (auditResolverAttempt) {
+      auditWriteStatus = "blocked_invalid_scope";
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       dryRun,
       force,
       stageReview,
+      ...(auditResolverAttempt ? {
+        auditResolverAttempt,
+        audit_run_id: auditRunId,
+        audit_rows_written: auditRowsWritten,
+        audit_write_status: auditWriteStatus,
+        audit_row_statuses: auditRowStatuses,
+        resolver_model_version: RESOLVER_MODEL_VERSION,
+        resolver_audit_actor_label: resolverAuditActorLabel,
+      } : {}),
       requested_count: fragranceIds.length,
       picked: targets.length,
       results_count: results.length,
