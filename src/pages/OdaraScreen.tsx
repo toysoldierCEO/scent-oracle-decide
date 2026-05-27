@@ -9797,11 +9797,11 @@ const OdaraScreen = ({
         setFavoriteWritePendingByFragranceId(prev => ({ ...prev, [fragranceId]: true }));
         haptic(nextFavorite ? 'success' : 'light');
 
-        void odaraSupabase.rpc('set_user_fragrance_favorite_v1' as any, {
+        void Promise.resolve(odaraSupabase.rpc('set_user_fragrance_favorite_v1' as any, {
           p_fragrance_id: fragranceId,
           p_favorite: nextFavorite,
           p_source: 'odara_action_row',
-        } as any).then(({ error, data }) => {
+        } as any)).then(({ error, data }: any) => {
           if (error) throw error;
 
           const resolvedFavorite = Boolean(
@@ -9810,7 +9810,7 @@ const OdaraScreen = ({
             ?? nextFavorite
           );
           setSignedInFavoriteByFragranceId(prev => ({ ...prev, [fragranceId]: resolvedFavorite }));
-        }).catch((error) => {
+        }).catch((error: any) => {
           console.error('[Odara] favorite write failed', error);
           setSignedInFavoriteByFragranceId(prev => ({ ...prev, [fragranceId]: previousFavorite }));
         }).finally(() => {
@@ -11557,16 +11557,16 @@ const OdaraScreen = ({
                       setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: next }));
                       setHeartWritePendingByFragranceId(prev => ({ ...prev, [fragranceId]: true }));
 
-                      void odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
+                      void Promise.resolve(odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
                         p_fragrance_id: fragranceId,
                         p_next_state: heartStateToPreferenceState(next),
                         p_source: 'odara_action_row',
-                      } as any).then(({ error, data }) => {
+                      } as any)).then(({ error, data }: any) => {
                         if (error) throw error;
 
                         const resolvedHeartState = preferenceStateToHeartState((data as any)?.preference_state);
                         setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: resolvedHeartState }));
-                      }).catch((error) => {
+                      }).catch((error: any) => {
                         console.error('[Odara] heart preference write failed', error);
                         setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: previousHeartState }));
                       }).finally(() => {
