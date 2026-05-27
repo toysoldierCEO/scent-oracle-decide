@@ -1361,34 +1361,12 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
 /* ── Gesture constants ──
  * Card approval is a double-tap (click-based).
  * Swipe-up-to-lock is REMOVED and must not be reintroduced.
- * Swipe-DOWN remains a two-step contract:
- *   - locked   → swipe down = unlock
- *   - neutral  → swipe down = skip
+ * Horizontal day-swipes remain active on the hero card.
+ * Vertical swipe-to-skip is intentionally disabled.
  */
-const SWIPE_DOWN_DISTANCE = 90;     // px of downward travel to trigger skip (intentional pull)
 const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
-const SWIPE_HORIZONTAL_TOLERANCE = 1.5; // |dy| must exceed |dx| * this for a skip
 const HORIZONTAL_INTENT_DISTANCE = 40;  // px of |dx| required to claim a horizontal day-swipe
 const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
-const SCROLL_TOP_TOLERANCE = 6;         // px of slack when deciding "near top"
-
-/**
- * Robust "is the page scroll surface at/near the top?" check.
- * Considers window.scrollY and document.scrollingElement.scrollTop so the
- * check works inside iframes / preview shells where one of the two may
- * report 0 while the other lags. Intentionally does NOT walk arbitrary
- * scrollable ancestors — the hero card itself is never the scroll
- * container, and over-broad ancestor checks were producing false
- * negatives that blocked the skip gesture.
- */
-function isScrollSurfaceAtTop(_originEl?: Element | null): boolean {
-  if (typeof window === 'undefined') return true;
-  const wy = window.scrollY ?? 0;
-  const docTop = document.scrollingElement?.scrollTop
-    ?? document.documentElement?.scrollTop
-    ?? 0;
-  return Math.min(wy, docTop) <= SCROLL_TOP_TOLERANCE;
-}
 const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
 const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
 
@@ -2333,15 +2311,6 @@ function heroToDisplay(pick: OraclePick): DisplayCard {
 /** Tracks locked scent colors per day+context for weekly lane rendering */
 type LockedLaneInfo = { mainColor: string; layerColor: string | null };
 type LockedSelectionsMap = Record<string, LockedLaneInfo>; // key = "dateStr:context"
-
-/** Persisted lock state per day+context */
-type FavoriteCombo = {
-  mainId: string;
-  layerId: string | null;
-  mood: LayerMood;
-  ratio: string;
-};
-type FavoriteMap = Record<string, FavoriteCombo>; // key = "dateStr:context"
 type PersistedLayerModeSnapshot = NonNullable<LayerModes[LayerMood]>;
 type PersistedResolvedHeroRailSnapshot = {
   familyLabel: string;
@@ -2434,6 +2403,14 @@ type SignedInResolvedLockTruth = {
 
 const ODARA_SIGNED_IN_DAY_MEMORY_TABLE = 'odara_signed_in_day_memory';
 const ODARA_SIGNED_IN_DAY_MEMORY_DEFAULT_CONTEXT = 'daily';
+
+function preferenceStateToHeartState(value: unknown): HeartState {
+  return value === 'loved' ? 2 : value === 'liked' ? 1 : 0;
+}
+
+function heartStateToPreferenceState(value: HeartState): 'neutral' | 'liked' | 'loved' {
+  return value === 2 ? 'loved' : value === 1 ? 'liked' : 'neutral';
+}
 
 function createDefaultSignedInDayState(): SignedInDayState {
   return {
@@ -6922,6 +6899,29 @@ const OdaraScreen = ({
     }
   }, [oracle, activeOracle, guestSelectedMood, guestActiveLayerIdx, selectedAlternateIdx, isGuestLocked]);
 
+  const handleGuestNextLocal = useCallback(async (): Promise<'advanced' | 'locked' | 'unavailable'> => {
+    if (isGuestLocked) return 'locked';
+
+    const o: any = oracle ?? activeOracle ?? {};
+    const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
+    if (altBundles.length === 0) {
+      return 'unavailable';
+    }
+
+    setSkipAnimating(true);
+    window.setTimeout(() => setSkipAnimating(false), 350);
+
+    const current = selectedAlternateIdx;
+    const nextIdx = current === null ? 0 : (current + 1) % altBundles.length;
+    setGuestSkipHistory((history) => [...history, current]);
+    guestRenderSourceRef.current = 'guest_skip_target';
+    setSelectedAlternateIdx(nextIdx);
+    guestPrevMainStateRef.current = null;
+    haptic('selection');
+
+    return 'advanced';
+  }, [isGuestLocked, oracle, activeOracle, selectedAlternateIdx]);
+
   // Guest alternate tap: PHASE 2 — promotion model matches signed-in.
   // Tapping an alternate promotes it to hero. Tapping the SAME (already-active)
   // alternate is a no-op (no toggle-off). Use the back arrow to undo.
@@ -7086,15 +7086,19 @@ const OdaraScreen = ({
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
   const [likeFlash, setLikeFlash] = useState(false);
-  const [skipFlash, setSkipFlash] = useState(false);
   const [skipAnimating, setSkipAnimating] = useState(false);
 
   // Locked selections for weekly lanes
   const [lockedSelections, setLockedSelections] = useState<LockedSelectionsMap>({});
 
-  // Favorite state — persisted per day+context
-  const [favoriteMap, setFavoriteMap] = useState<FavoriteMap>({});
-  // Heart state — local/visual only. Per-card key (date|context|heroId).
+  // Signed-in action-state hydration comes from durable backend preference
+  // stores. Guest remains local/session-only and read-only for durable writes.
+  const [signedInFavoriteByFragranceId, setSignedInFavoriteByFragranceId] = useState<Record<string, boolean>>({});
+  const [signedInHeartStateByFragranceId, setSignedInHeartStateByFragranceId] = useState<Record<string, HeartState>>({});
+  const [favoriteWritePendingByFragranceId, setFavoriteWritePendingByFragranceId] = useState<Record<string, boolean>>({});
+  const [heartWritePendingByFragranceId, setHeartWritePendingByFragranceId] = useState<Record<string, boolean>>({});
+  // Guest heart state remains local/session-only. Per-card key
+  // (date|context|heroId).
   // 0 = empty, 1 = liked (single heart), 2 = loved (double heart).
   const [heartStateByKey, setHeartStateByKey] = useState<Record<string, 0 | 1 | 2>>({});
   const [heartFlash, setHeartFlash] = useState(false);
@@ -7104,11 +7108,24 @@ const OdaraScreen = ({
   const [favoriteLabelText, setFavoriteLabelText] = useState<string | null>(null);
   const [daisyLabelTick, setDaisyLabelTick] = useState(0);
   const [daisyLabelText, setDaisyLabelText] = useState<string | null>(null);
+  const [nextLabelTick, setNextLabelTick] = useState(0);
+  const [nextLabelText, setNextLabelText] = useState<string | null>(null);
   const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
   const daisyButtonRef = useRef<HTMLButtonElement | null>(null);
-  const currentFavorite = favoriteMap[stateKey] ?? null;
-  const isFavorited = !!(currentFavorite && visibleCard &&
-    currentFavorite.mainId === visibleCard.fragrance_id);
+  const nextButtonRef = useRef<HTMLButtonElement | null>(null);
+  const signedInActionFragranceId = visibleCard?.fragrance_id ?? null;
+  const signedInFavoriteActive = !isGuestMode
+    && !!signedInActionFragranceId
+    && !!signedInFavoriteByFragranceId[signedInActionFragranceId];
+  const signedInHeartState = !isGuestMode && signedInActionFragranceId
+    ? (signedInHeartStateByFragranceId[signedInActionFragranceId] ?? 0)
+    : 0;
+  const signedInFavoritePending = !isGuestMode
+    && !!signedInActionFragranceId
+    && !!favoriteWritePendingByFragranceId[signedInActionFragranceId];
+  const signedInHeartPending = !isGuestMode
+    && !!signedInActionFragranceId
+    && !!heartWritePendingByFragranceId[signedInActionFragranceId];
   const signedInCarryoverOrigin = signedInDayState.carryoverOrigin;
   const [signedInCarryoverPulseTarget, setSignedInCarryoverPulseTarget] = useState<Exclude<SignedInCarryoverTarget, 'off'> | null>(null);
   const [signedInCarryoverCloseFlash, setSignedInCarryoverCloseFlash] = useState(false);
@@ -7202,6 +7219,50 @@ const OdaraScreen = ({
     setSignedInLockedHistoryDateKeys((current) => (current.length === 0 ? current : []));
     setSignedInWeekMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
     setSignedInHistoryMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
+    if (isGuestMode || !userId) {
+      setSignedInFavoriteByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
+      setSignedInHeartStateByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
+      setFavoriteWritePendingByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
+      setHeartWritePendingByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await odaraSupabase.rpc('get_user_collection_preferences_v1' as any, {
+          p_user_id: userId,
+        } as any);
+
+        if (cancelled) return;
+        if (error) throw error;
+
+        const normalized = normalizeCollectionPayload((data ?? null) as OdaraCollectionPayload | null);
+        const nextFavorites: Record<string, boolean> = {};
+        const nextHeartStates: Record<string, HeartState> = {};
+
+        for (const item of normalized?.items ?? []) {
+          if (!item.fragrance_id) continue;
+          nextFavorites[item.fragrance_id] = Boolean(item.favorite ?? item.wear_more);
+          nextHeartStates[item.fragrance_id] = preferenceStateToHeartState(item.preference_state);
+        }
+
+        setSignedInFavoriteByFragranceId(nextFavorites);
+        setSignedInHeartStateByFragranceId(nextHeartStates);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[Odara] signed-in action-state hydrate failed', error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isGuestMode, userId]);
 
   useEffect(() => {
@@ -9021,6 +9082,12 @@ const OdaraScreen = ({
         return;
       }
 
+      if (stack.length > 0) {
+        setSignedInLayerIdxByMood((prev) => ({ ...prev, [mood]: 0 }));
+        syncMoodLaneSelectedEntry(moodKey, 0);
+        return;
+      }
+
       syncMoodLaneSelectedEntry(moodKey, currentIndex);
       console.log('[Odara][SignedIn][lane] mood re-tap exhausted', { mood, currentIndex, stackLen: stack.length });
     });
@@ -9101,9 +9168,6 @@ const OdaraScreen = ({
     }
 
     setSkipLoading(true);
-    // Play red Tron flash on skip
-    setSkipFlash(true);
-    window.setTimeout(() => setSkipFlash(false), 700);
 
     // Fire-and-forget backend skip via canonical RPC
     void odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
@@ -9403,28 +9467,27 @@ const OdaraScreen = ({
   }, []);
 
   /* ──────────────────────────────────────────────────────────────
-   * Swipe-DOWN two-step contract (state-aware):
-   *   - lockState === 'locked'  → swipe down UNLOCKS the card
-   *   - lockState === 'neutral' → swipe down SKIPS to next card
-   * Swipe-UP is intentionally a no-op (lock is double-tap only).
-   * Same contract applies to signed-in AND guest/fallback profiles.
+   * Hero-card pointer gestures:
+   *   - horizontal swipe → day navigation
+   *   - vertical movement → native page scroll only
+   * Swipe-up-to-lock and swipe-down-to-skip are intentionally disabled.
    * ────────────────────────────────────────────────────────────── */
   const swipeRef = useRef<{
     active: boolean;
     startX: number;
     startY: number;
     lastY: number;
-    direction: 'none' | 'vertical' | 'horizontal';
+    direction: 'none' | 'horizontal';
     fired: boolean;
     pointerId: number | null;
   }>({ active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null });
   const lastCardPointerTypeRef = useRef<string>('');
 
-  // ── SKIP GESTURE LIFECYCLE RESET ──
+  // ── CARD GESTURE LIFECYCLE RESET ──
   // Any pending pointer/gesture state from the prior visible card MUST be
   // cleared the instant a new visible card mounts. Without this, a leaked
   // `fired:true` flag (e.g. from an aborted pointer or rapid card swap) can
-  // block subsequent swipes from firing on later cards.
+  // block subsequent horizontal day-swipes from firing on later cards.
   useEffect(() => {
     swipeRef.current = {
       active: false,
@@ -9441,8 +9504,8 @@ const OdaraScreen = ({
     suppressCardClickRef.current = false;
   }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
-  // Swipe-down must work when the gesture STARTS on the visible card body,
-  // including the layer card area. Only true interactive controls block it.
+  // Horizontal day-swipes may start on the visible card body, including the
+  // layer card area. Only true interactive controls block them.
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el || !el.closest) return false;
@@ -9461,11 +9524,8 @@ const OdaraScreen = ({
     if (!visibleCard) return;
     if (isInteractiveSwipeTarget(e.target)) return;
     lastCardPointerTypeRef.current = e.pointerType;
-    // The hero card uses touchAction: 'none' so it owns the gesture. We
-    // re-introduce natural vertical page scrolling by manually forwarding
-    // upward finger motion to window.scrollBy below. Downward intent is
-    // reserved for the skip gesture and never steals page scroll because
-    // page scroll cannot move "down past the bottom" the same way.
+    // The hero card uses touchAction: 'pan-y', so native vertical scrolling
+    // remains intact while we selectively claim clear horizontal day-swipes.
     swipeRef.current = {
       active: true,
       startX: e.clientX,
@@ -9499,44 +9559,10 @@ const OdaraScreen = ({
             e.currentTarget.setPointerCapture(e.pointerId);
           }
         } catch { /* noop */ }
-      } else if (
-        // Lock to vertical only for a strong, clearly-vertical downward gesture
-        // when the page is already at the top (so we never fight scrolling).
-        dy >= SWIPE_DIRECTION_LOCK &&
-        Math.abs(dy) > Math.abs(dx) * HORIZONTAL_AXIS_RATIO &&
-        isScrollSurfaceAtTop()
-      ) {
-        s.direction = 'vertical';
       } else {
         return;
       }
     }
-    const surfaceType = isGuestMode ? 'guest' : 'signed_in';
-    const dominantAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
-    const downwardOk =
-      dy >= SWIPE_DOWN_DISTANCE &&
-      Math.abs(dy) >= Math.abs(dx) * SWIPE_HORIZONTAL_TOLERANCE &&
-      isScrollSurfaceAtTop();
-
-    const activeCardNameBefore = visibleCard?.name ?? null;
-    const activeCardIdBefore = visibleCard?.fragrance_id ?? null;
-    const activeMode = selectedMood;
-    const activeLayerIndex = isGuestMode ? guestActiveLayerIdx : (signedInLayerIdxByMood[selectedMood] ?? 0);
-
-    const baseProof = {
-      surfaceType,
-      isLockedBefore: lockState === 'locked',
-      deltaX: dx,
-      deltaY: dy,
-      velocityX: 0,
-      velocityY: 0,
-      dominantAxis,
-      thresholdPassed: downwardOk,
-      activeCardNameBefore,
-      activeCardIdBefore,
-      activeMode,
-      activeLayerIndex,
-    };
     if (s.direction === 'horizontal') {
       const hasPrevDay = !!prevForecastDay;
       const hasNextDay = !!nextForecastDay;
@@ -9548,105 +9574,8 @@ const OdaraScreen = ({
       if (Math.abs(dx) > 10) suppressCardClickRef.current = true;
       return;
     }
-    // vertical (downward skip only — upward is browser-native scroll)
-    if (dy <= 0) return;
-    if (!downwardOk) return;
-
-    // Threshold reached: fire the state-aware swipe-down action ONCE.
-    s.fired = true;
-    let actionTaken: string;
-    let activeCardNameAfter: string | null = activeCardNameBefore;
-    let activeCardIdAfter: string | null = activeCardIdBefore;
-
-    if (isGuestMode && isGuestLocked) {
-      // Locked guest card: swipe-down is NOT an unlock gesture anymore.
-      // Unlock is double-tap on the locked card body.
-      actionTaken = 'locked_no_op_guest';
-    } else if (signedInIsReadOnlyHistoryCard) {
-      actionTaken = 'history_locked_read_only';
-    } else if (lockState === 'locked') {
-      // Locked signed-in card: swipe-down does nothing. Unlock is double-tap.
-      actionTaken = 'locked_no_op_signed_in';
-    } else if (isGuestMode) {
-      // GUEST SKIP — read-only cycle through alternate_bundles. No backend writes.
-      const o: any = (oracle ?? activeOracle ?? {});
-      const altBundles: any[] = Array.isArray(o?.alternate_bundles) ? o.alternate_bundles : [];
-      if (altBundles.length === 0) {
-        actionTaken = 'fail_guest_no_skip_source';
-      } else {
-        actionTaken = 'skip_guest';
-        // Premium downward-dismiss animation (same `cardSlideDown` keyframe
-        // used by signed-in skip) so the user clearly sees the card advance.
-        setSkipFlash(true);
-        window.setTimeout(() => setSkipFlash(false), 500);
-        setSkipAnimating(true);
-        window.setTimeout(() => setSkipAnimating(false), 350);
-
-        // Advance to next bundle (or wrap to 0). null treated as "main" → go to 0.
-        const current = selectedAlternateIdx;
-        const nextIdx = current === null ? 0 : (current + 1) % altBundles.length;
-        const previousCardName =
-          current === null
-            ? (o?.main_bundle?.hero?.name ?? activeCardNameBefore)
-            : (altBundles[current]?.hero?.name ?? activeCardNameBefore);
-        const nextHero = altBundles[nextIdx]?.hero ?? null;
-
-        // Push the previously visible guest card onto the multi-step history
-        // BEFORE advancing, so back can rewind step-by-step through every skip.
-        const lengthBefore = guestSkipHistory.length;
-        setGuestSkipHistory((h) => [...h, current]);
-        guestRenderSourceRef.current = 'guest_skip_target';
-        setSelectedAlternateIdx(nextIdx);
-        haptic('selection');
-        // Clear alternate-tap snapshot — skip flow owns the stack now.
-        guestPrevMainStateRef.current = null;
-
-        activeCardNameAfter = nextHero?.name ?? activeCardNameBefore;
-        activeCardIdAfter = nextHero?.fragrance_id ?? nextHero?.id ?? activeCardIdBefore;
-
-        console.info('ODARA_GUEST_SKIP_PROOF', {
-          actionTaken,
-          previousCardName,
-          nextCardName: nextHero?.name ?? null,
-          guestHistoryLengthBefore: lengthBefore,
-          guestHistoryLengthAfter: lengthBefore + 1,
-          selectedAlternateIdxBefore: current,
-          selectedAlternateIdxAfter: nextIdx,
-        });
-      }
-    } else {
-      actionTaken = 'skip_signed_in';
-      setSkipFlash(true);
-      window.setTimeout(() => setSkipFlash(false), 500);
-      void handleSkipLocal();
-    }
-    console.info('ODARA_SWIPE_DOWN_PROOF', {
-      ...baseProof,
-      thresholdPassed: true,
-      actionTaken,
-      activeCardNameAfter,
-      activeCardIdAfter,
-    });
   }, [
-    lockState,
-    setLockState,
-    clearLockedSelection,
-    pulseLock,
-    unlockGuestCard,
-    handleSkipLocal,
-    isGuestMode,
     visibleCard,
-    selectedMood,
-    guestActiveLayerIdx,
-    signedInLayerIdxByMood,
-    oracle,
-    activeOracle,
-    selectedAlternateIdx,
-    setSelectedAlternateIdx,
-    guestSkipHistory,
-    isGuestLocked,
-    activeGuestRender,
-    signedInIsReadOnlyHistoryCard,
     prevForecastDay,
     nextForecastDay,
   ]);
@@ -9794,7 +9723,7 @@ const OdaraScreen = ({
   const showHistoryBack = isGuestMode ? guestHasRealHistory : hasHistory;
   const actionRailState = {
     locked: isCardLocked,
-    starred: isGuestMode ? guestStarredForCurrentCard : isFavorited,
+    starred: isGuestMode ? guestStarredForCurrentCard : signedInFavoriteActive,
     showBack: isLayerDetailExpanded || showPreviewBack || showModeBack || showHistoryBack,
     showDetailBack: isLayerDetailExpanded,
     showPreviewBack,
@@ -9813,8 +9742,9 @@ const OdaraScreen = ({
     actions: {
       toggleLock: () => {
         if (isGuestMode) {
-          // Guest lock is an engage-only latch from the icon. Unlocking is
-          // swipe-down only so the guest card stays read-only and predictable.
+          // Guest lock is an engage-only latch from the icon. Unlocking stays
+          // on the locked-card interaction path so guest remains read-only and
+          // predictable.
           if (guestLocked) {
             return;
           }
@@ -9858,23 +9788,38 @@ const OdaraScreen = ({
           return;
         }
         if (isReadOnlyHistoryCard) return;
-        if (!visibleCard) return;
-        const combo: FavoriteCombo = {
-          mainId: activeMainCardRender?.resolvedCurrentCard?.fragrance_id ?? visibleCard.fragrance_id,
-          layerId: activeMainCardRender?.activeLayer?.id ?? null,
-          mood: selectedMood ?? 'balance',
-          ratio: selectedRatio,
-        };
-        if (isFavorited) {
-          setFavoriteMap(prev => {
+        if (!userId || !signedInActionFragranceId || signedInFavoritePending) return;
+        const fragranceId = signedInActionFragranceId;
+        const nextFavorite = !signedInFavoriteActive;
+        const previousFavorite = signedInFavoriteByFragranceId[fragranceId] === true;
+
+        setSignedInFavoriteByFragranceId(prev => ({ ...prev, [fragranceId]: nextFavorite }));
+        setFavoriteWritePendingByFragranceId(prev => ({ ...prev, [fragranceId]: true }));
+        haptic(nextFavorite ? 'success' : 'light');
+
+        void odaraSupabase.rpc('set_user_fragrance_favorite_v1' as any, {
+          p_fragrance_id: fragranceId,
+          p_favorite: nextFavorite,
+          p_source: 'odara_action_row',
+        } as any).then(({ error, data }) => {
+          if (error) throw error;
+
+          const resolvedFavorite = Boolean(
+            (data as any)?.favorite
+            ?? (data as any)?.wear_more
+            ?? nextFavorite
+          );
+          setSignedInFavoriteByFragranceId(prev => ({ ...prev, [fragranceId]: resolvedFavorite }));
+        }).catch((error) => {
+          console.error('[Odara] favorite write failed', error);
+          setSignedInFavoriteByFragranceId(prev => ({ ...prev, [fragranceId]: previousFavorite }));
+        }).finally(() => {
+          setFavoriteWritePendingByFragranceId(prev => {
             const next = { ...prev };
-            delete next[stateKey];
+            delete next[fragranceId];
             return next;
           });
-        } else {
-          setFavoriteMap(prev => ({ ...prev, [stateKey]: combo }));
-        }
-        haptic(isFavorited ? 'light' : 'success');
+        });
       },
       selectMood: (mood: any) => {
         if (isCardLocked || isReadOnlyHistoryCard) return;
@@ -9898,15 +9843,33 @@ const OdaraScreen = ({
         if (isCardLocked || isReadOnlyHistoryCard) return;
         handleBack();
       },
-      skipOrSwipe: () => {
-        // Locked cards cannot be skipped. Signed-in unlock-via-swipe remains
-        // handled by the existing pointer handler (which still inspects
-        // lockState directly inside its own internals).
-        if (isCardLocked || isReadOnlyHistoryCard) return;
-        // No direct external invocation here — the pointer handler owns it.
+      nextPick: async () => {
+        if (isCardLocked) return 'locked' as const;
+        if (isReadOnlyHistoryCard) return 'read_only' as const;
+        if (isGuestMode) {
+          return await handleGuestNextLocal();
+        }
+        await handleSkipLocal();
+        return 'advanced' as const;
       },
     },
   };
+
+  const handleNextButtonPress = useCallback(() => {
+    void cardController.actions.nextPick().then((result) => {
+      if (result === 'read_only') return;
+
+      if (result === 'locked') {
+        setNextLabelText('Locked');
+      } else if (result === 'unavailable') {
+        setNextLabelText(isGuestMode ? 'No next pick' : 'Unavailable');
+      } else {
+        setNextLabelText('Next');
+      }
+
+      setNextLabelTick((tick) => tick + 1);
+    });
+  }, [cardController.actions, isGuestMode]);
 
   const collapseLayerDetail = useCallback(() => {
     if (isGuestMode) {
@@ -10391,6 +10354,13 @@ const OdaraScreen = ({
     backdropFilter: 'blur(12px)',
   } as const;
   const bottomCarryoverButtonStyle = signedInCarryoverButtonStyle;
+  const nextActionButtonStyle = {
+    background: 'linear-gradient(180deg, rgba(14,15,18,0.94) 0%, rgba(8,9,12,0.96) 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -10px 18px rgba(255,255,255,0.02), 0 12px 24px rgba(0,0,0,0.20)',
+    color: 'rgba(255,255,255,0.76)',
+    backdropFilter: 'blur(14px)',
+  } as const;
   useEffect(() => {
     if (isGuestMode) return;
     if (signedInCarryoverOrigin !== 'inherited') return;
@@ -11047,8 +11017,7 @@ const OdaraScreen = ({
                   border: `1px solid ${tint.border}`,
                   boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
                   // Allow native vertical scroll from the hero card. We only
-                  // claim the gesture on clear horizontal intent (day-swipe)
-                  // or a strong downward pull at the top of the page (skip).
+                  // claim the gesture on clear horizontal intent (day-swipe).
                   touchAction: 'pan-y',
                   // iOS Safari: suppress the long-press callout, text selection,
                   // and tap highlight so the hero card behaves like a native
@@ -11196,35 +11165,6 @@ const OdaraScreen = ({
                       <span className="absolute inset-0 rounded-full"
                         style={{
                           background: 'radial-gradient(circle, rgba(234,179,8,0.4) 0%, transparent 70%)',
-                          animation: 'tronBurst 0.6s ease-out forwards',
-                        }}
-                      />
-                    </span>
-                  )}
-
-                  {/* RED Tron skip animation (signed-in only) */}
-                  {!isGuestMode && skipFlash && (
-                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
-                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
-                        style={{
-                          width: '130%',
-                          background: 'linear-gradient(90deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
-                          animation: 'tronTraceH 0.5s ease-out forwards',
-                        }}
-                      />
-                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
-                        style={{
-                          height: '130%',
-                          background: 'linear-gradient(180deg, transparent 0%, #ef4444 30%, #ff6b6b 50%, #ef4444 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #ef4444, 0 0 12px #ef444488',
-                          animation: 'tronTraceV 0.5s ease-out forwards',
-                          animationDelay: '0.08s',
-                        }}
-                      />
-                      <span className="absolute inset-0 rounded-full"
-                        style={{
-                          background: 'radial-gradient(circle, rgba(239,68,68,0.4) 0%, transparent 70%)',
                           animation: 'tronBurst 0.6s ease-out forwards',
                         }}
                       />
@@ -11540,7 +11480,7 @@ const OdaraScreen = ({
               )}
 
               <div
-                className="flex min-h-10 w-full items-center justify-center gap-10"
+                className="flex min-h-10 w-full items-center justify-center gap-8 sm:gap-10"
                 data-shared-bottom-action-row
                 role="group"
                 aria-label="Card actions"
@@ -11550,9 +11490,10 @@ const OdaraScreen = ({
                   type="button"
                   aria-label="Favorite"
                   aria-pressed={bottomStarActive}
-                  aria-disabled={isReadOnlyHistoryCard || undefined}
+                  aria-disabled={isReadOnlyHistoryCard || signedInFavoritePending || undefined}
+                  disabled={isReadOnlyHistoryCard || signedInFavoritePending}
                   onClick={() => {
-                    if (isReadOnlyHistoryCard) return;
+                    if (isReadOnlyHistoryCard || signedInFavoritePending) return;
                     cardController.actions.toggleStar();
                     setFavoriteLabelText(bottomStarActive ? 'Removed' : 'Favorite');
                     setFavoriteLabelTick((t) => t + 1);
@@ -11594,14 +11535,47 @@ const OdaraScreen = ({
                 const heartKey = visibleCard
                   ? `${selectedDate}|${selectedContext}|${visibleCard.fragrance_id}`
                   : '';
-                const heartState: HeartState = heartKey ? (heartStateByKey[heartKey] ?? 0) : 0;
+                const heartState: HeartState = isGuestMode
+                  ? (heartKey ? (heartStateByKey[heartKey] ?? 0) : 0)
+                  : signedInHeartState;
                 return (
                   <HeartReactionButton
                     state={heartState}
-                    disabled={!heartKey || isReadOnlyHistoryCard}
+                    disabled={(!heartKey && isGuestMode) || isReadOnlyHistoryCard || signedInHeartPending}
                     onChange={(next) => {
-                      if (!heartKey || isReadOnlyHistoryCard) return;
-                      setHeartStateByKey(prev => ({ ...prev, [heartKey]: next }));
+                      if (isReadOnlyHistoryCard) return;
+                      if (isGuestMode) {
+                        if (!heartKey) return;
+                        setHeartStateByKey(prev => ({ ...prev, [heartKey]: next }));
+                        return;
+                      }
+                      if (!userId || !signedInActionFragranceId || signedInHeartPending) return;
+
+                      const fragranceId = signedInActionFragranceId;
+                      const previousHeartState = signedInHeartStateByFragranceId[fragranceId] ?? 0;
+
+                      setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: next }));
+                      setHeartWritePendingByFragranceId(prev => ({ ...prev, [fragranceId]: true }));
+
+                      void odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
+                        p_fragrance_id: fragranceId,
+                        p_next_state: heartStateToPreferenceState(next),
+                        p_source: 'odara_action_row',
+                      } as any).then(({ error, data }) => {
+                        if (error) throw error;
+
+                        const resolvedHeartState = preferenceStateToHeartState((data as any)?.preference_state);
+                        setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: resolvedHeartState }));
+                      }).catch((error) => {
+                        console.error('[Odara] heart preference write failed', error);
+                        setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: previousHeartState }));
+                      }).finally(() => {
+                        setHeartWritePendingByFragranceId(prev => {
+                          const nextPending = { ...prev };
+                          delete nextPending[fragranceId];
+                          return nextPending;
+                        });
+                      });
                     }}
                     onHaptic={(intensity) => haptic(intensity === 'medium' ? 'success' : 'selection')}
                   />
@@ -11645,6 +11619,43 @@ const OdaraScreen = ({
                   text={daisyLabelText}
                   anchorRef={daisyButtonRef}
                   color={daisyLabelText === 'Off' ? '#ef4444' : undefined}
+                />
+              </button>
+
+              <button
+                ref={nextButtonRef}
+                type="button"
+                aria-label="Next"
+                aria-disabled={isCardLocked || skipLoading || isReadOnlyHistoryCard || undefined}
+                disabled={isCardLocked || skipLoading || isReadOnlyHistoryCard}
+                onClick={() => {
+                  if (skipLoading) return;
+                  handleNextButtonPress();
+                }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 active:scale-[0.97]"
+                style={{
+                  ...nextActionButtonStyle,
+                  opacity: isCardLocked || isReadOnlyHistoryCard ? 0.42 : 1,
+                  transform: skipLoading ? 'translateY(0.5px)' : undefined,
+                }}
+              >
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M7 10.5l5 5 5-5" />
+                  <path d="M8 7.5h8" opacity="0.46" />
+                </svg>
+                <FloatingActionLabel
+                  triggerKey={nextLabelTick || null}
+                  text={nextLabelText}
+                  anchorRef={nextButtonRef}
                 />
               </button>
             </div>
