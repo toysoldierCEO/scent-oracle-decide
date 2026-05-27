@@ -8,11 +8,11 @@
  * Extracted from OdaraScreen so the rules are unit-testable in isolation.
  */
 
-export const SWIPE_DIRECTION_LOCK = 10;       // px before either axis can lock
-export const HORIZONTAL_INTENT_DISTANCE = 24; // |dx| required to claim horizontal
-export const HORIZONTAL_AXIS_RATIO = 1.25;    // |dx| must exceed |dy| * ratio
-export const DAY_SWIPE_THRESHOLD = 64;        // |dx| at release to commit day change
-export const DAY_SWIPE_MAX_OFFSET = 148;      // visual drag clamp
+export const SWIPE_DIRECTION_LOCK = 4;        // px before either axis can lock
+export const HORIZONTAL_INTENT_DISTANCE = 10;  // |dx| required to claim horizontal
+export const HORIZONTAL_AXIS_RATIO = 1.0;      // |dx| must exceed |dy| * ratio
+export const DAY_SWIPE_THRESHOLD = 40;         // |dx| at release to commit day change
+export const DAY_SWIPE_MAX_OFFSET = 148;       // visual drag clamp
 
 export type DaySwipeDirection = 'none' | 'horizontal';
 
