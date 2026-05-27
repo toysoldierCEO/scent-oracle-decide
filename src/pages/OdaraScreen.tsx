@@ -1364,11 +1364,15 @@ type SignedInCarryoverTarget = 'off' | 'hero' | 'layer';
  * Horizontal day-swipes remain active on the hero card.
  * Vertical swipe-to-skip is intentionally disabled.
  */
-const SWIPE_DIRECTION_LOCK = 10;    // px before we lock direction
-const HORIZONTAL_INTENT_DISTANCE = 40;  // px of |dx| required to claim a horizontal day-swipe
-const HORIZONTAL_AXIS_RATIO = 1.5;      // |dx| must exceed |dy| * this to lock horizontal
-const DAY_SWIPE_THRESHOLD = 72;     // px before a day-change commits
-const DAY_SWIPE_MAX_OFFSET = 148;   // px visual drag clamp for card stack
+// Hero-card horizontal day-swipe rules live in src/lib/day-swipe.ts so they
+// can be unit-tested in isolation. Re-export the runtime constants used here.
+import {
+  shouldLockHorizontal as shouldLockHorizontalDaySwipe,
+  clampDayDragOffset,
+  resolveDayCommit,
+  DAY_SWIPE_MAX_OFFSET,
+  DAY_SWIPE_THRESHOLD,
+} from '@/lib/day-swipe';
 
 function backendModeEntryToLayerMode(
   entry: BackendModeEntry | null | undefined,
@@ -9548,27 +9552,20 @@ const OdaraScreen = ({
       // motion (including downward) is left to the browser via touch-action:
       // pan-y so normal page scrolling never feels hijacked. We only lock
       // horizontal when the gesture is clearly sideways.
-      if (Math.abs(dx) < SWIPE_DIRECTION_LOCK && Math.abs(dy) < SWIPE_DIRECTION_LOCK) return;
-      if (
-        Math.abs(dx) >= HORIZONTAL_INTENT_DISTANCE &&
-        Math.abs(dx) > Math.abs(dy) * HORIZONTAL_AXIS_RATIO
-      ) {
-        s.direction = 'horizontal';
-        try {
-          if (e.currentTarget.setPointerCapture) {
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }
-        } catch { /* noop */ }
-      } else {
-        return;
-      }
+      if (!shouldLockHorizontalDaySwipe(dx, dy)) return;
+      s.direction = 'horizontal';
+      try {
+        if (e.currentTarget.setPointerCapture) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      } catch { /* noop */ }
     }
     if (s.direction === 'horizontal') {
-      const hasPrevDay = !!prevForecastDay;
-      const hasNextDay = !!nextForecastDay;
-      let clampedDx = Math.max(-DAY_SWIPE_MAX_OFFSET, Math.min(DAY_SWIPE_MAX_OFFSET, dx));
-      if (dx > 0 && !hasPrevDay) clampedDx = Math.min(dx, DAY_SWIPE_MAX_OFFSET * 0.28);
-      if (dx < 0 && !hasNextDay) clampedDx = Math.max(dx, -DAY_SWIPE_MAX_OFFSET * 0.28);
+      const clampedDx = clampDayDragOffset(dx, {
+        hasPrevDay: !!prevForecastDay,
+        hasNextDay: !!nextForecastDay,
+        maxOffset: DAY_SWIPE_MAX_OFFSET,
+      });
       setDaySwipeDragging(true);
       setDaySwipeOffset(clampedDx);
       if (Math.abs(dx) > 10) suppressCardClickRef.current = true;
@@ -9593,12 +9590,16 @@ const OdaraScreen = ({
     }
     if (s.direction === 'horizontal') {
       const dx = e.clientX - s.startX;
+      const commit = resolveDayCommit({
+        dx,
+        didCancel,
+        hasPrevDay: !!prevForecastDay,
+        hasNextDay: !!nextForecastDay,
+      });
       const targetDate =
-        didCancel
-          ? null
-          : dx <= -DAY_SWIPE_THRESHOLD
+        commit === 'next'
           ? (nextForecastDay?.dateStr ?? null)
-          : dx >= DAY_SWIPE_THRESHOLD
+          : commit === 'prev'
             ? (prevForecastDay?.dateStr ?? null)
             : null;
       setDaySwipeDragging(false);
