@@ -9508,19 +9508,16 @@ const OdaraScreen = ({
     suppressCardClickRef.current = false;
   }, [visibleCard?.fragrance_id, lockState, queuePointer, viewHistory.length, skipAnimating]);
 
-  // Horizontal day-swipes may start on the visible card body, including the
-  // layer card area. Only true interactive controls block them.
+  // Horizontal day-swipes may start anywhere on the visible card body,
+  // including the layer/alternates area. Only genuine interactive controls
+  // (buttons, links, inputs, explicit opt-outs) block the gesture from
+  // starting — large content regions must remain swipable on mobile.
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el || !el.closest) return false;
     return !!(
-      el.closest('[data-action-stack]') ||
-      el.closest('[data-debug-controls]') ||
-      el.closest('[data-mode-chip]') ||
-      el.closest('[data-alternate-chip]') ||
-      el.closest('[data-layer-section]') ||
       el.closest('[data-no-card-swipe]') ||
-      el.closest('button, a, input, textarea, select, [role="button"]')
+      el.closest('button, a, input, textarea, select, [role="button"], [role="slider"], [role="switch"]')
     );
   };
 
