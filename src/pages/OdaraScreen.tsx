@@ -2516,6 +2516,10 @@ function buildSignedInDayStateSlotKey(dateKey: string, contextKey: string) {
   return `${dateKey}:${normalizePersistedContextKey(contextKey)}`;
 }
 
+function buildSignedInMoodCycleMemoryKey(slotKey: string, anchorId: string | null | undefined) {
+  return `${slotKey}|${anchorId ?? 'none'}`;
+}
+
 function parseSignedInDayStateSlotKey(slotKey: string) {
   if (typeof slotKey !== 'string' || slotKey.length < 10) {
     return {
@@ -6197,11 +6201,19 @@ const OdaraScreen = ({
   }, [readMoodLaneStack]);
 
   // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
-  // Reset to {balance:0,bold:0,smooth:0,wild:0} on every payload change.
-  // Repeated taps on the same mood cycle this index modulo stack length.
+  // Keep per-slot/per-anchor lane state in runtime memory so leaving Daily and
+  // coming back restores the same mood lane position instead of snapping back
+  // to candidate 0 for that exact card.
   const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
     balance: 0, bold: 0, smooth: 0, wild: 0,
   });
+  const signedInLayerIdxByMoodRef = useRef(signedInLayerIdxByMood);
+  signedInLayerIdxByMoodRef.current = signedInLayerIdxByMood;
+  const signedInMoodCycleScopeRef = useRef<{ slot: string; anchorId: string | null } | null>(null);
+  const signedInMoodCycleMemoryRef = useRef<Record<string, {
+    selectedMood: LayerMood;
+    layerIdxByMood: Record<LayerMood, number>;
+  }>>({});
 
   const getResolvedMoodLaneEntry = useCallback((
     fragranceId: string | null | undefined,
@@ -6669,6 +6681,28 @@ const OdaraScreen = ({
   const [layerExpanded, setLayerExpanded] = useState(false);
   const [signedInModeHistory, setSignedInModeHistory] = useState<LocalModeHistoryEntry<LayerMood>[]>([]);
   const signedInModeHistoryRef = useRef<LocalModeHistoryEntry<LayerMood>[]>([]);
+  const persistSignedInMoodCycleMemory = useCallback((
+    slotKey: string,
+    anchorId: string | null | undefined,
+    mood: LayerMood,
+    layerIdxByMood: Record<LayerMood, number>,
+  ) => {
+    if (isGuestMode || !anchorId) return;
+    const memoryKey = buildSignedInMoodCycleMemoryKey(slotKey, anchorId);
+    signedInMoodCycleMemoryRef.current[memoryKey] = {
+      selectedMood: mood,
+      layerIdxByMood: { ...layerIdxByMood },
+    };
+  }, [isGuestMode]);
+
+  useEffect(() => {
+    persistSignedInMoodCycleMemory(
+      `${selectedDate}|${selectedContext}`,
+      visibleCard?.fragrance_id ?? null,
+      selectedMood,
+      signedInLayerIdxByMood,
+    );
+  }, [persistSignedInMoodCycleMemory, visibleCard?.fragrance_id, selectedDate, selectedContext, selectedMood, signedInLayerIdxByMood]);
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
@@ -6680,7 +6714,8 @@ const OdaraScreen = ({
   // those are restored verbatim when the alternate is cleared.
   const [guestLayerExpanded, setGuestLayerExpanded] = useState(false);
   const [guestSelectedMood, setGuestSelectedMood] = useState<GuestModeKey>('balance');
-  const [guestActiveLayerIdx, setGuestActiveLayerIdx] = useState(0);
+  const [guestLayerIdxByMood, setGuestLayerIdxByMood] = useState<Record<GuestModeKey, number>>(DEFAULT_LAYER_INDEX_MAP);
+  const guestActiveLayerIdx = guestLayerIdxByMood[guestSelectedMood] ?? 0;
   const [guestModeHistory, setGuestModeHistory] = useState<LocalModeHistoryEntry<GuestModeKey>[]>([]);
   const guestModeHistoryRef = useRef<LocalModeHistoryEntry<GuestModeKey>[]>([]);
   const [selectedAlternateIdx, setSelectedAlternateIdx] = useState<number | null>(null);
@@ -6714,7 +6749,7 @@ const OdaraScreen = ({
     guestPrevMainStateRef.current = null;
     setGuestSkipHistory([]);
     setGuestLayerExpanded(false);
-    setGuestActiveLayerIdx(0);
+    setGuestLayerIdxByMood(DEFAULT_LAYER_INDEX_MAP);
     setGuestLocked(false);
     setLockedGuestSnapshot(null);
     const def = (oracle as any)?.main_bundle?.ui_default_mode ?? (oracle as any)?.ui_default_mode;
@@ -6879,7 +6914,7 @@ const OdaraScreen = ({
     const resolved = resolveGuestCardVM(o, selectedAlternateIdx, {
       source: guestRenderSourceRef.current,
       selectedMood: mode,
-      activeLayerIdx: 0,
+      activeLayerIdx: guestLayerIdxByMood[mode] ?? 0,
     });
     const modeBlock = getNormalizedLayerModeBlock(resolved?.layerModes ?? null, mode);
     const stack = layerModeBlockToStack(modeBlock);
@@ -6892,12 +6927,20 @@ const OdaraScreen = ({
       guestModeHistoryRef.current = nextHistory;
       setGuestModeHistory(nextHistory);
       setGuestSelectedMood(mode);
-      setGuestActiveLayerIdx(0);
+      setGuestLayerIdxByMood((prev) => {
+        const nextIndex = prev[mode] ?? 0;
+        const safeIndex = nextIndex >= 0 && nextIndex < stack.length ? nextIndex : 0;
+        if (safeIndex === nextIndex) return prev;
+        return { ...prev, [mode]: safeIndex };
+      });
     } else {
       // cycle within current mode using backend layers.length (no hard-coded N)
-      setGuestActiveLayerIdx((cur) => (cur + 1) % stack.length);
+      setGuestLayerIdxByMood((prev) => ({
+        ...prev,
+        [mode]: ((prev[mode] ?? 0) + 1) % stack.length,
+      }));
     }
-  }, [oracle, activeOracle, guestSelectedMood, guestActiveLayerIdx, selectedAlternateIdx, isGuestLocked]);
+  }, [oracle, activeOracle, guestSelectedMood, guestActiveLayerIdx, guestLayerIdxByMood, selectedAlternateIdx, isGuestLocked]);
 
   const handleGuestNextLocal = useCallback(async (): Promise<'advanced' | 'locked' | 'unavailable'> => {
     if (isGuestLocked) return 'locked';
@@ -6977,7 +7020,7 @@ const OdaraScreen = ({
       const prev = guestPrevMainStateRef.current;
       if (prev) {
         setGuestSelectedMood(prev.mood);
-        setGuestActiveLayerIdx(prev.idx);
+        setGuestLayerIdxByMood((current) => ({ ...current, [prev.mood]: prev.idx }));
       }
       guestPrevMainStateRef.current = null;
       guestRenderSourceRef.current = 'guest_main_bundle';
@@ -6985,11 +7028,14 @@ const OdaraScreen = ({
       return true; // consumed
     }
     if (guestActiveLayerIdx > 0) {
-      setGuestActiveLayerIdx((cur) => Math.max(0, cur - 1));
+      setGuestLayerIdxByMood((current) => ({
+        ...current,
+        [guestSelectedMood]: Math.max(0, (current[guestSelectedMood] ?? 0) - 1),
+      }));
       return true; // consumed
     }
     return false; // let normal back run
-  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSkipHistory, oracle, activeOracle, isGuestLocked]);
+  }, [isGuestMode, selectedAlternateIdx, guestActiveLayerIdx, guestSelectedMood, guestSkipHistory, oracle, activeOracle, isGuestLocked]);
 
   // Lock + carryover state — persisted per signed-in calendar day
   const [signedInDayStateMap, setSignedInDayStateMap] = useState<SignedInDayStateMap>({});
@@ -8175,6 +8221,12 @@ const OdaraScreen = ({
   useEffect(() => {
     if (prevSlotRef.current === stateKey) return; // same slot, no-op
     const oldSlot = prevSlotRef.current;
+    persistSignedInMoodCycleMemory(
+      oldSlot,
+      visibleCard?.fragrance_id ?? null,
+      selectedMood,
+      signedInLayerIdxByMood,
+    );
     prevSlotRef.current = stateKey;
 
     console.log('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
@@ -8220,7 +8272,7 @@ const OdaraScreen = ({
     moodLaneInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
     queueFetchInFlightRef.current.clear();
-  }, [stateKey]);
+  }, [persistSignedInMoodCycleMemory, selectedMood, signedInLayerIdxByMood, stateKey, visibleCard?.fragrance_id]);
 
   useEffect(() => {
     committedSignedInSlotRef.current = stateKey;
@@ -8306,10 +8358,25 @@ const OdaraScreen = ({
     const initialVisibleCard = resolvedDayDecision.visibleCard;
     const initialForcedLayerCarryCard = resolvedDayDecision.forcedLayerCarryCard;
     const initialMood: LayerMood = resolvedDayDecision.selectedMood;
-    setSelectedMood((current) => (current === initialMood ? current : initialMood));
-    setSignedInLayerIdxByMood((current) => (
-      areSameLayerIndexMap(current, DEFAULT_LAYER_INDEX_MAP) ? current : DEFAULT_LAYER_INDEX_MAP
-    ));
+    const initialAnchorId = initialVisibleCard?.fragrance_id ?? oracle.today_pick?.fragrance_id ?? null;
+    const moodCycleMemoryKey = buildSignedInMoodCycleMemoryKey(capturedSlot, initialAnchorId);
+    const storedMoodCycleState = initialAnchorId
+      ? (signedInMoodCycleMemoryRef.current[moodCycleMemoryKey] ?? null)
+      : null;
+    const previousMoodCycleScope = signedInMoodCycleScopeRef.current;
+    const shouldResetSignedInMoodCycleState =
+      previousMoodCycleScope?.slot !== capturedSlot
+      || previousMoodCycleScope?.anchorId !== initialAnchorId;
+
+    if (shouldResetSignedInMoodCycleState) {
+      const restoredMood = storedMoodCycleState?.selectedMood ?? initialMood;
+      const restoredLayerIdxByMood = storedMoodCycleState?.layerIdxByMood ?? DEFAULT_LAYER_INDEX_MAP;
+      setSelectedMood((current) => (current === restoredMood ? current : restoredMood));
+      setSignedInLayerIdxByMood((current) => (
+        areSameLayerIndexMap(current, restoredLayerIdxByMood) ? current : restoredLayerIdxByMood
+      ));
+    }
+    signedInMoodCycleScopeRef.current = { slot: capturedSlot, anchorId: initialAnchorId };
 
     if (oracle.today_pick) {
       setVisibleCard((current) => (
@@ -8341,7 +8408,13 @@ const OdaraScreen = ({
                 : [modeValueToBackendModeEntry(modeData, mood)],
             );
             if (seededEntries.length > 0) {
-              writeMoodLaneStack(buildMoodLaneKey(slotPfx, heroId, mood), seededEntries);
+              writeMoodLaneStack(
+                buildMoodLaneKey(slotPfx, heroId, mood),
+                seededEntries,
+                shouldResetSignedInMoodCycleState
+                  ? (storedMoodCycleState?.layerIdxByMood?.[mood] ?? 0)
+                  : (signedInLayerIdxByMoodRef.current[mood] ?? 0),
+              );
               console.log('[Odara] pre-seeded mood cache from layer_modes', mood, seededEntries.map((entry) => entry.layer_name));
             }
           }
@@ -8377,7 +8450,13 @@ const OdaraScreen = ({
           interaction_type: sb.interactionType ?? 'balance',
         }, 'balance');
         if (balanceEntry) {
-          writeMoodLaneStack(balanceCacheKey, [balanceEntry]);
+          writeMoodLaneStack(
+            balanceCacheKey,
+            [balanceEntry],
+            shouldResetSignedInMoodCycleState
+              ? (storedMoodCycleState?.layerIdxByMood?.balance ?? 0)
+              : (signedInLayerIdxByMoodRef.current.balance ?? 0),
+          );
           console.log('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
         }
       }
@@ -8585,30 +8664,39 @@ const OdaraScreen = ({
   // a fallback (legacy/promoted/queue cards).
   const modeResults: LayerModes = useMemo(() => {
     const lm: any = v6Payload?.layer_modes ?? (signedInResolvedOracle as any)?.layer_modes ?? null;
-    const fromLane = (mood: LayerMood) => {
+    const resolveMood = (mood: LayerMood) => {
       const moodKey = buildMoodLaneKey(slotPrefix, cardId, mood);
       const stack = readMoodLaneStack(moodKey);
-      if (stack.length === 0) return null;
       const idx = signedInLayerIdxByMood[mood] ?? 0;
-      const safeIndex = Math.min(Math.max(idx, 0), stack.length - 1);
-      return backendModeEntryToLayerMode(stack[safeIndex] ?? stack[0] ?? null);
-    };
-    const fromV6 = (mood: LayerMood) => {
-      if (!signedInVisibleIsHeroCard) return null;
+      const laneEntry = stack.length > 0
+        ? backendModeEntryToLayerMode(stack[Math.min(Math.max(idx, 0), stack.length - 1)] ?? stack[0] ?? null)
+        : null;
+
+      if (!signedInVisibleIsHeroCard) return laneEntry;
+
       const block = getNormalizedLayerModeBlock(lm, mood);
-      if (!block) return null;
-      const idx = signedInLayerIdxByMood[mood] ?? 0;
-      const stack: any[] = Array.isArray(block.layers) ? block.layers : [];
-      const picked = stack.length > 0
-        ? stack[Math.min(Math.max(idx, 0), stack.length - 1)] ?? stack[0]
+      if (!block) return laneEntry;
+      const v6Stack = Array.isArray(block.layers) ? block.layers : [];
+      const pickedV6 = v6Stack.length > 0
+        ? v6Stack[Math.min(Math.max(idx, 0), v6Stack.length - 1)] ?? v6Stack[0]
         : block;
-      return v6LayerToLayerMode(picked, mood);
+      const v6Entry = v6LayerToLayerMode(pickedV6, mood);
+
+      // Hero cards can already ship deeper real candidates in v6 even before
+      // the signed-in lane cache has fetched or re-seeded to the same depth.
+      // When the selected index points beyond the current lane cache, prefer
+      // the payload-backed candidate instead of clamping back to lane index 0.
+      if (v6Stack.length > stack.length && idx >= stack.length) {
+        return v6Entry ?? laneEntry;
+      }
+
+      return laneEntry ?? v6Entry;
     };
     return {
-      balance: fromLane('balance') ?? fromV6('balance'),
-      bold:    fromLane('bold')    ?? fromV6('bold'),
-      smooth:  fromLane('smooth')  ?? fromV6('smooth'),
-      wild:    fromLane('wild')    ?? fromV6('wild'),
+      balance: resolveMood('balance'),
+      bold:    resolveMood('bold'),
+      smooth:  resolveMood('smooth'),
+      wild:    resolveMood('wild'),
     };
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -9898,7 +9986,7 @@ const OdaraScreen = ({
       guestModeHistoryRef.current = nextHistory;
       setGuestModeHistory(nextHistory);
       setGuestSelectedMood(previous.mood);
-      setGuestActiveLayerIdx(previous.layerIndex);
+      setGuestLayerIdxByMood((current) => ({ ...current, [previous.mood]: previous.layerIndex }));
       return true;
     }
 
