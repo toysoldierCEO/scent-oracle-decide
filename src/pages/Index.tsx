@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type FormEvent, type HTMLAttributes } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { odaraSupabase } from '@/lib/odara-client';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
@@ -26,16 +27,161 @@ function todayLocalKey(): string {
   return `${y}-${m}-${d}`;
 }
 
+const PASSWORD_MIN_LENGTH = 8;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type AuthView = 'signIn' | 'signUp' | 'checkEmail';
+type AuthField = 'firstName' | 'lastName' | 'email' | 'password' | 'confirmPassword';
+
+type AuthFieldErrors = Partial<Record<AuthField, string>>;
+
+interface AuthTextFieldProps {
+  autoComplete: string;
+  error?: string;
+  inputMode?: HTMLAttributes<HTMLInputElement>['inputMode'];
+  label: string;
+  onBlur: () => void;
+  onChange: (value: string) => void;
+  placeholder: string;
+  showToggle?: boolean;
+  toggleLabel?: string;
+  onToggle?: () => void;
+  type: 'email' | 'password' | 'text';
+  value: string;
+}
+
+function validateSignInFields(email: string, password: string): AuthFieldErrors {
+  const errors: AuthFieldErrors = {};
+  const normalizedEmail = email.trim();
+
+  if (!normalizedEmail) {
+    errors.email = 'Email is required.';
+  } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
+    errors.email = 'Enter a valid email address.';
+  }
+
+  if (!password) {
+    errors.password = 'Password is required.';
+  }
+
+  return errors;
+}
+
+function validateSignUpFields(
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string,
+  confirmPassword: string,
+): AuthFieldErrors {
+  const errors: AuthFieldErrors = {};
+  const normalizedEmail = email.trim();
+
+  if (!firstName.trim()) {
+    errors.firstName = 'First name is required.';
+  }
+
+  if (!lastName.trim()) {
+    errors.lastName = 'Last name is required.';
+  }
+
+  if (!normalizedEmail) {
+    errors.email = 'Email is required.';
+  } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
+    errors.email = 'Enter a valid email address.';
+  }
+
+  if (!password) {
+    errors.password = 'Password is required.';
+  } else if (password.length < PASSWORD_MIN_LENGTH) {
+    errors.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+  }
+
+  if (!confirmPassword) {
+    errors.confirmPassword = 'Confirm your password.';
+  } else if (password !== confirmPassword) {
+    errors.confirmPassword = 'Passwords must match exactly.';
+  }
+
+  return errors;
+}
+
+function AuthTextField({
+  autoComplete,
+  error,
+  inputMode,
+  label,
+  onBlur,
+  onChange,
+  placeholder,
+  showToggle = false,
+  toggleLabel,
+  onToggle,
+  type,
+  value,
+}: AuthTextFieldProps) {
+  const labelSlug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const inputId = `auth-${labelSlug}`;
+  const errorId = `${inputId}-error`;
+
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={inputId} className="block text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={inputId}
+          autoComplete={autoComplete}
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? 'true' : 'false'}
+          className="h-12 w-full rounded-xl border border-border/12 bg-accent/40 px-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/24 focus:bg-accent/60"
+          inputMode={inputMode}
+          onBlur={onBlur}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          type={type}
+          value={value}
+        />
+        {showToggle && onToggle ? (
+          <button
+            type="button"
+            aria-label={toggleLabel ?? (type === 'password' ? `Show ${label.toLowerCase()}` : `Hide ${label.toLowerCase()}`)}
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground/65 transition-colors hover:text-foreground"
+            onClick={onToggle}
+          >
+            {type === 'password' ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </button>
+        ) : null}
+      </div>
+      {error ? (
+        <p id={errorId} className="text-xs text-red-400">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 const Index = () => {
   const { getTemperature, currentTemperature, weatherLoading } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [authView, setAuthView] = useState<AuthView>('signIn');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touchedFields, setTouchedFields] = useState<Partial<Record<AuthField, boolean>>>({});
+  const [signUpPasswordsVisible, setSignUpPasswordsVisible] = useState(false);
+  const [signInPasswordVisible, setSignInPasswordVisible] = useState(false);
   // Recipe Mode state removed — v6 backend decides card_type ("standard" | "recipe").
 
   // Oracle state
@@ -62,6 +208,18 @@ const Index = () => {
 
   // ── Normalized access mode — single source of truth ──
   const access = resolveAccessMode(user, guestMode);
+  const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
+  const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
+  const isSignUp = authView === 'signUp';
+  const isCheckEmail = authView === 'checkEmail';
+  const pendingEmail = pendingVerificationEmail || email.trim();
+  const canResendVerification = !!pendingEmail;
+  const activeFieldErrors = isSignUp
+    ? validateSignUpFields(firstName, lastName, email, password, confirmPassword)
+    : validateSignInFields(email, password);
+  const socialButtonLabel = isEditorPreview
+    ? 'Open shared preview to sign in with Google'
+    : 'Continue with Google';
 
   const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
@@ -309,37 +467,93 @@ const Index = () => {
     return data as unknown as OracleResult;
   }, [user, access, selectedContext, selectedDate, stableOracleTemperature]);
 
-  const handleEmailAuth = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      if (isSignUp) {
-        const { error: err } = await odaraSupabase.auth.signUp({ email: email.trim(), password: password.trim() });
-        if (err) { setError(err.message); } else { setError('Check your email to confirm your account.'); }
-      } else {
-        const { error: err } = await odaraSupabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
-        if (err) setError(err.message);
-      }
-    } finally { setLoading(false); }
-  };
+  const clearAuthMessages = useCallback(() => {
+    setAuthError('');
+    setAuthNotice('');
+  }, []);
 
-  const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
-  const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
+  const markFieldTouched = useCallback((field: AuthField) => {
+    setTouchedFields((current) => (current[field] ? current : { ...current, [field]: true }));
+  }, []);
+
+  const resetAuthDraftState = useCallback((nextView: AuthView, nextEmail?: string) => {
+    setAuthView(nextView);
+    setSubmitAttempted(false);
+    setTouchedFields({});
+    setPassword('');
+    setConfirmPassword('');
+    setSignUpPasswordsVisible(false);
+    setSignInPasswordVisible(false);
+    setAuthError('');
+    setAuthNotice('');
+    if (nextView !== 'checkEmail') {
+      setPendingVerificationEmail('');
+    }
+    if (nextEmail !== undefined) {
+      setEmail(nextEmail);
+    }
+  }, []);
+
+  const handleFieldChange = useCallback((field: AuthField, value: string) => {
+    clearAuthMessages();
+    if (submitAttempted) {
+      setTouchedFields((current) => ({ ...current, [field]: true }));
+    }
+
+    switch (field) {
+      case 'firstName':
+        setFirstName(value);
+        break;
+      case 'lastName':
+        setLastName(value);
+        break;
+      case 'email':
+        setEmail(value);
+        break;
+      case 'password':
+        setPassword(value);
+        break;
+      case 'confirmPassword':
+        setConfirmPassword(value);
+        break;
+      default:
+        break;
+    }
+  }, [clearAuthMessages, submitAttempted]);
 
   const handleGoogle = async () => {
     if (isEditorPreview) {
       window.open(SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
-    setError('');
+    clearAuthMessages();
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: SHARED_PREVIEW_ORIGIN },
       });
-      if (err) setError(err.message);
+      if (err) setAuthError(err.message);
     } finally { setLoading(false); }
+  };
+
+  const handleResendVerification = async () => {
+    if (!canResendVerification) return;
+    clearAuthMessages();
+    setLoading(true);
+    try {
+      const { error: err } = await odaraSupabase.auth.resend({
+        type: 'signup',
+        email: pendingEmail,
+      });
+      if (err) {
+        setAuthError(err.message);
+      } else {
+        setAuthNotice(`Verification email resent to ${pendingEmail}.`);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -355,6 +569,73 @@ const Index = () => {
     await odaraSupabase.auth.signOut();
   };
 
+  const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    clearAuthMessages();
+    setSubmitAttempted(true);
+
+    const validationErrors = isSignUp
+      ? validateSignUpFields(firstName, lastName, email, password, confirmPassword)
+      : validateSignInFields(email, password);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setTouchedFields((current) => ({
+        ...current,
+        ...Object.fromEntries(Object.keys(validationErrors).map((key) => [key, true])) as Partial<Record<AuthField, boolean>>,
+      }));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const normalizedEmail = email.trim();
+
+      if (isSignUp) {
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        const { data, error: err } = await odaraSupabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: {
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              full_name: fullName,
+              name: fullName,
+            },
+          },
+        });
+
+        if (err) {
+          setAuthError(err.message);
+          return;
+        }
+
+        if (!data.session) {
+          setPendingVerificationEmail(normalizedEmail);
+          setPassword('');
+          setConfirmPassword('');
+          setSubmitAttempted(false);
+          setTouchedFields({});
+          setSignUpPasswordsVisible(false);
+          setAuthView('checkEmail');
+        }
+
+        return;
+      }
+
+      const { error: err } = await odaraSupabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (err) {
+        setAuthError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Wait for auth bootstrap (but NOT when in guest mode — guest skips auth entirely)
   if (!authReady && !guestMode) {
     return (
@@ -367,45 +648,202 @@ const Index = () => {
   // Show auth screen only when not signed in AND not in guest mode
   if (!access.isSignedIn && !access.isGuestMode) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
-        <span className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/50 mb-4">Welcome</span>
-        <h1 className="text-xl tracking-[0.4em] font-bold uppercase mb-2">ODARA</h1>
-        <p className="text-sm text-muted-foreground mb-8">
-          {isSignUp ? 'Create your account' : 'Sign in to access your scent profile'}
-        </p>
-        <div className="w-full max-w-xs flex flex-col gap-3">
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
-            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors" />
-          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
-            className="bg-accent/50 border border-border/10 rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20 transition-colors" />
-          <button onClick={handleEmailAuth} disabled={loading || !email.trim() || !password.trim()}
-            className="bg-foreground text-background rounded-lg py-2.5 text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-all">
-            {isSignUp ? 'Create Account' : 'Sign In'}
-          </button>
-          <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px bg-border/10" />
-            <span className="text-[11px] text-muted-foreground/50">or</span>
-            <div className="flex-1 h-px bg-border/10" />
+      <div
+        className="min-h-dvh overflow-y-auto bg-background text-foreground"
+        style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+      >
+        <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-10 sm:py-14" style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom))' }}>
+          <div className="mx-auto w-full max-w-sm">
+            <div className="mb-8 text-center">
+              <span className="mb-4 block text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
+                {isSignUp ? 'Welcome' : isCheckEmail ? 'Almost there' : 'Welcome back'}
+              </span>
+              <h1 className="mb-3 text-xl font-bold uppercase tracking-[0.4em]">ODARA</h1>
+              {!isCheckEmail ? (
+                <>
+                  <p className="mb-2 text-sm text-foreground/82">Hi, I&apos;m Vesper.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isSignUp ? 'Create your scent profile.' : 'Sign in to access your scent profile.'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mb-2 text-sm text-foreground/82">Hi, I&apos;m Vesper.</p>
+                  <h2 className="text-lg font-medium text-foreground">Check your email</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    We sent a verification email to <span className="text-foreground">{pendingEmail}</span>. Confirm your account, then return to sign in.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="rounded-[1.75rem] border border-border/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-sm">
+              {isCheckEmail ? (
+                <div className="space-y-3">
+                  {authError ? (
+                    <p className="rounded-xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-300">
+                      {authError}
+                    </p>
+                  ) : null}
+                  {authNotice ? (
+                    <p className="rounded-xl border border-emerald-400/18 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-300">
+                      {authNotice}
+                    </p>
+                  ) : null}
+                  {canResendVerification ? (
+                    <button
+                      type="button"
+                      className="h-12 w-full rounded-xl border border-border/12 bg-accent/40 text-sm font-medium text-foreground transition-colors hover:bg-accent/70 disabled:opacity-50"
+                      disabled={loading}
+                      onClick={handleResendVerification}
+                    >
+                      {loading ? 'Sending…' : 'Resend Email'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="h-12 w-full rounded-xl bg-foreground text-sm font-semibold text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
+                    disabled={loading}
+                    onClick={() => resetAuthDraftState('signIn', pendingEmail)}
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form className="space-y-3" noValidate onSubmit={handleEmailAuth}>
+                  {isSignUp ? (
+                    <>
+                      <AuthTextField
+                        autoComplete="given-name"
+                        error={(submitAttempted || touchedFields.firstName) ? activeFieldErrors.firstName : undefined}
+                        label="First name"
+                        onBlur={() => markFieldTouched('firstName')}
+                        onChange={(value) => handleFieldChange('firstName', value)}
+                        placeholder="First name"
+                        type="text"
+                        value={firstName}
+                      />
+                      <AuthTextField
+                        autoComplete="family-name"
+                        error={(submitAttempted || touchedFields.lastName) ? activeFieldErrors.lastName : undefined}
+                        label="Last name"
+                        onBlur={() => markFieldTouched('lastName')}
+                        onChange={(value) => handleFieldChange('lastName', value)}
+                        placeholder="Last name"
+                        type="text"
+                        value={lastName}
+                      />
+                    </>
+                  ) : null}
+
+                  <AuthTextField
+                    autoComplete="email"
+                    error={(submitAttempted || touchedFields.email) ? activeFieldErrors.email : undefined}
+                    inputMode="email"
+                    label="Email"
+                    onBlur={() => markFieldTouched('email')}
+                    onChange={(value) => handleFieldChange('email', value)}
+                    placeholder="Email"
+                    type="email"
+                    value={email}
+                  />
+
+                  <AuthTextField
+                    autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                    error={(submitAttempted || touchedFields.password) ? activeFieldErrors.password : undefined}
+                    label="Password"
+                    onBlur={() => markFieldTouched('password')}
+                    onChange={(value) => handleFieldChange('password', value)}
+                    onToggle={() => isSignUp ? setSignUpPasswordsVisible((current) => !current) : setSignInPasswordVisible((current) => !current)}
+                    placeholder="Password"
+                    showToggle
+                    toggleLabel={isSignUp
+                      ? (signUpPasswordsVisible ? 'Hide sign-up passwords' : 'Show sign-up passwords')
+                      : (signInPasswordVisible ? 'Hide password' : 'Show password')}
+                    type={isSignUp
+                      ? (signUpPasswordsVisible ? 'text' : 'password')
+                      : (signInPasswordVisible ? 'text' : 'password')}
+                    value={password}
+                  />
+
+                  {isSignUp ? (
+                    <AuthTextField
+                      autoComplete="new-password"
+                      error={(submitAttempted || touchedFields.confirmPassword) ? activeFieldErrors.confirmPassword : undefined}
+                      label="Confirm password"
+                      onBlur={() => markFieldTouched('confirmPassword')}
+                      onChange={(value) => handleFieldChange('confirmPassword', value)}
+                      onToggle={() => setSignUpPasswordsVisible((current) => !current)}
+                      placeholder="Confirm password"
+                      showToggle
+                      toggleLabel={signUpPasswordsVisible ? 'Hide sign-up passwords' : 'Show sign-up passwords'}
+                      type={signUpPasswordsVisible ? 'text' : 'password'}
+                      value={confirmPassword}
+                    />
+                  ) : null}
+
+                  {isSignUp ? (
+                    <p className="px-1 text-[11px] leading-5 text-muted-foreground/55">
+                      Passwords currently require at least {PASSWORD_MIN_LENGTH} characters. Final policy should still be confirmed in Supabase Auth settings.
+                    </p>
+                  ) : null}
+
+                  {authError ? (
+                    <p className="rounded-xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-300">
+                      {authError}
+                    </p>
+                  ) : null}
+                  {authNotice ? (
+                    <p className="rounded-xl border border-emerald-400/18 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-300">
+                      {authNotice}
+                    </p>
+                  ) : null}
+
+                  <button
+                    className="mt-2 h-12 w-full rounded-xl bg-foreground text-sm font-semibold text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
+                    disabled={loading}
+                    type="submit"
+                  >
+                    {loading ? (isSignUp ? 'Creating account…' : 'Signing in…') : (isSignUp ? 'Create Account' : 'Sign In')}
+                  </button>
+
+                  <div className="flex items-center gap-3 py-1">
+                    <div className="h-px flex-1 bg-border/10" />
+                    <span className="text-[11px] text-muted-foreground/50">or</span>
+                    <div className="h-px flex-1 bg-border/10" />
+                  </div>
+
+                  <button
+                    className="h-12 w-full rounded-xl border border-border/12 bg-accent/40 text-sm font-medium text-foreground transition-colors hover:bg-accent/70 disabled:opacity-50"
+                    disabled={loading}
+                    onClick={handleGoogle}
+                    type="button"
+                  >
+                    {socialButtonLabel}
+                  </button>
+
+                  <p className="pt-1 text-center text-[13px] text-muted-foreground">
+                    {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                    <button
+                      className="text-foreground/80 underline underline-offset-2"
+                      onClick={() => resetAuthDraftState(isSignUp ? 'signIn' : 'signUp')}
+                      type="button"
+                    >
+                      {isSignUp ? 'Sign in' : 'Sign up'}
+                    </button>
+                  </p>
+
+                  <button
+                    className="mt-5 w-full text-center text-[12px] text-muted-foreground/45 underline underline-offset-2 transition-colors hover:text-muted-foreground/80"
+                    onClick={() => setGuestMode(true)}
+                    type="button"
+                  >
+                    Skip for now
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
-          <button onClick={handleGoogle} disabled={loading}
-            className="bg-accent/50 text-foreground border border-border/10 rounded-lg py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-50 transition-all">
-            {isEditorPreview ? 'Open shared preview to sign in with Google' : 'Continue with Google'}
-          </button>
-          {error && (
-            <p className={`text-xs text-center ${error.startsWith('Check') ? 'text-green-400' : 'text-red-400'}`}>{error}</p>
-          )}
-          <p className="text-[13px] text-muted-foreground text-center mt-2">
-            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-            <span onClick={() => { setIsSignUp(!isSignUp); setError(''); }} className="text-foreground/70 cursor-pointer underline underline-offset-2">
-              {isSignUp ? 'Sign in' : 'Sign up'}
-            </span>
-          </p>
-          <button
-            onClick={() => setGuestMode(true)}
-            className="mt-6 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
-          >
-            Skip for now
-          </button>
         </div>
       </div>
     );
