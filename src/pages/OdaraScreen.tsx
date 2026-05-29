@@ -1197,6 +1197,7 @@ interface OdaraSearchFragranceResult {
 function normalizeOdaraSearchQuery(query: string) {
   return query
     .trim()
+    .toLowerCase()
     .replace(/[^a-z0-9\s-]/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -4195,16 +4196,6 @@ function getWardrobeStatusRank(status: OdaraWardrobePrimaryStatus) {
   }
 }
 
-function isCollectionWriteFallbackError(message: string | null | undefined) {
-  const normalized = String(message ?? '').toLowerCase();
-  return (
-    normalized.includes('row-level security')
-    || normalized.includes('permission denied')
-    || normalized.includes('not authorized')
-    || normalized.includes('new row violates row-level security')
-  );
-}
-
 function deriveWardrobePrimaryStatus(signal: {
   owned: boolean;
   wishlist: boolean;
@@ -6840,28 +6831,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         status_label: 'Owned',
       });
       setSurface('confirmation');
-    } catch (ownError: any) {
-      if (isCollectionWriteFallbackError(ownError?.message)) {
-        upsertSessionSignal(selectedCatalogItem, (current) => ({
-          ...current,
-          owned: true,
-          own_persisted: false,
-          wishlist: false,
-          negative_state: 0,
-          negative_persisted: false,
-          updated_at: Date.now(),
-        }));
-        recordActionInteraction();
-        setConfirmationState({
-          kind: 'owned',
-          fragrance_id: selectedCatalogItem.fragrance_id,
-          durability: 'session',
-          status_label: 'Owned',
-        });
-        setSurface('confirmation');
-      } else {
-        setActionError(ownError?.message || 'Could not add this fragrance yet.');
-      }
+    } catch {
+      setActionError("Couldn't save to wardrobe. Try again.");
     } finally {
       setPendingActionKey(null);
     }
