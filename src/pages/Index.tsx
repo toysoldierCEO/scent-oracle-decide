@@ -545,6 +545,9 @@ const Index = () => {
       const { error: err } = await odaraSupabase.auth.resend({
         type: 'signup',
         email: pendingEmail,
+        options: {
+          emailRedirectTo: SHARED_PREVIEW_ORIGIN,
+        },
       });
       if (err) {
         setAuthError(err.message);
@@ -596,6 +599,7 @@ const Index = () => {
           email: normalizedEmail,
           password,
           options: {
+            emailRedirectTo: SHARED_PREVIEW_ORIGIN,
             data: {
               first_name: firstName.trim(),
               last_name: lastName.trim(),
