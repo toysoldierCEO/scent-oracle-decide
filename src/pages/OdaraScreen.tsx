@@ -2413,8 +2413,16 @@ function preferenceStateToHeartState(value: unknown): HeartState {
   return value === 'loved' ? 2 : value === 'liked' ? 1 : 0;
 }
 
+function preferenceStateToNegativeState(value: unknown): OdaraNegativeState {
+  return value === 'disliked' ? 2 : value === 'not_for_me' ? 1 : 0;
+}
+
 function heartStateToPreferenceState(value: HeartState): 'neutral' | 'liked' | 'loved' {
   return value === 2 ? 'loved' : value === 1 ? 'liked' : 'neutral';
+}
+
+function negativeStateToPreferenceState(value: OdaraNegativeState): 'neutral' | 'not_for_me' | 'disliked' {
+  return value === 2 ? 'disliked' : value === 1 ? 'not_for_me' : 'neutral';
 }
 
 function createDefaultSignedInDayState(): SignedInDayState {
@@ -3682,7 +3690,7 @@ type OdaraProfileDossierPayload = {
   };
 };
 
-type OdaraCollectionPreferenceState = 'neutral' | 'liked' | 'loved';
+type OdaraCollectionPreferenceState = 'neutral' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 
 type OdaraCollectionItem = {
   fragrance_id: string | null;
@@ -3775,6 +3783,13 @@ type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 type OdaraNegativeState = 0 | 1 | 2;
+type OdaraPersistedWardrobePreference = {
+  fragrance_id: string;
+  preference_state: OdaraCollectionPreferenceState;
+  heart_state: HeartState;
+  negative_state: OdaraNegativeState;
+  updated_at: number;
+};
 
 type OdaraWardrobeCatalogItem = {
   fragrance_id: string;
@@ -4111,6 +4126,14 @@ function writeStoredWardrobeOnboardingSeen(seen: boolean) {
   }
 }
 
+function normalizeWardrobePreferenceState(value: unknown): OdaraCollectionPreferenceState {
+  if (value === 'loved') return 'loved';
+  if (value === 'liked') return 'liked';
+  if (value === 'disliked') return 'disliked';
+  if (value === 'not_for_me') return 'not_for_me';
+  return 'neutral';
+}
+
 function getWardrobePrimaryStatusLabel(status: OdaraWardrobePrimaryStatus) {
   switch (status) {
     case 'owned':
@@ -4270,11 +4293,12 @@ function buildWardrobeCatalogItemFromSignal(signal: OdaraWardrobeSessionSignal):
 }
 
 function isWardrobeStatusPersisted(
-  signal: Pick<OdaraWardrobeSessionSignal, 'own_persisted' | 'heart_persisted'>,
+  signal: Pick<OdaraWardrobeSessionSignal, 'own_persisted' | 'heart_persisted' | 'negative_persisted'>,
   status: OdaraWardrobePrimaryStatus,
 ) {
   if (status === 'owned') return signal.own_persisted;
   if (status === 'liked' || status === 'loved') return signal.heart_persisted;
+  if (status === 'not_for_me' || status === 'disliked') return signal.negative_persisted;
   return false;
 }
 
@@ -6451,6 +6475,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   userId: string | null;
 }> = ({ onClose, userId }) => {
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
+  const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<OdaraWardrobeCatalogItem[]>([]);
@@ -6497,6 +6522,73 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setLoading(false);
   }, [userId]);
 
+  const loadPersistedPreferences = useCallback(async () => {
+    if (!userId) {
+      setPersistedPreferencesById({});
+      return;
+    }
+
+    const { data, error: preferenceError } = await odaraSupabase.rpc('get_user_fragrance_preference_signals_v1' as any, {
+      p_user_id: userId,
+    } as any);
+
+    if (preferenceError) {
+      throw preferenceError;
+    }
+
+    const preferenceItems = Array.isArray((data as any)?.items)
+      ? (data as any).items
+      : Array.isArray(data)
+        ? data
+        : [];
+
+    const nextPreferences: Record<string, OdaraPersistedWardrobePreference> = {};
+    for (const row of preferenceItems) {
+      const fragranceId = typeof row?.fragrance_id === 'string' ? row.fragrance_id.trim() : '';
+      if (!fragranceId) continue;
+      const preferenceState = normalizeWardrobePreferenceState(row?.preference_state);
+      if (preferenceState === 'neutral') continue;
+      nextPreferences[fragranceId] = {
+        fragrance_id: fragranceId,
+        preference_state: preferenceState,
+        heart_state: preferenceStateToHeartState(preferenceState),
+        negative_state: preferenceStateToNegativeState(preferenceState),
+        updated_at: Number.isFinite(Date.parse(String(row?.updated_at ?? '')))
+          ? Date.parse(String(row?.updated_at ?? ''))
+          : Date.now(),
+      };
+    }
+
+    setPersistedPreferencesById(nextPreferences);
+    setSessionSignals((current) => {
+      const next = { ...current };
+      for (const [fragranceId, signal] of Object.entries(current)) {
+        if (!signal.heart_persisted && !signal.negative_persisted) continue;
+        const persisted = nextPreferences[fragranceId];
+        if (persisted) {
+          next[fragranceId] = {
+            ...signal,
+            heart_state: persisted.heart_state,
+            heart_persisted: persisted.heart_state > 0,
+            negative_state: persisted.negative_state,
+            negative_persisted: persisted.negative_state > 0,
+            updated_at: Math.max(signal.updated_at, persisted.updated_at),
+          };
+          continue;
+        }
+        next[fragranceId] = {
+          ...signal,
+          heart_state: 0,
+          heart_persisted: false,
+          negative_state: 0,
+          negative_persisted: false,
+          updated_at: Date.now(),
+        };
+      }
+      return next;
+    });
+  }, [userId]);
+
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setCatalogError(null);
@@ -6514,6 +6606,23 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   useEffect(() => {
     void loadCollection();
   }, [loadCollection]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadPersistedPreferences();
+      } catch (preferenceHydrateError) {
+        if (!cancelled) {
+          console.error('[Odara] wardrobe preference hydrate failed', preferenceHydrateError);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPersistedPreferences]);
 
   useEffect(() => {
     void loadCatalog();
@@ -6595,12 +6704,34 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       });
     }
 
+    for (const persisted of Object.values(persistedPreferencesById)) {
+      const resolvedItem = catalogById.get(persisted.fragrance_id)
+        ?? (collectionItemById.get(persisted.fragrance_id) ? buildWardrobeCatalogItemFromCollectionItem(collectionItemById.get(persisted.fragrance_id)!) : null);
+      if (!resolvedItem) continue;
+      const baseSignal = next[persisted.fragrance_id] ?? createWardrobeSessionSignalFromItem(resolvedItem);
+      next[persisted.fragrance_id] = {
+        ...baseSignal,
+        heart_state: persisted.heart_state,
+        heart_persisted: persisted.heart_state > 0,
+        negative_state: persisted.negative_state,
+        negative_persisted: persisted.negative_state > 0,
+        updated_at: persisted.updated_at,
+      };
+    }
+
     for (const [fragranceId, signal] of Object.entries(sessionSignals)) {
       const resolvedItem = catalogById.get(fragranceId)
         ?? buildWardrobeCatalogItemFromSignal(signal)
         ?? null;
       if (!resolvedItem) continue;
       const baseSignal = next[fragranceId] ?? createWardrobeSessionSignalFromItem(resolvedItem);
+      const persistedSignal = persistedPreferencesById[fragranceId] ?? null;
+      const allowSessionHeartState = !persistedSignal || signal.heart_persisted;
+      const allowSessionNegativeState = !persistedSignal || signal.negative_persisted;
+      const resolvedHeartState = allowSessionHeartState ? signal.heart_state : baseSignal.heart_state;
+      const resolvedHeartPersisted = allowSessionHeartState ? signal.heart_persisted : baseSignal.heart_persisted;
+      const resolvedNegativeState = allowSessionNegativeState ? signal.negative_state : baseSignal.negative_state;
+      const resolvedNegativePersisted = allowSessionNegativeState ? signal.negative_persisted : baseSignal.negative_persisted;
       next[fragranceId] = {
         ...baseSignal,
         ...signal,
@@ -6618,11 +6749,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         source_confidence: signal.source_confidence ?? baseSignal.source_confidence,
         image_url: signal.image_url ?? baseSignal.image_url,
         thumbnail_url: signal.thumbnail_url ?? baseSignal.thumbnail_url,
+        wishlist: resolvedNegativeState > 0 ? false : signal.wishlist,
+        heart_state: resolvedHeartState,
+        heart_persisted: resolvedHeartPersisted,
+        negative_state: resolvedNegativeState,
+        negative_persisted: resolvedNegativePersisted,
       };
     }
 
     return next;
-  }, [catalogById, collectionItems, sessionSignals]);
+  }, [catalogById, collectionItemById, collectionItems, persistedPreferencesById, sessionSignals]);
 
   const wardrobeCards = useMemo(() => {
     const cards = Object.values(effectiveSignalMap)
@@ -6880,15 +7016,24 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       if (rpcError) throw rpcError;
 
       const resolvedHeartState = preferenceStateToHeartState((data as any)?.preference_state);
+      const resolvedNegativeState = preferenceStateToNegativeState((data as any)?.preference_state);
       upsertSessionSignal(selectedCatalogItem, (current) => ({
         ...current,
         heart_state: resolvedHeartState,
         heart_persisted: resolvedHeartState > 0,
-        negative_state: resolvedHeartState > 0 ? 0 : current.negative_state,
-        negative_persisted: false,
+        negative_state: resolvedNegativeState,
+        negative_persisted: resolvedNegativeState > 0,
         updated_at: Date.now(),
       }));
-      await loadCollection();
+      const refreshResults = await Promise.allSettled([
+        loadCollection(),
+        loadPersistedPreferences(),
+      ]);
+      for (const result of refreshResults) {
+        if (result.status === 'rejected') {
+          console.error('[Odara] post-heart preference refresh failed', result.reason);
+        }
+      }
       recordActionInteraction();
       if (resolvedHeartState > 0) {
         setConfirmationState({
@@ -6906,62 +7051,67 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setPendingActionKey(null);
     }
-  }, [loadCollection, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal, userId]);
+  }, [loadCollection, loadPersistedPreferences, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal, userId]);
 
   const handleNegative = useCallback(async () => {
-    if (!selectedCatalogItem) return;
+    if (!selectedCatalogItem || !userId) return;
     const nextNegativeState: OdaraNegativeState = selectedNegativeState === 0 ? 1 : selectedNegativeState === 1 ? 2 : 0;
     setPendingActionKey(`negative:${selectedCatalogItem.fragrance_id}`);
     setActionError(null);
 
     try {
-      if (selectedHeartState > 0 && selectedSignal?.heart_persisted && userId) {
-        const { error: clearHeartError } = await odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
-          p_fragrance_id: selectedCatalogItem.fragrance_id,
-          p_next_state: 'neutral',
-          p_source: 'odara_wardrobe_onboarding',
-        } as any);
-        if (clearHeartError) throw clearHeartError;
-      }
+      const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
+        p_fragrance_id: selectedCatalogItem.fragrance_id,
+        p_next_state: negativeStateToPreferenceState(nextNegativeState),
+        p_source: 'odara_wardrobe_onboarding',
+      } as any);
+      if (rpcError) throw rpcError;
+
+      const resolvedHeartState = preferenceStateToHeartState((data as any)?.preference_state);
+      const resolvedNegativeState = preferenceStateToNegativeState((data as any)?.preference_state);
 
       upsertSessionSignal(selectedCatalogItem, (current) => ({
         ...current,
-        wishlist: nextNegativeState > 0 ? false : current.wishlist,
+        wishlist: resolvedNegativeState > 0 ? false : current.wishlist,
         wishlist_persisted: false,
-        heart_state: nextNegativeState > 0 ? 0 : current.heart_state,
-        heart_persisted: nextNegativeState > 0 ? false : current.heart_persisted,
-        negative_state: nextNegativeState,
-        negative_persisted: false,
+        heart_state: resolvedHeartState,
+        heart_persisted: resolvedHeartState > 0,
+        negative_state: resolvedNegativeState,
+        negative_persisted: resolvedNegativeState > 0,
         updated_at: Date.now(),
       }));
-      if (selectedCollectionItem && selectedHeartState > 0) {
-        await loadCollection();
+      const refreshResults = await Promise.allSettled([
+        loadCollection(),
+        loadPersistedPreferences(),
+      ]);
+      for (const result of refreshResults) {
+        if (result.status === 'rejected') {
+          console.error('[Odara] post-negative preference refresh failed', result.reason);
+        }
       }
       recordActionInteraction();
-      if (nextNegativeState > 0) {
+      if (resolvedNegativeState > 0) {
         setConfirmationState({
           kind: 'negative',
           fragrance_id: selectedCatalogItem.fragrance_id,
-          durability: 'session',
-          status_label: nextNegativeState === 2 ? 'Disliked' : 'Not for me',
+          durability: 'persisted',
+          status_label: resolvedNegativeState === 2 ? 'Disliked' : 'Not for me',
         });
         setSurface('confirmation');
       } else {
         setConfirmationState(null);
       }
     } catch (negativeError: any) {
-      setActionError(negativeError?.message || 'Could not update that signal yet.');
+      setActionError("Couldn't save preference. Try again.");
     } finally {
       setPendingActionKey(null);
     }
   }, [
     loadCollection,
+    loadPersistedPreferences,
     recordActionInteraction,
     selectedCatalogItem,
-    selectedCollectionItem,
-    selectedHeartState,
     selectedNegativeState,
-    selectedSignal?.heart_persisted,
     upsertSessionSignal,
     userId,
   ]);
