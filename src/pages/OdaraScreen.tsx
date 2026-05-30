@@ -8051,11 +8051,24 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-end px-1">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <button
+            type="button"
+            onClick={cycleWardrobeSort}
+            className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+            style={{
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.04)',
+              color: 'rgba(255,255,255,0.74)',
+            }}
+          >
+            <ArrowUpDown className="h-3 w-3" strokeWidth={1.6} />
+            {wardrobeSortLabel}
+          </button>
           <button
             type="button"
             onClick={openSearch}
-            className="rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
+            className="shrink-0 rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
             style={{
               border: '1px solid rgba(218,188,124,0.28)',
               background: 'rgba(218,188,124,0.12)',
@@ -8064,6 +8077,42 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             + Add fragrance
           </button>
         </div>
+
+        {wardrobeStatusOptions.length > 1 ? (
+          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setWardrobeStatusFilter(null)}
+              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+              }}
+            >
+              All
+            </button>
+            {wardrobeStatusOptions.map((status) => {
+              const active = wardrobeStatusFilter === status;
+              const tone = getWardrobePrimaryStatusTone(status);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setWardrobeStatusFilter(status)}
+                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                  style={{
+                    border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
+                    background: active ? tone.background : 'rgba(255,255,255,0.03)',
+                    color: active ? tone.color : 'rgba(255,255,255,0.68)',
+                  }}
+                >
+                  {getWardrobePrimaryStatusLabel(status)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {wardrobeBrandOptions.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
