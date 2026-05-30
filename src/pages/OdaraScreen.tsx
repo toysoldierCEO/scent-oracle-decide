@@ -9420,6 +9420,8 @@ const OdaraScreen = ({
   }, [currentDayStateKey]);
 
   const [lockPulse, setLockPulse] = useState(false);
+  const [lockPulseType, setLockPulseType] = useState<'lock' | 'unlock' | null>(null);
+  const lockPulseTimeoutRef = useRef<number | null>(null);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
   const [likeFlash, setLikeFlash] = useState(false);
@@ -11639,9 +11641,17 @@ const OdaraScreen = ({
     setLockState('neutral');
   }, [viewHistory, handleGuestBack, lockState, signedInIsReadOnlyHistoryCard, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
 
-  const pulseLock = useCallback(() => {
+  const pulseLock = useCallback((type: 'lock' | 'unlock' = 'lock') => {
     setLockPulse(true);
-    window.setTimeout(() => setLockPulse(false), 400);
+    setLockPulseType(type);
+    if (lockPulseTimeoutRef.current !== null) {
+      window.clearTimeout(lockPulseTimeoutRef.current);
+    }
+    lockPulseTimeoutRef.current = window.setTimeout(() => {
+      setLockPulse(false);
+      setLockPulseType(null);
+      lockPulseTimeoutRef.current = null;
+    }, 400);
   }, []);
 
   const unlockGuestCard = useCallback(() => {
@@ -11650,7 +11660,7 @@ const OdaraScreen = ({
     clearLockedSelection();
     setGuestUnlockFlash(true);
     window.setTimeout(() => setGuestUnlockFlash(false), 700);
-    pulseLock();
+    pulseLock('unlock');
     haptic('success');
   }, [clearLockedSelection, pulseLock]);
 
@@ -11795,7 +11805,7 @@ const OdaraScreen = ({
       clearLockedSelection();
       setUnlockFlash(true);
       window.setTimeout(() => setUnlockFlash(false), 700);
-      pulseLock();
+      pulseLock('unlock');
       haptic('light');
       return;
     }
@@ -11811,7 +11821,7 @@ const OdaraScreen = ({
     window.setTimeout(() => setLikeFlash(false), 600);
     setLockFlash(true);
     window.setTimeout(() => setLockFlash(false), 700);
-    pulseLock();
+    pulseLock('lock');
 
     // NOTE: backend "like" persistence is not yet wired — when it lands,
     // call it here alongside onAccept. Lock persistence runs through onAccept.
@@ -12133,7 +12143,7 @@ const OdaraScreen = ({
           clearLockedSelection();
           setUnlockFlash(true);
           window.setTimeout(() => setUnlockFlash(false), 700);
-          pulseLock();
+          pulseLock('unlock');
           // Lighter tick on unlock — fired only after the unlock is accepted.
           haptic('light');
           return;
@@ -12143,7 +12153,7 @@ const OdaraScreen = ({
         if (!didLock) return;
         setLockFlash(true);
         window.setTimeout(() => setLockFlash(false), 700);
-        pulseLock();
+        pulseLock('lock');
         // Stronger tick on lock — fired only after the lock is accepted.
         haptic('medium');
       },
@@ -13472,7 +13482,13 @@ const OdaraScreen = ({
                   <svg
                     width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke={lockColor} strokeWidth="1.5"
-                    className="transition-colors duration-300 relative z-[1]"
+                    className={`transition-colors duration-300 relative z-[1]${
+                      lockPulseType === 'lock'
+                        ? ' lock-tick-strong'
+                        : lockPulseType === 'unlock'
+                          ? ' lock-tick-light'
+                          : ''
+                    }`}
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
                   >
                     {lockActive ? (
