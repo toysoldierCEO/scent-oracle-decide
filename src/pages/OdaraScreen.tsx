@@ -12134,7 +12134,8 @@ const OdaraScreen = ({
           setUnlockFlash(true);
           window.setTimeout(() => setUnlockFlash(false), 700);
           pulseLock();
-          haptic('success');
+          // Lighter tick on unlock — fired only after the unlock is accepted.
+          haptic('light');
           return;
         }
         clearUnlockTimeout();
@@ -12143,7 +12144,8 @@ const OdaraScreen = ({
         setLockFlash(true);
         window.setTimeout(() => setLockFlash(false), 700);
         pulseLock();
-        haptic('success');
+        // Stronger tick on lock — fired only after the lock is accepted.
+        haptic('medium');
       },
       toggleStar: () => {
         if (isGuestMode) {
