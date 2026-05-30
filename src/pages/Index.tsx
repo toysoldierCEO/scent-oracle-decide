@@ -566,6 +566,7 @@ const Index = () => {
       return;
     }
     clearAuthMessages();
+    persistRememberedEmail(rememberMe, email.trim());
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
