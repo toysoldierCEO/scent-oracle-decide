@@ -30,6 +30,43 @@ function todayLocalKey(): string {
 const PASSWORD_MIN_LENGTH = 8;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// --- Remembered email (email only — never passwords/tokens) ---
+const REMEMBER_EMAIL_KEY = 'vesper_remember_email';
+const REMEMBER_ME_KEY = 'vesper_remember_me';
+
+function readRememberedEmail(): string {
+  try {
+    if (localStorage.getItem(REMEMBER_ME_KEY) !== 'true') return '';
+    return localStorage.getItem(REMEMBER_EMAIL_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function readRememberMePreference(): boolean {
+  try {
+    const stored = localStorage.getItem(REMEMBER_ME_KEY);
+    // Default to checked when no prior preference exists.
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function persistRememberedEmail(remember: boolean, emailValue: string) {
+  try {
+    if (remember) {
+      localStorage.setItem(REMEMBER_ME_KEY, 'true');
+      if (emailValue) localStorage.setItem(REMEMBER_EMAIL_KEY, emailValue);
+    } else {
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 type AuthView = 'signIn' | 'signUp' | 'checkEmail';
 type AuthField = 'firstName' | 'lastName' | 'email' | 'password' | 'confirmPassword';
 
@@ -170,7 +207,9 @@ const Index = () => {
   const [authView, setAuthView] = useState<AuthView>('signIn');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => readRememberedEmail());
+  const [rememberMe, setRememberMe] = useState(() => readRememberMePreference());
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -521,12 +560,19 @@ const Index = () => {
     }
   }, [clearAuthMessages, submitAttempted]);
 
+  const handleRememberMeToggle = (next: boolean) => {
+    setRememberMe(next);
+    // Apply immediately so an unchecked box clears any previously remembered email.
+    persistRememberedEmail(next, email.trim());
+  };
+
   const handleGoogle = async () => {
     if (isEditorPreview) {
       window.open(SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
     clearAuthMessages();
+    persistRememberedEmail(rememberMe, email.trim());
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
@@ -634,6 +680,8 @@ const Index = () => {
 
       if (err) {
         setAuthError(err.message);
+      } else {
+        persistRememberedEmail(rememberMe, normalizedEmail);
       }
     } finally {
       setLoading(false);
@@ -776,6 +824,18 @@ const Index = () => {
                       type={signUpPasswordsVisible ? 'text' : 'password'}
                       value={confirmPassword}
                     />
+                  ) : null}
+
+                  {!isSignUp ? (
+                    <label className="flex select-none items-center gap-2.5 px-1 pt-0.5 text-[12px] text-muted-foreground/70">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => handleRememberMeToggle(event.target.checked)}
+                        className="h-4 w-4 cursor-pointer appearance-none rounded-[5px] border border-border/25 bg-accent/40 transition-colors checked:border-foreground/40 checked:bg-foreground/90 checked:bg-[length:11px_11px] checked:bg-center checked:bg-no-repeat checked:[background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%223%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><polyline%20points=%2220%206%209%2017%204%2012%22/></svg>')]"
+                      />
+                      Remember me
+                    </label>
                   ) : null}
 
                   {isSignUp ? (
