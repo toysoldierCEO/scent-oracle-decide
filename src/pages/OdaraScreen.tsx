@@ -4067,10 +4067,15 @@ function normalizeStoredWardrobeSessionSignal(raw: any): OdaraWardrobeSessionSig
   };
 }
 
-function readStoredWardrobeSessionSignals() {
+function getScopedWardrobeOnboardingStorageKey(baseKey: string, userId?: string | null) {
+  const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
+  return normalizedUserId ? `${baseKey}:${normalizedUserId}` : baseKey;
+}
+
+function readStoredWardrobeSessionSignals(userId?: string | null) {
   if (typeof window === 'undefined') return {} as Record<string, OdaraWardrobeSessionSignal>;
   try {
-    const raw = window.sessionStorage.getItem(ODARA_WARDROBE_SESSION_SIGNAL_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(getScopedWardrobeOnboardingStorageKey(ODARA_WARDROBE_SESSION_SIGNAL_STORAGE_KEY, userId));
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return {};
@@ -4086,10 +4091,13 @@ function readStoredWardrobeSessionSignals() {
   }
 }
 
-function writeStoredWardrobeSessionSignals(signals: Record<string, OdaraWardrobeSessionSignal>) {
+function writeStoredWardrobeSessionSignals(userId: string | null | undefined, signals: Record<string, OdaraWardrobeSessionSignal>) {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(ODARA_WARDROBE_SESSION_SIGNAL_STORAGE_KEY, JSON.stringify(signals));
+    window.sessionStorage.setItem(
+      getScopedWardrobeOnboardingStorageKey(ODARA_WARDROBE_SESSION_SIGNAL_STORAGE_KEY, userId),
+      JSON.stringify(signals),
+    );
   } catch {
     // Session storage is best-effort only for beta onboarding state.
   }
@@ -4114,19 +4122,22 @@ function writeStoredWardrobeActionLabelCount(count: number) {
   }
 }
 
-function readStoredWardrobeOnboardingSeen() {
+function readStoredWardrobeOnboardingSeen(userId?: string | null) {
   if (typeof window === 'undefined') return false;
   try {
-    return window.sessionStorage.getItem(ODARA_WARDROBE_ONBOARDING_SEEN_STORAGE_KEY) === '1';
+    return window.sessionStorage.getItem(getScopedWardrobeOnboardingStorageKey(ODARA_WARDROBE_ONBOARDING_SEEN_STORAGE_KEY, userId)) === '1';
   } catch {
     return false;
   }
 }
 
-function writeStoredWardrobeOnboardingSeen(seen: boolean) {
+function writeStoredWardrobeOnboardingSeen(userId: string | null | undefined, seen: boolean) {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(ODARA_WARDROBE_ONBOARDING_SEEN_STORAGE_KEY, seen ? '1' : '0');
+    window.sessionStorage.setItem(
+      getScopedWardrobeOnboardingStorageKey(ODARA_WARDROBE_ONBOARDING_SEEN_STORAGE_KEY, userId),
+      seen ? '1' : '0',
+    );
   } catch {
     // Session storage is best-effort only for first-run state.
   }
@@ -6497,9 +6508,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
-  const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals());
+  const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
   const [actionLabelCount, setActionLabelCount] = useState(() => readStoredWardrobeActionLabelCount());
-  const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen());
+  const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(userId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -6716,6 +6727,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [loadCatalog]);
 
   useEffect(() => {
+    setSessionSignals(readStoredWardrobeSessionSignals(userId));
+    setOnboardingSeen(readStoredWardrobeOnboardingSeen(userId));
+    setSurface('wardrobe');
+    setSelectedFragranceId(null);
+    setConfirmationState(null);
+    setPendingActionKey(null);
+    setActionError(null);
+  }, [userId]);
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, 180);
@@ -6725,16 +6746,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [searchQuery]);
 
   useEffect(() => {
-    writeStoredWardrobeSessionSignals(sessionSignals);
-  }, [sessionSignals]);
+    writeStoredWardrobeSessionSignals(userId, sessionSignals);
+  }, [sessionSignals, userId]);
 
   useEffect(() => {
     writeStoredWardrobeActionLabelCount(actionLabelCount);
   }, [actionLabelCount]);
 
   useEffect(() => {
-    writeStoredWardrobeOnboardingSeen(onboardingSeen);
-  }, [onboardingSeen]);
+    writeStoredWardrobeOnboardingSeen(userId, onboardingSeen);
+  }, [onboardingSeen, userId]);
 
   const collectionItems = payload?.items ?? [];
 
