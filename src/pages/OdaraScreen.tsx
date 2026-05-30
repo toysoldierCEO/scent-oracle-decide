@@ -3515,7 +3515,7 @@ const OdaraDestinationChrome: React.FC<{
           </svg>
         </button>
         <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90">
-          ODARA
+          VESPER
         </div>
         <div className="h-10 w-10" />
       </div>
