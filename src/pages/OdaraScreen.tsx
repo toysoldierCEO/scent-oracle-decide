@@ -8003,8 +8003,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between px-1">
-          <div className="text-[12px] leading-[1.55] text-foreground/48">Add a few more for sharper picks.</div>
+        <div className="flex items-center justify-end px-1">
           <button
             type="button"
             onClick={openSearch}
@@ -8018,9 +8017,44 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </button>
         </div>
 
+        {wardrobeBrandOptions.length > 0 ? (
+          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setWardrobeBrandFilter(null)}
+              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+              }}
+            >
+              All
+            </button>
+            {wardrobeBrandOptions.map((brand) => {
+              const active = wardrobeBrandFilter === brand;
+              return (
+                <button
+                  key={brand}
+                  type="button"
+                  onClick={() => setWardrobeBrandFilter(brand)}
+                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                  style={{
+                    border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                    background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                    color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                  }}
+                >
+                  {getWardrobeBrandLabel(brand)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         <OdaraInsetGroup emphasis>
           <div className="grid grid-cols-2 gap-3 px-4 py-4">
-            {wardrobeCards.map((card) => (
+            {visibleWardrobeCards.map((card) => (
               <div
                 key={card.fragrance_id}
                 className="rounded-[22px] border p-3"
