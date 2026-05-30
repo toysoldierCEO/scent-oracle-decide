@@ -3484,8 +3484,10 @@ const OdaraDestinationChrome: React.FC<{
   title?: string;
   eyebrow?: string;
   onClose: () => void;
+  onSearch?: () => void;
+  centerHeader?: boolean;
   children: React.ReactNode;
-}> = ({ title, eyebrow, onClose, children }) => (
+}> = ({ title, eyebrow, onClose, onSearch, centerHeader, children }) => (
   <div
     className="fixed inset-0 z-[60] overflow-y-auto"
     style={{
@@ -3514,13 +3516,28 @@ const OdaraDestinationChrome: React.FC<{
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
-        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90">
+        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[19px] font-semibold uppercase tracking-[0.46em] text-foreground/95">
           VESPER
         </div>
-        <div className="h-10 w-10" />
+        {onSearch ? (
+          <button
+            type="button"
+            aria-label="Search fragrances"
+            onClick={onSearch}
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </button>
+        ) : (
+          <div className="h-10 w-10" />
+        )}
       </div>
       {(eyebrow || title) && (
-        <div className={title ? 'mb-6 px-1' : 'mb-4 px-1'}>
+        <div className={`${title ? 'mb-6' : 'mb-4'} px-1 ${centerHeader ? 'text-center' : ''}`}>
           {eyebrow && (
             <div className={`${title ? 'mb-1.5' : ''} text-[10px] font-medium uppercase tracking-[0.36em] text-foreground/40`}>
               {eyebrow}
@@ -7015,11 +7032,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       });
   }, [visibleWardrobeCards]);
 
+  // Only data-backed sorts are exposed. Last Worn / Unworn require wear
+  // history that does not exist yet, so they are omitted rather than faked.
   const wardrobeSortOptions: { value: 'az' | 'newest' | 'last_worn' | 'unworn'; label: string }[] = [
     { value: 'az', label: 'A–Z' },
     { value: 'newest', label: 'Newest to Oldest' },
-    { value: 'last_worn', label: 'Last Worn' },
-    { value: 'unworn', label: 'Unworn' },
   ];
 
   const activeWardrobeSortLabel =
@@ -8075,8 +8092,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="relative flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2">
+        <div className="relative flex flex-wrap items-center justify-center gap-2 px-1">
+          <div className="flex items-center justify-center gap-2">
+
             {/* Filter pill + anchored dropdown */}
             <div className="relative">
               <button
@@ -8110,30 +8128,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     WebkitBackdropFilter: 'blur(14px)',
                   }}
                 >
-                  {/* Season — no source data, shown disabled rather than faked */}
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
-                    {!wardrobeSeasonAvailable ? (
-                      <div className="text-[8px] uppercase tracking-[0.2em] text-foreground/28">Unavailable</div>
-                    ) : null}
-                  </div>
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    {['All', 'Spring', 'Summer', 'Fall', 'Winter'].map((season) => (
-                      <span
-                        key={season}
-                        className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.18em]"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          background: 'rgba(255,255,255,0.02)',
-                          color: 'rgba(255,255,255,0.26)',
-                        }}
-                      >
-                        {season}
-                      </span>
-                    ))}
-                  </div>
-
                   {/* Family — toggles grouped browsing using real family_key data */}
+
                   <div className="mb-1 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
                   <div className="flex flex-col gap-1.5">
                     {[
@@ -8273,7 +8269,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
 
         {wardrobeBrandOptions.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex justify-center">
+          <div className="flex max-w-full gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
             <button
               type="button"
               onClick={() => setWardrobeBrandFilter(null)}
@@ -8304,6 +8302,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 </button>
               );
             })}
+          </div>
           </div>
         ) : null}
 
@@ -8418,7 +8417,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         : undefined;
 
   return (
-    <OdaraDestinationChrome title={chromeTitle || undefined} eyebrow={chromeEyebrow} onClose={onClose}>
+    <OdaraDestinationChrome
+      title={chromeTitle || undefined}
+      eyebrow={chromeEyebrow}
+      onClose={onClose}
+      onSearch={surface !== 'search' ? openSearch : undefined}
+      centerHeader={surface === 'wardrobe'}
+    >
       {surface === 'search'
         ? renderSearchContent()
         : surface === 'detail'
