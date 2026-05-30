@@ -3791,6 +3791,12 @@ type OdaraPersistedWardrobePreference = {
   updated_at: number;
 };
 
+type OdaraPersistedWardrobeWishlistSignal = {
+  fragrance_id: string;
+  status: 'would_buy';
+  updated_at: number;
+};
+
 type OdaraWardrobeCatalogItem = {
   fragrance_id: string;
   name: string;
@@ -4204,11 +4210,11 @@ function getWardrobeStatusRank(status: OdaraWardrobePrimaryStatus) {
   switch (status) {
     case 'owned':
       return 0;
-    case 'loved':
-      return 1;
-    case 'liked':
-      return 2;
     case 'wishlist':
+      return 1;
+    case 'loved':
+      return 2;
+    case 'liked':
       return 3;
     case 'disliked':
       return 4;
@@ -4226,9 +4232,9 @@ function deriveWardrobePrimaryStatus(signal: {
   negative_state: OdaraNegativeState;
 }): OdaraWardrobePrimaryStatus | null {
   if (signal.owned) return 'owned';
+  if (signal.wishlist) return 'wishlist';
   if (signal.heart_state === 2) return 'loved';
   if (signal.heart_state === 1) return 'liked';
-  if (signal.wishlist) return 'wishlist';
   if (signal.negative_state === 2) return 'disliked';
   if (signal.negative_state === 1) return 'not_for_me';
   return null;
@@ -4293,10 +4299,11 @@ function buildWardrobeCatalogItemFromSignal(signal: OdaraWardrobeSessionSignal):
 }
 
 function isWardrobeStatusPersisted(
-  signal: Pick<OdaraWardrobeSessionSignal, 'own_persisted' | 'heart_persisted' | 'negative_persisted'>,
+  signal: Pick<OdaraWardrobeSessionSignal, 'own_persisted' | 'wishlist_persisted' | 'heart_persisted' | 'negative_persisted'>,
   status: OdaraWardrobePrimaryStatus,
 ) {
   if (status === 'owned') return signal.own_persisted;
+  if (status === 'wishlist') return signal.wishlist_persisted;
   if (status === 'liked' || status === 'loved') return signal.heart_persisted;
   if (status === 'not_for_me' || status === 'disliked') return signal.negative_persisted;
   return false;
@@ -6476,6 +6483,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 }> = ({ onClose, userId }) => {
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
+  const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<OdaraWardrobeCatalogItem[]>([]);
@@ -6589,6 +6597,68 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     });
   }, [userId]);
 
+  const loadPersistedWishlists = useCallback(async () => {
+    if (!userId) {
+      setPersistedWishlistsById({});
+      return;
+    }
+
+    const { data, error: wishlistError } = await odaraSupabase.rpc('get_user_collection_wishlist_signals_v1' as any, {
+      p_user_id: userId,
+    } as any);
+
+    if (wishlistError) {
+      throw wishlistError;
+    }
+
+    const wishlistItems = Array.isArray((data as any)?.items)
+      ? (data as any).items
+      : Array.isArray(data)
+        ? data
+        : [];
+
+    const nextWishlists: Record<string, OdaraPersistedWardrobeWishlistSignal> = {};
+    for (const row of wishlistItems) {
+      const fragranceId = typeof row?.fragrance_id === 'string' ? row.fragrance_id.trim() : '';
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : '';
+      if (!fragranceId || status !== 'would_buy') continue;
+      nextWishlists[fragranceId] = {
+        fragrance_id: fragranceId,
+        status: 'would_buy',
+        updated_at: Number.isFinite(Date.parse(String(row?.updated_at ?? '')))
+          ? Date.parse(String(row?.updated_at ?? ''))
+          : Date.now(),
+      };
+    }
+
+    setPersistedWishlistsById(nextWishlists);
+    setSessionSignals((current) => {
+      const next = { ...current };
+      for (const [fragranceId, signal] of Object.entries(current)) {
+        const persisted = nextWishlists[fragranceId];
+        if (persisted) {
+          next[fragranceId] = {
+            ...signal,
+            wishlist: true,
+            wishlist_persisted: true,
+            updated_at: Math.max(signal.updated_at, persisted.updated_at),
+          };
+          continue;
+        }
+
+        if (signal.wishlist || signal.wishlist_persisted) {
+          next[fragranceId] = {
+            ...signal,
+            wishlist: false,
+            wishlist_persisted: false,
+            updated_at: Date.now(),
+          };
+        }
+      }
+      return next;
+    });
+  }, [userId]);
+
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setCatalogError(null);
@@ -6623,6 +6693,23 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       cancelled = true;
     };
   }, [loadPersistedPreferences]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadPersistedWishlists();
+      } catch (wishlistHydrateError) {
+        if (!cancelled) {
+          console.error('[Odara] wardrobe wishlist hydrate failed', wishlistHydrateError);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPersistedWishlists]);
 
   useEffect(() => {
     void loadCatalog();
@@ -6704,6 +6791,19 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       });
     }
 
+    for (const persistedWishlist of Object.values(persistedWishlistsById)) {
+      const resolvedItem = catalogById.get(persistedWishlist.fragrance_id)
+        ?? (collectionItemById.get(persistedWishlist.fragrance_id) ? buildWardrobeCatalogItemFromCollectionItem(collectionItemById.get(persistedWishlist.fragrance_id)!) : null);
+      if (!resolvedItem) continue;
+      const baseSignal = next[persistedWishlist.fragrance_id] ?? createWardrobeSessionSignalFromItem(resolvedItem);
+      next[persistedWishlist.fragrance_id] = {
+        ...baseSignal,
+        wishlist: !baseSignal.owned,
+        wishlist_persisted: !baseSignal.owned,
+        updated_at: persistedWishlist.updated_at,
+      };
+    }
+
     for (const persisted of Object.values(persistedPreferencesById)) {
       const resolvedItem = catalogById.get(persisted.fragrance_id)
         ?? (collectionItemById.get(persisted.fragrance_id) ? buildWardrobeCatalogItemFromCollectionItem(collectionItemById.get(persisted.fragrance_id)!) : null);
@@ -6749,7 +6849,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         source_confidence: signal.source_confidence ?? baseSignal.source_confidence,
         image_url: signal.image_url ?? baseSignal.image_url,
         thumbnail_url: signal.thumbnail_url ?? baseSignal.thumbnail_url,
-        wishlist: resolvedNegativeState > 0 ? false : signal.wishlist,
+        wishlist: baseSignal.owned ? false : (resolvedNegativeState > 0 ? false : signal.wishlist),
+        wishlist_persisted: baseSignal.owned ? false : (resolvedNegativeState > 0 ? false : signal.wishlist_persisted),
         heart_state: resolvedHeartState,
         heart_persisted: resolvedHeartPersisted,
         negative_state: resolvedNegativeState,
@@ -6758,7 +6859,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
 
     return next;
-  }, [catalogById, collectionItemById, collectionItems, persistedPreferencesById, sessionSignals]);
+  }, [catalogById, collectionItemById, collectionItems, persistedPreferencesById, persistedWishlistsById, sessionSignals]);
 
   const wardrobeCards = useMemo(() => {
     const cards = Object.values(effectiveSignalMap)
@@ -6954,11 +7055,20 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         owned: true,
         own_persisted: true,
         wishlist: false,
+        wishlist_persisted: false,
         negative_state: 0,
         negative_persisted: false,
         updated_at: Date.now(),
       }));
-      await loadCollection();
+      const refreshResults = await Promise.allSettled([
+        loadCollection(),
+        loadPersistedWishlists(),
+      ]);
+      for (const result of refreshResults) {
+        if (result.status === 'rejected') {
+          console.error('[Odara] post-owned wardrobe refresh failed', result.reason);
+        }
+      }
       recordActionInteraction();
       setConfirmationState({
         kind: 'owned',
@@ -6972,33 +7082,70 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setPendingActionKey(null);
     }
-  }, [loadCollection, recordActionInteraction, selectedCatalogItem, selectedOwned, upsertSessionSignal, userId]);
+  }, [loadCollection, loadPersistedWishlists, recordActionInteraction, selectedCatalogItem, selectedOwned, upsertSessionSignal, userId]);
 
-  const handleWishlist = useCallback(() => {
-    if (!selectedCatalogItem || selectedOwned) return;
+  const handleWishlist = useCallback(async () => {
+    if (!selectedCatalogItem || !userId || selectedOwned) return;
     const nextWishlist = !selectedWishlist;
-    upsertSessionSignal(selectedCatalogItem, (current) => ({
-      ...current,
-      wishlist: nextWishlist,
-      wishlist_persisted: false,
-      negative_state: nextWishlist ? 0 : current.negative_state,
-      negative_persisted: false,
-      updated_at: Date.now(),
-    }));
-    recordActionInteraction();
     setActionError(null);
-    if (nextWishlist) {
-      setConfirmationState({
-        kind: 'wishlist',
-        fragrance_id: selectedCatalogItem.fragrance_id,
-        durability: 'session',
-        status_label: 'Wishlist',
-      });
-      setSurface('confirmation');
-      return;
+    setPendingActionKey(`wishlist:${selectedCatalogItem.fragrance_id}`);
+
+    try {
+      const { data, error: rpcError } = await odaraSupabase.rpc('set_user_collection_wishlist_v1' as any, {
+        p_fragrance_id: selectedCatalogItem.fragrance_id,
+        p_next_active: nextWishlist,
+        p_source: 'search',
+      } as any);
+
+      if (rpcError) throw rpcError;
+
+      const wishlistActive = Boolean((data as any)?.wishlist_active);
+      upsertSessionSignal(selectedCatalogItem, (current) => ({
+        ...current,
+        wishlist: wishlistActive,
+        wishlist_persisted: wishlistActive,
+        negative_state: wishlistActive ? 0 : current.negative_state,
+        negative_persisted: wishlistActive ? false : current.negative_persisted,
+        updated_at: Date.now(),
+      }));
+      const refreshResults = await Promise.allSettled([
+        loadCollection(),
+        loadPersistedPreferences(),
+        loadPersistedWishlists(),
+      ]);
+      for (const result of refreshResults) {
+        if (result.status === 'rejected') {
+          console.error('[Odara] post-wishlist refresh failed', result.reason);
+        }
+      }
+      recordActionInteraction();
+      if (wishlistActive) {
+        setConfirmationState({
+          kind: 'wishlist',
+          fragrance_id: selectedCatalogItem.fragrance_id,
+          durability: 'persisted',
+          status_label: 'Wishlist',
+        });
+        setSurface('confirmation');
+        return;
+      }
+      setConfirmationState(null);
+    } catch {
+      setActionError("Couldn't save wishlist. Try again.");
+    } finally {
+      setPendingActionKey(null);
     }
-    setConfirmationState(null);
-  }, [recordActionInteraction, selectedCatalogItem, selectedOwned, selectedWishlist, upsertSessionSignal]);
+  }, [
+    loadCollection,
+    loadPersistedPreferences,
+    loadPersistedWishlists,
+    recordActionInteraction,
+    selectedCatalogItem,
+    selectedOwned,
+    selectedWishlist,
+    upsertSessionSignal,
+    userId,
+  ]);
 
   const handleHeart = useCallback(async () => {
     if (!selectedCatalogItem || !userId) return;
@@ -7060,6 +7207,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setActionError(null);
 
     try {
+      if (nextNegativeState > 0 && selectedWishlist) {
+        const { error: wishlistError } = await odaraSupabase.rpc('set_user_collection_wishlist_v1' as any, {
+          p_fragrance_id: selectedCatalogItem.fragrance_id,
+          p_next_active: false,
+          p_source: 'search',
+        } as any);
+
+        if (wishlistError) throw wishlistError;
+      }
+
       const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_preference_v1' as any, {
         p_fragrance_id: selectedCatalogItem.fragrance_id,
         p_next_state: negativeStateToPreferenceState(nextNegativeState),
@@ -7073,7 +7230,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       upsertSessionSignal(selectedCatalogItem, (current) => ({
         ...current,
         wishlist: resolvedNegativeState > 0 ? false : current.wishlist,
-        wishlist_persisted: false,
+        wishlist_persisted: resolvedNegativeState > 0 ? false : current.wishlist_persisted,
         heart_state: resolvedHeartState,
         heart_persisted: resolvedHeartState > 0,
         negative_state: resolvedNegativeState,
@@ -7083,6 +7240,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       const refreshResults = await Promise.allSettled([
         loadCollection(),
         loadPersistedPreferences(),
+        loadPersistedWishlists(),
       ]);
       for (const result of refreshResults) {
         if (result.status === 'rejected') {
@@ -7109,9 +7267,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [
     loadCollection,
     loadPersistedPreferences,
+    loadPersistedWishlists,
     recordActionInteraction,
     selectedCatalogItem,
     selectedNegativeState,
+    selectedWishlist,
     upsertSessionSignal,
     userId,
   ]);
@@ -7338,6 +7498,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     ].filter((section) => section.values.length > 0);
 
     const ownPending = pendingActionKey === `own:${selectedCatalogItem.fragrance_id}`;
+    const wishlistPending = pendingActionKey === `wishlist:${selectedCatalogItem.fragrance_id}`;
     const heartPending = pendingActionKey === `heart:${selectedCatalogItem.fragrance_id}`;
     const negativePending = pendingActionKey === `negative:${selectedCatalogItem.fragrance_id}`;
 
@@ -7512,9 +7673,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 type="button"
                 aria-label={selectedWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
                 aria-pressed={selectedWishlist}
-                disabled={selectedOwned}
-                onClick={handleWishlist}
-                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-60"
+                disabled={selectedOwned || wishlistPending}
+                onClick={() => {
+                  void handleWishlist();
+                }}
+                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-70"
                 style={{
                   ...actionButtonBase,
                   borderColor: selectedWishlist ? 'rgba(125,161,255,0.3)' : 'rgba(255,255,255,0.08)',
