@@ -8404,7 +8404,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       : surface === 'confirmation'
         ? ''
         : wardrobeCards.length > 0
-          ? 'Vesper'
+          ? '' // top wordmark already reads VESPER — no duplicate serif title
           : shouldShowFirstRun
             ? 'Build your wardrobe'
             : 'Vesper';
@@ -8413,7 +8413,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     ? 'Search by name, brand, or notes.'
     : surface === 'confirmation'
       ? 'Wardrobe updated'
-      : undefined;
+      : surface === 'wardrobe' && wardrobeCards.length > 0
+        ? 'My Collection'
+        : undefined;
 
   return (
     <OdaraDestinationChrome title={chromeTitle || undefined} eyebrow={chromeEyebrow} onClose={onClose}>
