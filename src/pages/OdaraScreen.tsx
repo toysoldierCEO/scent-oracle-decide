@@ -3515,7 +3515,7 @@ const OdaraDestinationChrome: React.FC<{
           </svg>
         </button>
         <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90">
-          ODARA
+          VESPER
         </div>
         <div className="h-10 w-10" />
       </div>
@@ -6509,6 +6509,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeBrandFilter, setWardrobeBrandFilter] = useState<string | null>(null);
   const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState<OdaraWardrobePrimaryStatus | null>(null);
   const [wardrobeSortMode, setWardrobeSortMode] = useState<'recommended' | 'name' | 'brand'>('recommended');
+  const [wardrobeSheet, setWardrobeSheet] = useState<'filter' | 'sort' | null>(null);
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
   const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
@@ -6989,19 +6990,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return cards;
   }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
 
-  const wardrobeSortLabel =
-    wardrobeSortMode === 'name'
-      ? 'Name A–Z'
-      : wardrobeSortMode === 'brand'
-        ? 'Brand'
-        : 'Recommended';
+  const wardrobeSortOptions: { value: typeof wardrobeSortMode; label: string }[] = [
+    { value: 'recommended', label: 'Recommended' },
+    { value: 'name', label: 'Name A–Z' },
+    { value: 'brand', label: 'Brand A–Z' },
+  ];
 
-  const cycleWardrobeSort = () => {
-    haptic('light');
-    setWardrobeSortMode((prev) =>
-      prev === 'recommended' ? 'name' : prev === 'name' ? 'brand' : 'recommended',
-    );
-  };
+  const activeWardrobeFilterCount =
+    (wardrobeBrandFilter ? 1 : 0) + (wardrobeStatusFilter ? 1 : 0);
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -8052,24 +8048,43 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2 px-1">
-          <button
-            type="button"
-            onClick={cycleWardrobeSort}
-            className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-            style={{
-              border: '1px solid rgba(255,255,255,0.1)',
-              background: 'rgba(255,255,255,0.04)',
-              color: 'rgba(255,255,255,0.74)',
-            }}
-          >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m3 16 4 4 4-4" />
-              <path d="M7 20V4" />
-              <path d="m21 8-4-4-4 4" />
-              <path d="M17 4v16" />
-            </svg>
-            {wardrobeSortLabel}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWardrobeSheet('filter')}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+              }}
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="7" y1="12" x2="17" y2="12" />
+                <line x1="10" y1="18" x2="14" y2="18" />
+              </svg>
+              Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWardrobeSheet('sort')}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.74)',
+              }}
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m3 16 4 4 4-4" />
+                <path d="M7 20V4" />
+                <path d="m21 8-4-4-4 4" />
+                <path d="M17 4v16" />
+              </svg>
+              Sort
+            </button>
+          </div>
           <button
             type="button"
             onClick={openSearch}
@@ -8083,41 +8098,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </button>
         </div>
 
-        {wardrobeStatusOptions.length > 1 ? (
-          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => setWardrobeStatusFilter(null)}
-              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-              style={{
-                border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-              }}
-            >
-              All
-            </button>
-            {wardrobeStatusOptions.map((status) => {
-              const active = wardrobeStatusFilter === status;
-              const tone = getWardrobePrimaryStatusTone(status);
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setWardrobeStatusFilter(status)}
-                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                  style={{
-                    border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
-                    background: active ? tone.background : 'rgba(255,255,255,0.03)',
-                    color: active ? tone.color : 'rgba(255,255,255,0.68)',
-                  }}
-                >
-                  {getWardrobePrimaryStatusLabel(status)}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
 
         {wardrobeBrandOptions.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -8191,7 +8171,171 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             ))}
           </div>
         </OdaraInsetGroup>
+
+        {wardrobeSheet ? (
+          <div
+            className="fixed inset-0 z-[70] flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label={wardrobeSheet === 'filter' ? 'Filter collection' : 'Sort collection'}
+            onClick={() => setWardrobeSheet(null)}
+          >
+            <div
+              className="absolute inset-0"
+              style={{ background: 'rgba(4,4,6,0.62)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+            />
+            <div
+              className="relative mx-auto w-full max-w-md rounded-t-[28px] border-t px-5 pb-9 pt-4"
+              style={{
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(26,24,30,0.96) 0%, rgba(12,12,15,0.98) 100%)',
+                boxShadow: '0 -24px 60px rgba(0,0,0,0.5)',
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mx-auto mb-5 h-1 w-10 rounded-full" style={{ background: 'rgba(255,255,255,0.16)' }} />
+
+              {wardrobeSheet === 'filter' ? (
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] uppercase tracking-[0.32em] text-foreground/50">Filter</div>
+                    {activeWardrobeFilterCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWardrobeStatusFilter(null);
+                          setWardrobeBrandFilter(null);
+                        }}
+                        className="text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
+                      >
+                        Clear all
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {wardrobeStatusOptions.length > 1 ? (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="text-[10px] uppercase tracking-[0.26em] text-foreground/40">Status</div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWardrobeStatusFilter(null)}
+                          className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                          style={{
+                            border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                            background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                            color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                          }}
+                        >
+                          All
+                        </button>
+                        {wardrobeStatusOptions.map((status) => {
+                          const active = wardrobeStatusFilter === status;
+                          const tone = getWardrobePrimaryStatusTone(status);
+                          return (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => setWardrobeStatusFilter(active ? null : status)}
+                              className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                              style={{
+                                border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
+                                background: active ? tone.background : 'rgba(255,255,255,0.03)',
+                                color: active ? tone.color : 'rgba(255,255,255,0.68)',
+                              }}
+                            >
+                              {getWardrobePrimaryStatusLabel(status)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {wardrobeBrandOptions.length > 0 ? (
+                    <div className="flex flex-col gap-2.5">
+                      <div className="text-[10px] uppercase tracking-[0.26em] text-foreground/40">Brand</div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWardrobeBrandFilter(null)}
+                          className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                          style={{
+                            border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                            background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                            color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                          }}
+                        >
+                          All
+                        </button>
+                        {wardrobeBrandOptions.map((brand) => {
+                          const active = wardrobeBrandFilter === brand;
+                          return (
+                            <button
+                              key={brand}
+                              type="button"
+                              onClick={() => setWardrobeBrandFilter(active ? null : brand)}
+                              className="whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                              style={{
+                                border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                                background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                                color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                              }}
+                            >
+                              {getWardrobeBrandLabel(brand)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => setWardrobeSheet(null)}
+                    className="mt-2 w-full rounded-full py-3 text-[11px] uppercase tracking-[0.24em] text-[#f8e5b9]"
+                    style={{ border: '1px solid rgba(218,188,124,0.3)', background: 'rgba(218,188,124,0.12)' }}
+                  >
+                    Show {visibleWardrobeCards.length} {visibleWardrobeCards.length === 1 ? 'result' : 'results'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="mb-2 text-[11px] uppercase tracking-[0.32em] text-foreground/50">Sort by</div>
+                  {wardrobeSortOptions.map((option) => {
+                    const active = wardrobeSortMode === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setWardrobeSortMode(option.value);
+                          setWardrobeSheet(null);
+                        }}
+                        className="flex items-center justify-between rounded-2xl px-4 py-3 text-[13px] transition-colors"
+                        style={{
+                          border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                          background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                          color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.82)',
+                        }}
+                      >
+                        {option.label}
+                        {active ? (
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
+
     );
   };
 
