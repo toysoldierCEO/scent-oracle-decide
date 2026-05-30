@@ -8055,24 +8055,43 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2 px-1">
-          <button
-            type="button"
-            onClick={cycleWardrobeSort}
-            className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-            style={{
-              border: '1px solid rgba(255,255,255,0.1)',
-              background: 'rgba(255,255,255,0.04)',
-              color: 'rgba(255,255,255,0.74)',
-            }}
-          >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m3 16 4 4 4-4" />
-              <path d="M7 20V4" />
-              <path d="m21 8-4-4-4 4" />
-              <path d="M17 4v16" />
-            </svg>
-            {wardrobeSortLabel}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWardrobeSheet('filter')}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+              }}
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="7" y1="12" x2="17" y2="12" />
+                <line x1="10" y1="18" x2="14" y2="18" />
+              </svg>
+              Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWardrobeSheet('sort')}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.74)',
+              }}
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m3 16 4 4 4-4" />
+                <path d="M7 20V4" />
+                <path d="m21 8-4-4-4 4" />
+                <path d="M17 4v16" />
+              </svg>
+              Sort
+            </button>
+          </div>
           <button
             type="button"
             onClick={openSearch}
@@ -8086,41 +8105,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </button>
         </div>
 
-        {wardrobeStatusOptions.length > 1 ? (
-          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => setWardrobeStatusFilter(null)}
-              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-              style={{
-                border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-              }}
-            >
-              All
-            </button>
-            {wardrobeStatusOptions.map((status) => {
-              const active = wardrobeStatusFilter === status;
-              const tone = getWardrobePrimaryStatusTone(status);
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setWardrobeStatusFilter(status)}
-                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                  style={{
-                    border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
-                    background: active ? tone.background : 'rgba(255,255,255,0.03)',
-                    color: active ? tone.color : 'rgba(255,255,255,0.68)',
-                  }}
-                >
-                  {getWardrobePrimaryStatusLabel(status)}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
 
         {wardrobeBrandOptions.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
