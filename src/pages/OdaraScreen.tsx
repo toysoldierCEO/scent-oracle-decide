@@ -6990,13 +6990,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return cards;
   }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
 
-  const wardrobeSortLabel =
-    wardrobeSortMode === 'name'
-      ? 'Name A–Z'
-      : wardrobeSortMode === 'brand'
-        ? 'Brand A–Z'
-        : 'Recommended';
-
   const wardrobeSortOptions: { value: typeof wardrobeSortMode; label: string }[] = [
     { value: 'recommended', label: 'Recommended' },
     { value: 'name', label: 'Name A–Z' },
