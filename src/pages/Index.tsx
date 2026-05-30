@@ -826,6 +826,18 @@ const Index = () => {
                     />
                   ) : null}
 
+                  {!isSignUp ? (
+                    <label className="flex select-none items-center gap-2.5 px-1 pt-0.5 text-[12px] text-muted-foreground/70">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => handleRememberMeToggle(event.target.checked)}
+                        className="h-4 w-4 cursor-pointer appearance-none rounded-[5px] border border-border/25 bg-accent/40 transition-colors checked:border-foreground/40 checked:bg-foreground/90 checked:bg-[length:11px_11px] checked:bg-center checked:bg-no-repeat checked:[background-image:url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%223%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><polyline%20points=%2220%206%209%2017%204%2012%22/></svg>')]"
+                      />
+                      Remember me
+                    </label>
+                  ) : null}
+
                   {isSignUp ? (
                     <p className="px-1 text-[11px] leading-5 text-muted-foreground/55">
                       Passwords currently require at least {PASSWORD_MIN_LENGTH} characters. Final policy should still be confirmed in Supabase Auth settings.
