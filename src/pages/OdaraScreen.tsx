@@ -11805,7 +11805,7 @@ const OdaraScreen = ({
       clearLockedSelection();
       setUnlockFlash(true);
       window.setTimeout(() => setUnlockFlash(false), 700);
-      pulseLock();
+      pulseLock('unlock');
       haptic('light');
       return;
     }
