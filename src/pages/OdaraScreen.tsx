@@ -11821,7 +11821,7 @@ const OdaraScreen = ({
     window.setTimeout(() => setLikeFlash(false), 600);
     setLockFlash(true);
     window.setTimeout(() => setLockFlash(false), 700);
-    pulseLock();
+    pulseLock('lock');
 
     // NOTE: backend "like" persistence is not yet wired — when it lands,
     // call it here alongside onAccept. Lock persistence runs through onAccept.
