@@ -6949,13 +6949,59 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeBrandFilter, wardrobeBrandOptions]);
 
-  const visibleWardrobeCards = useMemo(() => {
-    if (!wardrobeBrandFilter) return wardrobeCards;
-    const target = wardrobeBrandFilter.toLowerCase();
-    return wardrobeCards.filter(
-      (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+  // Status options present in the current collection, ordered by status rank.
+  const wardrobeStatusOptions = useMemo(() => {
+    const present = new Set<OdaraWardrobePrimaryStatus>();
+    wardrobeCards.forEach((card) => present.add(card.primary_status));
+    return Array.from(present).sort(
+      (a, b) => getWardrobeStatusRank(a) - getWardrobeStatusRank(b),
     );
-  }, [wardrobeCards, wardrobeBrandFilter]);
+  }, [wardrobeCards]);
+
+  // Keep an active status filter valid as the collection changes.
+  useEffect(() => {
+    if (wardrobeStatusFilter && !wardrobeStatusOptions.includes(wardrobeStatusFilter)) {
+      setWardrobeStatusFilter(null);
+    }
+  }, [wardrobeStatusFilter, wardrobeStatusOptions]);
+
+  const visibleWardrobeCards = useMemo(() => {
+    let cards = wardrobeCards;
+    if (wardrobeBrandFilter) {
+      const target = wardrobeBrandFilter.toLowerCase();
+      cards = cards.filter(
+        (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+      );
+    }
+    if (wardrobeStatusFilter) {
+      cards = cards.filter((card) => card.primary_status === wardrobeStatusFilter);
+    }
+    if (wardrobeSortMode === 'name') {
+      cards = [...cards].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
+    } else if (wardrobeSortMode === 'brand') {
+      cards = [...cards].sort((a, b) =>
+        getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
+          || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
+    }
+    return cards;
+  }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
+
+  const wardrobeSortLabel =
+    wardrobeSortMode === 'name'
+      ? 'Name A–Z'
+      : wardrobeSortMode === 'brand'
+        ? 'Brand'
+        : 'Recommended';
+
+  const cycleWardrobeSort = () => {
+    triggerHaptic('light');
+    setWardrobeSortMode((prev) =>
+      prev === 'recommended' ? 'name' : prev === 'name' ? 'brand' : 'recommended',
+    );
+  };
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
