@@ -673,6 +673,8 @@ const Index = () => {
 
       if (err) {
         setAuthError(err.message);
+      } else {
+        persistRememberedEmail(rememberMe, normalizedEmail);
       }
     } finally {
       setLoading(false);
