@@ -8092,8 +8092,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="relative flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2">
+        <div className="relative flex flex-wrap items-center justify-center gap-2 px-1">
+          <div className="flex items-center justify-center gap-2">
+
             {/* Filter pill + anchored dropdown */}
             <div className="relative">
               <button
