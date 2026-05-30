@@ -8128,30 +8128,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     WebkitBackdropFilter: 'blur(14px)',
                   }}
                 >
-                  {/* Season — no source data, shown disabled rather than faked */}
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
-                    {!wardrobeSeasonAvailable ? (
-                      <div className="text-[8px] uppercase tracking-[0.2em] text-foreground/28">Unavailable</div>
-                    ) : null}
-                  </div>
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    {['All', 'Spring', 'Summer', 'Fall', 'Winter'].map((season) => (
-                      <span
-                        key={season}
-                        className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.18em]"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          background: 'rgba(255,255,255,0.02)',
-                          color: 'rgba(255,255,255,0.26)',
-                        }}
-                      >
-                        {season}
-                      </span>
-                    ))}
-                  </div>
-
                   {/* Family — toggles grouped browsing using real family_key data */}
+
                   <div className="mb-1 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
                   <div className="flex flex-col gap-1.5">
                     {[
