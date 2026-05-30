@@ -7032,11 +7032,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       });
   }, [visibleWardrobeCards]);
 
+  // Only data-backed sorts are exposed. Last Worn / Unworn require wear
+  // history that does not exist yet, so they are omitted rather than faked.
   const wardrobeSortOptions: { value: 'az' | 'newest' | 'last_worn' | 'unworn'; label: string }[] = [
     { value: 'az', label: 'A–Z' },
     { value: 'newest', label: 'Newest to Oldest' },
-    { value: 'last_worn', label: 'Last Worn' },
-    { value: 'unworn', label: 'Unworn' },
   ];
 
   const activeWardrobeSortLabel =
