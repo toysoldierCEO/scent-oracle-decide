@@ -6507,9 +6507,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [wardrobeBrandFilter, setWardrobeBrandFilter] = useState<string | null>(null);
-  const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState<OdaraWardrobePrimaryStatus | null>(null);
-  const [wardrobeSortMode, setWardrobeSortMode] = useState<'recommended' | 'name' | 'brand'>('recommended');
-  const [wardrobeSheet, setWardrobeSheet] = useState<'filter' | 'sort' | null>(null);
+  const [wardrobeFamilyMode, setWardrobeFamilyMode] = useState(false);
+  const [wardrobeSortMode, setWardrobeSortMode] = useState<'az' | 'newest' | 'last_worn' | 'unworn' | null>(null);
+  const [wardrobeMenu, setWardrobeMenu] = useState<'filter' | 'sort' | null>(null);
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
   const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
@@ -6950,21 +6950,22 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeBrandFilter, wardrobeBrandOptions]);
 
-  // Status options present in the current collection, ordered by status rank.
-  const wardrobeStatusOptions = useMemo(() => {
-    const present = new Set<OdaraWardrobePrimaryStatus>();
-    wardrobeCards.forEach((card) => present.add(card.primary_status));
-    return Array.from(present).sort(
-      (a, b) => getWardrobeStatusRank(a) - getWardrobeStatusRank(b),
-    );
-  }, [wardrobeCards]);
+  // Recency lookup (last-updated timestamp) used for the "Newest" sort.
+  const getWardrobeCardRecency = useCallback(
+    (fragranceId: string) => effectiveSignalMap[fragranceId]?.updated_at ?? 0,
+    [effectiveSignalMap],
+  );
 
-  // Keep an active status filter valid as the collection changes.
-  useEffect(() => {
-    if (wardrobeStatusFilter && !wardrobeStatusOptions.includes(wardrobeStatusFilter)) {
-      setWardrobeStatusFilter(null);
-    }
-  }, [wardrobeStatusFilter, wardrobeStatusOptions]);
+  // Sort availability — only expose options backed by reliable data.
+  // Season has no source field, and there is no wear-history field, so
+  // Season / Last Worn / Unworn are surfaced as disabled rather than faked.
+  const wardrobeSortAvailability: Record<'az' | 'newest' | 'last_worn' | 'unworn', boolean> = {
+    az: true,
+    newest: true,
+    last_worn: false,
+    unworn: false,
+  };
+  const wardrobeSeasonAvailable = false;
 
   const visibleWardrobeCards = useMemo(() => {
     let cards = wardrobeCards;
@@ -6974,30 +6975,57 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
       );
     }
-    if (wardrobeStatusFilter) {
-      cards = cards.filter((card) => card.primary_status === wardrobeStatusFilter);
-    }
-    if (wardrobeSortMode === 'name') {
+    if (wardrobeSortMode === 'az') {
       cards = [...cards].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
-    } else if (wardrobeSortMode === 'brand') {
-      cards = [...cards].sort((a, b) =>
-        getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
-          || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    } else if (wardrobeSortMode === 'newest') {
+      cards = [...cards].sort(
+        (a, b) => getWardrobeCardRecency(b.fragrance_id) - getWardrobeCardRecency(a.fragrance_id),
       );
     }
+    // 'last_worn' / 'unworn' have no reliable backing data — fall back to
+    // the default ordering rather than inventing wear history.
     return cards;
-  }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
+  }, [wardrobeCards, wardrobeBrandFilter, wardrobeSortMode, getWardrobeCardRecency]);
 
-  const wardrobeSortOptions: { value: typeof wardrobeSortMode; label: string }[] = [
-    { value: 'recommended', label: 'Recommended' },
-    { value: 'name', label: 'Name A–Z' },
-    { value: 'brand', label: 'Brand A–Z' },
+  // Grouped family browsing — built from real family_key data, empty groups hidden.
+  const wardrobeFamilyGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; cards: typeof visibleWardrobeCards }>();
+    visibleWardrobeCards.forEach((card) => {
+      const familyKey = readTrimmedLayerText(card.family_key);
+      const key = familyKey ? familyKey.toLowerCase() : '__other__';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: familyKey
+            ? (readTrimmedLayerText(card.family_label) || buildFamilyLabel(familyKey))
+            : 'Uncategorized',
+          cards: [],
+        });
+      }
+      groups.get(key)!.cards.push(card);
+    });
+    return Array.from(groups.values())
+      .filter((group) => group.cards.length > 0)
+      .sort((a, b) => {
+        if (a.key === '__other__') return 1;
+        if (b.key === '__other__') return -1;
+        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+      });
+  }, [visibleWardrobeCards]);
+
+  const wardrobeSortOptions: { value: 'az' | 'newest' | 'last_worn' | 'unworn'; label: string }[] = [
+    { value: 'az', label: 'A–Z' },
+    { value: 'newest', label: 'Newest to Oldest' },
+    { value: 'last_worn', label: 'Last Worn' },
+    { value: 'unworn', label: 'Unworn' },
   ];
 
-  const activeWardrobeFilterCount =
-    (wardrobeBrandFilter ? 1 : 0) + (wardrobeStatusFilter ? 1 : 0);
+  const activeWardrobeSortLabel =
+    wardrobeSortOptions.find((option) => option.value === wardrobeSortMode)?.label ?? null;
+
+  const activeWardrobeFilterCount = (wardrobeFamilyMode ? 1 : 0);
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -8047,55 +8075,200 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-2 px-1">
+        <div className="relative flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setWardrobeSheet('filter')}
-              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-              style={{
-                border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
-                background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
-                color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
-              }}
-            >
-              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="4" y1="6" x2="20" y2="6" />
-                <line x1="7" y1="12" x2="17" y2="12" />
-                <line x1="10" y1="18" x2="14" y2="18" />
-              </svg>
-              Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
-            </button>
-            <button
-              type="button"
-              onClick={() => setWardrobeSheet('sort')}
-              className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-              style={{
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(255,255,255,0.04)',
-                color: 'rgba(255,255,255,0.74)',
-              }}
-            >
-              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m3 16 4 4 4-4" />
-                <path d="M7 20V4" />
-                <path d="m21 8-4-4-4 4" />
-                <path d="M17 4v16" />
-              </svg>
-              Sort
-            </button>
+            {/* Filter pill + anchored dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setWardrobeMenu(wardrobeMenu === 'filter' ? null : 'filter')}
+                aria-haspopup="menu"
+                aria-expanded={wardrobeMenu === 'filter'}
+                className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
+                style={{
+                  border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                  background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                  color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+                }}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <line x1="7" y1="12" x2="17" y2="12" />
+                  <line x1="10" y1="18" x2="14" y2="18" />
+                </svg>
+                Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
+              </button>
+              {wardrobeMenu === 'filter' ? (
+                <div
+                  className="absolute left-0 top-[calc(100%+8px)] z-[80] w-60 rounded-[18px] border p-3"
+                  role="menu"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
+                    boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(14px)',
+                    WebkitBackdropFilter: 'blur(14px)',
+                  }}
+                >
+                  {/* Season — no source data, shown disabled rather than faked */}
+                  <div className="mb-1 flex items-center justify-between">
+                    <div className="text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
+                    {!wardrobeSeasonAvailable ? (
+                      <div className="text-[8px] uppercase tracking-[0.2em] text-foreground/28">Unavailable</div>
+                    ) : null}
+                  </div>
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {['All', 'Spring', 'Summer', 'Fall', 'Winter'].map((season) => (
+                      <span
+                        key={season}
+                        className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.18em]"
+                        style={{
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          background: 'rgba(255,255,255,0.02)',
+                          color: 'rgba(255,255,255,0.26)',
+                        }}
+                      >
+                        {season}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Family — toggles grouped browsing using real family_key data */}
+                  <div className="mb-1 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { value: false, label: 'All fragrances' },
+                      { value: true, label: 'Group by family' },
+                    ].map((option) => {
+                      const active = wardrobeFamilyMode === option.value;
+                      return (
+                        <button
+                          key={String(option.value)}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => {
+                            setWardrobeFamilyMode(option.value);
+                            setWardrobeMenu(null);
+                          }}
+                          className="flex items-center justify-between rounded-xl px-3 py-2 text-[11px] transition-colors"
+                          style={{
+                            border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                            background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                            color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                          }}
+                        >
+                          {option.label}
+                          {active ? (
+                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M20 6 9 17l-5-5" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Sort pill + anchored dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setWardrobeMenu(wardrobeMenu === 'sort' ? null : 'sort')}
+                aria-haspopup="menu"
+                aria-expanded={wardrobeMenu === 'sort'}
+                className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
+                style={{
+                  border: `1px solid ${activeWardrobeSortLabel ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                  background: activeWardrobeSortLabel ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                  color: activeWardrobeSortLabel ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+                }}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m3 16 4 4 4-4" />
+                  <path d="M7 20V4" />
+                  <path d="m21 8-4-4-4 4" />
+                  <path d="M17 4v16" />
+                </svg>
+                {activeWardrobeSortLabel ?? 'Sort'}
+              </button>
+              {wardrobeMenu === 'sort' ? (
+                <div
+                  className="absolute left-0 top-[calc(100%+8px)] z-[80] w-56 rounded-[18px] border p-2"
+                  role="menu"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
+                    boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(14px)',
+                    WebkitBackdropFilter: 'blur(14px)',
+                  }}
+                >
+                  {wardrobeSortOptions.map((option) => {
+                    const active = wardrobeSortMode === option.value;
+                    const available = wardrobeSortAvailability[option.value];
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        disabled={!available}
+                        onClick={() => {
+                          if (!available) return;
+                          setWardrobeSortMode(active ? null : option.value);
+                          setWardrobeMenu(null);
+                        }}
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors disabled:cursor-not-allowed"
+                        style={{
+                          border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'transparent'}`,
+                          background: active ? 'rgba(218,188,124,0.1)' : 'transparent',
+                          color: !available
+                            ? 'rgba(255,255,255,0.26)'
+                            : active
+                              ? 'rgba(248,229,185,0.96)'
+                              : 'rgba(255,255,255,0.82)',
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {!available ? (
+                          <span className="text-[8px] uppercase tracking-[0.2em] text-foreground/28">Unavailable</span>
+                        ) : active ? (
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
             onClick={openSearch}
-            className="shrink-0 rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
+            className="shrink-0 rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
             style={{
               border: '1px solid rgba(218,188,124,0.28)',
               background: 'rgba(218,188,124,0.12)',
             }}
           >
-            + Add fragrance
+            + Add
           </button>
+
+          {/* Outside-click catcher for the dropdowns */}
+          {wardrobeMenu ? (
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setWardrobeMenu(null)}
+              className="fixed inset-0 z-[75] cursor-default"
+              style={{ background: 'transparent' }}
+            />
+          ) : null}
         </div>
 
 
@@ -8134,207 +8307,92 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </div>
         ) : null}
 
-        <OdaraInsetGroup emphasis>
-          <div className="grid grid-cols-2 gap-3 px-4 py-4">
-            {visibleWardrobeCards.map((card) => (
-              <div
-                key={card.fragrance_id}
-                className="rounded-[22px] border p-3"
-                style={{
-                  borderColor: 'rgba(255,255,255,0.07)',
-                  background: 'linear-gradient(180deg, rgba(24,25,30,0.72) 0%, rgba(12,13,17,0.82) 100%)',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.28)',
-                }}
-              >
-                <OdaraWardrobeBottleArt
-                  name={card.name}
-                  brand={card.brand}
-                  family_key={card.family_key}
-                  family_label={card.family_label}
-                  image_url={card.image_url}
-                  thumbnail_url={card.thumbnail_url}
-                  className="aspect-[4/5] w-full"
-                />
-                <div
-                  className="mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
-                >
-                  {card.name}
+        {wardrobeFamilyMode ? (
+          <div className="flex flex-col gap-5">
+            {wardrobeFamilyGroups.map((group) => (
+              <div key={group.key} className="flex flex-col gap-2.5">
+                <div className="px-1 text-[11px] uppercase tracking-[0.28em] text-foreground/52">
+                  {group.label}
                 </div>
-                <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
-                  {getWardrobeBrandLabel(card.brand)}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                <div className="flex gap-3 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {group.cards.map((card) => (
+                    <div
+                      key={card.fragrance_id}
+                      className="w-[150px] shrink-0 rounded-[22px] border p-3"
+                      style={{
+                        borderColor: 'rgba(255,255,255,0.07)',
+                        background: 'linear-gradient(180deg, rgba(24,25,30,0.72) 0%, rgba(12,13,17,0.82) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.28)',
+                      }}
+                    >
+                      <OdaraWardrobeBottleArt
+                        name={card.name}
+                        brand={card.brand}
+                        family_key={card.family_key}
+                        family_label={card.family_label}
+                        image_url={card.image_url}
+                        thumbnail_url={card.thumbnail_url}
+                        className="aspect-[4/5] w-full"
+                      />
+                      <div
+                        className="mt-3 line-clamp-2 text-[16px] leading-[1.04] text-foreground/94"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+                      >
+                        {card.name}
+                      </div>
+                      <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
+                        {getWardrobeBrandLabel(card.brand)}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
-        </OdaraInsetGroup>
-
-        {wardrobeSheet ? (
-          <div
-            className="fixed inset-0 z-[70] flex flex-col justify-end"
-            role="dialog"
-            aria-modal="true"
-            aria-label={wardrobeSheet === 'filter' ? 'Filter collection' : 'Sort collection'}
-            onClick={() => setWardrobeSheet(null)}
-          >
-            <div
-              className="absolute inset-0"
-              style={{ background: 'rgba(4,4,6,0.62)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
-            />
-            <div
-              className="relative mx-auto w-full max-w-md rounded-t-[28px] border-t px-5 pb-9 pt-4"
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'linear-gradient(180deg, rgba(26,24,30,0.96) 0%, rgba(12,12,15,0.98) 100%)',
-                boxShadow: '0 -24px 60px rgba(0,0,0,0.5)',
-                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mx-auto mb-5 h-1 w-10 rounded-full" style={{ background: 'rgba(255,255,255,0.16)' }} />
-
-              {wardrobeSheet === 'filter' ? (
-                <div className="flex flex-col gap-5">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] uppercase tracking-[0.32em] text-foreground/50">Filter</div>
-                    {activeWardrobeFilterCount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWardrobeStatusFilter(null);
-                          setWardrobeBrandFilter(null);
-                        }}
-                        className="text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
-                      >
-                        Clear all
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {wardrobeStatusOptions.length > 1 ? (
-                    <div className="flex flex-col gap-2.5">
-                      <div className="text-[10px] uppercase tracking-[0.26em] text-foreground/40">Status</div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setWardrobeStatusFilter(null)}
-                          className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                          style={{
-                            border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                            background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                            color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-                          }}
-                        >
-                          All
-                        </button>
-                        {wardrobeStatusOptions.map((status) => {
-                          const active = wardrobeStatusFilter === status;
-                          const tone = getWardrobePrimaryStatusTone(status);
-                          return (
-                            <button
-                              key={status}
-                              type="button"
-                              onClick={() => setWardrobeStatusFilter(active ? null : status)}
-                              className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                              style={{
-                                border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
-                                background: active ? tone.background : 'rgba(255,255,255,0.03)',
-                                color: active ? tone.color : 'rgba(255,255,255,0.68)',
-                              }}
-                            >
-                              {getWardrobePrimaryStatusLabel(status)}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {wardrobeBrandOptions.length > 0 ? (
-                    <div className="flex flex-col gap-2.5">
-                      <div className="text-[10px] uppercase tracking-[0.26em] text-foreground/40">Brand</div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setWardrobeBrandFilter(null)}
-                          className="rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                          style={{
-                            border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                            background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                            color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-                          }}
-                        >
-                          All
-                        </button>
-                        {wardrobeBrandOptions.map((brand) => {
-                          const active = wardrobeBrandFilter === brand;
-                          return (
-                            <button
-                              key={brand}
-                              type="button"
-                              onClick={() => setWardrobeBrandFilter(active ? null : brand)}
-                              className="whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                              style={{
-                                border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                                background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                                color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-                              }}
-                            >
-                              {getWardrobeBrandLabel(brand)}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => setWardrobeSheet(null)}
-                    className="mt-2 w-full rounded-full py-3 text-[11px] uppercase tracking-[0.24em] text-[#f8e5b9]"
-                    style={{ border: '1px solid rgba(218,188,124,0.3)', background: 'rgba(218,188,124,0.12)' }}
+        ) : (
+          <OdaraInsetGroup emphasis>
+            <div className="grid grid-cols-2 gap-3 px-4 py-4">
+              {visibleWardrobeCards.map((card) => (
+                <div
+                  key={card.fragrance_id}
+                  className="rounded-[22px] border p-3"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.07)',
+                    background: 'linear-gradient(180deg, rgba(24,25,30,0.72) 0%, rgba(12,13,17,0.82) 100%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.28)',
+                  }}
+                >
+                  <OdaraWardrobeBottleArt
+                    name={card.name}
+                    brand={card.brand}
+                    family_key={card.family_key}
+                    family_label={card.family_label}
+                    image_url={card.image_url}
+                    thumbnail_url={card.thumbnail_url}
+                    className="aspect-[4/5] w-full"
+                  />
+                  <div
+                    className="mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
                   >
-                    Show {visibleWardrobeCards.length} {visibleWardrobeCards.length === 1 ? 'result' : 'results'}
-                  </button>
+                    {card.name}
+                  </div>
+                  <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
+                    {getWardrobeBrandLabel(card.brand)}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                  </div>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="mb-2 text-[11px] uppercase tracking-[0.32em] text-foreground/50">Sort by</div>
-                  {wardrobeSortOptions.map((option) => {
-                    const active = wardrobeSortMode === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          setWardrobeSortMode(option.value);
-                          setWardrobeSheet(null);
-                        }}
-                        className="flex items-center justify-between rounded-2xl px-4 py-3 text-[13px] transition-colors"
-                        style={{
-                          border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                          background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                          color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.82)',
-                        }}
-                      >
-                        {option.label}
-                        {active ? (
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M20 6 9 17l-5-5" />
-                          </svg>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              ))}
             </div>
-          </div>
-        ) : null}
+          </OdaraInsetGroup>
+        )}
       </div>
+
 
     );
   };
@@ -8346,7 +8404,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       : surface === 'confirmation'
         ? ''
         : wardrobeCards.length > 0
-          ? 'Vesper'
+          ? '' // top wordmark already reads VESPER — no duplicate serif title
           : shouldShowFirstRun
             ? 'Build your wardrobe'
             : 'Vesper';
@@ -8355,7 +8413,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     ? 'Search by name, brand, or notes.'
     : surface === 'confirmation'
       ? 'Wardrobe updated'
-      : undefined;
+      : surface === 'wardrobe' && wardrobeCards.length > 0
+        ? 'My Collection'
+        : undefined;
 
   return (
     <OdaraDestinationChrome title={chromeTitle || undefined} eyebrow={chromeEyebrow} onClose={onClose}>
