@@ -6507,6 +6507,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [wardrobeBrandFilter, setWardrobeBrandFilter] = useState<string | null>(null);
+  const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState<OdaraWardrobePrimaryStatus | null>(null);
+  const [wardrobeSortMode, setWardrobeSortMode] = useState<'recommended' | 'name' | 'brand'>('recommended');
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
   const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
@@ -6947,13 +6949,59 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeBrandFilter, wardrobeBrandOptions]);
 
-  const visibleWardrobeCards = useMemo(() => {
-    if (!wardrobeBrandFilter) return wardrobeCards;
-    const target = wardrobeBrandFilter.toLowerCase();
-    return wardrobeCards.filter(
-      (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+  // Status options present in the current collection, ordered by status rank.
+  const wardrobeStatusOptions = useMemo(() => {
+    const present = new Set<OdaraWardrobePrimaryStatus>();
+    wardrobeCards.forEach((card) => present.add(card.primary_status));
+    return Array.from(present).sort(
+      (a, b) => getWardrobeStatusRank(a) - getWardrobeStatusRank(b),
     );
-  }, [wardrobeCards, wardrobeBrandFilter]);
+  }, [wardrobeCards]);
+
+  // Keep an active status filter valid as the collection changes.
+  useEffect(() => {
+    if (wardrobeStatusFilter && !wardrobeStatusOptions.includes(wardrobeStatusFilter)) {
+      setWardrobeStatusFilter(null);
+    }
+  }, [wardrobeStatusFilter, wardrobeStatusOptions]);
+
+  const visibleWardrobeCards = useMemo(() => {
+    let cards = wardrobeCards;
+    if (wardrobeBrandFilter) {
+      const target = wardrobeBrandFilter.toLowerCase();
+      cards = cards.filter(
+        (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+      );
+    }
+    if (wardrobeStatusFilter) {
+      cards = cards.filter((card) => card.primary_status === wardrobeStatusFilter);
+    }
+    if (wardrobeSortMode === 'name') {
+      cards = [...cards].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
+    } else if (wardrobeSortMode === 'brand') {
+      cards = [...cards].sort((a, b) =>
+        getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
+          || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
+    }
+    return cards;
+  }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
+
+  const wardrobeSortLabel =
+    wardrobeSortMode === 'name'
+      ? 'Name A–Z'
+      : wardrobeSortMode === 'brand'
+        ? 'Brand'
+        : 'Recommended';
+
+  const cycleWardrobeSort = () => {
+    haptic('light');
+    setWardrobeSortMode((prev) =>
+      prev === 'recommended' ? 'name' : prev === 'name' ? 'brand' : 'recommended',
+    );
+  };
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -8003,11 +8051,29 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-end px-1">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <button
+            type="button"
+            onClick={cycleWardrobeSort}
+            className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+            style={{
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.04)',
+              color: 'rgba(255,255,255,0.74)',
+            }}
+          >
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m3 16 4 4 4-4" />
+              <path d="M7 20V4" />
+              <path d="m21 8-4-4-4 4" />
+              <path d="M17 4v16" />
+            </svg>
+            {wardrobeSortLabel}
+          </button>
           <button
             type="button"
             onClick={openSearch}
-            className="rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
+            className="shrink-0 rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]"
             style={{
               border: '1px solid rgba(218,188,124,0.28)',
               background: 'rgba(218,188,124,0.12)',
@@ -8016,6 +8082,42 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             + Add fragrance
           </button>
         </div>
+
+        {wardrobeStatusOptions.length > 1 ? (
+          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setWardrobeStatusFilter(null)}
+              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+              style={{
+                border: `1px solid ${wardrobeStatusFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                background: wardrobeStatusFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                color: wardrobeStatusFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+              }}
+            >
+              All
+            </button>
+            {wardrobeStatusOptions.map((status) => {
+              const active = wardrobeStatusFilter === status;
+              const tone = getWardrobePrimaryStatusTone(status);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setWardrobeStatusFilter(status)}
+                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                  style={{
+                    border: `1px solid ${active ? tone.border : 'rgba(255,255,255,0.08)'}`,
+                    background: active ? tone.background : 'rgba(255,255,255,0.03)',
+                    color: active ? tone.color : 'rgba(255,255,255,0.68)',
+                  }}
+                >
+                  {getWardrobePrimaryStatusLabel(status)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {wardrobeBrandOptions.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
