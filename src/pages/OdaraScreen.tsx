@@ -12153,7 +12153,7 @@ const OdaraScreen = ({
         if (!didLock) return;
         setLockFlash(true);
         window.setTimeout(() => setLockFlash(false), 700);
-        pulseLock();
+        pulseLock('lock');
         // Stronger tick on lock — fired only after the lock is accepted.
         haptic('medium');
       },
