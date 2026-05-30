@@ -673,7 +673,7 @@ const Index = () => {
               ) : null}
             </div>
 
-            <div className="rounded-[1.75rem] border border-border/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-sm">
+            <div>
               {isCheckEmail ? (
                 <div className="space-y-3">
                   {authError ? (
