@@ -13482,7 +13482,13 @@ const OdaraScreen = ({
                   <svg
                     width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke={lockColor} strokeWidth="1.5"
-                    className="transition-colors duration-300 relative z-[1]"
+                    className={`transition-colors duration-300 relative z-[1]${
+                      lockPulseType === 'lock'
+                        ? ' lock-tick-strong'
+                        : lockPulseType === 'unlock'
+                          ? ' lock-tick-light'
+                          : ''
+                    }`}
                     style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
                   >
                     {lockActive ? (
