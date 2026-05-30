@@ -8325,6 +8325,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               );
             })}
           </div>
+          </div>
         ) : null}
 
         {wardrobeFamilyMode ? (
