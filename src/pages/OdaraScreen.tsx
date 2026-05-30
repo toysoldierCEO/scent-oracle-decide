@@ -8062,7 +8062,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               color: 'rgba(255,255,255,0.74)',
             }}
           >
-            <ArrowUpDown className="h-3 w-3" strokeWidth={1.6} />
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m3 16 4 4 4-4" />
+              <path d="M7 20V4" />
+              <path d="m21 8-4-4-4 4" />
+              <path d="M17 4v16" />
+            </svg>
             {wardrobeSortLabel}
           </button>
           <button
