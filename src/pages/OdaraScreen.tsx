@@ -6950,21 +6950,22 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeBrandFilter, wardrobeBrandOptions]);
 
-  // Status options present in the current collection, ordered by status rank.
-  const wardrobeStatusOptions = useMemo(() => {
-    const present = new Set<OdaraWardrobePrimaryStatus>();
-    wardrobeCards.forEach((card) => present.add(card.primary_status));
-    return Array.from(present).sort(
-      (a, b) => getWardrobeStatusRank(a) - getWardrobeStatusRank(b),
-    );
-  }, [wardrobeCards]);
+  // Recency lookup (last-updated timestamp) used for the "Newest" sort.
+  const getWardrobeCardRecency = useCallback(
+    (fragranceId: string) => effectiveSignalMap[fragranceId]?.updated_at ?? 0,
+    [effectiveSignalMap],
+  );
 
-  // Keep an active status filter valid as the collection changes.
-  useEffect(() => {
-    if (wardrobeStatusFilter && !wardrobeStatusOptions.includes(wardrobeStatusFilter)) {
-      setWardrobeStatusFilter(null);
-    }
-  }, [wardrobeStatusFilter, wardrobeStatusOptions]);
+  // Sort availability — only expose options backed by reliable data.
+  // Season has no source field, and there is no wear-history field, so
+  // Season / Last Worn / Unworn are surfaced as disabled rather than faked.
+  const wardrobeSortAvailability: Record<'az' | 'newest' | 'last_worn' | 'unworn', boolean> = {
+    az: true,
+    newest: true,
+    last_worn: false,
+    unworn: false,
+  };
+  const wardrobeSeasonAvailable = false;
 
   const visibleWardrobeCards = useMemo(() => {
     let cards = wardrobeCards;
@@ -6974,30 +6975,57 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
       );
     }
-    if (wardrobeStatusFilter) {
-      cards = cards.filter((card) => card.primary_status === wardrobeStatusFilter);
-    }
-    if (wardrobeSortMode === 'name') {
+    if (wardrobeSortMode === 'az') {
       cards = [...cards].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
-    } else if (wardrobeSortMode === 'brand') {
-      cards = [...cards].sort((a, b) =>
-        getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
-          || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    } else if (wardrobeSortMode === 'newest') {
+      cards = [...cards].sort(
+        (a, b) => getWardrobeCardRecency(b.fragrance_id) - getWardrobeCardRecency(a.fragrance_id),
       );
     }
+    // 'last_worn' / 'unworn' have no reliable backing data — fall back to
+    // the default ordering rather than inventing wear history.
     return cards;
-  }, [wardrobeCards, wardrobeBrandFilter, wardrobeStatusFilter, wardrobeSortMode]);
+  }, [wardrobeCards, wardrobeBrandFilter, wardrobeSortMode, getWardrobeCardRecency]);
 
-  const wardrobeSortOptions: { value: typeof wardrobeSortMode; label: string }[] = [
-    { value: 'recommended', label: 'Recommended' },
-    { value: 'name', label: 'Name A–Z' },
-    { value: 'brand', label: 'Brand A–Z' },
+  // Grouped family browsing — built from real family_key data, empty groups hidden.
+  const wardrobeFamilyGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; cards: typeof visibleWardrobeCards }>();
+    visibleWardrobeCards.forEach((card) => {
+      const familyKey = readTrimmedLayerText(card.family_key);
+      const key = familyKey ? familyKey.toLowerCase() : '__other__';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: familyKey
+            ? (readTrimmedLayerText(card.family_label) || buildFamilyLabel(familyKey))
+            : 'Uncategorized',
+          cards: [],
+        });
+      }
+      groups.get(key)!.cards.push(card);
+    });
+    return Array.from(groups.values())
+      .filter((group) => group.cards.length > 0)
+      .sort((a, b) => {
+        if (a.key === '__other__') return 1;
+        if (b.key === '__other__') return -1;
+        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+      });
+  }, [visibleWardrobeCards]);
+
+  const wardrobeSortOptions: { value: 'az' | 'newest' | 'last_worn' | 'unworn'; label: string }[] = [
+    { value: 'az', label: 'A–Z' },
+    { value: 'newest', label: 'Newest to Oldest' },
+    { value: 'last_worn', label: 'Last Worn' },
+    { value: 'unworn', label: 'Unworn' },
   ];
 
-  const activeWardrobeFilterCount =
-    (wardrobeBrandFilter ? 1 : 0) + (wardrobeStatusFilter ? 1 : 0);
+  const activeWardrobeSortLabel =
+    wardrobeSortOptions.find((option) => option.value === wardrobeSortMode)?.label ?? null;
+
+  const activeWardrobeFilterCount = (wardrobeFamilyMode ? 1 : 0);
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
