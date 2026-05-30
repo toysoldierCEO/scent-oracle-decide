@@ -11641,9 +11641,17 @@ const OdaraScreen = ({
     setLockState('neutral');
   }, [viewHistory, handleGuestBack, lockState, signedInIsReadOnlyHistoryCard, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
 
-  const pulseLock = useCallback(() => {
+  const pulseLock = useCallback((type: 'lock' | 'unlock' = 'lock') => {
     setLockPulse(true);
-    window.setTimeout(() => setLockPulse(false), 400);
+    setLockPulseType(type);
+    if (lockPulseTimeoutRef.current !== null) {
+      window.clearTimeout(lockPulseTimeoutRef.current);
+    }
+    lockPulseTimeoutRef.current = window.setTimeout(() => {
+      setLockPulse(false);
+      setLockPulseType(null);
+      lockPulseTimeoutRef.current = null;
+    }, 400);
   }, []);
 
   const unlockGuestCard = useCallback(() => {
