@@ -3723,6 +3723,9 @@ type OdaraCollectionItem = {
   image_url: string | null;
   thumbnail_url: string | null;
   collection_status: string | null;
+  primary_season?: string | null;
+  collection_created_at?: string | null;
+  collection_updated_at?: string | null;
   preference_state: OdaraCollectionPreferenceState;
   rating?: number | null;
   wear_more?: boolean;
@@ -3799,18 +3802,24 @@ type OdaraCollectionSort = 'role' | 'rating' | 'family' | 'name' | 'brand';
 type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
+type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
+type OdaraWardrobeSortDirection = 'asc' | 'desc';
+type OdaraWardrobeSeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'all_year';
+type OdaraWardrobeSeasonFilterKey = Exclude<OdaraWardrobeSeasonKey, 'all_year'>;
 type OdaraNegativeState = 0 | 1 | 2;
 type OdaraPersistedWardrobePreference = {
   fragrance_id: string;
   preference_state: OdaraCollectionPreferenceState;
   heart_state: HeartState;
   negative_state: OdaraNegativeState;
+  created_at: number;
   updated_at: number;
 };
 
 type OdaraPersistedWardrobeWishlistSignal = {
   fragrance_id: string;
   status: 'would_buy';
+  created_at: number;
   updated_at: number;
 };
 
@@ -3829,6 +3838,7 @@ type OdaraWardrobeCatalogItem = {
   base_notes: string[];
   source_url: string | null;
   source_confidence: string | null;
+  primary_season: OdaraWardrobeSeasonKey | null;
   image_url: string | null;
   thumbnail_url: string | null;
 };
@@ -3848,6 +3858,7 @@ type OdaraWardrobeSessionSignal = {
   base_notes: string[];
   source_url: string | null;
   source_confidence: string | null;
+  primary_season: OdaraWardrobeSeasonKey | null;
   image_url: string | null;
   thumbnail_url: string | null;
   owned: boolean;
@@ -3867,11 +3878,26 @@ type OdaraWardrobeCard = {
   brand: string | null;
   family_key: string | null;
   family_label: string | null;
+  primary_season: OdaraWardrobeSeasonKey | null;
   image_url: string | null;
   thumbnail_url: string | null;
   item: OdaraWardrobeCatalogItem;
   primary_status: OdaraWardrobePrimaryStatus;
+  favorite: boolean;
+  collection_created_at: number;
+  collection_updated_at: number;
+  sort_newest_at: number;
+  last_worn_at: number | null;
+  last_worn_date_key: string | null;
+  wear_count: number;
+  is_unworn: boolean;
   local_only: boolean;
+};
+
+type OdaraWardrobeWearSnapshot = {
+  last_worn_at: number;
+  last_worn_date_key: string;
+  wear_count: number;
 };
 
 type OdaraWardrobeConfirmationState = {
@@ -3901,12 +3927,93 @@ const ODARA_BRAND_LABEL_OVERRIDES: Record<string, string> = {
   'Alexandria Fragrances': 'Alexandria',
 };
 
+const ODARA_WARDROBE_SEASON_FILTER_OPTIONS: Array<{
+  value: OdaraWardrobeSeasonFilterKey | null;
+  label: string;
+}> = [
+  { value: null, label: 'All Seasons' },
+  { value: 'spring', label: 'Spring' },
+  { value: 'summer', label: 'Summer' },
+  { value: 'fall', label: 'Fall' },
+  { value: 'winter', label: 'Winter' },
+];
+
+const ODARA_WARDROBE_SORT_OPTIONS: Array<{
+  value: OdaraWardrobeSortKey;
+  defaultDirection: OdaraWardrobeSortDirection;
+}> = [
+  { value: 'az', defaultDirection: 'asc' },
+  { value: 'newest', defaultDirection: 'desc' },
+  { value: 'last_worn', defaultDirection: 'desc' },
+];
+
 function normalizeNegativeState(value: unknown): OdaraNegativeState {
   return value === 2 ? 2 : value === 1 ? 1 : 0;
 }
 
 function normalizeStoredHeartState(value: unknown): HeartState {
   return value === 2 ? 2 : value === 1 ? 1 : 0;
+}
+
+function normalizeWardrobeSeasonKey(value: unknown): OdaraWardrobeSeasonKey | null {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'spring') return 'spring';
+  if (normalized === 'summer') return 'summer';
+  if (normalized === 'fall' || normalized === 'autumn') return 'fall';
+  if (normalized === 'winter') return 'winter';
+  if (normalized === 'all_year' || normalized === 'all year' || normalized === 'all-season' || normalized === 'all season') {
+    return 'all_year';
+  }
+  return null;
+}
+
+function parseOdaraTimestampMs(value: unknown) {
+  const parsed = Date.parse(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseOdaraDateKeyMs(value: unknown) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return 0;
+  const parsed = Date.parse(`${normalized}T12:00:00Z`);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function matchesWardrobeSeason(
+  primarySeason: OdaraWardrobeSeasonKey | null | undefined,
+  selectedSeason: OdaraWardrobeSeasonFilterKey | null,
+) {
+  if (!selectedSeason) return true;
+  if (!primarySeason) return false;
+  if (primarySeason === 'all_year') return true;
+  return primarySeason === selectedSeason;
+}
+
+function getWardrobeSortLabel(
+  sortKey: OdaraWardrobeSortKey | null,
+  direction: OdaraWardrobeSortDirection,
+) {
+  if (sortKey === 'az') return direction === 'asc' ? 'A–Z' : 'Z–A';
+  if (sortKey === 'newest') return direction === 'desc' ? 'Newest to Oldest' : 'Oldest to Newest';
+  if (sortKey === 'last_worn') return direction === 'desc' ? 'Last Worn' : 'Least Recently Worn';
+  return null;
+}
+
+function toggleWardrobeSortDirection(direction: OdaraWardrobeSortDirection): OdaraWardrobeSortDirection {
+  return direction === 'asc' ? 'desc' : 'asc';
+}
+
+function compareOptionalWardrobeTimestamps(
+  left: number | null | undefined,
+  right: number | null | undefined,
+  direction: OdaraWardrobeSortDirection,
+) {
+  const a = typeof left === 'number' && left > 0 ? left : null;
+  const b = typeof right === 'number' && right > 0 ? right : null;
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return direction === 'desc' ? b - a : a - b;
 }
 
 function buildFamilyLabel(familyKey: string | null | undefined) {
@@ -3971,6 +4078,7 @@ function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset
     base_notes: sanitizeTokenSource(row?.base_notes),
     source_url: readTrimmedLayerText(row?.source_url),
     source_confidence: readTrimmedLayerText(row?.source_confidence),
+    primary_season: normalizeWardrobeSeasonKey(row?.primary_season),
     image_url: resolvedImageUrl,
     thumbnail_url: readTrimmedImageUrl(imageAsset?.thumbnail_url ?? row?.thumbnail_url),
   };
@@ -3979,7 +4087,7 @@ function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset
 async function fetchOdaraWardrobeCatalog() {
   const { data: fragranceRows, error: fragranceError } = await odaraSupabase
     .from('fragrances' as any)
-    .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, source_url, source_confidence')
+    .select('id, name, brand, family_key, primary_season, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, source_url, source_confidence')
     .order('brand', { ascending: true })
     .order('name', { ascending: true })
     .range(0, 999);
@@ -4036,6 +4144,7 @@ function createWardrobeSessionSignalFromItem(
     base_notes: sanitizeTokenSource(item.base_notes),
     source_url: item.source_url,
     source_confidence: item.source_confidence,
+    primary_season: item.primary_season,
     image_url: item.image_url,
     thumbnail_url: item.thumbnail_url,
     owned: false,
@@ -4070,6 +4179,7 @@ function normalizeStoredWardrobeSessionSignal(raw: any): OdaraWardrobeSessionSig
     base_notes: sanitizeTokenSource(raw?.base_notes),
     source_url: readTrimmedLayerText(raw?.source_url),
     source_confidence: readTrimmedLayerText(raw?.source_confidence),
+    primary_season: normalizeWardrobeSeasonKey(raw?.primary_season),
     image_url: readTrimmedImageUrl(raw?.image_url),
     thumbnail_url: readTrimmedImageUrl(raw?.thumbnail_url),
     owned: Boolean(raw?.owned),
@@ -4300,6 +4410,7 @@ function buildWardrobeCatalogItemFromCollectionItem(item: OdaraCollectionItem): 
     base_notes: [],
     source_url: null,
     source_confidence: null,
+    primary_season: normalizeWardrobeSeasonKey(item.primary_season),
     image_url: resolvePreferredWardrobeBottleImage(item.image_url, item.thumbnail_url),
     thumbnail_url: readTrimmedImageUrl(item.thumbnail_url),
   };
@@ -4321,6 +4432,7 @@ function buildWardrobeCatalogItemFromSignal(signal: OdaraWardrobeSessionSignal):
     base_notes: sanitizeTokenSource(signal.base_notes),
     source_url: signal.source_url,
     source_confidence: signal.source_confidence,
+    primary_season: signal.primary_season,
     image_url: resolvePreferredWardrobeBottleImage(signal.image_url, signal.thumbnail_url),
     thumbnail_url: readTrimmedImageUrl(signal.thumbnail_url),
   };
@@ -4598,6 +4710,9 @@ function normalizeCollectionPayload(payload: OdaraCollectionPayload | null): Oda
       wardrobe_role_label: typeof item.wardrobe_role_label === 'string' ? item.wardrobe_role_label : null,
       role_confidence: typeof item.role_confidence === 'string' ? item.role_confidence : null,
       role_source: typeof item.role_source === 'string' ? item.role_source : null,
+      primary_season: normalizeWardrobeSeasonKey(item.primary_season),
+      collection_created_at: readTrimmedLayerText(item.collection_created_at),
+      collection_updated_at: readTrimmedLayerText(item.collection_updated_at),
       rating: normalizeCollectionRating(item.rating),
       wear_more: Boolean(item.wear_more ?? item.favorite),
       favorite: Boolean(item.favorite ?? item.wear_more),
@@ -6508,15 +6623,18 @@ const OdaraWardrobeBottleArt: React.FC<{
 const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   onClose: () => void;
   userId: string | null;
-}> = ({ onClose, userId }) => {
+  selectedContext: string;
+}> = ({ onClose, userId, selectedContext }) => {
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
+  const [persistedWearById, setPersistedWearById] = useState<Record<string, OdaraWardrobeWearSnapshot>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<OdaraWardrobeCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [wearHistoryLoading, setWearHistoryLoading] = useState(true);
   const [brandRailSource, setBrandRailSource] = useState<OdaraWardrobeRailSource>('safe_local_list');
   const [surface, setSurface] = useState<OdaraWardrobeSurface>('wardrobe');
   const [searchQuery, setSearchQuery] = useState('');
@@ -6524,8 +6642,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [wardrobeBrandFilter, setWardrobeBrandFilter] = useState<string | null>(null);
-  const [wardrobeFamilyMode, setWardrobeFamilyMode] = useState(false);
-  const [wardrobeSortMode, setWardrobeSortMode] = useState<'az' | 'newest' | 'last_worn' | 'unworn' | null>(null);
+  const [wardrobeSeasonFilter, setWardrobeSeasonFilter] = useState<OdaraWardrobeSeasonFilterKey | null>(null);
+  const [wardrobeFamilyFilter, setWardrobeFamilyFilter] = useState<string | null>(null);
+  const [wardrobeWishlistOnly, setWardrobeWishlistOnly] = useState(false);
+  const [wardrobeFavoriteOnly, setWardrobeFavoriteOnly] = useState(false);
+  const [wardrobeUnwornOnly, setWardrobeUnwornOnly] = useState(false);
+  const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>(null);
+  const [wardrobeSortDirection, setWardrobeSortDirection] = useState<OdaraWardrobeSortDirection>('asc');
   const [wardrobeMenu, setWardrobeMenu] = useState<'filter' | 'sort' | null>(null);
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
@@ -6593,6 +6716,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         preference_state: preferenceState,
         heart_state: preferenceStateToHeartState(preferenceState),
         negative_state: preferenceStateToNegativeState(preferenceState),
+        created_at: parseOdaraTimestampMs(row?.created_at ?? row?.updated_at),
         updated_at: Number.isFinite(Date.parse(String(row?.updated_at ?? '')))
           ? Date.parse(String(row?.updated_at ?? ''))
           : Date.now(),
@@ -6657,6 +6781,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       nextWishlists[fragranceId] = {
         fragrance_id: fragranceId,
         status: 'would_buy',
+        created_at: parseOdaraTimestampMs(row?.created_at ?? row?.updated_at),
         updated_at: Number.isFinite(Date.parse(String(row?.updated_at ?? '')))
           ? Date.parse(String(row?.updated_at ?? ''))
           : Date.now(),
@@ -6690,6 +6815,64 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       return next;
     });
   }, [userId]);
+
+  const loadPersistedWearHistory = useCallback(async () => {
+    if (!userId) {
+      setPersistedWearById({});
+      setWearHistoryLoading(false);
+      return;
+    }
+
+    setWearHistoryLoading(true);
+    try {
+      const { data, error: historyError } = await odaraSupabase
+        .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+        .select('date_key, context_key, state_json')
+        .eq('user_id', userId)
+        .eq('context_key', normalizePersistedContextKey(selectedContext));
+
+      if (historyError) throw historyError;
+
+      const nextHistory: Record<string, OdaraWardrobeWearSnapshot> = {};
+      for (const row of Array.isArray(data) ? data : []) {
+        const dateKey = typeof row?.date_key === 'string' ? row.date_key.trim() : '';
+        const wornAt = parseOdaraDateKeyMs(dateKey);
+        if (!dateKey || wornAt <= 0) continue;
+
+        const state = deserializeSignedInDayStateFromStorage(row?.state_json);
+        const lockTruth = resolveSignedInLockedTruth(state);
+        if (!lockTruth) continue;
+
+        const seenFragranceIds = new Set(
+          [
+            lockTruth.lockedCard?.fragrance_id,
+            lockTruth.lockedLayerCard?.fragrance_id,
+          ]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .filter(Boolean),
+        );
+
+        for (const fragranceId of seenFragranceIds) {
+          const existing = nextHistory[fragranceId];
+          nextHistory[fragranceId] = {
+            last_worn_at: Math.max(existing?.last_worn_at ?? 0, wornAt),
+            last_worn_date_key:
+              !existing || wornAt >= existing.last_worn_at
+                ? dateKey
+                : existing.last_worn_date_key,
+            wear_count: (existing?.wear_count ?? 0) + 1,
+          };
+        }
+      }
+
+      setPersistedWearById(nextHistory);
+    } catch (wearHistoryError) {
+      console.error('[Odara] wardrobe wear-history hydrate failed', wearHistoryError);
+      setPersistedWearById({});
+    } finally {
+      setWearHistoryLoading(false);
+    }
+  }, [selectedContext, userId]);
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
@@ -6748,6 +6931,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [loadCatalog]);
 
   useEffect(() => {
+    void loadPersistedWearHistory();
+  }, [loadPersistedWearHistory]);
+
+  useEffect(() => {
     setSessionSignals(readStoredWardrobeSessionSignals(userId));
     setOnboardingSeen(readStoredWardrobeOnboardingSeen(userId));
     setSurface('wardrobe');
@@ -6755,6 +6942,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setConfirmationState(null);
     setPendingActionKey(null);
     setActionError(null);
+    setWardrobeSeasonFilter(null);
+    setWardrobeFamilyFilter(null);
+    setWardrobeWishlistOnly(false);
+    setWardrobeFavoriteOnly(false);
+    setWardrobeUnwornOnly(false);
+    setWardrobeSortKey(null);
+    setWardrobeSortDirection('asc');
   }, [userId]);
 
   useEffect(() => {
@@ -6829,7 +7023,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         own_persisted: true,
         heart_state: collectionHeartState,
         heart_persisted: collectionHeartState > 0,
-        updated_at: 0,
+        updated_at: Math.max(
+          parseOdaraTimestampMs(item.collection_created_at),
+          parseOdaraTimestampMs(item.collection_updated_at),
+        ),
       });
     }
 
@@ -6889,6 +7086,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         base_notes: signal.base_notes.length > 0 ? signal.base_notes : baseSignal.base_notes,
         source_url: signal.source_url ?? baseSignal.source_url,
         source_confidence: signal.source_confidence ?? baseSignal.source_confidence,
+        primary_season: signal.primary_season ?? baseSignal.primary_season,
         image_url: signal.image_url ?? baseSignal.image_url,
         thumbnail_url: signal.thumbnail_url ?? baseSignal.thumbnail_url,
         wishlist: baseSignal.owned ? false : (resolvedNegativeState > 0 ? false : signal.wishlist),
@@ -6903,6 +7101,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return next;
   }, [catalogById, collectionItemById, collectionItems, persistedPreferencesById, persistedWishlistsById, sessionSignals]);
 
+  const compareWardrobeCardsDefault = useCallback((a: OdaraWardrobeCard, b: OdaraWardrobeCard) => {
+    const rankDelta = getWardrobeStatusRank(a.primary_status) - getWardrobeStatusRank(b.primary_status);
+    if (rankDelta !== 0) return rankDelta;
+    const newestDelta = compareOptionalWardrobeTimestamps(a.sort_newest_at, b.sort_newest_at, 'desc');
+    if (newestDelta !== 0) return newestDelta;
+    return (
+      getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
+      || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    );
+  }, []);
+
   const wardrobeCards = useMemo(() => {
     const cards = Object.values(effectiveSignalMap)
       .filter((signal) => hasMeaningfulWardrobeSignal(signal))
@@ -6910,34 +7119,51 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         const primaryStatus = deriveWardrobePrimaryStatus(signal);
         if (!primaryStatus) return null;
         const resolvedItem = catalogById.get(signal.fragrance_id) ?? buildWardrobeCatalogItemFromSignal(signal);
+        const collectionItem = collectionItemById.get(signal.fragrance_id) ?? null;
+        const persistedWishlist = persistedWishlistsById[signal.fragrance_id] ?? null;
+        const persistedPreference = persistedPreferencesById[signal.fragrance_id] ?? null;
+        const wearSnapshot = persistedWearById[signal.fragrance_id] ?? null;
+        const collectionCreatedAt = parseOdaraTimestampMs(collectionItem?.collection_created_at);
+        const collectionUpdatedAt = parseOdaraTimestampMs(collectionItem?.collection_updated_at);
+        const sortNewestAt = signal.owned
+          ? (collectionCreatedAt || collectionUpdatedAt || signal.updated_at)
+          : signal.wishlist
+            ? (persistedWishlist?.created_at ?? persistedWishlist?.updated_at ?? signal.updated_at)
+            : (persistedPreference?.created_at ?? persistedPreference?.updated_at ?? signal.updated_at);
         return {
           fragrance_id: signal.fragrance_id,
           name: signal.name,
           brand: signal.brand,
           family_key: signal.family_key,
           family_label: signal.family_label || buildFamilyLabel(signal.family_key),
+          primary_season: resolvedItem.primary_season,
           image_url: signal.image_url,
           thumbnail_url: signal.thumbnail_url,
           item: resolvedItem,
           primary_status: primaryStatus,
+          favorite: Boolean(collectionItem?.favorite ?? collectionItem?.wear_more),
+          collection_created_at: collectionCreatedAt,
+          collection_updated_at: collectionUpdatedAt,
+          sort_newest_at: sortNewestAt,
+          last_worn_at: wearSnapshot?.last_worn_at ?? null,
+          last_worn_date_key: wearSnapshot?.last_worn_date_key ?? null,
+          wear_count: wearSnapshot?.wear_count ?? 0,
+          is_unworn: !wearSnapshot,
           local_only: !isWardrobeStatusPersisted(signal, primaryStatus),
         } satisfies OdaraWardrobeCard;
       })
       .filter((card): card is OdaraWardrobeCard => !!card);
 
-    return cards.sort((a, b) => {
-      const rankDelta = getWardrobeStatusRank(a.primary_status) - getWardrobeStatusRank(b.primary_status);
-      if (rankDelta !== 0) return rankDelta;
-      const aSignal = effectiveSignalMap[a.fragrance_id];
-      const bSignal = effectiveSignalMap[b.fragrance_id];
-      const updatedDelta = (bSignal?.updated_at ?? 0) - (aSignal?.updated_at ?? 0);
-      if (updatedDelta !== 0) return updatedDelta;
-      return (
-        getWardrobeBrandLabel(a.brand).localeCompare(getWardrobeBrandLabel(b.brand), undefined, { sensitivity: 'base' })
-        || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-      );
-    });
-  }, [catalogById, effectiveSignalMap]);
+    return cards.sort(compareWardrobeCardsDefault);
+  }, [
+    catalogById,
+    collectionItemById,
+    compareWardrobeCardsDefault,
+    effectiveSignalMap,
+    persistedPreferencesById,
+    persistedWearById,
+    persistedWishlistsById,
+  ]);
 
   // Dynamic brand bar — built only from the current user's visible collection.
   // Null-safe: trims labels, ignores empty brands, dedupes case-insensitively,
@@ -6967,82 +7193,101 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeBrandFilter, wardrobeBrandOptions]);
 
-  // Recency lookup (last-updated timestamp) used for the "Newest" sort.
-  const getWardrobeCardRecency = useCallback(
-    (fragranceId: string) => effectiveSignalMap[fragranceId]?.updated_at ?? 0,
-    [effectiveSignalMap],
-  );
+  const brandFilteredWardrobeCards = useMemo(() => {
+    if (!wardrobeBrandFilter) return wardrobeCards;
+    const target = wardrobeBrandFilter.toLowerCase();
+    return wardrobeCards.filter(
+      (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+    );
+  }, [wardrobeBrandFilter, wardrobeCards]);
 
-  // Sort availability — only expose options backed by reliable data.
-  // Season has no source field, and there is no wear-history field, so
-  // Season / Last Worn / Unworn are surfaced as disabled rather than faked.
-  const wardrobeSortAvailability: Record<'az' | 'newest' | 'last_worn' | 'unworn', boolean> = {
-    az: true,
-    newest: true,
-    last_worn: false,
-    unworn: false,
-  };
-  const wardrobeSeasonAvailable = false;
+  const wardrobeFamilyOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    brandFilteredWardrobeCards.forEach((card) => {
+      const familyKey = readTrimmedLayerText(card.family_key);
+      if (!familyKey) return;
+      if (!byKey.has(familyKey.toLowerCase())) {
+        byKey.set(familyKey.toLowerCase(), readTrimmedLayerText(card.family_label) || buildFamilyLabel(familyKey) || familyKey);
+      }
+    });
+    return Array.from(byKey.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+  }, [brandFilteredWardrobeCards]);
+
+  useEffect(() => {
+    if (
+      wardrobeFamilyFilter &&
+      !wardrobeFamilyOptions.some((option) => option.key === wardrobeFamilyFilter)
+    ) {
+      setWardrobeFamilyFilter(null);
+    }
+  }, [wardrobeFamilyFilter, wardrobeFamilyOptions]);
+
+  const activeWardrobeSortLabel = getWardrobeSortLabel(wardrobeSortKey, wardrobeSortDirection);
 
   const visibleWardrobeCards = useMemo(() => {
-    let cards = wardrobeCards;
-    if (wardrobeBrandFilter) {
-      const target = wardrobeBrandFilter.toLowerCase();
-      cards = cards.filter(
-        (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
-      );
-    }
-    if (wardrobeSortMode === 'az') {
-      cards = [...cards].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      );
-    } else if (wardrobeSortMode === 'newest') {
-      cards = [...cards].sort(
-        (a, b) => getWardrobeCardRecency(b.fragrance_id) - getWardrobeCardRecency(a.fragrance_id),
-      );
-    }
-    // 'last_worn' / 'unworn' have no reliable backing data — fall back to
-    // the default ordering rather than inventing wear history.
-    return cards;
-  }, [wardrobeCards, wardrobeBrandFilter, wardrobeSortMode, getWardrobeCardRecency]);
+    let cards = [...brandFilteredWardrobeCards];
 
-  // Grouped family browsing — built from real family_key data, empty groups hidden.
-  const wardrobeFamilyGroups = useMemo(() => {
-    const groups = new Map<string, { key: string; label: string; cards: typeof visibleWardrobeCards }>();
-    visibleWardrobeCards.forEach((card) => {
-      const familyKey = readTrimmedLayerText(card.family_key);
-      const key = familyKey ? familyKey.toLowerCase() : '__other__';
-      if (!groups.has(key)) {
-        groups.set(key, {
-          key,
-          label: familyKey
-            ? (readTrimmedLayerText(card.family_label) || buildFamilyLabel(familyKey))
-            : 'Uncategorized',
-          cards: [],
-        });
+    if (wardrobeSeasonFilter) {
+      cards = cards.filter((card) => matchesWardrobeSeason(card.primary_season, wardrobeSeasonFilter));
+    }
+    if (wardrobeFamilyFilter) {
+      cards = cards.filter((card) => readTrimmedLayerText(card.family_key).toLowerCase() === wardrobeFamilyFilter);
+    }
+    if (wardrobeWishlistOnly) {
+      cards = cards.filter((card) => card.primary_status === 'wishlist');
+    }
+    if (wardrobeFavoriteOnly) {
+      cards = cards.filter((card) => card.favorite);
+    }
+    if (wardrobeUnwornOnly) {
+      cards = cards.filter((card) => card.is_unworn);
+    }
+
+    cards.sort((a, b) => {
+      if (wardrobeSortKey === 'az') {
+        const nameDelta = wardrobeSortDirection === 'asc'
+          ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          : b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
+        if (nameDelta !== 0) return nameDelta;
+      } else if (wardrobeSortKey === 'newest') {
+        const newestDelta = compareOptionalWardrobeTimestamps(a.sort_newest_at, b.sort_newest_at, wardrobeSortDirection);
+        if (newestDelta !== 0) return newestDelta;
+      } else if (wardrobeSortKey === 'last_worn') {
+        const aWorn = typeof a.last_worn_at === 'number' && a.last_worn_at > 0;
+        const bWorn = typeof b.last_worn_at === 'number' && b.last_worn_at > 0;
+        if (aWorn && bWorn) {
+          const wornDelta = compareOptionalWardrobeTimestamps(a.last_worn_at, b.last_worn_at, wardrobeSortDirection);
+          if (wornDelta !== 0) return wornDelta;
+        } else if (aWorn !== bWorn) {
+          return aWorn ? -1 : 1;
+        }
       }
-      groups.get(key)!.cards.push(card);
+
+      return compareWardrobeCardsDefault(a, b);
     });
-    return Array.from(groups.values())
-      .filter((group) => group.cards.length > 0)
-      .sort((a, b) => {
-        if (a.key === '__other__') return 1;
-        if (b.key === '__other__') return -1;
-        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-      });
-  }, [visibleWardrobeCards]);
 
-  // Only data-backed sorts are exposed. Last Worn / Unworn require wear
-  // history that does not exist yet, so they are omitted rather than faked.
-  const wardrobeSortOptions: { value: 'az' | 'newest' | 'last_worn' | 'unworn'; label: string }[] = [
-    { value: 'az', label: 'A–Z' },
-    { value: 'newest', label: 'Newest to Oldest' },
-  ];
+    return cards;
+  }, [
+    brandFilteredWardrobeCards,
+    compareWardrobeCardsDefault,
+    wardrobeFavoriteOnly,
+    wardrobeFamilyFilter,
+    wardrobeSeasonFilter,
+    wardrobeSortDirection,
+    wardrobeSortKey,
+    wardrobeUnwornOnly,
+    wardrobeWishlistOnly,
+  ]);
 
-  const activeWardrobeSortLabel =
-    wardrobeSortOptions.find((option) => option.value === wardrobeSortMode)?.label ?? null;
-
-  const activeWardrobeFilterCount = (wardrobeFamilyMode ? 1 : 0);
+  const activeWardrobeFilterCount = [
+    wardrobeSeasonFilter,
+    wardrobeFamilyFilter,
+    wardrobeWishlistOnly ? 'wishlist' : null,
+    wardrobeFavoriteOnly ? 'favorite' : null,
+    wardrobeUnwornOnly ? 'unworn' : null,
+  ].filter(Boolean).length;
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -7135,6 +7380,19 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setSurface('detail');
   }, []);
 
+  const clearWardrobeFilters = useCallback(() => {
+    setWardrobeSeasonFilter(null);
+    setWardrobeFamilyFilter(null);
+    setWardrobeWishlistOnly(false);
+    setWardrobeFavoriteOnly(false);
+    setWardrobeUnwornOnly(false);
+  }, []);
+
+  const clearWardrobeSort = useCallback(() => {
+    setWardrobeSortKey(null);
+    setWardrobeSortDirection('asc');
+  }, []);
+
   const recordActionInteraction = useCallback(() => {
     setActionLabelCount((current) => Math.min(99, current + 1));
   }, []);
@@ -7164,6 +7422,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           base_notes: existing.base_notes.length > 0 ? existing.base_notes : item.base_notes,
           source_url: existing.source_url ?? item.source_url,
           source_confidence: existing.source_confidence ?? item.source_confidence,
+          primary_season: existing.primary_season ?? item.primary_season,
           image_url: existing.image_url ?? item.image_url,
           thumbnail_url: existing.thumbnail_url ?? item.thumbnail_url,
         }),
@@ -7999,7 +8258,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   };
 
   const renderWardrobeContent = () => {
-    if (loading) {
+    if (loading || wearHistoryLoading) {
       return (
         <OdaraInsetGroup emphasis>
           <div className="space-y-4 px-4 py-5">
@@ -8128,41 +8387,122 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     WebkitBackdropFilter: 'blur(14px)',
                   }}
                 >
-                  {/* Family — toggles grouped browsing using real family_key data */}
+                  <div className="space-y-3">
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ODARA_WARDROBE_SEASON_FILTER_OPTIONS.map((option) => {
+                          const active = wardrobeSeasonFilter === option.value;
+                          return (
+                            <button
+                              key={option.label}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={active}
+                              onClick={() => {
+                                setWardrobeSeasonFilter(option.value);
+                              }}
+                              className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                              style={{
+                                border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                  <div className="mb-1 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
-                  <div className="flex flex-col gap-1.5">
-                    {[
-                      { value: false, label: 'All fragrances' },
-                      { value: true, label: 'Group by family' },
-                    ].map((option) => {
-                      const active = wardrobeFamilyMode === option.value;
-                      return (
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
+                      <div className="flex flex-wrap gap-1.5">
                         <button
-                          key={String(option.value)}
                           type="button"
                           role="menuitemradio"
-                          aria-checked={active}
+                          aria-checked={wardrobeFamilyFilter === null}
                           onClick={() => {
-                            setWardrobeFamilyMode(option.value);
-                            setWardrobeMenu(null);
+                            setWardrobeFamilyFilter(null);
                           }}
-                          className="flex items-center justify-between rounded-xl px-3 py-2 text-[11px] transition-colors"
+                          className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
                           style={{
-                            border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                            background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                            color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                            border: `1px solid ${wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                            background: wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                            color: wardrobeFamilyFilter === null ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
                           }}
                         >
-                          {option.label}
-                          {active ? (
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M20 6 9 17l-5-5" />
-                            </svg>
-                          ) : null}
+                          All Families
                         </button>
-                      );
-                    })}
+                        {wardrobeFamilyOptions.map((option) => {
+                          const active = wardrobeFamilyFilter === option.key;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={active}
+                              onClick={() => {
+                                setWardrobeFamilyFilter(active ? null : option.key);
+                              }}
+                              className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                              style={{
+                                border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Library</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { key: 'wishlist', label: 'Wishlist', active: wardrobeWishlistOnly, toggle: () => setWardrobeWishlistOnly((current) => !current) },
+                          { key: 'favorite', label: 'Favorite', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
+                          { key: 'unworn', label: 'Unworn', active: wardrobeUnwornOnly, toggle: () => setWardrobeUnwornOnly((current) => !current) },
+                        ].map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={option.active}
+                            onClick={option.toggle}
+                            className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                            style={{
+                              border: `1px solid ${option.active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                              background: option.active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                              color: option.active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {activeWardrobeFilterCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearWardrobeFilters();
+                          setWardrobeMenu(null);
+                        }}
+                        className="w-full rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
+                        style={{
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          background: 'rgba(255,255,255,0.02)',
+                        }}
+                      >
+                        Clear filters
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -8188,7 +8528,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   <path d="m21 8-4-4-4 4" />
                   <path d="M17 4v16" />
                 </svg>
-                {activeWardrobeSortLabel ?? 'Sort'}
+                {activeWardrobeSortLabel ? `Sort · ${activeWardrobeSortLabel}` : 'Sort'}
               </button>
               {wardrobeMenu === 'sort' ? (
                 <div
@@ -8202,36 +8542,38 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     WebkitBackdropFilter: 'blur(14px)',
                   }}
                 >
-                  {wardrobeSortOptions.map((option) => {
-                    const active = wardrobeSortMode === option.value;
-                    const available = wardrobeSortAvailability[option.value];
+                  {ODARA_WARDROBE_SORT_OPTIONS.map((option) => {
+                    const active = wardrobeSortKey === option.value;
+                    const optionLabel = getWardrobeSortLabel(
+                      option.value,
+                      active ? wardrobeSortDirection : option.defaultDirection,
+                    );
                     return (
                       <button
                         key={option.value}
                         type="button"
                         role="menuitemradio"
                         aria-checked={active}
-                        disabled={!available}
                         onClick={() => {
-                          if (!available) return;
-                          setWardrobeSortMode(active ? null : option.value);
+                          if (active) {
+                            setWardrobeSortDirection((current) => toggleWardrobeSortDirection(current));
+                          } else {
+                            setWardrobeSortKey(option.value);
+                            setWardrobeSortDirection(option.defaultDirection);
+                          }
                           setWardrobeMenu(null);
                         }}
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors disabled:cursor-not-allowed"
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors"
                         style={{
                           border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'transparent'}`,
                           background: active ? 'rgba(218,188,124,0.1)' : 'transparent',
-                          color: !available
-                            ? 'rgba(255,255,255,0.26)'
-                            : active
-                              ? 'rgba(248,229,185,0.96)'
-                              : 'rgba(255,255,255,0.82)',
+                          color: active
+                            ? 'rgba(248,229,185,0.96)'
+                            : 'rgba(255,255,255,0.82)',
                         }}
                       >
-                        <span>{option.label}</span>
-                        {!available ? (
-                          <span className="text-[8px] uppercase tracking-[0.2em] text-foreground/28">Unavailable</span>
-                        ) : active ? (
+                        <span>{optionLabel}</span>
+                        {active ? (
                           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M20 6 9 17l-5-5" />
                           </svg>
@@ -8239,6 +8581,22 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       </button>
                     );
                   })}
+                  {wardrobeSortKey ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearWardrobeSort();
+                        setWardrobeMenu(null);
+                      }}
+                      className="mt-1 flex w-full items-center justify-center rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      Clear sort
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -8306,51 +8664,36 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </div>
         ) : null}
 
-        {wardrobeFamilyMode ? (
-          <div className="flex flex-col gap-5">
-            {wardrobeFamilyGroups.map((group) => (
-              <div key={group.key} className="flex flex-col gap-2.5">
-                <div className="px-1 text-[11px] uppercase tracking-[0.28em] text-foreground/52">
-                  {group.label}
-                </div>
-                <div className="flex gap-3 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {group.cards.map((card) => (
-                    <div
-                      key={card.fragrance_id}
-                      className="w-[150px] shrink-0 rounded-[22px] border p-3"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.07)',
-                        background: 'linear-gradient(180deg, rgba(24,25,30,0.72) 0%, rgba(12,13,17,0.82) 100%)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.28)',
-                      }}
-                    >
-                      <OdaraWardrobeBottleArt
-                        name={card.name}
-                        brand={card.brand}
-                        family_key={card.family_key}
-                        family_label={card.family_label}
-                        image_url={card.image_url}
-                        thumbnail_url={card.thumbnail_url}
-                        className="aspect-[4/5] w-full"
-                      />
-                      <div
-                        className="mt-3 line-clamp-2 text-[16px] leading-[1.04] text-foreground/94"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
-                      >
-                        {card.name}
-                      </div>
-                      <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
-                        {getWardrobeBrandLabel(card.brand)}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        {visibleWardrobeCards.length === 0 ? (
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center">
+              <div
+                className="text-[24px] leading-[1.04] text-foreground/94"
+                style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+              >
+                No fragrances match these filters.
               </div>
-            ))}
-          </div>
+              <div className="mx-auto mt-3 max-w-[260px] text-[12px] leading-[1.6] text-foreground/52">
+                Try a different brand, clear a filter, or add another fragrance.
+              </div>
+              {(activeWardrobeFilterCount > 0 || wardrobeBrandFilter) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearWardrobeFilters();
+                    setWardrobeBrandFilter(null);
+                  }}
+                  className="mt-5 rounded-[18px] px-4 py-3 text-[11px] uppercase tracking-[0.22em] text-foreground/78"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(255,255,255,0.03)',
+                  }}
+                >
+                  Clear view
+                </button>
+              ) : null}
+            </div>
+          </OdaraInsetGroup>
         ) : (
           <OdaraInsetGroup emphasis>
             <div className="grid grid-cols-2 gap-3 px-4 py-4">
@@ -8381,9 +8724,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   </div>
                   <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
                     {getWardrobeBrandLabel(card.brand)}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
                   </div>
                 </div>
               ))}
@@ -8440,7 +8780,8 @@ const OdaraCollectionPage: React.FC<{
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   isGuestMode: boolean;
-}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode }) => {
+  selectedContext: string;
+}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode, selectedContext }) => {
   if (isGuestMode) {
     return (
       <OdaraLegacyCollectionPage
@@ -8456,6 +8797,7 @@ const OdaraCollectionPage: React.FC<{
     <OdaraSignedInWardrobeOnboardingPage
       onClose={onClose}
       userId={userId}
+      selectedContext={selectedContext}
     />
   );
 };
@@ -8468,7 +8810,8 @@ const OdaraMenuDestination: React.FC<{
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   isGuestMode: boolean;
-}> = ({ page, onClose, onOpenCollection, onOpenFragranceDetail, userId, isGuestMode }) => {
+  selectedContext: string;
+}> = ({ page, onClose, onOpenCollection, onOpenFragranceDetail, userId, isGuestMode, selectedContext }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
@@ -8486,6 +8829,7 @@ const OdaraMenuDestination: React.FC<{
         onOpenFragranceDetail={onOpenFragranceDetail}
         userId={userId}
         isGuestMode={isGuestMode}
+        selectedContext={selectedContext}
       />
     );
   }
@@ -13377,6 +13721,7 @@ const OdaraScreen = ({
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
           isGuestMode={isGuestMode}
+          selectedContext={selectedContext}
         />
       )}
 
