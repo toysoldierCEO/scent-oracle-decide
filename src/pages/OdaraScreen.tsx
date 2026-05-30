@@ -3516,13 +3516,28 @@ const OdaraDestinationChrome: React.FC<{
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
-        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90">
+        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[19px] font-semibold uppercase tracking-[0.46em] text-foreground/95">
           VESPER
         </div>
-        <div className="h-10 w-10" />
+        {onSearch ? (
+          <button
+            type="button"
+            aria-label="Search fragrances"
+            onClick={onSearch}
+            className="flex h-10 w-10 items-center justify-center text-foreground/70 transition-colors hover:text-foreground/95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </button>
+        ) : (
+          <div className="h-10 w-10" />
+        )}
       </div>
       {(eyebrow || title) && (
-        <div className={title ? 'mb-6 px-1' : 'mb-4 px-1'}>
+        <div className={`${title ? 'mb-6' : 'mb-4'} px-1 ${centerHeader ? 'text-center' : ''}`}>
           {eyebrow && (
             <div className={`${title ? 'mb-1.5' : ''} text-[10px] font-medium uppercase tracking-[0.36em] text-foreground/40`}>
               {eyebrow}
