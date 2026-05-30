@@ -8291,7 +8291,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
 
         {wardrobeBrandOptions.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex justify-center">
+          <div className="flex max-w-full gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
             <button
               type="button"
               onClick={() => setWardrobeBrandFilter(null)}
