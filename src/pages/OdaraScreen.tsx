@@ -6509,6 +6509,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeBrandFilter, setWardrobeBrandFilter] = useState<string | null>(null);
   const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState<OdaraWardrobePrimaryStatus | null>(null);
   const [wardrobeSortMode, setWardrobeSortMode] = useState<'recommended' | 'name' | 'brand'>('recommended');
+  const [wardrobeSheet, setWardrobeSheet] = useState<'filter' | 'sort' | null>(null);
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
   const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
