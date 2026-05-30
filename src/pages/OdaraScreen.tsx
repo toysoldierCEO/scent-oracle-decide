@@ -9420,6 +9420,8 @@ const OdaraScreen = ({
   }, [currentDayStateKey]);
 
   const [lockPulse, setLockPulse] = useState(false);
+  const [lockPulseType, setLockPulseType] = useState<'lock' | 'unlock' | null>(null);
+  const lockPulseTimeoutRef = useRef<number | null>(null);
   const [unlockFlash, setUnlockFlash] = useState(false);
   const [lockFlash, setLockFlash] = useState(false);
   const [likeFlash, setLikeFlash] = useState(false);
