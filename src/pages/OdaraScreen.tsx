@@ -8100,10 +8100,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       : surface === 'confirmation'
         ? ''
         : wardrobeCards.length > 0
-          ? 'Your wardrobe'
+          ? 'Vesper'
           : shouldShowFirstRun
             ? 'Build your wardrobe'
-            : 'Your wardrobe';
+            : 'Vesper';
 
   const chromeEyebrow = surface === 'search'
     ? 'Search by name, brand, or notes.'
