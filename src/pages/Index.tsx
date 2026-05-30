@@ -207,7 +207,9 @@ const Index = () => {
   const [authView, setAuthView] = useState<AuthView>('signIn');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => readRememberedEmail());
+  const [rememberMe, setRememberMe] = useState(() => readRememberMePreference());
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState('');
