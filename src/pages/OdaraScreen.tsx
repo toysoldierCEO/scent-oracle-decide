@@ -8564,6 +8564,7 @@ const OdaraScreen = ({
   const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
+  const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
 
   // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
   // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
@@ -13360,7 +13361,7 @@ const OdaraScreen = ({
                 }}
                 className="flex w-full items-center rounded-[14px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.04] hover:text-foreground/85"
               >
-                Sign out
+                {shellAuthActionLabel}
               </button>
             </div>
           </div>
@@ -14592,7 +14593,7 @@ const OdaraScreen = ({
           onClick={onSignOut}
           className="text-[10px] text-muted-foreground/30 mt-3 self-center hover:text-muted-foreground/60 transition-colors"
         >
-          Sign out
+          {shellAuthActionLabel}
         </button>
 
         {/* No data state */}
