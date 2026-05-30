@@ -8435,7 +8435,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         : undefined;
 
   return (
-    <OdaraDestinationChrome title={chromeTitle || undefined} eyebrow={chromeEyebrow} onClose={onClose}>
+    <OdaraDestinationChrome
+      title={chromeTitle || undefined}
+      eyebrow={chromeEyebrow}
+      onClose={onClose}
+      onSearch={surface !== 'search' ? openSearch : undefined}
+      centerHeader={surface === 'wardrobe'}
+    >
       {surface === 'search'
         ? renderSearchContent()
         : surface === 'detail'
