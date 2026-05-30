@@ -11660,7 +11660,7 @@ const OdaraScreen = ({
     clearLockedSelection();
     setGuestUnlockFlash(true);
     window.setTimeout(() => setGuestUnlockFlash(false), 700);
-    pulseLock();
+    pulseLock('unlock');
     haptic('success');
   }, [clearLockedSelection, pulseLock]);
 
