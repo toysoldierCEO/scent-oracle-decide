@@ -6994,15 +6994,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     wardrobeSortMode === 'name'
       ? 'Name A–Z'
       : wardrobeSortMode === 'brand'
-        ? 'Brand'
+        ? 'Brand A–Z'
         : 'Recommended';
 
-  const cycleWardrobeSort = () => {
-    haptic('light');
-    setWardrobeSortMode((prev) =>
-      prev === 'recommended' ? 'name' : prev === 'name' ? 'brand' : 'recommended',
-    );
-  };
+  const wardrobeSortOptions: { value: typeof wardrobeSortMode; label: string }[] = [
+    { value: 'recommended', label: 'Recommended' },
+    { value: 'name', label: 'Name A–Z' },
+    { value: 'brand', label: 'Brand A–Z' },
+  ];
+
+  const activeWardrobeFilterCount =
+    (wardrobeBrandFilter ? 1 : 0) + (wardrobeStatusFilter ? 1 : 0);
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
