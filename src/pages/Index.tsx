@@ -660,25 +660,17 @@ const Index = () => {
           <div className="mx-auto w-full max-w-sm">
             <div className="mb-8 text-center">
               <span className="mb-4 block text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
-                {isSignUp ? 'Welcome' : isCheckEmail ? 'Almost there' : 'Welcome back'}
+                Welcome to Vesper
               </span>
-              <h1 className="mb-3 text-xl font-bold uppercase tracking-[0.4em]">ODARA</h1>
-              {!isCheckEmail ? (
+              <h1 className="text-xl font-bold uppercase tracking-[0.4em]">ODARA</h1>
+              {isCheckEmail ? (
                 <>
-                  <p className="mb-2 text-sm text-foreground/82">Hi, I&apos;m Vesper.</p>
-                  <p className="text-sm text-muted-foreground">
-                    {isSignUp ? 'Create your scent profile.' : 'Sign in to access your scent profile.'}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="mb-2 text-sm text-foreground/82">Hi, I&apos;m Vesper.</p>
-                  <h2 className="text-lg font-medium text-foreground">Check your email</h2>
+                  <h2 className="mt-3 text-lg font-medium text-foreground">Check your email</h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     We sent a verification email to <span className="text-foreground">{pendingEmail}</span>. Confirm your account, then return to sign in.
                   </p>
                 </>
-              )}
+              ) : null}
             </div>
 
             <div className="rounded-[1.75rem] border border-border/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-sm">
