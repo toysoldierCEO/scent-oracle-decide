@@ -560,6 +560,12 @@ const Index = () => {
     }
   }, [clearAuthMessages, submitAttempted]);
 
+  const handleRememberMeToggle = (next: boolean) => {
+    setRememberMe(next);
+    // Apply immediately so an unchecked box clears any previously remembered email.
+    persistRememberedEmail(next, email.trim());
+  };
+
   const handleGoogle = async () => {
     if (isEditorPreview) {
       window.open(SHARED_PREVIEW_ORIGIN, '_blank');
