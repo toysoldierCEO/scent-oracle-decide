@@ -3484,8 +3484,10 @@ const OdaraDestinationChrome: React.FC<{
   title?: string;
   eyebrow?: string;
   onClose: () => void;
+  onSearch?: () => void;
+  centerHeader?: boolean;
   children: React.ReactNode;
-}> = ({ title, eyebrow, onClose, children }) => (
+}> = ({ title, eyebrow, onClose, onSearch, centerHeader, children }) => (
   <div
     className="fixed inset-0 z-[60] overflow-y-auto"
     style={{
