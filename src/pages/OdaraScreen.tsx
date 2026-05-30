@@ -6997,7 +6997,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         : 'Recommended';
 
   const cycleWardrobeSort = () => {
-    triggerHaptic('light');
+    haptic('light');
     setWardrobeSortMode((prev) =>
       prev === 'recommended' ? 'name' : prev === 'name' ? 'brand' : 'recommended',
     );
