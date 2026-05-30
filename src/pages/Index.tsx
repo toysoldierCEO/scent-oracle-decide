@@ -30,6 +30,43 @@ function todayLocalKey(): string {
 const PASSWORD_MIN_LENGTH = 8;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// --- Remembered email (email only — never passwords/tokens) ---
+const REMEMBER_EMAIL_KEY = 'vesper_remember_email';
+const REMEMBER_ME_KEY = 'vesper_remember_me';
+
+function readRememberedEmail(): string {
+  try {
+    if (localStorage.getItem(REMEMBER_ME_KEY) !== 'true') return '';
+    return localStorage.getItem(REMEMBER_EMAIL_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function readRememberMePreference(): boolean {
+  try {
+    const stored = localStorage.getItem(REMEMBER_ME_KEY);
+    // Default to checked when no prior preference exists.
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function persistRememberedEmail(remember: boolean, emailValue: string) {
+  try {
+    if (remember) {
+      localStorage.setItem(REMEMBER_ME_KEY, 'true');
+      if (emailValue) localStorage.setItem(REMEMBER_EMAIL_KEY, emailValue);
+    } else {
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 type AuthView = 'signIn' | 'signUp' | 'checkEmail';
 type AuthField = 'firstName' | 'lastName' | 'email' | 'password' | 'confirmPassword';
 
