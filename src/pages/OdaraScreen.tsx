@@ -6919,6 +6919,42 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     });
   }, [catalogById, effectiveSignalMap]);
 
+  // Dynamic brand bar — built only from the current user's visible collection.
+  // Null-safe: trims labels, ignores empty brands, dedupes case-insensitively,
+  // sorts alphabetically (All is rendered first separately).
+  const wardrobeBrandOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    wardrobeCards.forEach((card) => {
+      const label = readTrimmedLayerText(card.brand);
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (!byKey.has(key)) byKey.set(key, label);
+    });
+    return Array.from(byKey.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' }),
+    );
+  }, [wardrobeCards]);
+
+  // Keep an active brand filter valid as the collection changes.
+  useEffect(() => {
+    if (
+      wardrobeBrandFilter &&
+      !wardrobeBrandOptions.some(
+        (brand) => brand.toLowerCase() === wardrobeBrandFilter.toLowerCase(),
+      )
+    ) {
+      setWardrobeBrandFilter(null);
+    }
+  }, [wardrobeBrandFilter, wardrobeBrandOptions]);
+
+  const visibleWardrobeCards = useMemo(() => {
+    if (!wardrobeBrandFilter) return wardrobeCards;
+    const target = wardrobeBrandFilter.toLowerCase();
+    return wardrobeCards.filter(
+      (card) => readTrimmedLayerText(card.brand).toLowerCase() === target,
+    );
+  }, [wardrobeCards, wardrobeBrandFilter]);
+
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
     [effectiveSignalMap],
