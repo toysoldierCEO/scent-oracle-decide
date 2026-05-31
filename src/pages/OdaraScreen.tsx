@@ -6659,10 +6659,6 @@ const OdaraWardrobeBottleArt: React.FC<{
     family_key: family_key ?? family_label ?? null,
     family_label: family_label ?? (family_key ? getFamilyLabelText(family_key) : null),
   });
-  const gridAccent = getWardrobeGridCardAccent({
-    family_key: family_key ?? family_label ?? null,
-    family_label: family_label ?? (family_key ? getFamilyLabelText(family_key) : null),
-  });
   const resolvedImageUrl = resolvePreferredWardrobeBottleImage(image_url, thumbnail_url);
   const likelyTransparentImage = isLikelyTransparentBottleImageUrl(resolvedImageUrl);
   const useWardrobeGridPresentation = presentation === 'wardrobe_grid';
@@ -6696,14 +6692,7 @@ const OdaraWardrobeBottleArt: React.FC<{
             filter: frameless ? 'blur(10px)' : 'blur(18px)',
           }}
         />
-      ) : (
-        <div
-          className="pointer-events-none absolute inset-x-10 top-1 h-px"
-          style={{
-            background: `linear-gradient(90deg, rgba(255,255,255,0) 0%, ${gridAccent} 18%, ${gridAccent} 82%, rgba(255,255,255,0) 100%)`,
-          }}
-        />
-      )}
+      ) : null}
       {visibleImageUrl ? (
         <img
           src={visibleImageUrl}
@@ -8835,6 +8824,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
             {visibleWardrobeCards.map((card) => {
+              const tint = getEnhancedCollectionTint(card);
               const accent = getWardrobeGridCardAccent(card);
               return (
                 <button
@@ -8844,18 +8834,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative w-full overflow-hidden rounded-[24px] p-3 text-left transition duration-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
-                    border: '1px solid rgba(255,255,255,0.075)',
-                    background: 'linear-gradient(180deg, rgba(18,19,24,0.82) 0%, rgba(9,10,14,0.96) 100%)',
+                    border: `1px solid ${accent}`,
+                    background: `radial-gradient(circle at 50% 14%, ${tint.wash} 0%, rgba(255,255,255,0.016) 32%, rgba(255,255,255,0) 64%), linear-gradient(180deg, rgba(18,19,24,0.84) 0%, rgba(9,10,14,0.97) 100%)`,
                     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045), inset 0 -1px 0 rgba(0,0,0,0.34), 0 14px 28px rgba(0,0,0,0.3)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  <div
-                    className="pointer-events-none absolute inset-x-6 top-0 h-px"
-                    style={{
-                      background: `linear-gradient(90deg, rgba(255,255,255,0) 0%, ${accent} 18%, ${accent} 82%, rgba(255,255,255,0) 100%)`,
-                    }}
-                  />
                   <OdaraWardrobeBottleArt
                     name={card.name}
                     brand={card.brand}
