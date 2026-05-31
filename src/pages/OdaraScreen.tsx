@@ -4671,11 +4671,20 @@ function getEnhancedCollectionTint(item: Pick<OdaraCollectionItem, 'family_key' 
 
 function getWardrobeGridCardAccent(item: Pick<OdaraCollectionItem, 'family_key' | 'family_label'>) {
   const base = getCollectionTileTint(item);
-  return base.border
-    .replace('0.32', '0.12')
-    .replace('0.3', '0.11')
-    .replace('0.28', '0.1')
-    .replace('0.26', '0.09');
+  return {
+    bg: base.bg,
+    glow: base.glow
+      .replace('0.22', '0.13')
+      .replace('0.18', '0.11')
+      .replace('0.15', '0.09')
+      .replace('0.06', '0.05'),
+    border: base.border
+      .replace('0.18', '0.24')
+      .replace('0.16', '0.22')
+      .replace('0.14', '0.2')
+      .replace('0.12', '0.18')
+      .replace('0.08', '0.12'),
+  };
 }
 
 function getAccordChipTone(label: string, familyKey?: string | null) {
@@ -8824,8 +8833,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
             {visibleWardrobeCards.map((card) => {
-              const tint = getEnhancedCollectionTint(card);
-              const accent = getWardrobeGridCardAccent(card);
+              const tone = getWardrobeGridCardAccent(card);
               return (
                 <button
                   type="button"
@@ -8834,12 +8842,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative w-full overflow-hidden rounded-[24px] p-3 text-left transition duration-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
-                    border: `1px solid ${accent}`,
-                    background: `radial-gradient(circle at 50% 14%, ${tint.wash} 0%, rgba(255,255,255,0.016) 32%, rgba(255,255,255,0) 64%), linear-gradient(180deg, rgba(18,19,24,0.84) 0%, rgba(9,10,14,0.97) 100%)`,
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045), inset 0 -1px 0 rgba(0,0,0,0.34), 0 14px 28px rgba(0,0,0,0.3)',
+                    border: `1px solid ${tone.border}`,
+                    background: `linear-gradient(165deg, ${tone.bg} 0%, rgba(15,12,8,0.94) 62%, rgba(8,9,12,0.985) 100%)`,
+                    boxShadow: '0 18px 34px rgba(0,0,0,0.42), inset 0 1px 1px rgba(255,255,255,0.055)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.055] to-transparent opacity-55" />
+                  <div
+                    className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl"
+                    style={{ background: tone.glow, opacity: 0.34 }}
+                  />
                   <OdaraWardrobeBottleArt
                     name={card.name}
                     brand={card.brand}
@@ -8852,12 +8865,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     className="aspect-[4/5] w-full"
                   />
                   <div
-                    className="mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
+                    className="relative z-[1] mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
                     style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
                   >
                     {card.name}
                   </div>
-                  <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
+                  <div className="relative z-[1] mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
                     {getWardrobeBrandLabel(card.brand)}
                   </div>
                 </button>
