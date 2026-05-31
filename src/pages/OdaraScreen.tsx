@@ -4633,6 +4633,41 @@ function getCollectionTileTint(item: Pick<OdaraCollectionItem, 'family_key' | 'f
   return FAMILY_TINTS[normalized] ?? DEFAULT_TINT;
 }
 
+type OdaraGlassCardVariant = 'hero' | 'collection';
+
+function getOdaraGlassCardVisualRecipe(
+  tint: { bg: string; glow: string; border: string },
+  variant: OdaraGlassCardVariant,
+) {
+  if (variant === 'hero') {
+    return {
+      surfaceStyle: {
+        background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
+        border: `1px solid ${tint.border}`,
+        boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
+      },
+      atmosphereClassName: 'absolute -top-16 -right-16 w-52 h-52 rounded-full blur-3xl pointer-events-none',
+      atmosphereStyle: {
+        background: tint.glow,
+        opacity: 0.35,
+      },
+    } as const;
+  }
+
+  return {
+    surfaceStyle: {
+      background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
+      border: `1px solid ${tint.border}`,
+      boxShadow: `0 18px 36px rgba(0,0,0,0.44), inset 0 1px 1px rgba(255,255,255,0.06)`,
+    },
+    atmosphereClassName: 'pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full blur-2xl',
+    atmosphereStyle: {
+      background: tint.glow,
+      opacity: 0.28,
+    },
+  } as const;
+}
+
 function getCollectionRoleRank(value: string | null | undefined) {
   switch (value) {
     case 'anchor':
@@ -4666,24 +4701,6 @@ function getEnhancedCollectionTint(item: Pick<OdaraCollectionItem, 'family_key' 
     inner: base.bg.replace('0.08', '0.055').replace('0.07', '0.055').replace('0.06', '0.05').replace('0.05', '0.045'),
     frame: base.border.replace('0.32', '0.22').replace('0.3', '0.22').replace('0.28', '0.2').replace('0.26', '0.18'),
     glowStrong: base.glow.replace('0.22', '0.11').replace('0.2', '0.1').replace('0.18', '0.09').replace('0.16', '0.08'),
-  };
-}
-
-function getWardrobeGridCardAccent(item: Pick<OdaraCollectionItem, 'family_key' | 'family_label'>) {
-  const base = getCollectionTileTint(item);
-  return {
-    bg: base.bg,
-    glow: base.glow
-      .replace('0.22', '0.13')
-      .replace('0.18', '0.11')
-      .replace('0.15', '0.09')
-      .replace('0.06', '0.05'),
-    border: base.border
-      .replace('0.18', '0.24')
-      .replace('0.16', '0.22')
-      .replace('0.14', '0.2')
-      .replace('0.12', '0.18')
-      .replace('0.08', '0.12'),
   };
 }
 
@@ -8833,7 +8850,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
             {visibleWardrobeCards.map((card) => {
-              const tone = getWardrobeGridCardAccent(card);
+              const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               return (
                 <button
                   type="button"
@@ -8842,16 +8859,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative w-full overflow-hidden rounded-[24px] p-3 text-left transition duration-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
-                    border: `1px solid ${tone.border}`,
-                    background: `linear-gradient(165deg, ${tone.bg} 0%, rgba(15,12,8,0.94) 62%, rgba(8,9,12,0.985) 100%)`,
-                    boxShadow: '0 18px 34px rgba(0,0,0,0.42), inset 0 1px 1px rgba(255,255,255,0.055)',
+                    ...cardVisual.surfaceStyle,
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.055] to-transparent opacity-55" />
                   <div
-                    className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl"
-                    style={{ background: tone.glow, opacity: 0.34 }}
+                    className={cardVisual.atmosphereClassName}
+                    style={cardVisual.atmosphereStyle}
                   />
                   <OdaraWardrobeBottleArt
                     name={card.name}
@@ -8862,7 +8876,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     thumbnail_url={card.thumbnail_url}
                     frameless
                     presentation="wardrobe_grid"
-                    className="aspect-[4/5] w-full"
+                    className="relative z-[1] aspect-[4/5] w-full"
                   />
                   <div
                     className="relative z-[1] mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
@@ -11790,6 +11804,7 @@ const OdaraScreen = ({
 
   const familyKey = visibleCard?.family ?? '';
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
+  const heroCardVisual = getOdaraGlassCardVisualRecipe(tint, 'hero');
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
   const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
   const getPreviewTone = (dateStr: string) => {
@@ -14274,9 +14289,7 @@ const OdaraScreen = ({
               <div
                 className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
                 style={{
-                  background: `linear-gradient(165deg, ${tint.bg} 0%, rgba(15,12,8,0.97) 70%)`,
-                  border: `1px solid ${tint.border}`,
-                  boxShadow: `0 24px 60px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.06)`,
+                  ...heroCardVisual.surfaceStyle,
                   // Allow native vertical scroll from the hero card. We only
                   // claim the gesture on clear horizontal intent (day-swipe).
                   touchAction: 'pan-y',
@@ -14298,8 +14311,8 @@ const OdaraScreen = ({
               >
             {/* Glow orb */}
             <div
-              className="absolute -top-16 -right-16 w-52 h-52 rounded-full blur-3xl pointer-events-none"
-              style={{ background: tint.glow, opacity: 0.35 }}
+              className={heroCardVisual.atmosphereClassName}
+              style={heroCardVisual.atmosphereStyle}
             />
 
             {/* Like flash — restrained white pulse confirming the "like" half
