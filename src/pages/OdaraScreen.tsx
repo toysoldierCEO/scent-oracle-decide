@@ -374,6 +374,12 @@ function readTransparentBottleImageUrlFromObject(value: any): string | null {
     value.preview?.transparent_image_url,
     value.preview?.transparentImageUrl,
     value.preview?.['Image URL Transparent'],
+    value.provider_payload?.image_url_transparent,
+    value.provider_payload?.imageUrlTransparent,
+    value.provider_payload?.transparent_image_url,
+    value.provider_payload?.transparentImageUrl,
+    value.provider_payload?.fragella_transparent_image_url,
+    value.provider_payload?.['Image URL Transparent'],
     value.image?.transparent_url,
     value.image?.transparentUrl,
     value.photo?.transparent_url,
@@ -3513,10 +3519,11 @@ const OdaraDestinationChrome: React.FC<{
   title?: string;
   eyebrow?: string;
   onClose: () => void;
+  onHome?: () => void;
   onSearch?: () => void;
   centerHeader?: boolean;
   children: React.ReactNode;
-}> = ({ title, eyebrow, onClose, onSearch, centerHeader, children }) => (
+}> = ({ title, eyebrow, onClose, onHome, onSearch, centerHeader, children }) => (
   <div
     className="fixed inset-0 z-[60] overflow-y-auto"
     style={{
@@ -3545,9 +3552,15 @@ const OdaraDestinationChrome: React.FC<{
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
-        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[19px] font-semibold uppercase tracking-[0.46em] text-foreground/95">
+        <button
+          type="button"
+          aria-label="Go to Today's Pick"
+          onClick={onHome ?? onClose}
+          className="absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-2 text-center text-[19px] font-semibold uppercase tracking-[0.46em] text-foreground/95 transition-colors hover:text-[#f8e5b9] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/22"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
           VESPER
-        </div>
+        </button>
         {onSearch ? (
           <button
             type="button"
@@ -3829,6 +3842,7 @@ type OdaraCollectionFilter =
 type OdaraCollectionSort = 'role' | 'rating' | 'family' | 'name' | 'brand';
 
 type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
+type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
@@ -4072,6 +4086,17 @@ function scorePreferredBottleImageUrl(url: string | null | undefined) {
   return score;
 }
 
+function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
+  const normalized = typeof url === 'string' ? url.trim().toLowerCase() : '';
+  if (!normalized) return false;
+  return normalized.includes('transparent')
+    || normalized.includes('cutout')
+    || normalized.includes('isolated')
+    || normalized.includes('no-bg')
+    || normalized.includes('nobg')
+    || normalized.includes('alpha');
+}
+
 function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
   const candidates: string[] = [];
   const visited = new Set<unknown>();
@@ -4102,6 +4127,7 @@ function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
       value.image,
       value.photo,
       value.thumbnail,
+      value.provider_payload,
     );
   }
 
@@ -4155,7 +4181,7 @@ async function fetchOdaraWardrobeCatalog() {
   try {
     const { data: imageRows, error: imageError } = await odaraSupabase
       .from('fragrance_image_assets' as any)
-      .select('fragrance_id, image_url, thumbnail_url, updated_at, created_at')
+      .select('fragrance_id, image_url, thumbnail_url, provider_payload, updated_at, created_at')
       .order('updated_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false, nullsFirst: false })
       .range(0, 1999);
@@ -4166,6 +4192,7 @@ async function fetchOdaraWardrobeCatalog() {
         if (!row?.fragrance_id || imageAssetMap.has(row.fragrance_id)) continue;
         imageAssetMap.set(row.fragrance_id, {
           fragrance_id: row.fragrance_id,
+          image_url_transparent: readTransparentBottleImageUrlFromObject(row),
           image_url: readTrimmedImageUrl(row.image_url),
           thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
         });
@@ -4635,11 +4662,20 @@ function getEnhancedCollectionTint(item: Pick<OdaraCollectionItem, 'family_key' 
   const base = getCollectionTileTint(item);
   return {
     ...base,
-    wash: base.bg.replace('0.08', '0.18').replace('0.07', '0.18').replace('0.06', '0.18').replace('0.05', '0.18'),
-    inner: base.bg.replace('0.08', '0.12').replace('0.07', '0.12').replace('0.06', '0.12').replace('0.05', '0.12'),
-    frame: base.border.replace('0.32', '0.44').replace('0.3', '0.44').replace('0.28', '0.42').replace('0.26', '0.4'),
-    glowStrong: base.glow.replace('0.22', '0.3').replace('0.2', '0.3').replace('0.18', '0.28').replace('0.16', '0.28'),
+    wash: base.bg.replace('0.08', '0.09').replace('0.07', '0.09').replace('0.06', '0.085').replace('0.05', '0.08'),
+    inner: base.bg.replace('0.08', '0.055').replace('0.07', '0.055').replace('0.06', '0.05').replace('0.05', '0.045'),
+    frame: base.border.replace('0.32', '0.22').replace('0.3', '0.22').replace('0.28', '0.2').replace('0.26', '0.18'),
+    glowStrong: base.glow.replace('0.22', '0.11').replace('0.2', '0.1').replace('0.18', '0.09').replace('0.16', '0.08'),
   };
+}
+
+function getWardrobeGridCardAccent(item: Pick<OdaraCollectionItem, 'family_key' | 'family_label'>) {
+  const base = getCollectionTileTint(item);
+  return base.border
+    .replace('0.32', '0.12')
+    .replace('0.3', '0.11')
+    .replace('0.28', '0.1')
+    .replace('0.26', '0.09');
 }
 
 function getAccordChipTone(label: string, familyKey?: string | null) {
@@ -6604,6 +6640,7 @@ const OdaraWardrobeBottleArt: React.FC<{
   alt?: string;
   compact?: boolean;
   frameless?: boolean;
+  presentation?: 'default' | 'wardrobe_grid';
   className?: string;
 }> = ({
   name,
@@ -6615,41 +6652,76 @@ const OdaraWardrobeBottleArt: React.FC<{
   alt,
   compact = false,
   frameless = false,
+  presentation = 'default',
   className = '',
 }) => {
   const tint = getEnhancedCollectionTint({
     family_key: family_key ?? family_label ?? null,
     family_label: family_label ?? (family_key ? getFamilyLabelText(family_key) : null),
   });
+  const gridAccent = getWardrobeGridCardAccent({
+    family_key: family_key ?? family_label ?? null,
+    family_label: family_label ?? (family_key ? getFamilyLabelText(family_key) : null),
+  });
   const resolvedImageUrl = resolvePreferredWardrobeBottleImage(image_url, thumbnail_url);
+  const likelyTransparentImage = isLikelyTransparentBottleImageUrl(resolvedImageUrl);
+  const useWardrobeGridPresentation = presentation === 'wardrobe_grid';
+  const visibleImageUrl = useWardrobeGridPresentation && resolvedImageUrl && !likelyTransparentImage
+    ? null
+    : resolvedImageUrl;
   const monogram = deriveProfileMonogram(name || brand || 'Bottle');
 
   return (
     <div
-      className={`relative ${frameless ? 'overflow-visible rounded-[28px]' : 'overflow-hidden rounded-[24px] border'} ${className}`}
+      className={`relative ${(frameless || useWardrobeGridPresentation) ? 'overflow-visible rounded-[28px]' : 'overflow-hidden rounded-[24px] border'} ${className}`}
       style={{
-        borderColor: frameless ? 'transparent' : tint.frame,
-        background: frameless
-          ? `radial-gradient(circle at 50% 42%, ${tint.wash} 0%, rgba(255,255,255,0.018) 34%, rgba(255,255,255,0) 72%)`
+        borderColor: (frameless || useWardrobeGridPresentation) ? 'transparent' : tint.frame,
+        background: useWardrobeGridPresentation
+          ? 'transparent'
+          : frameless
+          ? 'transparent'
           : `radial-gradient(circle at 50% 12%, ${tint.wash} 0%, rgba(255,255,255,0.022) 36%, rgba(9,10,14,0.96) 100%)`,
-        boxShadow: frameless
-          ? `0 28px 58px ${tint.glowStrong}`
+        boxShadow: useWardrobeGridPresentation
+          ? 'none'
+          : frameless
+          ? 'none'
           : `inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px ${tint.glowStrong}`,
       }}
     >
-      <div
-        className={`pointer-events-none absolute rounded-full ${frameless ? 'inset-x-3 top-8 h-20' : 'inset-x-4 top-3 h-16'}`}
-        style={{
-          background: `radial-gradient(circle at 50% 0%, ${tint.inner} 0%, rgba(255,255,255,0) 78%)`,
-          filter: frameless ? 'blur(24px)' : 'blur(18px)',
-        }}
-      />
-      {resolvedImageUrl ? (
+      {!useWardrobeGridPresentation ? (
+        <div
+          className={`pointer-events-none absolute rounded-full ${frameless ? 'inset-x-8 top-11 h-12 opacity-45' : 'inset-x-4 top-3 h-16'}`}
+          style={{
+            background: `radial-gradient(circle at 50% 0%, ${tint.inner} 0%, rgba(255,255,255,0) 78%)`,
+            filter: frameless ? 'blur(10px)' : 'blur(18px)',
+          }}
+        />
+      ) : (
+        <div
+          className="pointer-events-none absolute inset-x-10 top-1 h-px"
+          style={{
+            background: `linear-gradient(90deg, rgba(255,255,255,0) 0%, ${gridAccent} 18%, ${gridAccent} 82%, rgba(255,255,255,0) 100%)`,
+          }}
+        />
+      )}
+      {visibleImageUrl ? (
         <img
-          src={resolvedImageUrl}
+          src={visibleImageUrl}
           alt={alt ?? `${name} bottle`}
-          className={`relative h-full w-full object-contain ${frameless ? (compact ? 'p-1' : 'p-1.5') : compact ? 'p-2.5' : 'p-4'}`}
-          style={frameless ? { filter: `drop-shadow(0 24px 34px rgba(0,0,0,0.42)) drop-shadow(0 0 24px ${tint.glowStrong})` } : undefined}
+          className={`relative h-full w-full object-contain ${frameless ? (compact ? 'p-1' : 'p-2') : compact ? 'p-2.5' : 'p-4'}`}
+          style={useWardrobeGridPresentation
+            ? {
+                filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.26))',
+              }
+            : frameless
+              ? {
+                  borderRadius: likelyTransparentImage ? undefined : 18,
+                  filter: likelyTransparentImage
+                    ? `drop-shadow(0 16px 24px rgba(0,0,0,0.42)) drop-shadow(0 0 8px ${tint.glowStrong})`
+                    : 'contrast(1.03) saturate(0.95) drop-shadow(0 14px 22px rgba(0,0,0,0.4))',
+                  mixBlendMode: likelyTransparentImage ? undefined : 'darken',
+                }
+              : undefined}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
@@ -6659,20 +6731,20 @@ const OdaraWardrobeBottleArt: React.FC<{
               height={compact ? 76 : 148}
               viewBox="0 0 112 148"
               aria-hidden="true"
-              className="drop-shadow-[0_10px_30px_rgba(0,0,0,0.32)]"
+              className={useWardrobeGridPresentation ? 'drop-shadow-[0_8px_18px_rgba(0,0,0,0.22)]' : 'drop-shadow-[0_10px_30px_rgba(0,0,0,0.32)]'}
             >
               <defs>
-                <linearGradient id="wardrobeBottleSilhouette" x1="50%" y1="0%" x2="50%" y2="100%">
-                  <stop offset="0%" stopColor="rgba(255,255,255,0.22)" />
-                  <stop offset="100%" stopColor="rgba(255,255,255,0.08)" />
+                <linearGradient id={useWardrobeGridPresentation ? 'wardrobeBottleSilhouetteGrid' : 'wardrobeBottleSilhouette'} x1="50%" y1="0%" x2="50%" y2="100%">
+                  <stop offset="0%" stopColor={useWardrobeGridPresentation ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.22)'} />
+                  <stop offset="100%" stopColor={useWardrobeGridPresentation ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)'} />
                 </linearGradient>
               </defs>
-              <rect x="40" y="10" width="32" height="22" rx="8" fill="url(#wardrobeBottleSilhouette)" />
-              <rect x="30" y="28" width="52" height="98" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.18)" />
-              <rect x="35" y="38" width="42" height="74" rx="14" fill="rgba(255,255,255,0.05)" />
+              <rect x="40" y="10" width="32" height="22" rx="8" fill={useWardrobeGridPresentation ? 'url(#wardrobeBottleSilhouetteGrid)' : 'url(#wardrobeBottleSilhouette)'} />
+              <rect x="30" y="28" width="52" height="98" rx="18" fill={useWardrobeGridPresentation ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.08)'} stroke={useWardrobeGridPresentation ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.18)'} />
+              <rect x="35" y="38" width="42" height="74" rx="14" fill={useWardrobeGridPresentation ? 'rgba(255,255,255,0.028)' : 'rgba(255,255,255,0.05)'} />
             </svg>
             <div
-              className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] uppercase tracking-[0.32em] text-foreground/56"
+              className={`pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center uppercase tracking-[0.32em] ${useWardrobeGridPresentation ? 'text-[9px] text-foreground/48' : 'text-[10px] text-foreground/56'}`}
               style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
               {monogram}
@@ -6701,6 +6773,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wearHistoryLoading, setWearHistoryLoading] = useState(true);
   const [brandRailSource, setBrandRailSource] = useState<OdaraWardrobeRailSource>('safe_local_list');
   const [surface, setSurface] = useState<OdaraWardrobeSurface>('wardrobe');
+  const [detailReturnSurface, setDetailReturnSurface] = useState<OdaraWardrobeDetailReturnSurface>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
@@ -7429,17 +7502,20 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setOnboardingSeen(true);
     setActionError(null);
     setConfirmationState(null);
+    setDetailReturnSurface('search');
     setSurface('search');
   }, []);
 
   const openWardrobe = useCallback(() => {
     setActionError(null);
     setConfirmationState(null);
+    setDetailReturnSurface('wardrobe');
     setSurface('wardrobe');
   }, []);
 
-  const openDetail = useCallback((fragranceId: string) => {
+  const openDetail = useCallback((fragranceId: string, returnSurface: OdaraWardrobeDetailReturnSurface = 'search') => {
     setActionError(null);
+    setDetailReturnSurface(returnSurface);
     setSelectedFragranceId(fragranceId);
     setSurface('detail');
   }, []);
@@ -7984,14 +8060,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           type="button"
           onClick={() => {
             setActionError(null);
-            setSurface('search');
+            setSurface(detailReturnSurface);
           }}
           className="inline-flex items-center gap-2 px-2 text-[10px] uppercase tracking-[0.28em] text-foreground/42 transition-colors hover:text-foreground/74"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
-          Back to search
+          {detailReturnSurface === 'wardrobe' ? 'Back to wardrobe' : 'Back to search'}
         </button>
 
         <OdaraInsetGroup emphasis>
@@ -8759,17 +8835,27 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
             {visibleWardrobeCards.map((card) => {
-              const tint = getEnhancedCollectionTint(card);
+              const accent = getWardrobeGridCardAccent(card);
               return (
-                <div
+                <button
+                  type="button"
                   key={card.fragrance_id}
-                  className="rounded-[28px] p-3 transition-transform duration-200 active:scale-[0.985]"
+                  aria-label={`Open ${card.name} profile`}
+                  onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
+                  className="group relative w-full overflow-hidden rounded-[24px] p-3 text-left transition duration-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
-                    background: `radial-gradient(circle at 50% 18%, ${tint.wash} 0%, rgba(255,255,255,0.018) 42%, rgba(255,255,255,0) 100%)`,
-                    boxShadow: `0 26px 58px ${tint.glowStrong}`,
+                    border: '1px solid rgba(255,255,255,0.075)',
+                    background: 'linear-gradient(180deg, rgba(18,19,24,0.82) 0%, rgba(9,10,14,0.96) 100%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045), inset 0 -1px 0 rgba(0,0,0,0.34), 0 14px 28px rgba(0,0,0,0.3)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
+                  <div
+                    className="pointer-events-none absolute inset-x-6 top-0 h-px"
+                    style={{
+                      background: `linear-gradient(90deg, rgba(255,255,255,0) 0%, ${accent} 18%, ${accent} 82%, rgba(255,255,255,0) 100%)`,
+                    }}
+                  />
                   <OdaraWardrobeBottleArt
                     name={card.name}
                     brand={card.brand}
@@ -8778,6 +8864,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     image_url={card.image_url}
                     thumbnail_url={card.thumbnail_url}
                     frameless
+                    presentation="wardrobe_grid"
                     className="aspect-[4/5] w-full"
                   />
                   <div
@@ -8789,7 +8876,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
                     {getWardrobeBrandLabel(card.brand)}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
