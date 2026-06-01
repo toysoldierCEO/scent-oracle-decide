@@ -2403,6 +2403,7 @@ type SignedInDayState = {
   lockedPromotedAltId: string | null;
   manualHeroCard: DisplayCard | null;
   manualLayerCard: DisplayCard | null;
+  preferenceMoments: PersistedPreferenceMoment[];
 };
 
 type SignedInDayStateMap = Record<string, SignedInDayState>; // key = "dateStr:context"
@@ -2438,6 +2439,28 @@ type SignedInResolvedLockTruth = {
   lockedContext: string | null;
   lockedMood: LayerMood;
   lockedPromotedAltId: string | null;
+};
+
+type PersistedPreferenceMomentState = 'liked' | 'loved';
+
+type PersistedPreferenceMomentFragrance = {
+  fragrance_id: string;
+  name: string;
+  brand: string | null;
+  family_key: string | null;
+  image_url: string | null;
+};
+
+type PersistedPreferenceMoment = {
+  fragrance_id: string;
+  preference_state: PersistedPreferenceMomentState;
+  source: string | null;
+  created_at: string | null;
+  context_key: string | null;
+  date_key: string | null;
+  mode: LayerMood | null;
+  main: PersistedPreferenceMomentFragrance;
+  layer: PersistedPreferenceMomentFragrance | null;
 };
 
 const ODARA_SIGNED_IN_DAY_MEMORY_TABLE = 'odara_signed_in_day_memory';
@@ -2483,7 +2506,102 @@ function createDefaultSignedInDayState(): SignedInDayState {
     lockedPromotedAltId: null,
     manualHeroCard: null,
     manualLayerCard: null,
+    preferenceMoments: [],
   };
+}
+
+function normalizePersistedPreferenceMomentState(value: unknown): PersistedPreferenceMomentState | null {
+  return value === 'loved' ? 'loved' : value === 'liked' ? 'liked' : null;
+}
+
+function buildPreferenceMomentFragranceSnapshot(value: {
+  fragrance_id?: string | null;
+  id?: string | null;
+  name?: string | null;
+  brand?: string | null;
+  family?: string | null;
+  family_key?: string | null;
+  image_url?: string | null;
+} | null | undefined): PersistedPreferenceMomentFragrance | null {
+  if (!value) return null;
+  const fragrance_id = readTrimmedLayerText(value.fragrance_id, value.id);
+  const name = readTrimmedLayerText(value.name);
+  if (!fragrance_id || !name) return null;
+  return {
+    fragrance_id,
+    name,
+    brand: readTrimmedLayerText(value.brand) || null,
+    family_key: normalizeSearchFamilyKey(readTrimmedLayerText(value.family_key, value.family)),
+    image_url: readTrimmedImageUrl(value.image_url),
+  };
+}
+
+function toPersistedPreferenceMoment(moment: PersistedPreferenceMoment | null | undefined) {
+  if (!moment) return null;
+  const preferenceState = normalizePersistedPreferenceMomentState(moment.preference_state);
+  const main = buildPreferenceMomentFragranceSnapshot(moment.main);
+  const layer = buildPreferenceMomentFragranceSnapshot(moment.layer);
+  const fragranceId = readTrimmedLayerText(moment.fragrance_id, main?.fragrance_id);
+  if (!preferenceState || !fragranceId || !main) return null;
+  return {
+    fragrance_id: fragranceId,
+    preference_state: preferenceState,
+    source: readTrimmedLayerText(moment.source) || null,
+    created_at: readTrimmedLayerText(moment.created_at) || null,
+    context_key: readTrimmedLayerText(moment.context_key) ? normalizePersistedContextKey(moment.context_key) : null,
+    date_key: readTrimmedLayerText(moment.date_key) || null,
+    mode: moment.mode ? normalizePersistedMood(moment.mode) : null,
+    main,
+    layer,
+  };
+}
+
+function fromPersistedPreferenceMoment(raw: any): PersistedPreferenceMoment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const preferenceState = normalizePersistedPreferenceMomentState(raw.preference_state);
+  const main = buildPreferenceMomentFragranceSnapshot(raw.main);
+  const layer = buildPreferenceMomentFragranceSnapshot(raw.layer);
+  const fragranceId = readTrimmedLayerText(raw.fragrance_id, main?.fragrance_id);
+  if (!preferenceState || !fragranceId || !main) return null;
+  return {
+    fragrance_id: fragranceId,
+    preference_state: preferenceState,
+    source: readTrimmedLayerText(raw.source) || null,
+    created_at: readTrimmedLayerText(raw.created_at) || null,
+    context_key: readTrimmedLayerText(raw.context_key) ? normalizePersistedContextKey(raw.context_key) : null,
+    date_key: readTrimmedLayerText(raw.date_key) || null,
+    mode: normalizeLayerMoodKey(raw.mode) ?? null,
+    main,
+    layer,
+  };
+}
+
+function areSamePreferenceMoments(
+  a: PersistedPreferenceMoment[] | null | undefined,
+  b: PersistedPreferenceMoment[] | null | undefined,
+) {
+  return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+}
+
+function upsertPreferenceMoment(
+  moments: PersistedPreferenceMoment[] | null | undefined,
+  moment: PersistedPreferenceMoment | null | undefined,
+) {
+  const normalizedMoment = toPersistedPreferenceMoment(moment);
+  const existing = Array.isArray(moments)
+    ? moments
+        .map((entry) => toPersistedPreferenceMoment(entry))
+        .filter((entry): entry is NonNullable<typeof entry> => !!entry)
+    : [];
+
+  if (!normalizedMoment) return existing;
+
+  const next = [
+    normalizedMoment,
+    ...existing.filter((entry) => entry.fragrance_id !== normalizedMoment.fragrance_id),
+  ];
+
+  return next.slice(0, 12);
 }
 
 function normalizePersistedLockState(value: unknown): LockState {
@@ -2951,6 +3069,11 @@ function serializeSignedInDayStateForStorage(state: SignedInDayState) {
     lockedPromotedAltId: normalizedLockState === 'locked' ? (state.lockedPromotedAltId ?? null) : null,
     manualHeroCard: null,
     manualLayerCard: null,
+    preferenceMoments: Array.isArray(state.preferenceMoments)
+      ? state.preferenceMoments
+          .map((moment) => toPersistedPreferenceMoment(moment))
+          .filter((moment): moment is NonNullable<typeof moment> => !!moment)
+      : [],
   };
 }
 
@@ -3010,6 +3133,11 @@ function deserializeSignedInDayStateFromStorage(raw: any): SignedInDayState {
       : null,
     manualHeroCard: null,
     manualLayerCard: null,
+    preferenceMoments: Array.isArray(raw.preferenceMoments)
+      ? raw.preferenceMoments
+          .map((moment: any) => fromPersistedPreferenceMoment(moment))
+          .filter((moment: PersistedPreferenceMoment | null): moment is PersistedPreferenceMoment => !!moment)
+      : [],
   };
 }
 
@@ -3032,6 +3160,7 @@ function isPersistableSignedInDayState(state: SignedInDayState): boolean {
     || !!serialized.lockedLayerMode
     || !!serialized.lockedResolvedCurrentCard
     || serialized.lockedPromotedAltId !== null
+    || (Array.isArray(serialized.preferenceMoments) && serialized.preferenceMoments.length > 0)
   );
 }
 
@@ -3749,6 +3878,37 @@ type OdaraProfileDossierPayload = {
   };
 };
 
+type OdaraProfileSavedItemKind = 'saved_recipe' | 'saved_layer_combo' | 'saved_layer';
+
+type OdaraProfileSavedItemPayload = {
+  item_kind: OdaraProfileSavedItemKind;
+  item_id: string;
+  title: string | null;
+  subtitle: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  wear_date: string | null;
+  context_key: string | null;
+  ratio_a: number | null;
+  ratio_b: number | null;
+  application_style: string | null;
+  notes: string | null;
+  liked: boolean | null;
+  main_fragrance_id: string | null;
+  layer_fragrance_id: string | null;
+  main_name: string | null;
+  layer_name: string | null;
+  main_brand: string | null;
+  layer_brand: string | null;
+  mode: string | null;
+  source_table: string | null;
+};
+
+type OdaraProfileSavedItemsPayload = {
+  saved_item_contract_version: string;
+  items: OdaraProfileSavedItemPayload[];
+};
+
 type OdaraCollectionPreferenceState = 'neutral' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 
 type OdaraCollectionItem = {
@@ -3845,7 +4005,7 @@ type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
-type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired';
+type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired' | 'wishlist';
 type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
 type OdaraWardrobeSortDirection = 'asc' | 'desc';
 type OdaraWardrobeSeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'all_year';
@@ -4169,6 +4329,64 @@ function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset
   };
 }
 
+async function fetchWardrobeImageAssetMap(fragranceIds?: string[]) {
+  try {
+    let query = odaraSupabase
+      .from('fragrance_image_assets' as any)
+      .select('fragrance_id, image_url, thumbnail_url, provider_payload, updated_at, created_at')
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false, nullsFirst: false });
+
+    if (Array.isArray(fragranceIds) && fragranceIds.length > 0) {
+      query = query.in('fragrance_id', fragranceIds);
+    } else {
+      query = query.range(0, 1999);
+    }
+
+    const { data: imageRows, error: imageError } = await query;
+    if (imageError) throw imageError;
+
+    const imageAssetMap = new Map<string, FragranceImageAsset>();
+    for (const row of Array.isArray(imageRows) ? imageRows : []) {
+      if (!row?.fragrance_id || imageAssetMap.has(row.fragrance_id)) continue;
+      imageAssetMap.set(row.fragrance_id, {
+        fragrance_id: row.fragrance_id,
+        image_url_transparent: readTransparentBottleImageUrlFromObject(row),
+        image_url: readTrimmedImageUrl(row.image_url),
+        thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
+      });
+    }
+
+    return imageAssetMap;
+  } catch {
+    return new Map<string, FragranceImageAsset>();
+  }
+}
+
+async function fetchOdaraWardrobeCatalogByIds(fragranceIds: string[]) {
+  const ids = Array.from(new Set(
+    fragranceIds
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean),
+  ));
+  if (ids.length === 0) return [] as OdaraWardrobeCatalogItem[];
+
+  const { data: fragranceRows, error: fragranceError } = await odaraSupabase
+    .from('fragrances' as any)
+    .select('id, name, brand, family_key, primary_season, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, source_url, source_confidence')
+    .in('id', ids)
+    .order('brand', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (fragranceError) throw fragranceError;
+
+  const imageAssetMap = await fetchWardrobeImageAssetMap(ids);
+
+  return (Array.isArray(fragranceRows) ? fragranceRows : [])
+    .map((row) => normalizeWardrobeCatalogItem(row, imageAssetMap.get(row.id) ?? null))
+    .filter((row): row is OdaraWardrobeCatalogItem => !!row);
+}
+
 async function fetchOdaraWardrobeCatalog() {
   const { data: fragranceRows, error: fragranceError } = await odaraSupabase
     .from('fragrances' as any)
@@ -4179,30 +4397,7 @@ async function fetchOdaraWardrobeCatalog() {
 
   if (fragranceError) throw fragranceError;
 
-  let imageAssetMap = new Map<string, FragranceImageAsset>();
-  try {
-    const { data: imageRows, error: imageError } = await odaraSupabase
-      .from('fragrance_image_assets' as any)
-      .select('fragrance_id, image_url, thumbnail_url, provider_payload, updated_at, created_at')
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false, nullsFirst: false })
-      .range(0, 1999);
-
-    if (!imageError) {
-      imageAssetMap = new Map<string, FragranceImageAsset>();
-      for (const row of Array.isArray(imageRows) ? imageRows : []) {
-        if (!row?.fragrance_id || imageAssetMap.has(row.fragrance_id)) continue;
-        imageAssetMap.set(row.fragrance_id, {
-          fragrance_id: row.fragrance_id,
-          image_url_transparent: readTransparentBottleImageUrlFromObject(row),
-          image_url: readTrimmedImageUrl(row.image_url),
-          thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
-        });
-      }
-    }
-  } catch {
-    imageAssetMap = new Map<string, FragranceImageAsset>();
-  }
+  const imageAssetMap = await fetchWardrobeImageAssetMap();
 
   const items = (Array.isArray(fragranceRows) ? fragranceRows : [])
     .map((row) => normalizeWardrobeCatalogItem(row, imageAssetMap.get(row.id) ?? null))
@@ -4654,6 +4849,82 @@ function formatProfileCount(count: number, singular: string, plural = `${singula
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function normalizeProfileSavedRatio(value: any): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeProfileSavedItemPayload(raw: any): OdaraProfileSavedItemPayload | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const itemId = readTrimmedLayerText(raw.item_id, raw.id);
+  const itemKind = readTrimmedLayerText(raw.item_kind);
+  if (!itemId || !itemKind) return null;
+  if (!['saved_recipe', 'saved_layer_combo', 'saved_layer'].includes(itemKind)) return null;
+  return {
+    item_kind: itemKind as OdaraProfileSavedItemKind,
+    item_id: itemId,
+    title: readTrimmedLayerText(raw.title) || null,
+    subtitle: readTrimmedLayerText(raw.subtitle) || null,
+    created_at: readTrimmedLayerText(raw.created_at) || null,
+    updated_at: readTrimmedLayerText(raw.updated_at) || null,
+    wear_date: readTrimmedLayerText(raw.wear_date) || null,
+    context_key: readTrimmedLayerText(raw.context_key) || null,
+    ratio_a: normalizeProfileSavedRatio(raw.ratio_a),
+    ratio_b: normalizeProfileSavedRatio(raw.ratio_b),
+    application_style: readTrimmedLayerText(raw.application_style) || null,
+    notes: readTrimmedLayerText(raw.notes) || null,
+    liked: typeof raw.liked === 'boolean' ? raw.liked : null,
+    main_fragrance_id: readTrimmedLayerText(raw.main_fragrance_id) || null,
+    layer_fragrance_id: readTrimmedLayerText(raw.layer_fragrance_id) || null,
+    main_name: readTrimmedLayerText(raw.main_name) || null,
+    layer_name: readTrimmedLayerText(raw.layer_name) || null,
+    main_brand: readTrimmedLayerText(raw.main_brand) || null,
+    layer_brand: readTrimmedLayerText(raw.layer_brand) || null,
+    mode: readTrimmedLayerText(raw.mode) || null,
+    source_table: readTrimmedLayerText(raw.source_table) || null,
+  };
+}
+
+function normalizeProfileSavedItemsPayload(raw: any): OdaraProfileSavedItemsPayload {
+  const items = Array.isArray(raw?.items)
+    ? raw.items
+        .map((item: any) => normalizeProfileSavedItemPayload(item))
+        .filter((item: OdaraProfileSavedItemPayload | null): item is OdaraProfileSavedItemPayload => !!item)
+    : [];
+  return {
+    saved_item_contract_version: readTrimmedLayerText(raw?.saved_item_contract_version) || 'profile_saved_items_v1',
+    items,
+  };
+}
+
+function formatProfileContextLabel(value: string | null | undefined) {
+  const normalized = readTrimmedLayerText(value);
+  if (!normalized) return null;
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatProfileShortDate(value: string | null | undefined) {
+  const normalized = readTrimmedLayerText(value);
+  if (!normalized) return null;
+  const parsed = Date.parse(normalized);
+  if (!Number.isFinite(parsed)) return normalized;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(parsed));
+  } catch {
+    return normalized;
+  }
+}
+
 function getCollectionDefaultRank(item: OdaraCollectionItem, index: number) {
   return typeof item.default_rank === 'number' && Number.isFinite(item.default_rank)
     ? item.default_rank
@@ -4986,6 +5257,38 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
   };
 }
 
+function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWardrobeCatalogItem): OdaraFragranceDetailSurfaceState {
+  return {
+    fragrance_id: item.fragrance_id,
+    name: item.name,
+    brand: item.brand ?? null,
+    family_key: item.family_key ?? null,
+    family_label: item.family_label ?? (item.family_key ? getFamilyLabelText(item.family_key) : null),
+    family_color_token: item.family_key ?? null,
+    wardrobe_role_key: null,
+    wardrobe_role_label: null,
+    role_confidence: null,
+    role_source: null,
+    image_url: item.image_url ?? null,
+    thumbnail_url: item.thumbnail_url ?? null,
+    notes: sanitizeTokenSource(item.notes),
+    accords: sanitizeTokenSource(item.accords),
+    top_notes: sanitizeTokenSource(item.top_notes),
+    middle_notes: sanitizeTokenSource(item.heart_notes),
+    base_notes: sanitizeTokenSource(item.base_notes),
+    why_it_fits_wardrobe: null,
+    source_confidence: item.source_confidence ?? null,
+    longevity_score: null,
+    projection_score: null,
+    retired: false,
+    collection_status: null,
+    rating: null,
+    source_label: 'Profile detail',
+    detail_loading: false,
+    detail_error: null,
+  };
+}
+
 function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): OdaraFragranceDetailSurfaceState {
   return {
     fragrance_id: card.fragrance_id ?? null,
@@ -5092,12 +5395,14 @@ function mergeFragranceDetailSurfaceState(
 const OdaraProfilePage: React.FC<{
   onClose: () => void;
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
+  onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   onSearch?: () => void;
   userId: string | null;
   isGuestMode: boolean;
 }> = ({
   onClose,
   onOpenCollection,
+  onOpenFragranceDetail,
   onSearch,
   userId,
   isGuestMode,
@@ -5106,6 +5411,22 @@ const OdaraProfilePage: React.FC<{
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [authIdentity, setAuthIdentity] = useState<OdaraAuthProfileIdentity | null>(null);
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'saved' | 'liked'>('dashboard');
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [savedLibraryPayload, setSavedLibraryPayload] = useState<OdaraProfileSavedItemsPayload | null>(null);
+  const [savedLibraryLoading, setSavedLibraryLoading] = useState(false);
+  const [savedLibraryError, setSavedLibraryError] = useState<string | null>(null);
+  const [likedPreferenceRows, setLikedPreferenceRows] = useState<Array<{
+    fragrance_id: string;
+    preference_state: PersistedPreferenceMomentState;
+    updated_at: string | null;
+    created_at: string | null;
+    last_event_at: string | null;
+  }>>([]);
+  const [likedMomentRows, setLikedMomentRows] = useState<PersistedPreferenceMoment[]>([]);
+  const [likedLibraryLoading, setLikedLibraryLoading] = useState(false);
+  const [likedLibraryError, setLikedLibraryError] = useState<string | null>(null);
+  const [profileCatalogById, setProfileCatalogById] = useState<Record<string, OdaraWardrobeCatalogItem>>({});
 
   useEffect(() => {
     let active = true;
@@ -5148,6 +5469,21 @@ const OdaraProfilePage: React.FC<{
   }, [isGuestMode, userId]);
 
   useEffect(() => {
+    setActiveSection('dashboard');
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
+    setSavedLibraryPayload(null);
+    setSavedLibraryLoading(false);
+    setSavedLibraryError(null);
+    setLikedPreferenceRows([]);
+    setLikedMomentRows([]);
+    setLikedLibraryLoading(false);
+    setLikedLibraryError(null);
+    setProfileCatalogById({});
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
     let active = true;
 
     if (isGuestMode) {
@@ -5167,6 +5503,223 @@ const OdaraProfilePage: React.FC<{
       active = false;
     };
   }, [isGuestMode, userId]);
+
+  const mergeProfileCatalogItems = useCallback((items: OdaraWardrobeCatalogItem[]) => {
+    setProfileCatalogById((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const item of items) {
+        if (!item?.fragrance_id) continue;
+        if (next[item.fragrance_id] === item) continue;
+        next[item.fragrance_id] = item;
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (isGuestMode || !userId) {
+      setWishlistCount(0);
+      return () => {
+        active = false;
+      };
+    }
+
+    (async () => {
+      const { data, error } = await odaraSupabase.rpc('get_user_collection_wishlist_signals_v1' as any, {
+        p_user_id: userId,
+      } as any);
+
+      if (!active) return;
+      if (error) {
+        setWishlistCount(0);
+        return;
+      }
+
+      const items = Array.isArray((data as any)?.items)
+        ? (data as any).items
+        : Array.isArray(data)
+          ? data
+          : [];
+      setWishlistCount(items.length);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (activeSection !== 'saved' || isGuestMode || !userId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    setSavedLibraryLoading(true);
+    setSavedLibraryError(null);
+    setSavedLibraryPayload(null);
+
+    (async () => {
+      const { data, error } = await odaraSupabase.rpc('get_odara_profile_saved_items_v1' as any, {
+        p_user_id: userId,
+      } as any);
+
+      if (!active) return;
+      if (error) {
+        setSavedLibraryPayload(null);
+        setSavedLibraryError(error.message || 'Could not load saved scent moments yet.');
+        setSavedLibraryLoading(false);
+        return;
+      }
+
+      const normalized = normalizeProfileSavedItemsPayload(data ?? null);
+      setSavedLibraryPayload(normalized);
+
+      const ids = Array.from(new Set(
+        normalized.items
+          .flatMap((item) => [item.main_fragrance_id, item.layer_fragrance_id])
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean),
+      ));
+
+      if (ids.length > 0) {
+        try {
+          const items = await fetchOdaraWardrobeCatalogByIds(ids);
+          if (active) mergeProfileCatalogItems(items);
+        } catch {
+          // Saved cards can still render honest text without catalog enrichment.
+        }
+      }
+
+      if (active) {
+        setSavedLibraryLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeSection, isGuestMode, mergeProfileCatalogItems, userId]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (activeSection !== 'liked' || isGuestMode || !userId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    setLikedLibraryLoading(true);
+    setLikedLibraryError(null);
+    setLikedPreferenceRows([]);
+    setLikedMomentRows([]);
+
+    (async () => {
+      try {
+        const [{ data: preferenceData, error: preferenceError }, { data: dayMemoryRows, error: dayMemoryError }] = await Promise.all([
+          odaraSupabase.rpc('get_user_fragrance_preference_signals_v1' as any, {
+            p_user_id: userId,
+          } as any),
+          odaraSupabase
+            .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
+            .select('date_key, context_key, state_json, updated_at')
+            .eq('user_id', userId),
+        ]);
+
+        if (!active) return;
+        if (preferenceError) throw preferenceError;
+        if (dayMemoryError) throw dayMemoryError;
+
+        const preferenceItems = Array.isArray((preferenceData as any)?.items)
+          ? (preferenceData as any).items
+          : Array.isArray(preferenceData)
+            ? preferenceData
+            : [];
+
+        const positivePreferences = preferenceItems
+          .map((row: any) => {
+            const fragranceId = readTrimmedLayerText(row?.fragrance_id);
+            const preferenceState = normalizePersistedPreferenceMomentState(row?.preference_state);
+            if (!fragranceId || !preferenceState) return null;
+            return {
+              fragrance_id: fragranceId,
+              preference_state: preferenceState,
+              updated_at: readTrimmedLayerText(row?.updated_at) || null,
+              created_at: readTrimmedLayerText(row?.created_at) || null,
+              last_event_at: readTrimmedLayerText(row?.last_event_at) || null,
+            };
+          })
+          .filter((row: any): row is {
+            fragrance_id: string;
+            preference_state: PersistedPreferenceMomentState;
+            updated_at: string | null;
+            created_at: string | null;
+            last_event_at: string | null;
+          } => !!row);
+
+        const capturedMoments: PersistedPreferenceMoment[] = [];
+        for (const row of Array.isArray(dayMemoryRows) ? dayMemoryRows : []) {
+          const dateKey = readTrimmedLayerText(row?.date_key) || null;
+          const contextKey = readTrimmedLayerText(row?.context_key) || null;
+          const updatedAt = readTrimmedLayerText(row?.updated_at) || null;
+          const state = deserializeSignedInDayStateFromStorage(row?.state_json);
+          for (const moment of Array.isArray(state.preferenceMoments) ? state.preferenceMoments : []) {
+            const normalized = toPersistedPreferenceMoment({
+              ...moment,
+              date_key: moment.date_key ?? dateKey,
+              context_key: moment.context_key ?? contextKey,
+              created_at: moment.created_at ?? updatedAt,
+            });
+            if (normalized) capturedMoments.push(normalized);
+          }
+        }
+
+        setLikedPreferenceRows(positivePreferences);
+        setLikedMomentRows(capturedMoments);
+
+        const ids = Array.from(new Set(
+          [
+            ...positivePreferences.map((item) => item.fragrance_id),
+            ...capturedMoments.flatMap((item) => [
+              item.main?.fragrance_id,
+              item.layer?.fragrance_id,
+            ]),
+          ]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .filter(Boolean),
+        ));
+
+        if (ids.length > 0) {
+          try {
+            const items = await fetchOdaraWardrobeCatalogByIds(ids);
+            if (active) mergeProfileCatalogItems(items);
+          } catch {
+            // Liked moments fall back to captured names when catalog enrichment misses.
+          }
+        }
+      } catch (error: any) {
+        if (!active) return;
+        setLikedPreferenceRows([]);
+        setLikedMomentRows([]);
+        setLikedLibraryError(error?.message || 'Could not load liked scent moments yet.');
+      } finally {
+        if (active) {
+          setLikedLibraryLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeSection, isGuestMode, mergeProfileCatalogItems, userId]);
 
   const displayName =
     profilePayload?.profile_identity?.display_name
@@ -5201,30 +5754,150 @@ const OdaraProfilePage: React.FC<{
     profilePayload?.preference_summary?.favorite_count
     ?? profilePayload?.library?.favorite_count
     ?? 0;
+  const wishlistMetric = profileLoading ? '…' : (wishlistCount > 0 ? String(wishlistCount) : '—');
+  const wishlistSub = profileLoading ? 'Loading' : (wishlistCount > 0 ? 'Would buy' : 'None yet');
   const dominantFamilyKey = profilePayload?.family_balance?.dominant_family_key ?? null;
   const dossierTint = FAMILY_TINTS[dominantFamilyKey ?? ''] ?? DEFAULT_TINT;
   const dossierHeroVisual = getOdaraGlassCardVisualRecipe(dossierTint, 'hero');
   const dossierModuleVisual = getOdaraGlassCardVisualRecipe(dossierTint, 'collection');
 
   // Each tile shows one clean metric only — never invented.
-  const collectionMetric = profileLoading
-    ? '…'
-    : bottleCount && bottleCount > 0
-      ? String(bottleCount)
-      : '—';
-  const collectionSub = profileLoading
-    ? 'Loading'
-    : bottleCount && bottleCount > 0
-      ? (bottleCount === 1 ? 'Bottle' : 'Bottles')
-      : 'Empty';
   const savedMetric = profileLoading ? '…' : (savedCount > 0 ? String(savedCount) : '—');
-  const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? 'Wishlist view' : 'None yet');
+  const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? 'Moments / combos' : 'None yet');
   const likedMetric = profileLoading ? '…' : (likedCount > 0 ? String(likedCount) : '—');
   const likedSub = profileLoading ? 'Loading' : (likedCount > 0 ? 'Liked / loved' : 'None yet');
   const favoritesMetric = profileLoading ? '…' : (favoriteCount > 0 ? String(favoriteCount) : '—');
-  const favoritesSub = profileLoading ? 'Loading' : (favoriteCount > 0 ? 'Wear more / favorite' : 'None yet');
+  const favoritesSub = profileLoading ? 'Loading' : (favoriteCount > 0 ? 'Favorite bottles' : 'None yet');
   const profileChipLabel = readTrimmedLayerText(displayName, authIdentity?.email) || null;
   const shouldShowProfileChip = !isGuestMode && Boolean(profileChipLabel || authIdentity?.avatarUrl || monogram !== '—');
+
+  const openProfileFragranceDetail = useCallback((value: {
+    fragrance_id?: string | null;
+    id?: string | null;
+    name?: string | null;
+    brand?: string | null;
+    family_key?: string | null;
+    family?: string | null;
+    image_url?: string | null;
+  } | null | undefined) => {
+    const snapshot = buildPreferenceMomentFragranceSnapshot(value);
+    if (!snapshot) return;
+    const catalogItem = profileCatalogById[snapshot.fragrance_id];
+    if (catalogItem) {
+      onOpenFragranceDetail(buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(catalogItem));
+      return;
+    }
+    onOpenFragranceDetail(buildFragranceDetailSurfaceStateFromDisplayCard({
+      fragrance_id: snapshot.fragrance_id,
+      name: snapshot.name,
+      brand: snapshot.brand ?? '',
+      family: snapshot.family_key ?? '',
+      reason: '',
+      image_url: snapshot.image_url ?? null,
+      notes: [],
+      accords: [],
+      reason_chip_label: null,
+      reason_chip_explanation: null,
+      isHero: false,
+    }));
+  }, [onOpenFragranceDetail, profileCatalogById]);
+
+  const likedMomentByFragranceId = useMemo(() => {
+    const next = new Map<string, PersistedPreferenceMoment>();
+    for (const moment of likedMomentRows) {
+      const current = next.get(moment.fragrance_id);
+      const nextTs = Date.parse(moment.created_at ?? '') || 0;
+      const currentTs = current ? (Date.parse(current.created_at ?? '') || 0) : 0;
+      if (!current || nextTs >= currentTs) {
+        next.set(moment.fragrance_id, moment);
+      }
+    }
+    return next;
+  }, [likedMomentRows]);
+
+  const likedCards = useMemo(() => {
+    return likedPreferenceRows
+      .map((preference) => {
+        const moment = likedMomentByFragranceId.get(preference.fragrance_id) ?? null;
+        const mainSnapshot = moment?.main ?? buildPreferenceMomentFragranceSnapshot({
+          fragrance_id: preference.fragrance_id,
+          ...(profileCatalogById[preference.fragrance_id] ?? {}),
+        });
+        if (!mainSnapshot) return null;
+        const layerSnapshot = moment?.layer ?? null;
+        const mainCatalog = profileCatalogById[mainSnapshot.fragrance_id] ?? null;
+        const layerCatalog = layerSnapshot?.fragrance_id ? (profileCatalogById[layerSnapshot.fragrance_id] ?? null) : null;
+        const primaryTs = Date.parse(moment?.created_at ?? preference.last_event_at ?? preference.updated_at ?? preference.created_at ?? '') || 0;
+        return {
+          id: `${preference.fragrance_id}:${moment?.layer?.fragrance_id ?? 'single'}`,
+          preference_state: preference.preference_state,
+          main: mainCatalog
+            ? buildPreferenceMomentFragranceSnapshot(mainCatalog)
+            : mainSnapshot,
+          layer: layerCatalog
+            ? buildPreferenceMomentFragranceSnapshot(layerCatalog)
+            : layerSnapshot,
+          context_key: moment?.context_key ?? null,
+          date_key: moment?.date_key ?? null,
+          mode: moment?.mode ?? null,
+          created_at: primaryTs,
+          has_pair_context: Boolean(layerSnapshot?.fragrance_id),
+          source_kind: moment ? 'captured_moment' : 'single_preference_fallback',
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => !!item)
+      .sort((a, b) => b.created_at - a.created_at);
+  }, [likedMomentByFragranceId, likedPreferenceRows, profileCatalogById]);
+
+  const savedCards = useMemo(() => {
+    const items = savedLibraryPayload?.items ?? [];
+    return items.map((item) => {
+      const mainCatalog = item.main_fragrance_id ? (profileCatalogById[item.main_fragrance_id] ?? null) : null;
+      const layerCatalog = item.layer_fragrance_id ? (profileCatalogById[item.layer_fragrance_id] ?? null) : null;
+      const main = buildPreferenceMomentFragranceSnapshot(mainCatalog ?? {
+        fragrance_id: item.main_fragrance_id,
+        name: item.main_name,
+        brand: item.main_brand,
+      });
+      const layer = buildPreferenceMomentFragranceSnapshot(layerCatalog ?? {
+        fragrance_id: item.layer_fragrance_id,
+        name: item.layer_name,
+        brand: item.layer_brand,
+      });
+      return {
+        ...item,
+        main,
+        layer,
+      };
+    });
+  }, [profileCatalogById, savedLibraryPayload]);
+
+  const favoriteLane = readTrimmedLayerText(
+    profilePayload?.preference_summary?.favorite_lane,
+    profilePayload?.family_balance?.dominant_family,
+    profilePayload?.insights?.dominant_family?.value,
+  );
+  const houseGravity = readTrimmedLayerText(profilePayload?.preference_summary?.house_gravity);
+  const leanValue = readTrimmedLayerText(profilePayload?.insights?.lean?.value);
+  const textureValue = readTrimmedLayerText(profilePayload?.insights?.texture?.value);
+  const dayNightValue = readTrimmedLayerText(profilePayload?.insights?.day_night?.value);
+  const signatureGravity = readTrimmedLayerText(profilePayload?.insights?.signature_gravity?.value);
+  const leanTags = [
+    favoriteLane,
+    leanValue && leanValue !== 'Balanced' ? leanValue : null,
+    textureValue && textureValue !== 'Balanced' ? textureValue : null,
+    dayNightValue && dayNightValue !== 'Balanced' ? dayNightValue : null,
+  ].filter((value, index, array): value is string => !!value && array.indexOf(value) === index).slice(0, 3);
+  const currentLeanHeadline = leanTags.length > 0
+    ? `You’re leaning ${leanTags.join(', ')} lately.`
+    : null;
+  const currentLeanSupport = houseGravity
+    ? `Keep an eye on ${houseGravity} and adjacent releases that stay in this lane.`
+    : favoriteLane
+      ? `Look for more ${favoriteLane.toLowerCase()} bottles that reinforce this direction.`
+      : signatureGravity
+        ? `Your taste is starting to ${signatureGravity.toLowerCase()} — keep following what feels easy to wear.`
+        : null;
 
   const tiles: Array<{
     key: string;
@@ -5235,28 +5908,20 @@ const OdaraProfilePage: React.FC<{
     onClick?: () => void;
   }> = [
     {
-      key: 'collection',
-      label: 'Collection',
-      metric: collectionMetric,
-      sub: collectionSub,
-      ariaLabel: 'Open Collection wardrobe',
-      onClick: () => onOpenCollection('all'),
-    },
-    {
       key: 'saved',
       label: 'Saved',
       metric: savedMetric,
       sub: savedSub,
-      ariaLabel: 'Open saved wardrobe view',
-      onClick: !isGuestMode ? (() => onOpenCollection('saved')) : undefined,
+      ariaLabel: 'Open saved scent moments and combinations',
+      onClick: !isGuestMode ? (() => setActiveSection('saved')) : undefined,
     },
     {
       key: 'liked',
       label: 'Liked',
       metric: likedMetric,
       sub: likedSub,
-      ariaLabel: 'Open liked and loved fragrances',
-      onClick: !isGuestMode ? (() => onOpenCollection('liked')) : undefined,
+      ariaLabel: 'Open liked and loved scent moments',
+      onClick: !isGuestMode ? (() => setActiveSection('liked')) : undefined,
     },
     {
       key: 'favorites',
@@ -5265,6 +5930,14 @@ const OdaraProfilePage: React.FC<{
       sub: favoritesSub,
       ariaLabel: 'Open favorite fragrances',
       onClick: !isGuestMode ? (() => onOpenCollection('favorites')) : undefined,
+    },
+    {
+      key: 'wishlist',
+      label: 'Wishlist',
+      metric: wishlistMetric,
+      sub: wishlistSub,
+      ariaLabel: 'Open wishlist fragrances',
+      onClick: !isGuestMode ? (() => onOpenCollection('wishlist')) : undefined,
     },
   ];
 
@@ -5284,8 +5957,255 @@ const OdaraProfilePage: React.FC<{
     return `conic-gradient(${stops.join(', ')})`;
   }, [familySegments]);
 
+  const renderProfileSectionIntro = (eyebrow: string, title: string, body: string) => (
+    <div className="px-1">
+      <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
+        {eyebrow}
+      </div>
+      <div
+        className="mt-2 text-[24px] leading-[1.02] text-foreground/94"
+        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+      >
+        {title}
+      </div>
+      <div className="mt-2 max-w-[30rem] text-[12px] leading-[1.6] text-foreground/56">
+        {body}
+      </div>
+    </div>
+  );
+
+  const renderProfileMomentCard = ({
+    key,
+    eyebrow,
+    title,
+    subtitle,
+    main,
+    layer,
+    onClick,
+  }: {
+    key: string;
+    eyebrow: string;
+    title: string;
+    subtitle: string | null;
+    main: PersistedPreferenceMomentFragrance | null;
+    layer?: PersistedPreferenceMomentFragrance | null;
+    onClick?: () => void;
+  }) => {
+    const Tag: any = onClick ? 'button' : 'div';
+    return (
+      <Tag
+        key={key}
+        type={onClick ? 'button' : undefined}
+        onClick={onClick}
+        className={`relative overflow-hidden rounded-[24px] p-4 text-left transition duration-200 ${onClick ? 'active:scale-[0.988]' : ''}`}
+        style={dossierModuleVisual.surfaceStyle}
+      >
+        <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
+        <div className="relative z-[1] flex items-center gap-4">
+          <div className="relative h-[118px] w-[100px] shrink-0">
+            {main ? (
+              <OdaraWardrobeBottleArt
+                name={main.name}
+                brand={main.brand}
+                family_key={main.family_key}
+                image_url={main.image_url}
+                compact
+                frameless
+                className="h-[112px] w-[84px]"
+              />
+            ) : null}
+            {layer ? (
+              <OdaraWardrobeBottleArt
+                name={layer.name}
+                brand={layer.brand}
+                family_key={layer.family_key}
+                image_url={layer.image_url}
+                compact
+                frameless
+                className="absolute bottom-0 right-[-4px] h-[72px] w-[56px]"
+              />
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-foreground/40">
+              {eyebrow}
+            </div>
+            <div
+              className="mt-2 line-clamp-2 text-[22px] leading-[1.02] text-foreground/94"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+            >
+              {title}
+            </div>
+            {layer ? (
+              <div
+                className="mt-1 line-clamp-2 text-[15px] leading-[1.2] text-foreground/72"
+                style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.008em' }}
+              >
+                + {layer.name}
+              </div>
+            ) : null}
+            {subtitle ? (
+              <div className="mt-3 text-[11px] leading-[1.55] text-foreground/54">
+                {subtitle}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Tag>
+    );
+  };
+
+  const renderSavedContent = () => {
+    if (savedLibraryLoading) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Saved', 'Saved scent moments', 'Reading the real saved recipes, combos, and layer ideas now.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center text-[12px] leading-[1.6] text-foreground/52">
+              Loading saved scent moments…
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    if (savedLibraryError) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Saved', 'Saved scent moments', 'Saved recipes, combos, and layer ideas stay here when they exist.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center text-[12px] leading-[1.6] text-foreground/52">
+              {savedLibraryError}
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    if (savedCards.length === 0) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Saved', 'Saved scent moments', 'Saved recipes, combos, and layer ideas stay here when they exist.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center">
+              <div className="text-[16px] text-foreground/86">No saved scent moments yet.</div>
+              <div className="mx-auto mt-3 max-w-[250px] text-[12px] leading-[1.6] text-foreground/52">
+                Save a pick or layer combo to find it here.
+              </div>
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-4">
+        {renderProfileSectionIntro('Saved', 'Saved scent moments', 'Saved recipes, combos, and layer ideas stay here when they exist.')}
+        <div className="grid gap-3">
+          {savedCards.map((item) => {
+            const metaBits = [
+              item.context_key ? formatProfileContextLabel(item.context_key) : null,
+              item.wear_date ? formatProfileShortDate(item.wear_date) : null,
+              item.mode ? formatProfileContextLabel(item.mode) : null,
+              item.ratio_a && item.ratio_b ? `${item.ratio_a}:${item.ratio_b}` : null,
+            ].filter(Boolean);
+            const subtitle = [
+              metaBits.join(' · ') || null,
+              item.application_style || item.notes || null,
+            ].filter(Boolean).join(' — ') || null;
+            const title = item.main?.name ?? item.main_name ?? item.title ?? 'Saved item';
+            return renderProfileMomentCard({
+              key: item.item_id,
+              eyebrow: item.item_kind === 'saved_recipe'
+                ? 'Saved recipe'
+                : item.item_kind === 'saved_layer_combo'
+                  ? 'Saved combo'
+                  : 'Saved layer',
+              title,
+              subtitle,
+              main: item.main,
+              layer: item.layer,
+              onClick: item.main ? (() => openProfileFragranceDetail(item.main)) : undefined,
+            });
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderLikedContent = () => {
+    if (likedLibraryLoading) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Liked', 'Liked scent moments', 'Liked and loved cards keep their scent context when we have it.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center text-[12px] leading-[1.6] text-foreground/52">
+              Loading liked scent moments…
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    if (likedLibraryError) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Liked', 'Liked scent moments', 'Liked and loved cards keep their scent context when we have it.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center text-[12px] leading-[1.6] text-foreground/52">
+              {likedLibraryError}
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    if (likedCards.length === 0) {
+      return (
+        <div className="flex flex-col gap-4">
+          {renderProfileSectionIntro('Liked', 'Liked scent moments', 'Liked and loved cards keep their scent context when we have it.')}
+          <OdaraInsetGroup emphasis>
+            <div className="px-5 py-10 text-center">
+              <div className="text-[16px] text-foreground/86">No liked scent moments yet.</div>
+              <div className="mx-auto mt-3 max-w-[250px] text-[12px] leading-[1.6] text-foreground/52">
+                Like or love a pick to build your taste map.
+              </div>
+            </div>
+          </OdaraInsetGroup>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-4">
+        {renderProfileSectionIntro('Liked', 'Liked scent moments', 'Liked and loved cards stay here. Pair cards keep the layer when that context exists.')}
+        <div className="grid gap-3">
+          {likedCards.map((item) => {
+            const metaBits = [
+              item.preference_state === 'loved' ? 'Loved' : 'Liked',
+              item.context_key ? formatProfileContextLabel(item.context_key) : null,
+              item.date_key ? formatProfileShortDate(item.date_key) : null,
+            ].filter(Boolean);
+            const subtitle = item.source_kind === 'single_preference_fallback'
+              ? `${metaBits.join(' · ')} — Historical like context wasn’t stored, so this stays a single bottle.`
+              : metaBits.join(' · ');
+            return renderProfileMomentCard({
+              key: item.id,
+              eyebrow: item.preference_state === 'loved' ? 'Loved moment' : 'Liked moment',
+              title: item.main?.name ?? 'Liked fragrance',
+              subtitle,
+              main: item.main,
+              layer: item.layer,
+              onClick: item.main ? (() => openProfileFragranceDetail(item.main)) : undefined,
+            });
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose} onSearch={onSearch} centerHeader>
+    <OdaraDestinationChrome eyebrow="Dossier" onClose={activeSection === 'dashboard' ? onClose : () => setActiveSection('dashboard')} onSearch={onSearch} centerHeader>
       <div className="flex flex-col gap-5">
         {shouldShowProfileChip ? (
           <div className="flex justify-center">
@@ -5327,112 +6247,153 @@ const OdaraProfilePage: React.FC<{
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={() => onOpenCollection('all')}
-          aria-label="Open Collection Coverage in wardrobe"
-          className="relative overflow-hidden rounded-[26px] px-5 py-6 text-left transition-transform duration-200 hover:translate-y-[-1px] active:translate-y-0"
-          style={dossierHeroVisual.surfaceStyle}
-        >
-          <div className={dossierHeroVisual.atmosphereClassName} style={dossierHeroVisual.atmosphereStyle} />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
-          <div className="relative z-[1] flex flex-col items-center gap-6">
-            <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/48">
-              Collection Coverage
-            </div>
-            <div className="relative">
-              <div
-                className="relative h-[176px] w-[176px] rounded-full"
-                style={{
-                  background: ringGradient,
-                  boxShadow: '0 0 0 1px rgba(255,255,255,0.04)',
-                }}
-              >
-                <div
-                  className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full"
-                  style={{
-                    background:
-                      'radial-gradient(80% 80% at 50% 35%, rgba(28,29,34,0.96) 0%, rgba(12,13,17,0.98) 100%)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                  }}
-                >
-                  <div
-                    className="text-[40px] leading-none text-foreground/92"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.015em' }}
-                  >
-                    {profileLoading ? '…' : (bottleCount ?? '—')}
-                  </div>
-                  <div className="mt-2 text-[9px] uppercase tracking-[0.36em] text-foreground/42">
-                    BOTTLES
-                  </div>
+        {activeSection === 'dashboard' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onOpenCollection('all')}
+              aria-label="Open Collection Coverage in wardrobe"
+              className="relative overflow-hidden rounded-[26px] px-5 py-6 text-left transition-transform duration-200 hover:translate-y-[-1px] active:translate-y-0"
+              style={dossierHeroVisual.surfaceStyle}
+            >
+              <div className={dossierHeroVisual.atmosphereClassName} style={dossierHeroVisual.atmosphereStyle} />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
+              <div className="relative z-[1] flex flex-col items-center gap-6">
+                <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/48">
+                  Collection Coverage
                 </div>
-              </div>
-            </div>
-
-            {familySegments.length > 0 ? (
-              <div className="grid w-full grid-cols-2 gap-x-5 gap-y-3">
-                {familySegments.map((segment) => (
-                  <div key={segment.key} className="flex items-center gap-2.5">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
+                <div className="relative">
+                  <div
+                    className="relative h-[176px] w-[176px] rounded-full"
+                    style={{
+                      background: ringGradient,
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.04)',
+                    }}
+                  >
+                    <div
+                      className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full"
                       style={{
-                        background: segment.color,
-                        boxShadow: `0 0 10px ${segment.color}55`,
+                        background:
+                          'radial-gradient(80% 80% at 50% 35%, rgba(28,29,34,0.96) 0%, rgba(12,13,17,0.98) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                       }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] text-foreground/82">{segment.label}</div>
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-foreground/42">
-                        {segment.count}
-                        {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                    >
+                      <div
+                        className="text-[40px] leading-none text-foreground/92"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.015em' }}
+                      >
+                        {profileLoading ? '…' : (bottleCount ?? '—')}
+                      </div>
+                      <div className="mt-2 text-[9px] uppercase tracking-[0.36em] text-foreground/42">
+                        BOTTLES
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[11.5px] text-foreground/50">
-                {profileError
-                  ? 'Could not load live collection coverage yet.'
-                  : profileLoading
-                    ? 'Building coverage from the real wardrobe…'
-                    : 'No real bottles yet.'}
-              </div>
-            )}
-          </div>
-        </button>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {tiles.map((tile) => {
-            const Tag: any = tile.onClick ? 'button' : 'div';
-            return (
-              <Tag
-                key={tile.key}
-                type={tile.onClick ? 'button' : undefined}
-                onClick={tile.onClick}
-                aria-label={tile.onClick ? tile.ariaLabel : undefined}
-                className={`relative overflow-hidden rounded-[20px] px-4 py-4 text-left transition-transform duration-200 ${tile.onClick ? 'hover:translate-y-[-1px] active:translate-y-0' : ''}`}
-                style={dossierModuleVisual.surfaceStyle}
-              >
-                <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
-                <div className="relative z-[1]">
-                  <div className="text-[9.5px] uppercase tracking-[0.32em] text-foreground/42">
-                    {tile.label}
-                  </div>
-                  <div
-                    className="mt-3 text-[24px] leading-none text-foreground/92"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-                  >
-                    {tile.metric}
-                  </div>
-                  <div className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/45">
-                    {tile.sub}
-                  </div>
                 </div>
-              </Tag>
-            );
-          })}
-        </div>
+
+                {familySegments.length > 0 ? (
+                  <div className="grid w-full grid-cols-2 gap-x-5 gap-y-3">
+                    {familySegments.map((segment) => (
+                      <div key={segment.key} className="flex items-center gap-2.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{
+                            background: segment.color,
+                            boxShadow: `0 0 10px ${segment.color}55`,
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] text-foreground/82">{segment.label}</div>
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-foreground/42">
+                            {segment.count}
+                            {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[11.5px] text-foreground/50">
+                    {profileError
+                      ? 'Could not load live collection coverage yet.'
+                      : profileLoading
+                        ? 'Building coverage from the real wardrobe…'
+                        : 'No real bottles yet.'}
+                  </div>
+                )}
+              </div>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {tiles.map((tile) => {
+                const Tag: any = tile.onClick ? 'button' : 'div';
+                return (
+                  <Tag
+                    key={tile.key}
+                    type={tile.onClick ? 'button' : undefined}
+                    onClick={tile.onClick}
+                    aria-label={tile.onClick ? tile.ariaLabel : undefined}
+                    className={`relative overflow-hidden rounded-[20px] px-4 py-4 text-left transition-transform duration-200 ${tile.onClick ? 'hover:translate-y-[-1px] active:translate-y-0' : ''}`}
+                    style={dossierModuleVisual.surfaceStyle}
+                  >
+                    <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
+                    <div className="relative z-[1]">
+                      <div className="text-[9.5px] uppercase tracking-[0.32em] text-foreground/42">
+                        {tile.label}
+                      </div>
+                      <div
+                        className="mt-3 text-[24px] leading-none text-foreground/92"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                      >
+                        {tile.metric}
+                      </div>
+                      <div className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                        {tile.sub}
+                      </div>
+                    </div>
+                  </Tag>
+                );
+              })}
+            </div>
+
+            <div
+              className="relative overflow-hidden rounded-[24px] px-5 py-5"
+              style={dossierModuleVisual.surfaceStyle}
+            >
+              <div className={dossierModuleVisual.atmosphereClassName} style={{ ...dossierModuleVisual.atmosphereStyle, opacity: 0.24 }} />
+              <div className="relative z-[1]">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/42">
+                  Current Lean
+                </div>
+                <div
+                  className="mt-3 text-[23px] leading-[1.06] text-foreground/94"
+                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+                >
+                  {currentLeanHeadline ?? 'Add or wear more fragrances to reveal your current lean.'}
+                </div>
+                <div className="mt-3 max-w-[30rem] text-[12px] leading-[1.65] text-foreground/56">
+                  {currentLeanSupport ?? 'We only sharpen this from real wear, owned bottles, and real likes.'}
+                </div>
+                {leanTags.length > 0 ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {leanTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/76"
+                        style={{
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          background: 'rgba(255,255,255,0.035)',
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : activeSection === 'saved' ? renderSavedContent() : renderLikedContent()}
       </div>
     </OdaraDestinationChrome>
   );
@@ -6867,7 +7828,25 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   userId: string | null;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
-}> = ({ onClose, userId, selectedContext, entryPreset = 'all' }) => {
+  onCapturePreferenceMoment?: (payload: {
+    preference_state: PersistedPreferenceMomentState;
+    source: string;
+    main: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    };
+    layer?: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    } | null;
+  }) => void;
+}> = ({ onClose, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
@@ -6910,7 +7889,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeFamilyFilter(null);
     setWardrobeFavoriteOnly(entryPreset === 'favorites');
     setWardrobeUnwornOnly(false);
-    setWardrobeWishlistOnly(entryPreset === 'saved');
+    setWardrobeWishlistOnly(entryPreset === 'saved' || entryPreset === 'wishlist');
     setWardrobeLikedOnly(entryPreset === 'liked');
     setWardrobeRetiredOnly(entryPreset === 'retired');
   }, [entryPreset]);
@@ -7558,10 +8537,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   ].filter(Boolean).length;
 
   const presetEmptyState = !wardrobeBrandFilter && !wardrobeSeasonFilter && !wardrobeFamilyFilter && activeWardrobeFilterCount <= 1
-    ? entryPreset === 'saved'
+    ? entryPreset === 'saved' || entryPreset === 'wishlist'
       ? {
-          title: 'No saved fragrances yet.',
-          body: 'Save a fragrance and it will appear here.',
+          title: 'No wishlist fragrances yet.',
+          body: 'Add fragrances you want to try or buy.',
         }
       : entryPreset === 'liked'
         ? {
@@ -7886,6 +8865,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       }
       recordActionInteraction();
       if (resolvedHeartState > 0) {
+        onCapturePreferenceMoment?.({
+          preference_state: resolvedHeartState === 2 ? 'loved' : 'liked',
+          source: 'odara_wardrobe_onboarding',
+          main: {
+            fragrance_id: selectedCatalogItem.fragrance_id,
+            name: selectedCatalogItem.name,
+            brand: selectedCatalogItem.brand,
+            family_key: selectedCatalogItem.family_key,
+            image_url: selectedCatalogItem.image_url,
+          },
+        });
         setConfirmationState({
           kind: 'heart',
           fragrance_id: selectedCatalogItem.fragrance_id,
@@ -7901,7 +8891,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setPendingActionKey(null);
     }
-  }, [loadCollection, loadPersistedPreferences, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal, userId]);
+  }, [loadCollection, loadPersistedPreferences, onCapturePreferenceMoment, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal, userId]);
 
   const handleNegative = useCallback(async () => {
     if (!selectedCatalogItem || !userId) return;
@@ -9057,8 +10047,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const wardrobeEyebrow =
     entryPreset === 'liked'
       ? 'Liked'
-      : entryPreset === 'saved'
-        ? 'Saved'
+      : entryPreset === 'saved' || entryPreset === 'wishlist'
+        ? 'Wishlist'
         : entryPreset === 'favorites'
           ? 'Favorites'
         : entryPreset === 'retired'
@@ -9095,11 +10085,29 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 const OdaraCollectionPage: React.FC<{
   onClose: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
+  onCapturePreferenceMoment?: (payload: {
+    preference_state: PersistedPreferenceMomentState;
+    source: string;
+    main: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    };
+    layer?: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    } | null;
+  }) => void;
   userId: string | null;
   isGuestMode: boolean;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
-}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
+}> = ({ onClose, onOpenFragranceDetail, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
   if (isGuestMode) {
     return (
       <OdaraLegacyCollectionPage
@@ -9117,6 +10125,7 @@ const OdaraCollectionPage: React.FC<{
       userId={userId}
       selectedContext={selectedContext}
       entryPreset={entryPreset}
+      onCapturePreferenceMoment={onCapturePreferenceMoment}
     />
   );
 };
@@ -9128,16 +10137,35 @@ const OdaraMenuDestination: React.FC<{
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
   onSearch?: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
+  onCapturePreferenceMoment?: (payload: {
+    preference_state: PersistedPreferenceMomentState;
+    source: string;
+    main: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    };
+    layer?: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    } | null;
+  }) => void;
   userId: string | null;
   isGuestMode: boolean;
   selectedContext: string;
   collectionPreset?: OdaraCollectionEntryPreset;
-}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
+}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
         onClose={onClose}
         onOpenCollection={onOpenCollection}
+        onOpenFragranceDetail={onOpenFragranceDetail}
         onSearch={onSearch}
         userId={userId}
         isGuestMode={isGuestMode}
@@ -9149,6 +10177,7 @@ const OdaraMenuDestination: React.FC<{
       <OdaraCollectionPage
         onClose={onClose}
         onOpenFragranceDetail={onOpenFragranceDetail}
+        onCapturePreferenceMoment={onCapturePreferenceMoment}
         userId={userId}
         isGuestMode={isGuestMode}
         selectedContext={selectedContext}
@@ -10579,13 +11608,56 @@ const OdaraScreen = ({
         areSameLayerModeSnapshots(current.lockedLayerMode, next.lockedLayerMode) &&
         areSameResolvedCurrentCardSnapshots(current.lockedResolvedCurrentCard, next.lockedResolvedCurrentCard) &&
         areSameDisplayCards(current.manualHeroCard, next.manualHeroCard) &&
-        areSameDisplayCards(current.manualLayerCard, next.manualLayerCard)
+        areSameDisplayCards(current.manualLayerCard, next.manualLayerCard) &&
+        areSamePreferenceMoments(current.preferenceMoments, next.preferenceMoments)
       ) {
         return prev;
       }
       return { ...prev, [key]: next };
     });
   }, []);
+
+  const captureSignedInPreferenceMoment = useCallback((payload: {
+    preference_state: PersistedPreferenceMomentState;
+    source: string;
+    main: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    };
+    layer?: {
+      fragrance_id?: string | null;
+      name?: string | null;
+      brand?: string | null;
+      family_key?: string | null;
+      image_url?: string | null;
+    } | null;
+  }) => {
+    if (isGuestMode || !userId) return;
+    const preferenceState = normalizePersistedPreferenceMomentState(payload.preference_state);
+    const main = buildPreferenceMomentFragranceSnapshot(payload.main);
+    const layer = buildPreferenceMomentFragranceSnapshot(payload.layer ?? null);
+    if (!preferenceState || !main) return;
+
+    const nextMoment: PersistedPreferenceMoment = {
+      fragrance_id: main.fragrance_id,
+      preference_state: preferenceState,
+      source: readTrimmedLayerText(payload.source) || null,
+      created_at: new Date().toISOString(),
+      context_key: normalizePersistedContextKey(selectedContext),
+      date_key: selectedDate,
+      mode: null,
+      main,
+      layer,
+    };
+
+    updateSignedInDayState(currentDayStateKey, (current) => ({
+      ...current,
+      preferenceMoments: upsertPreferenceMoment(current.preferenceMoments, nextMoment),
+    }));
+  }, [currentDayStateKey, isGuestMode, selectedContext, selectedDate, updateSignedInDayState, userId]);
 
   const clearLockedSelection = useCallback(() => {
     const key = `${selectedDate}:${selectedContext}`;
@@ -14005,7 +15077,7 @@ const OdaraScreen = ({
             <div className={menuPanelVisual.atmosphereClassName} style={{ ...menuPanelVisual.atmosphereStyle, opacity: 0.22 }} />
             <div className="relative z-[1] px-2 py-2.5">
               {([
-                { key: 'profile', label: 'Dossier' },
+                { key: 'profile', label: 'Profile' },
                 { key: 'collection', label: 'Collection' },
                 { key: 'planner', label: 'Planner' },
                 { key: 'settings', label: 'Settings' },
@@ -14070,6 +15142,7 @@ const OdaraScreen = ({
             setCollectionPreset(preset);
             setMenuPage('collection');
           }}
+          onCapturePreferenceMoment={captureSignedInPreferenceMoment}
           onSearch={() => {
             setMenuPage(null);
             setMenuOpen(false);
@@ -15041,6 +16114,28 @@ const OdaraScreen = ({
 
                         const resolvedHeartState = preferenceStateToHeartState((data as any)?.preference_state);
                         setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: resolvedHeartState }));
+                        if (resolvedHeartState > 0 && visibleResolvedCurrentCard) {
+                          captureSignedInPreferenceMoment({
+                            preference_state: resolvedHeartState === 2 ? 'loved' : 'liked',
+                            source: 'odara_action_row',
+                            main: {
+                              fragrance_id: visibleResolvedCurrentCard.fragrance_id,
+                              name: visibleResolvedCurrentCard.name,
+                              brand: visibleResolvedCurrentCard.brand,
+                              family_key: visibleResolvedCurrentCard.family,
+                              image_url: visibleResolvedCurrentCard.image_url ?? visibleHeroBottleImageUrl ?? null,
+                            },
+                            layer: visibleResolvedLayer
+                              ? {
+                                  fragrance_id: visibleResolvedLayer.id,
+                                  name: visibleResolvedLayer.name,
+                                  brand: visibleResolvedLayer.brand,
+                                  family_key: visibleResolvedLayer.family_key,
+                                  image_url: visibleResolvedLayer.image_url ?? visibleLayerBottleImageUrl ?? null,
+                                }
+                              : null,
+                          });
+                        }
                       }).catch((error: any) => {
                         console.error('[Odara] heart preference write failed', error);
                         setSignedInHeartStateByFragranceId(prev => ({ ...prev, [fragranceId]: previousHeartState }));
