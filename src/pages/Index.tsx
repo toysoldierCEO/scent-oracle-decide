@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent, type HTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { odaraSupabase } from '@/lib/odara-client';
+import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
+import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -59,7 +60,7 @@ function persistRememberedEmail(remember: boolean, emailValue: string) {
       localStorage.setItem(REMEMBER_ME_KEY, 'true');
       if (emailValue) localStorage.setItem(REMEMBER_EMAIL_KEY, emailValue);
     } else {
-      localStorage.removeItem(REMEMBER_ME_KEY);
+      localStorage.setItem(REMEMBER_ME_KEY, 'false');
       localStorage.removeItem(REMEMBER_EMAIL_KEY);
     }
   } catch {
@@ -573,6 +574,7 @@ const Index = () => {
     }
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
+    primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
@@ -640,6 +642,7 @@ const Index = () => {
       const normalizedEmail = email.trim();
 
       if (isSignUp) {
+        primeVesperAuthPersistence(true, ODARA_AUTH_STORAGE_KEY);
         const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
         const { data, error: err } = await odaraSupabase.auth.signUp({
           email: normalizedEmail,
@@ -673,6 +676,7 @@ const Index = () => {
         return;
       }
 
+      primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
       const { error: err } = await odaraSupabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
@@ -710,7 +714,7 @@ const Index = () => {
               <span className="mb-4 block text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
                 Welcome to Vesper
               </span>
-              <h1 className="text-xl font-bold uppercase tracking-[0.4em]">ODARA</h1>
+              <h1 className="text-xl font-bold uppercase tracking-[0.4em]">VESPER</h1>
               {isCheckEmail ? (
                 <>
                   <h2 className="mt-3 text-lg font-medium text-foreground">Check your email</h2>
