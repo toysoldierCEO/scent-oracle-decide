@@ -1406,7 +1406,6 @@ import {
   clampDayDragOffset,
   resolveDayCommit,
   DAY_SWIPE_MAX_OFFSET,
-  DAY_SWIPE_THRESHOLD,
 } from '@/lib/day-swipe';
 
 function backendModeEntryToLayerMode(
@@ -9125,6 +9124,11 @@ const OdaraScreen = ({
       setSearchQuery('');
     }
   }, []);
+  const selectNavigationDay = useCallback((dateStr: string | null | undefined) => {
+    if (!dateStr || dateStr === selectedDate) return false;
+    onDateChange(dateStr);
+    return true;
+  }, [onDateChange, selectedDate]);
   useEffect(() => {
     if (!searchOpen) return;
 
@@ -12755,11 +12759,14 @@ const OdaraScreen = ({
     active: boolean;
     startX: number;
     startY: number;
+    lastX: number;
     lastY: number;
+    startTs: number;
+    lastTs: number;
     direction: 'none' | 'horizontal';
     fired: boolean;
     pointerId: number | null;
-  }>({ active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null });
+  }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null });
   const lastCardPointerTypeRef = useRef<string>('');
 
   // ── CARD GESTURE LIFECYCLE RESET ──
@@ -12772,7 +12779,10 @@ const OdaraScreen = ({
       active: false,
       startX: 0,
       startY: 0,
+      lastX: 0,
       lastY: 0,
+      startTs: 0,
+      lastTs: 0,
       direction: 'none',
       fired: false,
       pointerId: null,
@@ -12806,7 +12816,10 @@ const OdaraScreen = ({
       active: true,
       startX: e.clientX,
       startY: e.clientY,
+      lastX: e.clientX,
       lastY: e.clientY,
+      startTs: e.timeStamp,
+      lastTs: e.timeStamp,
       direction: 'none',
       fired: false,
       pointerId: e.pointerId,
@@ -12818,7 +12831,9 @@ const OdaraScreen = ({
     if (!s.active || s.pointerId !== e.pointerId || s.fired) return;
     const dx = e.clientX - s.startX;
     const dy = e.clientY - s.startY;
+    s.lastX = e.clientX;
     s.lastY = e.clientY;
+    s.lastTs = e.timeStamp;
     if (s.direction === 'none') {
       // Require a CLEAR horizontal intent before claiming a day-swipe. Vertical
       // motion (including downward) is left to the browser via touch-action:
@@ -12862,8 +12877,14 @@ const OdaraScreen = ({
     }
     if (s.direction === 'horizontal') {
       const dx = e.clientX - s.startX;
+      const velocityElapsedMs = Math.max(1, e.timeStamp - (s.lastTs || s.startTs));
+      const totalElapsedMs = Math.max(1, e.timeStamp - s.startTs);
+      const releaseVelocityX = Math.abs(e.clientX - s.lastX) > 0
+        ? (e.clientX - s.lastX) / velocityElapsedMs
+        : dx / totalElapsedMs;
       const commit = resolveDayCommit({
         dx,
+        velocityX: releaseVelocityX,
         didCancel,
         hasPrevDay: !!prevForecastDay,
         hasNextDay: !!nextForecastDay,
@@ -12876,16 +12897,15 @@ const OdaraScreen = ({
             : null;
       setDaySwipeDragging(false);
       setDaySwipeOffset(0);
-      if (targetDate && targetDate !== selectedDate) {
+      if (selectNavigationDay(targetDate)) {
         suppressCardClickRef.current = true;
         haptic('selection');
-        onDateChange(targetDate);
       }
-      swipeRef.current = { active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null };
+      swipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null };
       return;
     }
-    swipeRef.current = { active: false, startX: 0, startY: 0, lastY: 0, direction: 'none', fired: false, pointerId: null };
-  }, [nextForecastDay, onDateChange, prevForecastDay, selectedDate]);
+    swipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null };
+  }, [nextForecastDay, prevForecastDay, selectNavigationDay]);
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
     if (lockState === 'locked') return;
@@ -15042,7 +15062,9 @@ const OdaraScreen = ({
                   <button
                     key={fd.dateStr}
                     ref={(el) => { navigationDayCellRefs.current[i] = el; }}
-                    onClick={() => onDateChange(fd.dateStr)}
+                    onClick={() => {
+                      selectNavigationDay(fd.dateStr);
+                    }}
                     className="relative flex min-w-[44px] flex-none flex-col items-center gap-[1px] rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
                     style={{
                       width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,

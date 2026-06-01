@@ -12,6 +12,8 @@ export const SWIPE_DIRECTION_LOCK = 4;        // px before either axis can lock
 export const HORIZONTAL_INTENT_DISTANCE = 10;  // |dx| required to claim horizontal
 export const HORIZONTAL_AXIS_RATIO = 1.0;      // |dx| must exceed |dy| * ratio
 export const DAY_SWIPE_THRESHOLD = 40;         // |dx| at release to commit day change
+export const DAY_SWIPE_FLICK_DISTANCE = 18;    // minimum travel for velocity-assisted flick commit
+export const DAY_SWIPE_FLICK_VELOCITY = 0.35;  // px / ms required for quick flick commit
 export const DAY_SWIPE_MAX_OFFSET = 148;       // visual drag clamp
 
 export type DaySwipeDirection = 'none' | 'horizontal';
@@ -53,6 +55,7 @@ export interface ResolveDayCommitInput {
   didCancel: boolean;
   hasPrevDay: boolean;
   hasNextDay: boolean;
+  velocityX?: number;
 }
 
 export type DayCommit = 'prev' | 'next' | null;
@@ -67,9 +70,13 @@ export function resolveDayCommit({
   didCancel,
   hasPrevDay,
   hasNextDay,
+  velocityX = 0,
 }: ResolveDayCommitInput): DayCommit {
   if (didCancel) return null;
   if (dx <= -DAY_SWIPE_THRESHOLD) return hasNextDay ? 'next' : null;
   if (dx >= DAY_SWIPE_THRESHOLD) return hasPrevDay ? 'prev' : null;
+  if (Math.abs(dx) < DAY_SWIPE_FLICK_DISTANCE) return null;
+  if (velocityX <= -DAY_SWIPE_FLICK_VELOCITY) return hasNextDay ? 'next' : null;
+  if (velocityX >= DAY_SWIPE_FLICK_VELOCITY) return hasPrevDay ? 'prev' : null;
   return null;
 }

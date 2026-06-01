@@ -4,6 +4,8 @@ import {
   clampDayDragOffset,
   resolveDayCommit,
   DAY_SWIPE_THRESHOLD,
+  DAY_SWIPE_FLICK_DISTANCE,
+  DAY_SWIPE_FLICK_VELOCITY,
   DAY_SWIPE_MAX_OFFSET,
   HORIZONTAL_INTENT_DISTANCE,
 } from './day-swipe';
@@ -72,6 +74,39 @@ describe('day-swipe — release commit', () => {
 
   it('no commit when cancelled', () => {
     expect(resolveDayCommit({ dx: DAY_SWIPE_THRESHOLD + 50, didCancel: true, ...ctx })).toBeNull();
+  });
+
+  it('commits next on quick left flick even below distance threshold', () => {
+    expect(
+      resolveDayCommit({
+        dx: -(DAY_SWIPE_THRESHOLD - 8),
+        velocityX: -(DAY_SWIPE_FLICK_VELOCITY + 0.05),
+        didCancel: false,
+        ...ctx,
+      }),
+    ).toBe('next');
+  });
+
+  it('commits prev on quick right flick even below distance threshold', () => {
+    expect(
+      resolveDayCommit({
+        dx: DAY_SWIPE_THRESHOLD - 8,
+        velocityX: DAY_SWIPE_FLICK_VELOCITY + 0.05,
+        didCancel: false,
+        ...ctx,
+      }),
+    ).toBe('prev');
+  });
+
+  it('does not commit tiny high-velocity taps', () => {
+    expect(
+      resolveDayCommit({
+        dx: DAY_SWIPE_FLICK_DISTANCE - 2,
+        velocityX: DAY_SWIPE_FLICK_VELOCITY + 0.3,
+        didCancel: false,
+        ...ctx,
+      }),
+    ).toBeNull();
   });
 
   it('no commit toward edge with no available day', () => {
