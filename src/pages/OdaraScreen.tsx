@@ -3845,7 +3845,7 @@ type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
-type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'retired';
+type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired';
 type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
 type OdaraWardrobeSortDirection = 'asc' | 'desc';
 type OdaraWardrobeSeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'all_year';
@@ -4614,6 +4614,42 @@ function deriveProfileMonogram(value: string | null | undefined): string {
   return label.slice(0, 2).toUpperCase() || '—';
 }
 
+type OdaraAuthProfileIdentity = {
+  displayName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+};
+
+function readAuthProfileIdentity(sessionUser: any): OdaraAuthProfileIdentity {
+  const metadata = sessionUser?.user_metadata ?? {};
+  const primaryIdentity = Array.isArray(sessionUser?.identities) ? sessionUser.identities[0]?.identity_data ?? {} : {};
+  const email = readTrimmedLayerText(sessionUser?.email) || null;
+  const emailLocalPart = email?.split('@')[0]?.trim() || '';
+
+  return {
+    displayName:
+      readTrimmedLayerText(
+        metadata.full_name,
+        metadata.name,
+        metadata.display_name,
+        metadata.user_name,
+        primaryIdentity.full_name,
+        primaryIdentity.name,
+        primaryIdentity.display_name,
+        emailLocalPart,
+      ) || null,
+    email,
+    avatarUrl: readTrimmedImageUrl(
+      metadata.avatar_url,
+      metadata.picture,
+      metadata.photo_url,
+      primaryIdentity.avatar_url,
+      primaryIdentity.picture,
+      primaryIdentity.photo_url,
+    ),
+  };
+}
+
 function formatProfileCount(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -5056,17 +5092,20 @@ function mergeFragranceDetailSurfaceState(
 const OdaraProfilePage: React.FC<{
   onClose: () => void;
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
+  onSearch?: () => void;
   userId: string | null;
   isGuestMode: boolean;
 }> = ({
   onClose,
   onOpenCollection,
+  onSearch,
   userId,
   isGuestMode,
 }) => {
   const [profilePayload, setProfilePayload] = useState<OdaraProfileDossierPayload | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [authIdentity, setAuthIdentity] = useState<OdaraAuthProfileIdentity | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -5108,15 +5147,34 @@ const OdaraProfilePage: React.FC<{
     };
   }, [isGuestMode, userId]);
 
+  useEffect(() => {
+    let active = true;
+
+    if (isGuestMode) {
+      setAuthIdentity(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    (async () => {
+      const { data } = await odaraSupabase.auth.getSession();
+      if (!active) return;
+      setAuthIdentity(readAuthProfileIdentity(data?.session?.user ?? null));
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isGuestMode, userId]);
+
   const displayName =
     profilePayload?.profile_identity?.display_name
-    ?? (isGuestMode ? 'Guest Preview' : '');
+    ?? authIdentity?.displayName
+    ?? (isGuestMode ? 'Guest Preview' : authIdentity?.email ?? '');
   const monogram =
     profilePayload?.profile_identity?.initials
-    ?? deriveProfileMonogram(displayName);
-  const statusLabel =
-    profilePayload?.profile_identity?.status_label
-    ?? (isGuestMode ? 'Demo wardrobe' : 'Signed in');
+    ?? deriveProfileMonogram(displayName || authIdentity?.email);
   const bottleCount = profilePayload?.collection_summary?.bottle_count ?? null;
   const familySegments = useMemo(
     () =>
@@ -5129,9 +5187,6 @@ const OdaraProfilePage: React.FC<{
       })),
     [profilePayload]
   );
-  const retiredCount = profilePayload?.preference_summary?.retired_count
-    ?? profilePayload?.library?.retired_count
-    ?? 0;
   const savedCount = profilePayload?.library?.saved_count ?? 0;
   const likedCount = (
     profilePayload?.preference_summary?.liked_count
@@ -5142,6 +5197,10 @@ const OdaraProfilePage: React.FC<{
     ?? profilePayload?.library?.loved_count
     ?? 0
   );
+  const favoriteCount =
+    profilePayload?.preference_summary?.favorite_count
+    ?? profilePayload?.library?.favorite_count
+    ?? 0;
   const dominantFamilyKey = profilePayload?.family_balance?.dominant_family_key ?? null;
   const dossierTint = FAMILY_TINTS[dominantFamilyKey ?? ''] ?? DEFAULT_TINT;
   const dossierHeroVisual = getOdaraGlassCardVisualRecipe(dossierTint, 'hero');
@@ -5162,12 +5221,10 @@ const OdaraProfilePage: React.FC<{
   const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? 'Wishlist view' : 'None yet');
   const likedMetric = profileLoading ? '…' : (likedCount > 0 ? String(likedCount) : '—');
   const likedSub = profileLoading ? 'Loading' : (likedCount > 0 ? 'Liked / loved' : 'None yet');
-  const preferencesMetric = profileLoading
-    ? '…'
-    : (!isGuestMode && retiredCount > 0 ? String(retiredCount) : '—');
-  const preferencesSub = profileLoading
-    ? 'Loading'
-    : (!isGuestMode && retiredCount > 0 ? 'Retired' : 'None yet');
+  const favoritesMetric = profileLoading ? '…' : (favoriteCount > 0 ? String(favoriteCount) : '—');
+  const favoritesSub = profileLoading ? 'Loading' : (favoriteCount > 0 ? 'Wear more / favorite' : 'None yet');
+  const profileChipLabel = readTrimmedLayerText(displayName, authIdentity?.email) || null;
+  const shouldShowProfileChip = !isGuestMode && Boolean(profileChipLabel || authIdentity?.avatarUrl || monogram !== '—');
 
   const tiles: Array<{
     key: string;
@@ -5202,12 +5259,12 @@ const OdaraProfilePage: React.FC<{
       onClick: !isGuestMode ? (() => onOpenCollection('liked')) : undefined,
     },
     {
-      key: 'retired',
-      label: 'Retired',
-      metric: preferencesMetric,
-      sub: preferencesSub,
-      ariaLabel: 'Open retired fragrances',
-      onClick: !isGuestMode ? (() => onOpenCollection('retired')) : undefined,
+      key: 'favorites',
+      label: 'Favorites',
+      metric: favoritesMetric,
+      sub: favoritesSub,
+      ariaLabel: 'Open favorite fragrances',
+      onClick: !isGuestMode ? (() => onOpenCollection('favorites')) : undefined,
     },
   ];
 
@@ -5227,37 +5284,48 @@ const OdaraProfilePage: React.FC<{
     return `conic-gradient(${stops.join(', ')})`;
   }, [familySegments]);
 
-  const dominantFamily = familySegments[0] ?? null;
-
   return (
-    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose} centerHeader>
+    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose} onSearch={onSearch} centerHeader>
       <div className="flex flex-col gap-5">
-        <div
-          className="relative overflow-hidden rounded-[24px] px-5 py-5"
-          style={dossierModuleVisual.surfaceStyle}
-        >
-          <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
-          <div className="relative z-[1] flex flex-col items-center gap-3 text-center">
+        {shouldShowProfileChip ? (
+          <div className="flex justify-center">
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
+              className="inline-flex max-w-full items-center gap-2 rounded-full px-2.5 py-1.5"
               style={{
-                border: '1px solid rgba(255,255,255,0.10)',
-                background:
-                  'radial-gradient(80% 80% at 30% 20%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%, rgba(0,0,0,0) 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                background: 'linear-gradient(180deg, rgba(20,22,28,0.7) 0%, rgba(10,12,16,0.58) 100%)',
+                border: dossierModuleVisual.surfaceStyle.border,
+                boxShadow: '0 10px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
               }}
             >
-              {monogram || '—'}
-            </div>
-            <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">{statusLabel}</div>
-            <div
-              className="max-w-full truncate text-[18px] leading-tight text-foreground/92"
-              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
-            >
-              {displayName || '\u00A0'}
+              {authIdentity?.avatarUrl ? (
+                <img
+                  src={authIdentity.avatarUrl}
+                  alt={profileChipLabel ? `${profileChipLabel} profile` : 'Profile'}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-medium uppercase tracking-[0.14em] text-foreground/78"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'radial-gradient(80% 80% at 30% 20%, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.018) 62%, rgba(0,0,0,0) 100%)',
+                  }}
+                >
+                  {monogram || '—'}
+                </div>
+              )}
+              {profileChipLabel ? (
+                <div className="min-w-0">
+                  <div className="truncate text-[11px] uppercase tracking-[0.18em] text-foreground/72">
+                    {profileChipLabel}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
-        </div>
+        ) : null}
 
         <button
           type="button"
@@ -5277,9 +5345,7 @@ const OdaraProfilePage: React.FC<{
                 className="relative h-[176px] w-[176px] rounded-full"
                 style={{
                   background: ringGradient,
-                  boxShadow: dominantFamily
-                    ? `0 0 0 1px rgba(255,255,255,0.04), 0 0 60px ${dominantFamily.color}22`
-                    : '0 0 0 1px rgba(255,255,255,0.04)',
+                  boxShadow: '0 0 0 1px rgba(255,255,255,0.04)',
                 }}
               >
                 <div
@@ -6842,7 +6908,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeBrandFilter(null);
     setWardrobeSeasonFilter(null);
     setWardrobeFamilyFilter(null);
-    setWardrobeFavoriteOnly(false);
+    setWardrobeFavoriteOnly(entryPreset === 'favorites');
     setWardrobeUnwornOnly(false);
     setWardrobeWishlistOnly(entryPreset === 'saved');
     setWardrobeLikedOnly(entryPreset === 'liked');
@@ -7490,6 +7556,30 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     wardrobeFavoriteOnly ? 'favorite' : null,
     wardrobeUnwornOnly ? 'unworn' : null,
   ].filter(Boolean).length;
+
+  const presetEmptyState = !wardrobeBrandFilter && !wardrobeSeasonFilter && !wardrobeFamilyFilter && activeWardrobeFilterCount <= 1
+    ? entryPreset === 'saved'
+      ? {
+          title: 'No saved fragrances yet.',
+          body: 'Save a fragrance and it will appear here.',
+        }
+      : entryPreset === 'liked'
+        ? {
+            title: 'No liked fragrances yet.',
+            body: 'Like or love a fragrance and it will appear here.',
+          }
+        : entryPreset === 'favorites'
+          ? {
+              title: 'No favorites yet.',
+              body: 'Mark a fragrance as a favorite and it will appear here.',
+            }
+          : entryPreset === 'retired'
+            ? {
+                title: 'No retired fragrances yet.',
+                body: 'Retired bottles will appear here.',
+              }
+            : null
+    : null;
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -8672,7 +8762,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           { key: 'wishlist', label: 'Wishlist', active: wardrobeWishlistOnly, toggle: () => setWardrobeWishlistOnly((current) => !current) },
                           { key: 'liked', label: 'Liked', active: wardrobeLikedOnly, toggle: () => setWardrobeLikedOnly((current) => !current) },
                           { key: 'retired', label: 'Retired', active: wardrobeRetiredOnly, toggle: () => setWardrobeRetiredOnly((current) => !current) },
-                          { key: 'favorite', label: 'Favorite', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
+                          { key: 'favorite', label: 'Favorites', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
                           { key: 'unworn', label: 'Unworn', active: wardrobeUnwornOnly, toggle: () => setWardrobeUnwornOnly((current) => !current) },
                         ].map((option) => (
                           <button
@@ -8878,10 +8968,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 className="text-[24px] leading-[1.04] text-foreground/94"
                 style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
               >
-                No fragrances match these filters.
+                {presetEmptyState?.title ?? 'No fragrances match these filters.'}
               </div>
               <div className="mx-auto mt-3 max-w-[260px] text-[12px] leading-[1.6] text-foreground/52">
-                Try a different brand, clear a filter, or add another fragrance.
+                {presetEmptyState?.body ?? 'Try a different brand, clear a filter, or add another fragrance.'}
               </div>
               {(activeWardrobeFilterCount > 0 || wardrobeBrandFilter) ? (
                 <button
@@ -8969,6 +9059,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       ? 'Liked'
       : entryPreset === 'saved'
         ? 'Saved'
+        : entryPreset === 'favorites'
+          ? 'Favorites'
         : entryPreset === 'retired'
           ? 'Retired'
           : 'My Collection';
@@ -9034,17 +9126,19 @@ const OdaraMenuDestination: React.FC<{
   page: OdaraMenuPage;
   onClose: () => void;
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
+  onSearch?: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   isGuestMode: boolean;
   selectedContext: string;
   collectionPreset?: OdaraCollectionEntryPreset;
-}> = ({ page, onClose, onOpenCollection, onOpenFragranceDetail, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
+}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
         onClose={onClose}
         onOpenCollection={onOpenCollection}
+        onSearch={onSearch}
         userId={userId}
         isGuestMode={isGuestMode}
       />
@@ -9140,7 +9234,6 @@ const OdaraScreen = ({
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
   const menuPanelVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, 'hero');
-  const menuRowVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, 'collection');
 
   // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
   // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
@@ -13910,15 +14003,9 @@ const OdaraScreen = ({
             role="menu"
           >
             <div className={menuPanelVisual.atmosphereClassName} style={{ ...menuPanelVisual.atmosphereStyle, opacity: 0.22 }} />
-            <div
-              className="relative z-[1] px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
-              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
-            >
-              VESPER
-            </div>
-            <div className="relative z-[1] px-2 pb-1.5">
+            <div className="relative z-[1] px-2 py-2.5">
               {([
-                { key: 'profile', label: 'Profile' },
+                { key: 'profile', label: 'Dossier' },
                 { key: 'collection', label: 'Collection' },
                 { key: 'planner', label: 'Planner' },
                 { key: 'settings', label: 'Settings' },
@@ -13934,37 +14021,40 @@ const OdaraScreen = ({
                       setCollectionPreset('all');
                       setMenuPage(item.key);
                     }}
-                    className={`mb-1.5 flex w-full items-center justify-between rounded-[16px] px-3 py-2.5 text-left text-[14px] transition-transform ${
+                    className={`flex w-full items-center justify-between rounded-[14px] px-3 py-3 text-left text-[14px] transition-colors ${
                       disabled
                         ? 'cursor-not-allowed text-foreground/25'
-                        : 'text-foreground/88 hover:translate-y-[-1px] active:translate-y-0'
+                        : 'text-foreground/88 hover:bg-white/[0.05] active:bg-white/[0.06]'
                     }`}
                     style={{
-                      ...menuRowVisual.surfaceStyle,
                       opacity: disabled ? 0.46 : 1,
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
-                    {item.key !== 'profile' && (
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
-                        <path d="M9 6l6 6-6 6" />
-                      </svg>
-                    )}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
                   </button>
                 );
               })}
             </div>
-            <div className="relative z-[1] border-t border-white/[0.06] px-2 py-1.5">
+            <div className="relative z-[1] mx-3 border-t border-white/[0.06] pt-1.5 pb-2.5">
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onSignOut();
                 }}
-                className="flex w-full items-center rounded-[16px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-transform hover:translate-y-[-1px] hover:text-foreground/85 active:translate-y-0"
-                style={menuRowVisual.surfaceStyle}
+                className="flex w-full items-center justify-between rounded-[14px] px-3 py-3 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.05] hover:text-foreground/85 active:bg-white/[0.06]"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
-                {shellAuthActionLabel}
+                <span>{shellAuthActionLabel}</span>
+                {!isGuestMode ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/32">
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                ) : null}
               </button>
             </div>
           </div>
@@ -13979,6 +14069,11 @@ const OdaraScreen = ({
           onOpenCollection={(preset = 'all') => {
             setCollectionPreset(preset);
             setMenuPage('collection');
+          }}
+          onSearch={() => {
+            setMenuPage(null);
+            setMenuOpen(false);
+            setSearchOpen(true);
           }}
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
