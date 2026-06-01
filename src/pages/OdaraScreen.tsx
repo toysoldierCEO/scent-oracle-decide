@@ -3603,7 +3603,10 @@ const OdaraInsetGroup: React.FC<{
   eyebrow?: string;
   emphasis?: boolean;
   children: React.ReactNode;
-}> = ({ eyebrow, emphasis, children }) => (
+}> = ({ eyebrow, emphasis, children }) => {
+  const insetVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, emphasis ? 'hero' : 'collection');
+
+  return (
   <div>
     {eyebrow && (
       <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
@@ -3611,23 +3614,21 @@ const OdaraInsetGroup: React.FC<{
       </div>
     )}
     <div
-      className="overflow-hidden rounded-[20px] border"
+      className="relative overflow-hidden rounded-[20px]"
       style={{
-        borderColor: emphasis ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.07)',
-        background: emphasis
-          ? 'linear-gradient(180deg, rgba(26,27,32,0.78) 0%, rgba(16,17,21,0.78) 100%)'
-          : 'linear-gradient(180deg, rgba(20,21,26,0.62) 0%, rgba(12,13,17,0.62) 100%)',
+        ...insetVisual.surfaceStyle,
         backdropFilter: 'blur(18px)',
         WebkitBackdropFilter: 'blur(18px)',
-        boxShadow: emphasis
-          ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px rgba(0,0,0,0.32)'
-          : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 26px rgba(0,0,0,0.22)',
       }}
     >
+      <div className={insetVisual.atmosphereClassName} style={{ ...insetVisual.atmosphereStyle, opacity: emphasis ? 0.2 : 0.14 }} />
+      <div className="relative z-[1]">
       {children}
+      </div>
     </div>
   </div>
-);
+  );
+};
 
 const OdaraInsetRow: React.FC<{
   label: string;
@@ -3844,6 +3845,7 @@ type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
+type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'retired';
 type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
 type OdaraWardrobeSortDirection = 'asc' | 'desc';
 type OdaraWardrobeSeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'all_year';
@@ -3926,6 +3928,7 @@ type OdaraWardrobeCard = {
   item: OdaraWardrobeCatalogItem;
   primary_status: OdaraWardrobePrimaryStatus;
   favorite: boolean;
+  retired: boolean;
   collection_created_at: number;
   collection_updated_at: number;
   sort_newest_at: number;
@@ -5052,7 +5055,7 @@ function mergeFragranceDetailSurfaceState(
 
 const OdaraProfilePage: React.FC<{
   onClose: () => void;
-  onOpenCollection: () => void;
+  onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
   userId: string | null;
   isGuestMode: boolean;
 }> = ({
@@ -5130,7 +5133,19 @@ const OdaraProfilePage: React.FC<{
     ?? profilePayload?.library?.retired_count
     ?? 0;
   const savedCount = profilePayload?.library?.saved_count ?? 0;
-  const historyCount = profilePayload?.library?.history_count ?? 0;
+  const likedCount = (
+    profilePayload?.preference_summary?.liked_count
+    ?? profilePayload?.library?.liked_count
+    ?? 0
+  ) + (
+    profilePayload?.preference_summary?.loved_count
+    ?? profilePayload?.library?.loved_count
+    ?? 0
+  );
+  const dominantFamilyKey = profilePayload?.family_balance?.dominant_family_key ?? null;
+  const dossierTint = FAMILY_TINTS[dominantFamilyKey ?? ''] ?? DEFAULT_TINT;
+  const dossierHeroVisual = getOdaraGlassCardVisualRecipe(dossierTint, 'hero');
+  const dossierModuleVisual = getOdaraGlassCardVisualRecipe(dossierTint, 'collection');
 
   // Each tile shows one clean metric only — never invented.
   const collectionMetric = profileLoading
@@ -5144,27 +5159,56 @@ const OdaraProfilePage: React.FC<{
       ? (bottleCount === 1 ? 'Bottle' : 'Bottles')
       : 'Empty';
   const savedMetric = profileLoading ? '…' : (savedCount > 0 ? String(savedCount) : '—');
-  const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? (savedCount === 1 ? 'Saved' : 'Saved') : 'None yet');
-  const historyMetric = profileLoading ? '…' : (historyCount > 0 ? String(historyCount) : '—');
-  const historySub = profileLoading ? 'Loading' : (historyCount > 0 ? 'Events' : 'None yet');
+  const savedSub = profileLoading ? 'Loading' : (savedCount > 0 ? 'Wishlist view' : 'None yet');
+  const likedMetric = profileLoading ? '…' : (likedCount > 0 ? String(likedCount) : '—');
+  const likedSub = profileLoading ? 'Loading' : (likedCount > 0 ? 'Liked / loved' : 'None yet');
   const preferencesMetric = profileLoading
     ? '…'
     : (!isGuestMode && retiredCount > 0 ? String(retiredCount) : '—');
   const preferencesSub = profileLoading
     ? 'Loading'
-    : (!isGuestMode && retiredCount > 0 ? 'Retired' : 'Signals');
+    : (!isGuestMode && retiredCount > 0 ? 'Retired' : 'None yet');
 
   const tiles: Array<{
     key: string;
     label: string;
     metric: string;
     sub: string;
+    ariaLabel: string;
     onClick?: () => void;
   }> = [
-    { key: 'collection', label: 'Collection', metric: collectionMetric, sub: collectionSub, onClick: onOpenCollection },
-    { key: 'saved', label: 'Saved', metric: savedMetric, sub: savedSub },
-    { key: 'history', label: 'History', metric: historyMetric, sub: historySub },
-    { key: 'preferences', label: 'Preferences', metric: preferencesMetric, sub: preferencesSub },
+    {
+      key: 'collection',
+      label: 'Collection',
+      metric: collectionMetric,
+      sub: collectionSub,
+      ariaLabel: 'Open Collection wardrobe',
+      onClick: () => onOpenCollection('all'),
+    },
+    {
+      key: 'saved',
+      label: 'Saved',
+      metric: savedMetric,
+      sub: savedSub,
+      ariaLabel: 'Open saved wardrobe view',
+      onClick: !isGuestMode ? (() => onOpenCollection('saved')) : undefined,
+    },
+    {
+      key: 'liked',
+      label: 'Liked',
+      metric: likedMetric,
+      sub: likedSub,
+      ariaLabel: 'Open liked and loved fragrances',
+      onClick: !isGuestMode ? (() => onOpenCollection('liked')) : undefined,
+    },
+    {
+      key: 'retired',
+      label: 'Retired',
+      metric: preferencesMetric,
+      sub: preferencesSub,
+      ariaLabel: 'Open retired fragrances',
+      onClick: !isGuestMode ? (() => onOpenCollection('retired')) : undefined,
+    },
   ];
 
   // Build conic-gradient string for ring rendering — synced with familySegments.
@@ -5186,33 +5230,112 @@ const OdaraProfilePage: React.FC<{
   const dominantFamily = familySegments[0] ?? null;
 
   return (
-    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose}>
-      {/* Single compact identity row — account identity only. */}
-      <div className="mb-6 flex items-center gap-3.5 px-1">
+    <OdaraDestinationChrome eyebrow="Dossier" onClose={onClose} centerHeader>
+      <div className="flex flex-col gap-5">
         <div
-          className="flex h-11 w-11 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
-          style={{
-            border: '1px solid rgba(255,255,255,0.10)',
-            background:
-              'radial-gradient(80% 80% at 30% 20%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%, rgba(0,0,0,0) 100%)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
-          }}
+          className="relative overflow-hidden rounded-[24px] px-5 py-5"
+          style={dossierModuleVisual.surfaceStyle}
         >
-          {monogram || '—'}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">{statusLabel}</div>
-          <div
-            className="truncate text-[17px] leading-tight text-foreground/92"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
-          >
-            {displayName || '\u00A0'}
+          <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
+          <div className="relative z-[1] flex flex-col items-center gap-3 text-center">
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-full text-[12px] font-medium uppercase tracking-[0.16em] text-foreground/80"
+              style={{
+                border: '1px solid rgba(255,255,255,0.10)',
+                background:
+                  'radial-gradient(80% 80% at 30% 20%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%, rgba(0,0,0,0) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}
+            >
+              {monogram || '—'}
+            </div>
+            <div className="text-[9px] uppercase tracking-[0.36em] text-foreground/40">{statusLabel}</div>
+            <div
+              className="max-w-full truncate text-[18px] leading-tight text-foreground/92"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.005em' }}
+            >
+              {displayName || '\u00A0'}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex flex-col gap-6">
-        {/* Wardrobe tile group — 2x2 premium tiles. */}
+        <button
+          type="button"
+          onClick={() => onOpenCollection('all')}
+          aria-label="Open Collection Coverage in wardrobe"
+          className="relative overflow-hidden rounded-[26px] px-5 py-6 text-left transition-transform duration-200 hover:translate-y-[-1px] active:translate-y-0"
+          style={dossierHeroVisual.surfaceStyle}
+        >
+          <div className={dossierHeroVisual.atmosphereClassName} style={dossierHeroVisual.atmosphereStyle} />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.08] to-transparent opacity-40" />
+          <div className="relative z-[1] flex flex-col items-center gap-6">
+            <div className="text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/48">
+              Collection Coverage
+            </div>
+            <div className="relative">
+              <div
+                className="relative h-[176px] w-[176px] rounded-full"
+                style={{
+                  background: ringGradient,
+                  boxShadow: dominantFamily
+                    ? `0 0 0 1px rgba(255,255,255,0.04), 0 0 60px ${dominantFamily.color}22`
+                    : '0 0 0 1px rgba(255,255,255,0.04)',
+                }}
+              >
+                <div
+                  className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full"
+                  style={{
+                    background:
+                      'radial-gradient(80% 80% at 50% 35%, rgba(28,29,34,0.96) 0%, rgba(12,13,17,0.98) 100%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <div
+                    className="text-[40px] leading-none text-foreground/92"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.015em' }}
+                  >
+                    {profileLoading ? '…' : (bottleCount ?? '—')}
+                  </div>
+                  <div className="mt-2 text-[9px] uppercase tracking-[0.36em] text-foreground/42">
+                    BOTTLES
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {familySegments.length > 0 ? (
+              <div className="grid w-full grid-cols-2 gap-x-5 gap-y-3">
+                {familySegments.map((segment) => (
+                  <div key={segment.key} className="flex items-center gap-2.5">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{
+                        background: segment.color,
+                        boxShadow: `0 0 10px ${segment.color}55`,
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] text-foreground/82">{segment.label}</div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-foreground/42">
+                        {segment.count}
+                        {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[11.5px] text-foreground/50">
+                {profileError
+                  ? 'Could not load live collection coverage yet.'
+                  : profileLoading
+                    ? 'Building coverage from the real wardrobe…'
+                    : 'No real bottles yet.'}
+              </div>
+            )}
+          </div>
+        </button>
+
         <div className="grid grid-cols-2 gap-2.5">
           {tiles.map((tile) => {
             const Tag: any = tile.onClick ? 'button' : 'div';
@@ -5221,125 +5344,28 @@ const OdaraProfilePage: React.FC<{
                 key={tile.key}
                 type={tile.onClick ? 'button' : undefined}
                 onClick={tile.onClick}
-                className={`relative rounded-[18px] border px-4 py-4 text-left transition-colors ${tile.onClick ? 'active:bg-white/[0.04]' : ''}`}
-                style={{
-                  borderColor: 'rgba(255,255,255,0.07)',
-                  background: 'linear-gradient(180deg, rgba(24,25,30,0.7) 0%, rgba(13,14,18,0.7) 100%)',
-                  backdropFilter: 'blur(18px)',
-                  WebkitBackdropFilter: 'blur(18px)',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 24px rgba(0,0,0,0.22)',
-                }}
+                aria-label={tile.onClick ? tile.ariaLabel : undefined}
+                className={`relative overflow-hidden rounded-[20px] px-4 py-4 text-left transition-transform duration-200 ${tile.onClick ? 'hover:translate-y-[-1px] active:translate-y-0' : ''}`}
+                style={dossierModuleVisual.surfaceStyle}
               >
-                <div className="text-[9.5px] uppercase tracking-[0.32em] text-foreground/42">
-                  {tile.label}
-                </div>
-                <div
-                  className="mt-3 text-[24px] leading-none text-foreground/92"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-                >
-                  {tile.metric}
-                </div>
-                <div className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/45">
-                  {tile.sub}
+                <div className={dossierModuleVisual.atmosphereClassName} style={dossierModuleVisual.atmosphereStyle} />
+                <div className="relative z-[1]">
+                  <div className="text-[9.5px] uppercase tracking-[0.32em] text-foreground/42">
+                    {tile.label}
+                  </div>
+                  <div
+                    className="mt-3 text-[24px] leading-none text-foreground/92"
+                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+                  >
+                    {tile.metric}
+                  </div>
+                  <div className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                    {tile.sub}
+                  </div>
                 </div>
               </Tag>
             );
           })}
-        </div>
-
-        {/* Collection Coverage — centered scent map. */}
-        <div>
-          <div className="mb-3 px-2 text-[10px] font-medium uppercase tracking-[0.32em] text-foreground/40">
-            Collection Coverage
-          </div>
-          <div
-            className="rounded-[22px] border px-5 py-7"
-            style={{
-              borderColor: 'rgba(255,255,255,0.08)',
-              background: 'linear-gradient(180deg, rgba(22,23,28,0.7) 0%, rgba(13,14,18,0.7) 100%)',
-              backdropFilter: 'blur(18px)',
-              WebkitBackdropFilter: 'blur(18px)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 32px rgba(0,0,0,0.28)',
-            }}
-          >
-            <div className="flex flex-col items-center gap-6">
-              {/* Centered orb. */}
-              <div className="relative">
-                <div
-                  className="relative h-[176px] w-[176px] rounded-full"
-                  style={{
-                    background: ringGradient,
-                    boxShadow: dominantFamily
-                      ? `0 0 0 1px rgba(255,255,255,0.04), 0 0 60px ${dominantFamily.color}22`
-                      : '0 0 0 1px rgba(255,255,255,0.04)',
-                  }}
-                >
-                  {/* Inner mask to create donut */}
-                  <div
-                    className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full"
-                    style={{
-                      background:
-                        'radial-gradient(80% 80% at 50% 35%, rgba(28,29,34,0.96) 0%, rgba(12,13,17,0.98) 100%)',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <div
-                      className="text-[40px] leading-none text-foreground/92"
-                      style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.015em' }}
-                    >
-                      {profileLoading ? '…' : (bottleCount ?? '—')}
-                    </div>
-                    <div className="mt-2 text-[9px] uppercase tracking-[0.36em] text-foreground/42">
-                      Bottles
-                    </div>
-                    {dominantFamily ? (
-                      <div className="mt-2.5 flex items-center gap-1.5">
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ background: dominantFamily.color, boxShadow: `0 0 8px ${dominantFamily.color}80` }}
-                        />
-                        <span className="text-[9.5px] uppercase tracking-[0.24em] text-foreground/55">
-                          {dominantFamily.label}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              {/* Family map — compact, below the orb. */}
-              {familySegments.length > 0 ? (
-                <div className="grid w-full grid-cols-2 gap-x-5 gap-y-3">
-                  {familySegments.map((segment) => (
-                    <div key={segment.key} className="flex items-center gap-2.5">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{
-                          background: segment.color,
-                          boxShadow: `0 0 10px ${segment.color}55`,
-                        }}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px] text-foreground/82">{segment.label}</div>
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-foreground/42">
-                          {segment.count}
-                          {segment.pct > 0 ? ` · ${Math.round(segment.pct)}%` : ''}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-[11.5px] text-foreground/50">
-                  {profileError
-                    ? 'Could not load live collection coverage yet.'
-                    : profileLoading
-                      ? 'Building coverage from the real wardrobe…'
-                      : 'No real bottles yet.'}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </OdaraDestinationChrome>
@@ -6774,7 +6800,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   onClose: () => void;
   userId: string | null;
   selectedContext: string;
-}> = ({ onClose, userId, selectedContext }) => {
+  entryPreset?: OdaraCollectionEntryPreset;
+}> = ({ onClose, userId, selectedContext, entryPreset = 'all' }) => {
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
@@ -6796,6 +6823,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeSeasonFilter, setWardrobeSeasonFilter] = useState<OdaraWardrobeSeasonFilterKey | null>(null);
   const [wardrobeFamilyFilter, setWardrobeFamilyFilter] = useState<string | null>(null);
   const [wardrobeWishlistOnly, setWardrobeWishlistOnly] = useState(false);
+  const [wardrobeLikedOnly, setWardrobeLikedOnly] = useState(false);
+  const [wardrobeRetiredOnly, setWardrobeRetiredOnly] = useState(false);
   const [wardrobeFavoriteOnly, setWardrobeFavoriteOnly] = useState(false);
   const [wardrobeUnwornOnly, setWardrobeUnwornOnly] = useState(false);
   const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>(null);
@@ -6808,6 +6837,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(userId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWardrobeBrandFilter(null);
+    setWardrobeSeasonFilter(null);
+    setWardrobeFamilyFilter(null);
+    setWardrobeFavoriteOnly(false);
+    setWardrobeUnwornOnly(false);
+    setWardrobeWishlistOnly(entryPreset === 'saved');
+    setWardrobeLikedOnly(entryPreset === 'liked');
+    setWardrobeRetiredOnly(entryPreset === 'retired');
+  }, [entryPreset]);
 
   const loadCollection = useCallback(async () => {
     if (!userId) {
@@ -7293,6 +7333,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           item: resolvedItem,
           primary_status: primaryStatus,
           favorite: Boolean(collectionItem?.favorite ?? collectionItem?.wear_more),
+          retired: Boolean(collectionItem?.retired),
           collection_created_at: collectionCreatedAt,
           collection_updated_at: collectionUpdatedAt,
           sort_newest_at: sortNewestAt,
@@ -7389,6 +7430,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     if (wardrobeWishlistOnly) {
       cards = cards.filter((card) => card.primary_status === 'wishlist');
     }
+    if (wardrobeLikedOnly) {
+      cards = cards.filter((card) => (effectiveSignalMap[card.fragrance_id]?.heart_state ?? 0) > 0);
+    }
+    if (wardrobeRetiredOnly) {
+      cards = cards.filter((card) => card.retired);
+    }
     if (wardrobeFavoriteOnly) {
       cards = cards.filter((card) => card.favorite);
     }
@@ -7425,6 +7472,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     compareWardrobeCardsDefault,
     wardrobeFavoriteOnly,
     wardrobeFamilyFilter,
+    wardrobeLikedOnly,
+    wardrobeRetiredOnly,
     wardrobeSeasonFilter,
     wardrobeSortDirection,
     wardrobeSortKey,
@@ -7436,6 +7485,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     wardrobeSeasonFilter,
     wardrobeFamilyFilter,
     wardrobeWishlistOnly ? 'wishlist' : null,
+    wardrobeLikedOnly ? 'liked' : null,
+    wardrobeRetiredOnly ? 'retired' : null,
     wardrobeFavoriteOnly ? 'favorite' : null,
     wardrobeUnwornOnly ? 'unworn' : null,
   ].filter(Boolean).length;
@@ -7538,6 +7589,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeSeasonFilter(null);
     setWardrobeFamilyFilter(null);
     setWardrobeWishlistOnly(false);
+    setWardrobeLikedOnly(false);
+    setWardrobeRetiredOnly(false);
     setWardrobeFavoriteOnly(false);
     setWardrobeUnwornOnly(false);
   }, []);
@@ -8617,6 +8670,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       <div className="flex flex-wrap gap-1.5">
                         {[
                           { key: 'wishlist', label: 'Wishlist', active: wardrobeWishlistOnly, toggle: () => setWardrobeWishlistOnly((current) => !current) },
+                          { key: 'liked', label: 'Liked', active: wardrobeLikedOnly, toggle: () => setWardrobeLikedOnly((current) => !current) },
+                          { key: 'retired', label: 'Retired', active: wardrobeRetiredOnly, toggle: () => setWardrobeRetiredOnly((current) => !current) },
                           { key: 'favorite', label: 'Favorite', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
                           { key: 'unworn', label: 'Unworn', active: wardrobeUnwornOnly, toggle: () => setWardrobeUnwornOnly((current) => !current) },
                         ].map((option) => (
@@ -8909,12 +8964,21 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             ? 'Build your wardrobe'
             : 'Vesper';
 
+  const wardrobeEyebrow =
+    entryPreset === 'liked'
+      ? 'Liked'
+      : entryPreset === 'saved'
+        ? 'Saved'
+        : entryPreset === 'retired'
+          ? 'Retired'
+          : 'My Collection';
+
   const chromeEyebrow = surface === 'search'
     ? 'Search by name, brand, or notes.'
     : surface === 'confirmation'
       ? 'Wardrobe updated'
       : surface === 'wardrobe' && wardrobeCards.length > 0
-        ? 'My Collection'
+        ? wardrobeEyebrow
         : undefined;
 
   return (
@@ -8942,7 +9006,8 @@ const OdaraCollectionPage: React.FC<{
   userId: string | null;
   isGuestMode: boolean;
   selectedContext: string;
-}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode, selectedContext }) => {
+  entryPreset?: OdaraCollectionEntryPreset;
+}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
   if (isGuestMode) {
     return (
       <OdaraLegacyCollectionPage
@@ -8959,6 +9024,7 @@ const OdaraCollectionPage: React.FC<{
       onClose={onClose}
       userId={userId}
       selectedContext={selectedContext}
+      entryPreset={entryPreset}
     />
   );
 };
@@ -8967,12 +9033,13 @@ const OdaraCollectionPage: React.FC<{
 const OdaraMenuDestination: React.FC<{
   page: OdaraMenuPage;
   onClose: () => void;
-  onOpenCollection: () => void;
+  onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   isGuestMode: boolean;
   selectedContext: string;
-}> = ({ page, onClose, onOpenCollection, onOpenFragranceDetail, userId, isGuestMode, selectedContext }) => {
+  collectionPreset?: OdaraCollectionEntryPreset;
+}> = ({ page, onClose, onOpenCollection, onOpenFragranceDetail, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
@@ -8991,6 +9058,7 @@ const OdaraMenuDestination: React.FC<{
         userId={userId}
         isGuestMode={isGuestMode}
         selectedContext={selectedContext}
+        entryPreset={collectionPreset}
       />
     );
   }
@@ -9059,6 +9127,7 @@ const OdaraScreen = ({
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPage, setMenuPage] = useState<OdaraMenuPage | null>(null);
+  const [collectionPreset, setCollectionPreset] = useState<OdaraCollectionEntryPreset>('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
@@ -9070,6 +9139,8 @@ const OdaraScreen = ({
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
+  const menuPanelVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, 'hero');
+  const menuRowVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, 'collection');
 
   // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
   // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
@@ -13832,21 +13903,20 @@ const OdaraScreen = ({
               left: 12,
               width: 236,
               borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.08)',
-              background: 'linear-gradient(180deg, rgba(20,21,26,0.94) 0%, rgba(11,12,16,0.94) 100%)',
+              ...menuPanelVisual.surfaceStyle,
               backdropFilter: 'blur(28px)',
               WebkitBackdropFilter: 'blur(28px)',
-              boxShadow: '0 28px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
             }}
             role="menu"
           >
+            <div className={menuPanelVisual.atmosphereClassName} style={{ ...menuPanelVisual.atmosphereStyle, opacity: 0.22 }} />
             <div
-              className="px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
+              className="relative z-[1] px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
               style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
               VESPER
             </div>
-            <div className="px-2 pb-1.5">
+            <div className="relative z-[1] px-2 pb-1.5">
               {([
                 { key: 'profile', label: 'Profile' },
                 { key: 'collection', label: 'Collection' },
@@ -13861,13 +13931,18 @@ const OdaraScreen = ({
                     disabled={disabled}
                     onClick={() => {
                       setMenuOpen(false);
+                      setCollectionPreset('all');
                       setMenuPage(item.key);
                     }}
-                    className={`flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors ${
+                    className={`mb-1.5 flex w-full items-center justify-between rounded-[16px] px-3 py-2.5 text-left text-[14px] transition-transform ${
                       disabled
                         ? 'cursor-not-allowed text-foreground/25'
-                        : 'text-foreground/88 hover:bg-white/[0.04] active:bg-white/[0.07]'
+                        : 'text-foreground/88 hover:translate-y-[-1px] active:translate-y-0'
                     }`}
+                    style={{
+                      ...menuRowVisual.surfaceStyle,
+                      opacity: disabled ? 0.46 : 1,
+                    }}
                   >
                     <span style={{ letterSpacing: '0.005em' }}>{item.label}</span>
                     {item.key !== 'profile' && (
@@ -13879,14 +13954,15 @@ const OdaraScreen = ({
                 );
               })}
             </div>
-            <div className="border-t border-white/[0.06] px-2 py-1.5">
+            <div className="relative z-[1] border-t border-white/[0.06] px-2 py-1.5">
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onSignOut();
                 }}
-                className="flex w-full items-center rounded-[14px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.04] hover:text-foreground/85"
+                className="flex w-full items-center rounded-[16px] px-3 py-2.5 text-left text-[13px] text-foreground/62 transition-transform hover:translate-y-[-1px] hover:text-foreground/85 active:translate-y-0"
+                style={menuRowVisual.surfaceStyle}
               >
                 {shellAuthActionLabel}
               </button>
@@ -13900,11 +13976,15 @@ const OdaraScreen = ({
         <OdaraMenuDestination
           page={menuPage}
           onClose={() => setMenuPage(null)}
-          onOpenCollection={() => setMenuPage('collection')}
+          onOpenCollection={(preset = 'all') => {
+            setCollectionPreset(preset);
+            setMenuPage('collection');
+          }}
           onOpenFragranceDetail={openFragranceDetailSheet}
           userId={userId}
           isGuestMode={isGuestMode}
           selectedContext={selectedContext}
+          collectionPreset={collectionPreset}
         />
       )}
 
