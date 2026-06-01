@@ -711,9 +711,10 @@ const Index = () => {
         <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-10 sm:py-14" style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom))' }}>
           <div className="mx-auto w-full max-w-sm">
             <div className="mb-8 text-center">
-              <span className="mb-4 block text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
-                Welcome to Vesper
-              </span>
+              <div className="mb-4 flex flex-col items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
+                <span>WELCOME</span>
+                <span>TO</span>
+              </div>
               <h1 className="text-xl font-bold uppercase tracking-[0.4em]">VESPER</h1>
               {isCheckEmail ? (
                 <>

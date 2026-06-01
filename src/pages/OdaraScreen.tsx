@@ -3533,7 +3533,7 @@ const OdaraDestinationChrome: React.FC<{
       fontFamily: "'Geist Sans', system-ui, sans-serif",
     }}
     role="dialog"
-    aria-label={title || eyebrow || 'ODARA'}
+    aria-label={title || eyebrow || 'VESPER'}
   >
     <div
       className="mx-auto flex w-full max-w-md flex-col px-4 pb-12"
@@ -13844,7 +13844,7 @@ const OdaraScreen = ({
               className="px-4 pt-3.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.44em] text-foreground/72"
               style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
-              ODARA
+              VESPER
             </div>
             <div className="px-2 pb-1.5">
               {([
@@ -13941,7 +13941,7 @@ const OdaraScreen = ({
               className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
               style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
             >
-              ODARA
+              VESPER
             </div>
           )}
 
@@ -15116,14 +15116,6 @@ const OdaraScreen = ({
             </div>
           </div>
         </div>
-        {/* Sign out */}
-        <button
-          onClick={onSignOut}
-          className="text-[10px] text-muted-foreground/30 mt-3 self-center hover:text-muted-foreground/60 transition-colors"
-        >
-          {shellAuthActionLabel}
-        </button>
-
         {/* No data state */}
         {!oracleLoading && !oracleError && !oracle && (
           <div className="text-center py-12">
