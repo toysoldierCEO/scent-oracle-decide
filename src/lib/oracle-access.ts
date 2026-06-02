@@ -138,7 +138,7 @@ export async function fetchHomeOracle(
     return { data, rpcUsed: 'get_guest_oracle_home_v6' };
   }
 
-  if (!access.isSignedIn || !access.resolvedUserId) {
+  if (!access.isSignedIn || !access.signedInUserId) {
     throw new Error('Cannot fetch oracle: no access mode resolved');
   }
 
@@ -151,7 +151,7 @@ export async function fetchHomeOracle(
   // so the existing adapter remains valid; v7 additionally guarantees the
   // hard_primary_soft_preview_fallback overlap policy on the backend.
   const args = {
-    p_user_id: access.resolvedUserId,
+    p_user_id: access.signedInUserId,
     p_temperature: temperature,
     p_context: context,
     p_brand: brand,

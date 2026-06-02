@@ -1,13 +1,39 @@
-import { useState, useEffect, useCallback, useRef, type FormEvent, type HTMLAttributes } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type HTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
-import { resolveAccessMode } from '@/lib/access-mode';
+import { readGuestOverride, resolveAccessMode, writeGuestOverride } from '@/lib/access-mode';
 import { fetchHomeOracle } from '@/lib/oracle-access';
 // guest-recipe.ts is no longer called directly — get_guest_oracle_home_v6 decides card_type.
+
+const ORACLE_FETCH_DEBOUNCE_MS = 200;
+const ORACLE_FETCH_TIMEOUT_MS = 15000;
+
+function isDevEnv() {
+  return import.meta.env.DEV;
+}
+
+function createOracleTimeoutError() {
+  return new Error('Odara is taking longer than expected. Please try again.');
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeoutId: number | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(createOracleTimeoutError()), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
 
 
 
@@ -202,7 +228,7 @@ function AuthTextField({
 }
 
 const Index = () => {
-  const { getTemperature, currentTemperature, weatherLoading } = useWeather();
+  const { weatherByDate, getTemperature, currentTemperature, weatherLoading } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [authView, setAuthView] = useState<AuthView>('signIn');
@@ -217,7 +243,7 @@ const Index = () => {
   const [authNotice, setAuthNotice] = useState('');
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [guestMode, setGuestMode] = useState(false);
+  const [guestMode, setGuestMode] = useState(() => readGuestOverride());
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [touchedFields, setTouchedFields] = useState<Partial<Record<AuthField, boolean>>>({});
   const [signUpPasswordsVisible, setSignUpPasswordsVisible] = useState(false);
@@ -247,7 +273,7 @@ const Index = () => {
   const liveTemperature = getTemperature(selectedDate);
 
   // ── Normalized access mode — single source of truth ──
-  const access = resolveAccessMode(user, guestMode);
+  const access = useMemo(() => resolveAccessMode(user, guestMode), [user, guestMode]);
   const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
   const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
   const isSignUp = authView === 'signUp';
@@ -260,17 +286,22 @@ const Index = () => {
   const socialButtonLabel = isEditorPreview
     ? 'Open shared preview to sign in with Google'
     : 'Continue with Google';
+  const setGuestOverride = useCallback((enabled: boolean) => {
+    writeGuestOverride(enabled);
+    setGuestMode(enabled);
+  }, []);
 
   const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
       ? `${access.resolvedUserId}|${selectedContext}|${selectedDate}`
       : null;
   const isSelectedDateToday = selectedDate === todayLocalKey();
-  const shouldDelaySignedInOracleForWeather =
-    !access.isGuestMode
-    && isSelectedDateToday
-    && currentTemperature == null
-    && weatherLoading;
+  const hasWeatherForSelectedDate = isSelectedDateToday
+    ? currentTemperature != null
+    : weatherByDate[selectedDate] != null;
+  const shouldDelayOracleForWeather =
+    weatherLoading
+    && !hasWeatherForSelectedDate;
   const stableOracleTemperature = oracleSlotKey
     ? (oracleTemperatureBySlotRef.current[oracleSlotKey] ?? liveTemperature)
     : liveTemperature;
@@ -281,20 +312,23 @@ const Index = () => {
     : null;
 
   // Debug render log
-  console.log('[Odara] render summary', {
-    authReady,
-    userId: user?.id ?? null,
-    isGuestMode: access.isGuestMode,
-    resolvedUserId: access.resolvedUserId,
-    canWrite: access.canWrite,
-    oracleSlotKey,
-    oracleKey,
-    liveTemperature,
-    stableOracleTemperature,
-    oracleLoading,
-    hasOracle: !!oracle,
-    oracleError,
-  });
+  if (isDevEnv()) {
+    console.log('[Odara] render summary', {
+      authReady,
+      userId: user?.id ?? null,
+      hasAuthenticatedSession: access.hasAuthenticatedSession,
+      isGuestMode: access.isGuestMode,
+      resolvedUserId: access.resolvedUserId,
+      canWrite: access.canWrite,
+      oracleSlotKey,
+      oracleKey,
+      liveTemperature,
+      stableOracleTemperature,
+      oracleLoading,
+      hasOracle: !!oracle,
+      oracleError,
+    });
+  }
 
   // --- Auth bootstrap ---
   useEffect(() => {
@@ -328,7 +362,7 @@ const Index = () => {
     // For signed-in users, wait for authReady. For guests, proceed immediately.
     if (!access.isGuestMode && !authReady) return;
 
-    if (shouldDelaySignedInOracleForWeather) {
+    if (shouldDelayOracleForWeather) {
       setOracleLoading(true);
       setOracleError(null);
       return;
@@ -358,99 +392,118 @@ const Index = () => {
     // Launch
     const requestId = ++oracleRequestIdRef.current;
     const requestTemperature = stableOracleTemperature;
-    if (oracleSlotKey && oracleTemperatureBySlotRef.current[oracleSlotKey] == null) {
-      oracleTemperatureBySlotRef.current[oracleSlotKey] = requestTemperature;
-    }
     oracleInFlightKeyRef.current = oracleKey;
-
-    console.log('[Odara] oracle launch', {
-      oracleKey,
-      oracleSlotKey,
-      requestTemperature,
-      requestId,
-      isGuestMode: access.isGuestMode,
-    });
+    let requestStarted = false;
+    let cancelled = false;
+    let launchTimerId: number | null = null;
 
     setOracleLoading(true);
     setOracleError(null);
 
-    (async () => {
-      // For signed-in users, verify session before RPC
-      if (!access.isGuestMode) {
-        const { data: sessionData } = await odaraSupabase.auth.getSession();
-        const session = sessionData?.session;
-        console.log('[Odara] pre-oracle session check', {
-          hasSession: !!session,
-          sessionUserId: session?.user?.id ?? null,
-          rpc: 'get_todays_oracle_home_v1',
+    launchTimerId = window.setTimeout(() => {
+      requestStarted = true;
+
+      if (oracleSlotKey && oracleTemperatureBySlotRef.current[oracleSlotKey] == null) {
+        oracleTemperatureBySlotRef.current[oracleSlotKey] = requestTemperature;
+      }
+
+      if (isDevEnv()) {
+        console.log('[Odara] oracle launch', {
           oracleKey,
+          oracleSlotKey,
+          requestTemperature,
           requestId,
+          isGuestMode: access.isGuestMode,
         });
-        if (!session) {
-          if (requestId !== oracleRequestIdRef.current) return;
-          const msg = 'No active session — cannot call oracle RPC';
-          console.error('[Odara] oracle blocked: no session', { requestId });
-          setOracleError(msg);
+      }
+
+      (async () => {
+        try {
+          const result = await withTimeout((async () => {
+            if (!access.isGuestMode) {
+              const { data: sessionData } = await odaraSupabase.auth.getSession();
+              const session = sessionData?.session;
+              if (!session) {
+                throw new Error('No active session — cannot call oracle RPC');
+              }
+            }
+
+            return fetchHomeOracle({
+              access,
+              temperature: requestTemperature,
+              context: selectedContext,
+              brand: 'Alexandria Fragrances',
+              wearDate: selectedDate,
+            });
+          })(), ORACLE_FETCH_TIMEOUT_MS);
+
+          if (cancelled || requestId !== oracleRequestIdRef.current) return;
+
+          const data = result.data;
+          const slotTaggedData = data && typeof data === 'object'
+            ? {
+                ...data,
+                requested_context: (data as any).requested_context ?? selectedContext,
+                context_key: (data as any).context_key ?? selectedContext,
+                wear_date: (data as any).wear_date ?? selectedDate,
+                __v6: (data as any).__v6 && typeof (data as any).__v6 === 'object'
+                  ? {
+                      ...(data as any).__v6,
+                      requested_context: (data as any).__v6.requested_context ?? (data as any).requested_context ?? selectedContext,
+                      context_key: (data as any).__v6.context_key ?? (data as any).context_key ?? selectedContext,
+                      wear_date: (data as any).__v6.wear_date ?? (data as any).wear_date ?? selectedDate,
+                    }
+                  : (data as any).__v6,
+              }
+            : data;
+
+          setOracle(slotTaggedData as unknown as OracleResult);
+          setOracleError(null);
+          setOracleLoading(false);
+          oracleSuccessKeyRef.current = oracleKey;
+          oracleInFlightKeyRef.current = null;
+        } catch (e: any) {
+          if (cancelled || requestId !== oracleRequestIdRef.current) return;
+
+          setOracleError(e?.message || 'Unknown error');
           setOracleLoading(false);
           oracleInFlightKeyRef.current = null;
-          return;
+
+          if (isDevEnv()) {
+            const isNetworkError = !e?.code && !e?.message?.includes('row-level');
+            console.error('[Odara] oracle fail', {
+              requestId,
+              oracleKey,
+              type: isNetworkError ? 'network/preflight failure' : 'rpc error',
+              msg: e?.message || e,
+              code: e?.code,
+              details: e?.details,
+              hint: e?.hint,
+            });
+          }
         }
+      })();
+    }, ORACLE_FETCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      if (launchTimerId !== null) {
+        window.clearTimeout(launchTimerId);
       }
-
-      try {
-        let data: any;
-        let rpcUsed: string;
-        const result = await fetchHomeOracle({
-          access,
-          temperature: requestTemperature,
-          context: selectedContext,
-          brand: 'Alexandria Fragrances',
-          wearDate: selectedDate,
-        });
-        if (requestId !== oracleRequestIdRef.current) return;
-        data = result.data;
-        rpcUsed = result.rpcUsed;
-
-        const slotTaggedData = data && typeof data === 'object'
-          ? {
-              ...data,
-              requested_context: (data as any).requested_context ?? selectedContext,
-              context_key: (data as any).context_key ?? selectedContext,
-              wear_date: (data as any).wear_date ?? selectedDate,
-              __v6: (data as any).__v6 && typeof (data as any).__v6 === 'object'
-                ? {
-                    ...(data as any).__v6,
-                    requested_context: (data as any).__v6.requested_context ?? (data as any).requested_context ?? selectedContext,
-                    context_key: (data as any).__v6.context_key ?? (data as any).context_key ?? selectedContext,
-                    wear_date: (data as any).__v6.wear_date ?? (data as any).wear_date ?? selectedDate,
-                  }
-                : (data as any).__v6,
-            }
-          : data;
-
-        console.log('[Odara] oracle success', { requestId, oracleKey, rpcUsed });
-        setOracle(slotTaggedData as unknown as OracleResult);
-        setOracleError(null);
-        setOracleLoading(false);
-        oracleSuccessKeyRef.current = oracleKey;
-        oracleInFlightKeyRef.current = null;
-      } catch (e: any) {
-        if (requestId !== oracleRequestIdRef.current) return;
-        const isNetworkError = !e?.code && !e?.message?.includes('row-level');
-        console.error('[Odara] oracle fail', {
-          requestId, oracleKey,
-          type: isNetworkError ? 'network/preflight failure' : 'rpc error',
-          msg: e?.message || e,
-          code: e?.code,
-          details: e?.details,
-          hint: e?.hint,
-        });
-        setOracleError(e?.message || 'Unknown error');
-        setOracleLoading(false);
+      if (!requestStarted && oracleInFlightKeyRef.current === oracleKey) {
         oracleInFlightKeyRef.current = null;
       }
-    })();
-  }, [authReady, oracleKey, oracleSlotKey, stableOracleTemperature, shouldDelaySignedInOracleForWeather, access.isGuestMode, selectedContext, selectedDate]);
+    };
+  }, [
+    authReady,
+    oracleKey,
+    oracleSlotKey,
+    stableOracleTemperature,
+    shouldDelayOracleForWeather,
+    access,
+    selectedContext,
+    selectedDate,
+  ]);
 
   // Accept / Skip RPCs — guarded by canWrite
   const handleAccept = useCallback(async (fragranceId: string, layerFragranceId: string | null = null) => {
@@ -572,6 +625,7 @@ const Index = () => {
       window.open(SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
+    setGuestOverride(false);
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
     primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
@@ -610,13 +664,14 @@ const Index = () => {
   const handleSignOut = async () => {
     if (access.isGuestMode) {
       // Guest sign-out: just return to auth screen
-      setGuestMode(false);
+      setGuestOverride(false);
       setOracle(null);
       setOracleError(null);
       oracleSuccessKeyRef.current = null;
       oracleInFlightKeyRef.current = null;
       return;
     }
+    setGuestOverride(false);
     await odaraSupabase.auth.signOut();
   };
 
@@ -640,6 +695,7 @@ const Index = () => {
     setLoading(true);
     try {
       const normalizedEmail = email.trim();
+      setGuestOverride(false);
 
       if (isSignUp) {
         primeVesperAuthPersistence(true, ODARA_AUTH_STORAGE_KEY);
@@ -896,7 +952,7 @@ const Index = () => {
 
                   <button
                     className="mt-5 w-full text-center text-[12px] text-muted-foreground/45 underline underline-offset-2 transition-colors hover:text-muted-foreground/80"
-                    onClick={() => setGuestMode(true)}
+                    onClick={() => setGuestOverride(true)}
                     type="button"
                   >
                     Skip for now
@@ -924,7 +980,7 @@ const Index = () => {
         onDateChange={setSelectedDate}
         onAccept={handleAccept}
         onSkip={handleSkip}
-        userId={access.resolvedUserId!}
+        userId={access.isGuestMode ? null : access.signedInUserId}
         resolvedTemperature={liveTemperature}
         isGuestMode={access.isGuestMode}
       />

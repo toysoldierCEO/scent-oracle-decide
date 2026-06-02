@@ -1312,7 +1312,7 @@ interface OdaraScreenProps {
   onDateChange: (date: string) => void;
   onAccept: (fragranceId: string, layerFragranceId: string | null) => Promise<void>;
   onSkip: (fragranceId: string) => Promise<OracleResult | null>;
-  userId: string;
+  userId: string | null;
   resolvedTemperature: number;
   /** Guest mode: read-only, no signed-in RPCs (queue/alternates/mood). Render strictly from raw payload. */
   isGuestMode?: boolean;
@@ -15405,7 +15405,7 @@ const OdaraScreen = ({
         {oracleLoading && (
           <div className="flex flex-col gap-3 items-center py-16">
             <div className="w-8 h-8 border-2 border-foreground/20 border-t-foreground/60 rounded-full animate-spin" />
-            <span className="text-sm text-muted-foreground">Reading your collection…</span>
+            <span className="text-sm text-muted-foreground">Preparing today&apos;s pick…</span>
           </div>
         )}
         {oracleError && (
