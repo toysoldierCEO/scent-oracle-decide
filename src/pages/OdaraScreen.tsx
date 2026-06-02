@@ -1461,13 +1461,6 @@ function modeValueToBackendModeEntry(
   const layerFragranceId = value.layer_fragrance_id ?? value.fragrance_id ?? value.id ?? '';
   const layerName = value.layer_name ?? value.name ?? '';
   if (!layerFragranceId && !layerName) return null;
-  if (isTemporarilySuppressedRotationFragrance({
-    fragrance_id: layerFragranceId,
-    name: layerName,
-    brand: value.layer_brand ?? value.brand ?? '',
-  })) {
-    return null;
-  }
   const teaching = normalizeLayerTeachingFields(value);
   const sprayPattern = normalizeLayerSprayPattern(value);
 
@@ -1537,13 +1530,6 @@ function v6LayerToLayerMode(
   const id = layer.fragrance_id ?? layer.layer_fragrance_id ?? layer.id ?? '';
   const name = layer.name ?? layer.layer_name ?? '';
   if (!id && !name) return null;
-  if (isTemporarilySuppressedRotationFragrance({
-    fragrance_id: id,
-    name,
-    brand: layer.brand ?? layer.layer_brand ?? '',
-  })) {
-    return null;
-  }
   const teaching = normalizeLayerTeachingFields(layer);
   const sprayPattern = normalizeLayerSprayPattern(layer);
   return {
@@ -2265,13 +2251,6 @@ function appendUniqueBackendModeEntries(
   const next = [...existing];
   for (const addition of additions) {
     if (!addition) continue;
-    if (isTemporarilySuppressedRotationFragrance({
-      fragrance_id: addition.layer_fragrance_id,
-      name: addition.layer_name,
-      brand: addition.layer_brand,
-    })) {
-      continue;
-    }
     if (next.some((current) => isSameBackendModeEntryIdentity(current, addition))) continue;
     next.push(addition);
   }
@@ -12073,14 +12052,12 @@ const OdaraScreen = ({
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
 
-    // Gather already-loaded layer fragrance ids for exclusion — CURRENT SLOT ONLY
+    // Keep exclusion scoped to this mood lane. Different modes can
+    // legitimately resolve to the same layer scent with different teaching.
     const excludeIds: string[] = [];
-    for (const m of ['balance', 'bold', 'smooth', 'wild'] as LayerMood[]) {
-      const stack = readMoodLaneStack(buildMoodLaneKey(slotPrefix, fragranceId, m));
-      for (const existing of stack) {
-        if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
-          excludeIds.push(existing.layer_fragrance_id);
-        }
+    for (const existing of readMoodLaneStack(moodKey)) {
+      if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
+        excludeIds.push(existing.layer_fragrance_id);
       }
     }
     // Also include oracle.layer id if present
