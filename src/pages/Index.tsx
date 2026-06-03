@@ -12,10 +12,6 @@ import { fetchHomeOracle } from '@/lib/oracle-access';
 const ORACLE_FETCH_DEBOUNCE_MS = 200;
 const ORACLE_FETCH_TIMEOUT_MS = 15000;
 
-function isDevEnv() {
-  return import.meta.env.DEV;
-}
-
 function createOracleTimeoutError() {
   return new Error('Odara is taking longer than expected. Please try again.');
 }
@@ -311,35 +307,12 @@ const Index = () => {
     ? `${oracleSlotKey}|${stableOracleTemperature}`
     : null;
 
-  // Debug render log
-  if (isDevEnv()) {
-    console.log('[Odara] render summary', {
-      authReady,
-      userId: user?.id ?? null,
-      hasAuthenticatedSession: access.hasAuthenticatedSession,
-      isGuestMode: access.isGuestMode,
-      resolvedUserId: access.resolvedUserId,
-      canWrite: access.canWrite,
-      oracleSlotKey,
-      oracleKey,
-      liveTemperature,
-      stableOracleTemperature,
-      oracleLoading,
-      hasOracle: !!oracle,
-      oracleError,
-    });
-  }
-
   // --- Auth bootstrap ---
   useEffect(() => {
     const applySession = (session: any, source: string) => {
       const nextUser = normalizeUser(session?.user);
       setUser(prev => {
-        if (sameUser(prev, nextUser)) {
-          console.log(`[Odara] auth session skipped duplicate (${source})`);
-          return prev;
-        }
-        console.log(`[Odara] auth session applied (${source})`, { userId: nextUser?.id ?? null });
+        if (sameUser(prev, nextUser)) return prev;
         return nextUser;
       });
     };
@@ -379,13 +352,11 @@ const Index = () => {
 
     // Dedupe: already in flight for this key
     if (oracleInFlightKeyRef.current === oracleKey) {
-      console.log('[Odara] oracle launch skipped in-flight', { oracleKey });
       return;
     }
 
     // Dedupe: already satisfied for this key
     if (oracleSuccessKeyRef.current === oracleKey) {
-      console.log('[Odara] oracle launch skipped satisfied', { oracleKey });
       return;
     }
 
@@ -405,16 +376,6 @@ const Index = () => {
 
       if (oracleSlotKey && oracleTemperatureBySlotRef.current[oracleSlotKey] == null) {
         oracleTemperatureBySlotRef.current[oracleSlotKey] = requestTemperature;
-      }
-
-      if (isDevEnv()) {
-        console.log('[Odara] oracle launch', {
-          oracleKey,
-          oracleSlotKey,
-          requestTemperature,
-          requestId,
-          isGuestMode: access.isGuestMode,
-        });
       }
 
       (async () => {
@@ -473,19 +434,6 @@ const Index = () => {
           setOracleError(e?.message || 'Unknown error');
           setOracleLoading(false);
           oracleInFlightKeyRef.current = null;
-
-          if (isDevEnv()) {
-            const isNetworkError = !e?.code && !e?.message?.includes('row-level');
-            console.error('[Odara] oracle fail', {
-              requestId,
-              oracleKey,
-              type: isNetworkError ? 'network/preflight failure' : 'rpc error',
-              msg: e?.message || e,
-              code: e?.code,
-              details: e?.details,
-              hint: e?.hint,
-            });
-          }
         }
       })();
     }, ORACLE_FETCH_DEBOUNCE_MS);
@@ -513,10 +461,8 @@ const Index = () => {
   // Accept / Skip RPCs — guarded by canWrite
   const handleAccept = useCallback(async (fragranceId: string, layerFragranceId: string | null = null) => {
     if (!access.canWrite || !user) {
-      console.log('[Odara] accept blocked — guest mode or no user');
       return;
     }
-    console.log('[Odara] accept rpc start', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     const { error: err } = await odaraSupabase.rpc('accept_oracle_selection_v1' as any, {
       p_user: user.id,
       p_fragrance_id: fragranceId,
@@ -525,20 +471,15 @@ const Index = () => {
       p_wear_date: selectedDate,
     });
     if (err) {
-      console.error('[Odara] accept rpc fail', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1', error: err.message });
       throw err;
-    } else {
-      console.log('[Odara] accept rpc success', { userId: user.id, fragranceId, layerFragranceId, context: selectedContext, wearDate: selectedDate, rpc: 'accept_oracle_selection_v1' });
     }
   }, [user, access.canWrite, selectedContext, selectedDate]);
 
   const handleSkip = useCallback(async (fragranceId: string) => {
     if (!access.canWrite || !user) {
-      console.log('[Odara] skip blocked — guest mode or no user');
       return null;
     }
 
-    console.log('[Odara] skip rpc start', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
     const { error: skipError } = await odaraSupabase.rpc('skip_oracle_selection_v1' as any, {
       p_user: user.id,
       p_fragrance_id: fragranceId,
@@ -547,10 +488,8 @@ const Index = () => {
     });
 
     if (skipError) {
-      console.error('[Odara] skip rpc fail', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: skipError.message });
       throw skipError;
     }
-    console.log('[Odara] skip rpc success', { userId: user.id, fragranceId, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' });
 
     // Re-fetch oracle inline via normalized access layer
     oracleSuccessKeyRef.current = null;
