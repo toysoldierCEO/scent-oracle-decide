@@ -12,6 +12,7 @@
  * Engine decides. UI renders.
  */
 import { odaraSupabase } from '@/lib/odara-client';
+import { odaraDebugLog } from '@/lib/odara-debug';
 
 export interface RecipeHeader {
   text: string;
@@ -234,7 +235,7 @@ export async function fetchGuestRecipeQueue(
   context: string,
 ): Promise<GuestRecipePayload | null> {
   const args = { p_context: context, p_limit: 4 };
-  console.log('[Odara][GuestRecipe] rpc start', { rpc: 'get_guest_recipe_occasion_queue_v2', args });
+  odaraDebugLog('[Odara][GuestRecipe] rpc start', { rpc: 'get_guest_recipe_occasion_queue_v2', args });
   const { data, error } = await odaraSupabase.rpc(
     'get_guest_recipe_occasion_queue_v2' as any,
     args,
@@ -245,7 +246,7 @@ export async function fetchGuestRecipeQueue(
   }
   const ctxBlock = (data as any)?.contexts?.[context];
   const options: RawRecipeOption[] = Array.isArray(ctxBlock?.options) ? ctxBlock.options : [];
-  console.log('[Odara][GuestRecipe] payload summary', {
+  odaraDebugLog('[Odara][GuestRecipe] payload summary', {
     context,
     optionCount: options.length,
     recipeNames: options.map((o) => o.recipe_name),

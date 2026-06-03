@@ -8,6 +8,7 @@ import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType, type SprayPattern } from "@/components/ModeSelector";
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
+import { odaraDebugLog } from "@/lib/odara-debug";
 import { haptic } from "@/lib/haptics";
 import {
   CARD_ACTION_BUTTON_BASE_CLASS,
@@ -10737,17 +10738,17 @@ const OdaraScreen = ({
   // GUEST MODE: skip — queue is signed-in only.
   const fetchQueue = useCallback(async (excludeId?: string) => {
     if (isGuestMode) {
-      console.log('[Odara][Guest] queue fetch skipped (read-only)');
+      odaraDebugLog('[Odara][Guest] queue fetch skipped (read-only)');
       return [];
     }
     const requestKey = `${stateKey}|${excludeId ?? '(none)'}`;
     const inFlight = queueFetchInFlightRef.current.get(requestKey);
     if (inFlight) {
-      console.log('[Odara] queue fetch reuse', requestKey);
+      odaraDebugLog('[Odara] queue fetch reuse', requestKey);
       return inFlight;
     }
 
-    console.log('[Odara] queue fetch start', requestKey);
+    odaraDebugLog('[Odara] queue fetch start', requestKey);
     setQueueError(null);
 
     const request = (async () => {
@@ -10772,7 +10773,7 @@ const OdaraScreen = ({
         const detailMap = detailIds.length > 0
           ? await fetchFragranceDetails(detailIds)
           : new Map<string, FragranceDetail>();
-        console.log('[Odara] queue fetch success', seededQueue.length, 'cards');
+        odaraDebugLog('[Odara] queue fetch success', seededQueue.length, 'cards');
         return seededQueue.map((row) => {
           const resolvedCard = resolveQueuedHeroDisplayWithDetails(
             row,
@@ -12043,25 +12044,25 @@ const OdaraScreen = ({
     extraExcludeIds: string[] = [],
   ) => {
     if (isGuestMode) {
-      console.log('[Odara][Guest] mood fetch skipped (read-only)', { mood, fragranceId });
+      odaraDebugLog('[Odara][Guest] mood fetch skipped (read-only)', { mood, fragranceId });
       return null;
     }
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = buildMoodLaneKey(slotPrefix, fragranceId, mood);
     const cached = moodCacheRef.current.get(moodKey);
     if (cached !== undefined && !isRetry) {
-      console.log('[Odara] mood cache hit', moodKey);
+      odaraDebugLog('[Odara] mood cache hit', moodKey);
       return cached;
     }
 
     // In-flight dedupe: reuse pending promise for same key
     const inFlight = moodInFlightRef.current.get(moodKey);
     if (inFlight && !isRetry) {
-      console.log('[Odara] mood in-flight reuse', moodKey);
+      odaraDebugLog('[Odara] mood in-flight reuse', moodKey);
       return inFlight;
     }
 
-    console.log('[Odara] mood cache miss', moodKey, isRetry ? '(retry)' : '');
+    odaraDebugLog('[Odara] mood cache miss', moodKey, isRetry ? '(retry)' : '');
 
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
@@ -12083,7 +12084,7 @@ const OdaraScreen = ({
 
     const fetchPromise = (async (): Promise<BackendModeEntry | null> => {
       try {
-        console.log('[Odara] lazy mood fetch start', mood, fragranceId, 'slot', capturedSlot);
+        odaraDebugLog('[Odara] lazy mood fetch start', mood, fragranceId, 'slot', capturedSlot);
         setModeLoading(prev => ({ ...prev, [mood]: true }));
         setModeErrors(prev => ({ ...prev, [mood]: null }));
         setLayerDebugSource(`rpc:${mood}…`);
@@ -12099,7 +12100,7 @@ const OdaraScreen = ({
         });
 
         if (activeSlotRef.current !== capturedSlot) {
-          console.log('[Odara] ignoring stale mood result for old slot', capturedSlot, '→ current', activeSlotRef.current);
+          odaraDebugLog('[Odara] ignoring stale mood result for old slot', capturedSlot, '→ current', activeSlotRef.current);
           return null;
         }
 
@@ -12125,7 +12126,7 @@ const OdaraScreen = ({
             setLayerDebugSource(`fallback:${mood}`);
             setModeLoading(prev => ({ ...prev, [mood]: false }));
             setMoodCacheVersion(v => v + 1);
-            console.log('[Odara] mood RPC failed → seeded from home payload', mood);
+            odaraDebugLog('[Odara] mood RPC failed → seeded from home payload', mood);
             return fbEntry;
           }
           setModeErrors(prev => ({ ...prev, [mood]: error.message }));
@@ -12182,14 +12183,14 @@ const OdaraScreen = ({
           moodLaneStackRef.current.set(moodKey, nextStack);
         }
         moodCacheRef.current.set(moodKey, entry);
-        console.log('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
+        odaraDebugLog('[Odara] lazy mood fetch success', mood, entry.layer_name, 'slot', capturedSlot);
         setLayerDebugSource(`rpc:${mood}`);
         setModeLoading(prev => ({ ...prev, [mood]: false }));
         setMoodCacheVersion(v => v + 1);
         return entry;
       } catch (e: any) {
         if (activeSlotRef.current !== capturedSlot) {
-          console.log('[Odara] ignoring stale mood error for old slot', capturedSlot);
+          odaraDebugLog('[Odara] ignoring stale mood error for old slot', capturedSlot);
           return null;
         }
         setModeErrors(prev => ({ ...prev, [mood]: e?.message ?? 'Fetch failed' }));
@@ -12280,7 +12281,7 @@ const OdaraScreen = ({
         notes: Array.isArray(row?.notes) ? row.notes : [],
         accords: Array.isArray(row?.accords) ? row.accords : [],
       })).filter(a => a.name);
-      console.log('[Odara][Guest] alternates from raw payload', { count: guestAlts.length });
+      odaraDebugLog('[Odara][Guest] alternates from raw payload', { count: guestAlts.length });
       return guestAlts;
     }
 
@@ -12303,7 +12304,7 @@ const OdaraScreen = ({
       });
 
       if (activeSlotRef.current !== capturedSlot) {
-        console.log('[Odara] ignoring stale alternates for old slot', capturedSlot);
+        odaraDebugLog('[Odara] ignoring stale alternates for old slot', capturedSlot);
         return [];
       }
 
@@ -12642,7 +12643,7 @@ const OdaraScreen = ({
     );
     prevSlotRef.current = stateKey;
 
-    console.log('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
+    odaraDebugLog('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
     setSignedInDayStateMap((prev) => {
       let changed = false;
       const next: SignedInDayStateMap = {};
@@ -12712,7 +12713,7 @@ const OdaraScreen = ({
 
     const capturedSlot = stateKey;
     if (!isGuestMode && !signedInOracleMatchesRequestedSlot(oracle, selectedContext, selectedDate)) {
-      console.log('[Odara] ignoring stale signed-in oracle payload for slot', {
+      odaraDebugLog('[Odara] ignoring stale signed-in oracle payload for slot', {
         requestedContext: readSignedInOracleSlotMeta(oracle).contextKey,
         requestedDate: readSignedInOracleSlotMeta(oracle).wearDate,
         selectedContext,
@@ -12828,7 +12829,7 @@ const OdaraScreen = ({
                   ? (storedMoodCycleState?.layerIdxByMood?.[mood] ?? 0)
                   : (signedInLayerIdxByMoodRef.current[mood] ?? 0),
               );
-              console.log('[Odara] pre-seeded mood cache from layer_modes', mood, seededEntries.map((entry) => entry.layer_name));
+              odaraDebugLog('[Odara] pre-seeded mood cache from layer_modes', mood, seededEntries.map((entry) => entry.layer_name));
             }
           }
         }
@@ -12870,11 +12871,11 @@ const OdaraScreen = ({
               ? (storedMoodCycleState?.layerIdxByMood?.balance ?? 0)
               : (signedInLayerIdxByMoodRef.current.balance ?? 0),
           );
-          console.log('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
+          odaraDebugLog('[Odara] pre-seeded balance from normalized.seededBalanceLayer', balanceEntry.layer_name);
         }
       }
 
-      console.log('[Odara] mode cache after init', {
+      odaraDebugLog('[Odara] mode cache after init', {
         heroId,
         keys: Array.from(moodCacheRef.current.keys()).filter(k => k.includes(heroId)),
         balanceLoaded: moodCacheRef.current.has(balanceCacheKey),
@@ -13592,7 +13593,7 @@ const OdaraScreen = ({
       }
 
       syncMoodLaneSelectedEntry(moodKey, currentIndex);
-      console.log('[Odara][SignedIn][lane] mood re-tap exhausted', { mood, currentIndex, stackLen: stack.length });
+      odaraDebugLog('[Odara][SignedIn][lane] mood re-tap exhausted', { mood, currentIndex, stackLen: stack.length });
     });
   }, [
     lockState,
@@ -13680,7 +13681,7 @@ const OdaraScreen = ({
       p_context: selectedContext,
       p_skip_date: selectedDate,
     }).then(
-      () => console.log('[Odara] skip rpc success (fire-forget)', { userId, fragranceId: effectiveVisibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' }),
+      () => odaraDebugLog('[Odara] skip rpc success (fire-forget)', { userId, fragranceId: effectiveVisibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1' }),
       (err: any) => console.error('[Odara] skip rpc fail (fire-forget)', { userId, fragranceId: effectiveVisibleCard.fragrance_id, context: selectedContext, skipDate: selectedDate, rpc: 'skip_oracle_selection_v1', error: err?.message })
     );
 
@@ -13692,7 +13693,7 @@ const OdaraScreen = ({
     try {
       const currentMoodKey = effectiveSelectedMood ?? 'balance';
       const currentResolvedEntry = getResolvedMoodLaneEntry(effectiveVisibleCard.fragrance_id, currentMoodKey);
-      console.log('[Odara] history push (skip)', { id: effectiveVisibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
+      odaraDebugLog('[Odara] history push (skip)', { id: effectiveVisibleCard.fragrance_id, mood: currentMoodKey, resolved: currentResolvedEntry ? { id: currentResolvedEntry.layer_fragrance_id, name: currentResolvedEntry.layer_name } : null });
       setViewHistory(h => [
         ...h.slice(-(MAX_SESSION_HISTORY - 1)),
         {
@@ -13735,7 +13736,7 @@ const OdaraScreen = ({
     const entry = viewHistory[viewHistory.length - 1];
 
     const restoredMood = getBetaSafeLayerMood(entry.selectedMood ?? 'balance');
-    console.log('[Odara] back restore', {
+    odaraDebugLog('[Odara] back restore', {
       restoredId: entry.card.fragrance_id,
       restoredMood,
       restoredPromotedAltId: entry.promotedAltId,
@@ -14140,7 +14141,7 @@ const OdaraScreen = ({
     if (lockState === 'locked') return;
 
     const prevHeroId = visibleCard?.fragrance_id ?? '(none)';
-    console.log('[Odara] alternate promotion', {
+    odaraDebugLog('[Odara] alternate promotion', {
       tappedAltId: alt.fragrance_id,
       tappedAltName: alt.name,
       previousHeroId: prevHeroId,
@@ -14162,7 +14163,7 @@ const OdaraScreen = ({
     // 1. Save history
     const currentMoodKey2 = betaSafeSignedInMood;
     const currentResolvedEntry2 = getResolvedMoodLaneEntry(visibleCard!.fragrance_id, currentMoodKey2);
-    console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
+    odaraDebugLog('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
       ...h.slice(-(MAX_SESSION_HISTORY - 1)),
       { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood: currentMoodKey2, resolvedVisibleModeEntry: currentResolvedEntry2 },
@@ -14188,9 +14189,9 @@ const OdaraScreen = ({
 
     // 4. Immediately trigger BALANCE layer fetch for the promoted scent
     const capturedAltId = alt.fragrance_id;
-    console.log('[Odara] alternate promotion: fetching balance for', capturedAltId);
+    odaraDebugLog('[Odara] alternate promotion: fetching balance for', capturedAltId);
     void fetchMoodForCard(capturedAltId, 'balance').then((entry) => {
-      console.log('[Odara] alternate promotion: balance result', {
+      odaraDebugLog('[Odara] alternate promotion: balance result', {
         promotedId: capturedAltId,
         balanceLayerName: entry?.layer_name ?? '(null)',
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
@@ -14455,7 +14456,7 @@ const OdaraScreen = ({
 
   if (isGuestMode) {
     const o: any = oracle ?? {};
-    console.log('[Odara][Guest] render summary', {
+    odaraDebugLog('[Odara][Guest] render summary', {
       style_key: o.style_key ?? null,
       style_name: o.style_name ?? null,
       weekday_slot: o.weekday_slot ?? null,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { odaraDebugLog } from '@/lib/odara-debug';
 
 const DEV_FALLBACK_TEMPERATURE = 75;
 const STALE_MS = 10 * 60 * 1000; // 10 minutes
@@ -95,7 +96,7 @@ export function useWeather(): UseWeatherResult {
       setWeatherByDate(map);
       setCurrentTemperature(currentRounded);
       setWeatherError(null);
-      console.log('[Odara Weather] OK', {
+      odaraDebugLog('[Odara Weather] OK', {
         lat, lon, days: dates.length,
         currentTemperature: currentRounded,
         todayDailyMax: map[todayLocalKey()] ?? null,
@@ -143,7 +144,7 @@ export function useWeather(): UseWeatherResult {
       if (document.visibilityState !== 'visible') return;
       const age = fetchedAtRef.current ? Date.now() - fetchedAtRef.current : Infinity;
       if (age > STALE_MS) {
-        console.log('[Odara Weather] visibility refresh (stale)');
+        odaraDebugLog('[Odara Weather] visibility refresh (stale)');
         doRefresh();
       }
     };
