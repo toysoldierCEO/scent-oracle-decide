@@ -11454,6 +11454,20 @@ const OdaraScreen = ({
   const signedInIsReadOnlyHistoryCard = !isGuestMode
     && !!signedInResolvedLockTruth
     && currentDateKey < todayDateKey;
+  const signedInSearchPreviewDisabledReason = useMemo(() => {
+    if (isGuestMode) return null;
+    if (currentDateKey < todayDateKey) return 'Past days are read-only';
+    if (signedInResolvedLockTruth || signedInDayState.lockState === 'locked') {
+      return 'Unlock to preview';
+    }
+    return null;
+  }, [
+    currentDateKey,
+    isGuestMode,
+    signedInDayState.lockState,
+    signedInResolvedLockTruth,
+    todayDateKey,
+  ]);
   const lockState: LockState = signedInDayState.lockState;
   const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
   const signedInWeekMemoryRequestIdRef = useRef(0);
@@ -12527,8 +12541,8 @@ const OdaraScreen = ({
       return;
     }
 
-    if (signedInIsReadOnlyHistoryCard) {
-      showSearchFeedback(result.fragrance_id, 'History is read-only');
+    if (signedInSearchPreviewDisabledReason) {
+      showSearchFeedback(result.fragrance_id, signedInSearchPreviewDisabledReason);
       return;
     }
 
@@ -12626,7 +12640,7 @@ const OdaraScreen = ({
     resolveAlternatesForCard,
     resolveSearchPreviewDecision,
     showSearchFeedback,
-    signedInIsReadOnlyHistoryCard,
+    signedInSearchPreviewDisabledReason,
     stateKey,
     updateSignedInDayState,
   ]);
@@ -15288,12 +15302,22 @@ const OdaraScreen = ({
                     ? searchAddFeedback.text
                     : null;
                   const isAdding = searchAddPendingFragranceId === result.fragrance_id;
+                  const isSignedInAddDisabled = !isGuestMode && !!signedInSearchPreviewDisabledReason;
+                  const addDisabledReason = isSignedInAddDisabled
+                    ? signedInSearchPreviewDisabledReason
+                    : null;
                   const previewRole = result.fragrance_id === activeSearchPreviewLayerId
                     ? 'layer'
                     : result.fragrance_id === activeSearchPreviewTopId
                       ? 'top'
                       : null;
-                  const buttonTone = previewRole === 'top'
+                  const buttonTone = isSignedInAddDisabled
+                    ? {
+                        color: 'rgba(255,255,255,0.34)',
+                        background: 'rgba(255,255,255,0.025)',
+                        borderColor: 'rgba(255,255,255,0.08)',
+                      }
+                    : previewRole === 'top'
                     ? {
                         color: familyColor,
                         background: `${familyColor}14`,
@@ -15310,6 +15334,14 @@ const OdaraScreen = ({
                           background: 'rgba(255,255,255,0.03)',
                           borderColor: 'rgba(255,255,255,0.10)',
                         };
+                  const statusText = feedbackText ?? addDisabledReason;
+                  const statusTone = addDisabledReason
+                    ? 'rgba(255,255,255,0.42)'
+                    : feedbackText === 'Removed'
+                      ? 'rgba(161,161,170,0.9)'
+                      : previewRole === 'top'
+                        ? familyColor
+                        : 'rgba(255,255,255,0.52)';
 
                   return (
                     <div
@@ -15350,19 +15382,22 @@ const OdaraScreen = ({
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <button
                           type="button"
-                          aria-label={previewRole === 'top'
-                            ? `Add ${result.title} as layer for ${getDateLabel(currentDateKey)}`
-                            : previewRole === 'layer'
-                              ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
-                              : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
+                          aria-label={addDisabledReason
+                            ? `${addDisabledReason}: ${result.title}`
+                            : previewRole === 'top'
+                              ? `Add ${result.title} as layer for ${getDateLabel(currentDateKey)}`
+                              : previewRole === 'layer'
+                                ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
+                                : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
                           onClick={() => void handleAddSearchResultToSelectedDay(result)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-wait disabled:opacity-55"
+                          className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-not-allowed disabled:opacity-60"
                           style={{
                             WebkitTapHighlightColor: 'transparent',
                             ...buttonTone,
                             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
                           }}
-                          disabled={isAdding}
+                          title={addDisabledReason ?? undefined}
+                          disabled={isAdding || isSignedInAddDisabled}
                         >
                           {isAdding ? (
                             <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
@@ -15378,18 +15413,12 @@ const OdaraScreen = ({
                             </svg>
                           )}
                         </button>
-                        {feedbackText ? (
+                        {statusText ? (
                           <span
                             className="text-[10px] uppercase tracking-[0.12em]"
-                            style={{
-                              color: feedbackText === 'Removed'
-                                ? 'rgba(161,161,170,0.9)'
-                                : previewRole === 'top'
-                                  ? familyColor
-                                  : 'rgba(255,255,255,0.52)',
-                            }}
+                            style={{ color: statusTone }}
                           >
-                            {feedbackText}
+                            {statusText}
                           </span>
                         ) : null}
                       </div>
