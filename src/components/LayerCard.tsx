@@ -636,6 +636,7 @@ interface LayerCardProps {
   modeLoading?: Record<LayerMood, boolean>;
   modeErrors?: Record<LayerMood, string | null>;
   onRetryMood?: (mood: LayerMood) => void;
+  disabledMoodReasons?: Partial<Record<LayerMood, string>>;
   /** Optional backend-provided token rail for the visible layer (signed-in main page).
    *  Rendered between the layer family chip and the mode row to match the locked
    *  layer order (name → brand → family → tokens → mode row → why it works). */
@@ -669,6 +670,7 @@ const LayerCard = ({
   modeLoading,
   modeErrors,
   onRetryMood,
+  disabledMoodReasons,
   layerTokens = null,
   layerImageUrl = null,
   layerSprayCount = null,
@@ -982,6 +984,7 @@ const LayerCard = ({
           locked={locked}
           consumeLockedTap={consumeLockedMoodTap}
           loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
+          disabledMoodReasons={disabledMoodReasons}
         />
       </div>
 

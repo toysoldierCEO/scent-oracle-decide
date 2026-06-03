@@ -11037,6 +11037,15 @@ const OdaraScreen = ({
   const [layerExpanded, setLayerExpanded] = useState(false);
   const [signedInModeHistory, setSignedInModeHistory] = useState<LocalModeHistoryEntry<LayerMood>[]>([]);
   const signedInModeHistoryRef = useRef<LocalModeHistoryEntry<LayerMood>[]>([]);
+  const getBetaSafeLayerMood = useCallback((mood: LayerMood | null | undefined): LayerMood => {
+    const normalized = normalizeLayerMoodKey(mood) ?? 'balance';
+    return !isGuestMode && normalized === 'wild' ? 'balance' : normalized;
+  }, [isGuestMode]);
+  const betaSafeSignedInMood = getBetaSafeLayerMood(selectedMood);
+  const signedInDisabledMoodReasons = useMemo(
+    () => (isGuestMode ? undefined : { wild: 'Wild is being tuned.' }),
+    [isGuestMode],
+  );
   const persistSignedInMoodCycleMemory = useCallback((
     slotKey: string,
     anchorId: string | null | undefined,
@@ -11055,10 +11064,15 @@ const OdaraScreen = ({
     persistSignedInMoodCycleMemory(
       `${selectedDate}|${selectedContext}`,
       visibleCard?.fragrance_id ?? null,
-      selectedMood,
+      betaSafeSignedInMood,
       signedInLayerIdxByMood,
     );
-  }, [persistSignedInMoodCycleMemory, visibleCard?.fragrance_id, selectedDate, selectedContext, selectedMood, signedInLayerIdxByMood]);
+  }, [betaSafeSignedInMood, persistSignedInMoodCycleMemory, visibleCard?.fragrance_id, selectedDate, selectedContext, signedInLayerIdxByMood]);
+
+  useEffect(() => {
+    if (isGuestMode || selectedMood !== 'wild') return;
+    setSelectedMood('balance');
+  }, [isGuestMode, selectedMood]);
 
   // ── Guest-mode v5 state machine (guest_single_bundle_v3_mode_layers) ──
   // Two render states only:
@@ -12428,13 +12442,13 @@ const OdaraScreen = ({
       setSignedInForcedLayerCarryCard(decision.forcedLayerCarryCard);
       setSignedInResolvedDayDecisionSource(decision.source);
       setPromotedAltId(decision.promotedAltId);
-      setSelectedMood(decision.selectedMood ?? fallbackMood);
+      setSelectedMood(getBetaSafeLayerMood(decision.selectedMood ?? fallbackMood));
     } else {
       setVisibleCard(null);
       setSignedInForcedLayerCarryCard(null);
       setSignedInResolvedDayDecisionSource('oracle');
       setPromotedAltId(null);
-      setSelectedMood(fallbackMood);
+      setSelectedMood(getBetaSafeLayerMood(fallbackMood));
     }
 
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
@@ -12451,7 +12465,7 @@ const OdaraScreen = ({
       setCurrentCardAlternates([]);
       setCurrentCardAlternatesOwnerId(null);
     }
-  }, [clearLockedSelection, resolveActiveSignedInDefaultMood, setLockState]);
+  }, [clearLockedSelection, getBetaSafeLayerMood, resolveActiveSignedInDefaultMood, setLockState]);
 
   const primeSignedInPreviewTopCard = useCallback(async (heroCard: DisplayCard) => {
     const [prefetchedAlternates] = await Promise.all([
@@ -12623,7 +12637,7 @@ const OdaraScreen = ({
     persistSignedInMoodCycleMemory(
       oldSlot,
       visibleCard?.fragrance_id ?? null,
-      selectedMood,
+      betaSafeSignedInMood,
       signedInLayerIdxByMood,
     );
     prevSlotRef.current = stateKey;
@@ -12671,7 +12685,7 @@ const OdaraScreen = ({
     moodLaneInFlightRef.current.clear();
     alternatesCacheRef.current.clear();
     queueFetchInFlightRef.current.clear();
-  }, [persistSignedInMoodCycleMemory, selectedMood, signedInLayerIdxByMood, stateKey, visibleCard?.fragrance_id]);
+  }, [betaSafeSignedInMood, persistSignedInMoodCycleMemory, signedInLayerIdxByMood, stateKey, visibleCard?.fragrance_id]);
 
   useEffect(() => {
     committedSignedInSlotRef.current = stateKey;
@@ -12768,7 +12782,7 @@ const OdaraScreen = ({
       || previousMoodCycleScope?.anchorId !== initialAnchorId;
 
     if (shouldResetSignedInMoodCycleState) {
-      const restoredMood = storedMoodCycleState?.selectedMood ?? initialMood;
+      const restoredMood = getBetaSafeLayerMood(storedMoodCycleState?.selectedMood ?? initialMood);
       const restoredLayerIdxByMood = storedMoodCycleState?.layerIdxByMood ?? DEFAULT_LAYER_INDEX_MAP;
       setSelectedMood((current) => (current === restoredMood ? current : restoredMood));
       setSignedInLayerIdxByMood((current) => (
@@ -13101,10 +13115,10 @@ const OdaraScreen = ({
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v6Payload, signedInResolvedOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack]);
-  const visibleModeEntry = selectedMood ? modeResults[selectedMood] ?? null : null;
+  const visibleModeEntry = modeResults[betaSafeSignedInMood] ?? null;
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
-    const mood = selectedMood ?? 'balance';
+    const mood = betaSafeSignedInMood;
     const moodKey = buildMoodLaneKey(slotPrefix, visibleCard.fragrance_id, mood);
     if (readMoodLaneStack(moodKey).length > 0) return;
     const predecessorExclusionId = signedInResolvedDayDecisionSource === 'carryover-main'
@@ -13120,7 +13134,7 @@ const OdaraScreen = ({
     isGuestMode,
     visibleCard?.fragrance_id,
     signedInVisibleIsHeroCard,
-    selectedMood,
+    betaSafeSignedInMood,
     slotPrefix,
     ensureMoodLaneDepth,
     readMoodLaneStack,
@@ -13130,13 +13144,13 @@ const OdaraScreen = ({
 
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id) return;
-    const mood = selectedMood ?? 'balance';
+    const mood = betaSafeSignedInMood;
     const moodKey = buildMoodLaneKey(slotPrefix, visibleCard.fragrance_id, mood);
     syncMoodLaneSelectedEntry(moodKey, signedInLayerIdxByMood[mood] ?? 0);
   }, [
     isGuestMode,
     visibleCard?.fragrance_id,
-    selectedMood,
+    betaSafeSignedInMood,
     slotPrefix,
     signedInLayerIdxByMood,
     moodCacheVersion,
@@ -13164,10 +13178,10 @@ const OdaraScreen = ({
     const visibleLayerId = signedInForcedLayerCarryCard?.fragrance_id ?? visibleModeEntry?.id ?? null;
     const visibleLayerNeedsDetail = !!visibleLayerId
       && !fragranceDetailCacheRef.current.has(visibleLayerId);
-    if (visibleLayerNeedsDetail && layerModeNeedsDetailHydration(visibleModeEntry ?? (signedInForcedLayerCarryCard ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood) : null))) {
+    if (visibleLayerNeedsDetail && layerModeNeedsDetailHydration(visibleModeEntry ?? (signedInForcedLayerCarryCard ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, betaSafeSignedInMood) : null))) {
       void fetchFragranceDetail(visibleLayerId!);
     }
-  }, [isGuestMode, visibleCard, visibleModeEntry, signedInForcedLayerCarryCard, fetchFragranceDetail, fragranceDetailVersion, commitSignedInQueuedHero]);
+  }, [isGuestMode, visibleCard, visibleModeEntry, signedInForcedLayerCarryCard, fetchFragranceDetail, fragranceDetailVersion, commitSignedInQueuedHero, betaSafeSignedInMood]);
 
   // ── SINGLE-SOURCE RENDER for the signed-in main card — bound to v6. ──
   const activeMainCardRender = useMemo(() => {
@@ -13221,7 +13235,7 @@ const OdaraScreen = ({
       ? manualLayerModes?.balance ?? null
       : forcedLockedLayerMode
       ?? (signedInForcedLayerCarryCard
-        ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, selectedMood)
+        ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, betaSafeSignedInMood)
         : null);
     const layerSource = forcedLayerMode ?? visibleModeEntry;
     const visibleLayerDetail = layerSource?.id
@@ -13268,10 +13282,10 @@ const OdaraScreen = ({
       finalLayer &&
       isSameFragranceIdentity(finalLayer, predecessorExcludedCard)
     ) {
-      const uniqueLayerCandidate = isHeroCard
-        ? findFirstAllowedLayerModeCandidate(
-            getNormalizedLayerModeBlock(v6?.layer_modes ?? null, selectedMood),
-            selectedMood,
+        const uniqueLayerCandidate = isHeroCard
+          ? findFirstAllowedLayerModeCandidate(
+            getNormalizedLayerModeBlock(v6?.layer_modes ?? null, betaSafeSignedInMood),
+            betaSafeSignedInMood,
             [finalHero, predecessorExcludedCard, predecessorCarriedCard],
           )
         : null;
@@ -13304,7 +13318,7 @@ const OdaraScreen = ({
         }
       } else {
         const uniqueLayerCandidate = isHeroCard
-          ? findFirstUniqueLayerModeCandidate(getNormalizedLayerModeBlock(v6?.layer_modes ?? null, selectedMood), selectedMood, resolvedHero)
+          ? findFirstUniqueLayerModeCandidate(getNormalizedLayerModeBlock(v6?.layer_modes ?? null, betaSafeSignedInMood), betaSafeSignedInMood, resolvedHero)
           : null;
         if (uniqueLayerCandidate) {
           const uniqueLayerDetail = uniqueLayerCandidate.layer.id
@@ -13390,7 +13404,7 @@ const OdaraScreen = ({
           [finalHero, visibleLayer, manualHeroCard, manualLayerCard],
         )
       : [];
-    const finalSelectedMode: LayerMood = manualLayerModes?.balance ? 'balance' : selectedMood;
+    const finalSelectedMode: LayerMood = manualLayerModes?.balance ? 'balance' : betaSafeSignedInMood;
 
     const resolvedCurrentCard = {
       fragrance_id: finalHero.fragrance_id,
@@ -13440,7 +13454,7 @@ const OdaraScreen = ({
       duplicateResolution,
       resolvedCurrentCard,
     };
-  }, [isGuestMode, visibleCard, queue, v6Payload, signedInResolvedOracle, selectedMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, signedInResolvedOracle, betaSafeSignedInMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
 
   useEffect(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard || !activeMainCardRender || !visibleCard) return;
@@ -13462,9 +13476,9 @@ const OdaraScreen = ({
 
     if (duplicateResolution.kind === 'switch-layer') {
       const preferredLayerIndex = duplicateResolution.preferredLayerIndex ?? null;
-      const currentLayerIndex = signedInLayerIdxByMood[selectedMood] ?? 0;
+      const currentLayerIndex = signedInLayerIdxByMood[betaSafeSignedInMood] ?? 0;
       if (preferredLayerIndex !== null && preferredLayerIndex !== currentLayerIndex) {
-        setSignedInLayerIdxByMood((prev) => ({ ...prev, [selectedMood]: preferredLayerIndex }));
+        setSignedInLayerIdxByMood((prev) => ({ ...prev, [betaSafeSignedInMood]: preferredLayerIndex }));
       }
       return;
     }
@@ -13515,6 +13529,7 @@ const OdaraScreen = ({
   const handleMoodSelect = useCallback((mood: LayerMood) => {
     if (lockState === 'locked') return;
     if (!visibleCard) return;
+    if (!isGuestMode && mood === 'wild') return;
     const currentCardId = visibleCard.fragrance_id;
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = buildMoodLaneKey(slotPrefix, currentCardId, mood);
@@ -13540,10 +13555,10 @@ const OdaraScreen = ({
       }
     }
 
-    if (mood !== selectedMood) {
+    if (mood !== betaSafeSignedInMood) {
       const nextHistory = [
         ...signedInModeHistoryRef.current,
-        { mood: selectedMood, layerIndex: signedInLayerIdxByMood[selectedMood] ?? 0 },
+        { mood: betaSafeSignedInMood, layerIndex: signedInLayerIdxByMood[betaSafeSignedInMood] ?? 0 },
       ];
       signedInModeHistoryRef.current = nextHistory;
       setSignedInModeHistory(nextHistory);
@@ -13582,9 +13597,10 @@ const OdaraScreen = ({
   }, [
     lockState,
     visibleCard,
+    isGuestMode,
     activeOracle,
     oracle,
-    selectedMood,
+    betaSafeSignedInMood,
     signedInLayerIdxByMood,
     selectedDate,
     selectedContext,
@@ -13626,7 +13642,7 @@ const OdaraScreen = ({
 
     let effectiveVisibleCard = visibleCard;
     let effectivePromotedAltId = promotedAltId;
-    let effectiveSelectedMood: LayerMood = selectedMood ?? 'balance';
+    let effectiveSelectedMood: LayerMood = betaSafeSignedInMood;
 
     const hasManualPreview = signedInResolvedDayDecisionSource === 'manual'
       || !!signedInDayState.manualHeroCard
@@ -13652,7 +13668,7 @@ const OdaraScreen = ({
 
       effectiveVisibleCard = previewClearedDecision.visibleCard;
       effectivePromotedAltId = previewClearedDecision.promotedAltId;
-      effectiveSelectedMood = previewClearedDecision.selectedMood ?? 'balance';
+      effectiveSelectedMood = getBetaSafeLayerMood(previewClearedDecision.selectedMood ?? 'balance');
     }
 
     setSkipLoading(true);
@@ -13709,7 +13725,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, selectedMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, updateSignedInDayState, resolveSearchPreviewDecision, applySignedInSearchPreviewDecision]);
+  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, betaSafeSignedInMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, updateSignedInDayState, resolveSearchPreviewDecision, applySignedInSearchPreviewDecision, getBetaSafeLayerMood]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -13718,7 +13734,7 @@ const OdaraScreen = ({
     if (viewHistory.length === 0 || lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
     const entry = viewHistory[viewHistory.length - 1];
 
-    const restoredMood = entry.selectedMood ?? 'balance';
+    const restoredMood = getBetaSafeLayerMood(entry.selectedMood ?? 'balance');
     console.log('[Odara] back restore', {
       restoredId: entry.card.fragrance_id,
       restoredMood,
@@ -13746,7 +13762,7 @@ const OdaraScreen = ({
     setViewHistory(h => h.slice(0, -1));
     setLayerExpanded(false);
     setLockState('neutral');
-  }, [viewHistory, handleGuestBack, lockState, signedInIsReadOnlyHistoryCard, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack]);
+  }, [viewHistory, handleGuestBack, lockState, signedInIsReadOnlyHistoryCard, selectedDate, selectedContext, readMoodLaneStack, writeMoodLaneStack, getBetaSafeLayerMood]);
 
   const pulseLock = useCallback((type: 'lock' | 'unlock' = 'lock') => {
     setLockPulse(true);
@@ -14144,12 +14160,12 @@ const OdaraScreen = ({
     };
 
     // 1. Save history
-    const currentMoodKey2 = selectedMood ?? 'balance';
+    const currentMoodKey2 = betaSafeSignedInMood;
     const currentResolvedEntry2 = getResolvedMoodLaneEntry(visibleCard!.fragrance_id, currentMoodKey2);
     console.log('[Odara] history push (promote)', { id: visibleCard!.fragrance_id, mood: currentMoodKey2, resolved: currentResolvedEntry2 ? { id: currentResolvedEntry2.layer_fragrance_id, name: currentResolvedEntry2.layer_name } : null });
     setViewHistory(h => [
       ...h.slice(-(MAX_SESSION_HISTORY - 1)),
-      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood, resolvedVisibleModeEntry: currentResolvedEntry2 },
+      { card: visibleCard!, queuePointerBefore: queuePointer, promotedAltId, selectedMood: currentMoodKey2, resolvedVisibleModeEntry: currentResolvedEntry2 },
     ]);
 
     // 2. Clear stale state completely
@@ -14414,11 +14430,12 @@ const OdaraScreen = ({
     const nextHistory = signedInModeHistoryRef.current.slice(0, -1);
     const previous = signedInModeHistoryRef.current[signedInModeHistoryRef.current.length - 1] ?? null;
     if (!previous) return false;
+    const restoredMood = getBetaSafeLayerMood(previous.mood);
     signedInModeHistoryRef.current = nextHistory;
     setSignedInModeHistory(nextHistory);
-    setSelectedMood(previous.mood);
-    setSignedInLayerIdxByMood((prev) => ({ ...prev, [previous.mood]: previous.layerIndex }));
-    const moodKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, visibleCard.fragrance_id, previous.mood);
+    setSelectedMood(restoredMood);
+    setSignedInLayerIdxByMood((prev) => ({ ...prev, [restoredMood]: previous.layerIndex }));
+    const moodKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, visibleCard.fragrance_id, restoredMood);
     syncMoodLaneSelectedEntry(moodKey, previous.layerIndex);
     return true;
   }, [
@@ -14433,6 +14450,7 @@ const OdaraScreen = ({
     selectedDate,
     selectedContext,
     syncMoodLaneSelectedEntry,
+    getBetaSafeLayerMood,
   ]);
 
   if (isGuestMode) {
@@ -14593,6 +14611,9 @@ const OdaraScreen = ({
   const visibleResolvedLayer = isGuestMode
     ? (guestResolvedCurrentCard?.layer ?? null)
     : signedInVisibleLayer;
+  const visibleResolvedSelectedMood = getBetaSafeLayerMood(
+    (visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood | null | undefined,
+  );
   const visibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
   const visibleLayerBottleImageUrl = visibleResolvedLayer?.image_url ?? null;
   const visibleLayerSprayCounts = useMemo(
@@ -14608,14 +14629,13 @@ const OdaraScreen = ({
     startY: number;
   } | null>(null);
   const layerDetailIdentityKey = useMemo(() => (
-    `${selectedDate}|${selectedContext}|${visibleResolvedCurrentCard?.fragrance_id ?? 'none'}|${visibleResolvedLayer?.id ?? 'none'}|${visibleResolvedCurrentCard?.selectedMode ?? selectedMood}|${isGuestMode ? (selectedAlternateIdx ?? 'main') : (promotedAltId ?? 'base')}`
+    `${selectedDate}|${selectedContext}|${visibleResolvedCurrentCard?.fragrance_id ?? 'none'}|${visibleResolvedLayer?.id ?? 'none'}|${visibleResolvedSelectedMood}|${isGuestMode ? (selectedAlternateIdx ?? 'main') : (promotedAltId ?? 'base')}`
   ), [
     selectedDate,
     selectedContext,
     visibleResolvedCurrentCard?.fragrance_id,
-    visibleResolvedCurrentCard?.selectedMode,
     visibleResolvedLayer?.id,
-    selectedMood,
+    visibleResolvedSelectedMood,
     isGuestMode,
     selectedAlternateIdx,
     promotedAltId,
@@ -14689,7 +14709,7 @@ const OdaraScreen = ({
       layerTokens: Array.isArray(visibleResolvedCurrentCard?.layerTokens) ? visibleResolvedCurrentCard.layerTokens : [],
       layerModes: visibleResolvedLayerModes,
       alternates: signedInVisibleAlternates,
-      selectedMode: visibleResolvedCurrentCard?.selectedMode ?? selectedMood,
+      selectedMode: visibleResolvedSelectedMood,
       resolvedHeroRail: visibleResolvedHeroRail,
       visibleCardId: lockedCard.fragrance_id,
       isHeroCard: true,
@@ -14702,7 +14722,7 @@ const OdaraScreen = ({
       lockedLayerMode: toPersistedLayerModeSnapshot(signedInVisibleLayer),
       lockedResolvedCurrentCard: toPersistedResolvedCurrentCardSnapshot(snapshotSource),
       lockedContext: selectedContext,
-      lockedMood: normalizeLayerMoodKey(visibleResolvedCurrentCard?.selectedMode) ?? selectedMood,
+      lockedMood: visibleResolvedSelectedMood,
       lockedPromotedAltId: promotedAltId,
       resolvedHeroCard: lockedCard,
       resolvedLayerCard: signedInCurrentLayerCarryCard ?? null,
@@ -15901,7 +15921,7 @@ const OdaraScreen = ({
                     : null}
                   layerModes={visibleResolvedLayerModes}
                   visibleLayerMode={visibleResolvedLayer}
-                  selectedMood={(visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood}
+                  selectedMood={visibleResolvedSelectedMood}
                   onSelectMood={(mood) => cardController.actions.selectMood(mood)}
                   selectedRatio={selectedRatio}
                   onSelectRatio={isReadOnlyHistoryCard ? (() => {}) : setSelectedRatio}
@@ -15918,6 +15938,7 @@ const OdaraScreen = ({
                   consumeLockedMoodTap={isGuestMode || undefined}
                   modeLoading={!isGuestMode ? modeLoading : undefined}
                   modeErrors={!isGuestMode ? modeErrors : undefined}
+                  disabledMoodReasons={!isGuestMode ? signedInDisabledMoodReasons : undefined}
                   onRetryMood={!isGuestMode && !isReadOnlyHistoryCard ? ((mood) => {
                     const currentCardId = signedInResolvedCurrentCard?.fragrance_id;
                     if (!currentCardId) return;

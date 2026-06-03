@@ -62,6 +62,7 @@ interface ModeSelectorProps {
   locked?: boolean;
   loadingMood?: LayerMood | null;
   consumeLockedTap?: boolean;
+  disabledMoodReasons?: Partial<Record<LayerMood, string>>;
 }
 
 /**
@@ -78,61 +79,72 @@ const ModeSelector = ({
   locked = false,
   loadingMood = null,
   consumeLockedTap = false,
+  disabledMoodReasons,
 }: ModeSelectorProps) => {
+  const disabledMoodNote = LAYER_MODE_ORDER
+    .map((mood) => disabledMoodReasons?.[mood]?.trim())
+    .find(Boolean) ?? null;
+
   return (
-    <div
-      className="grid grid-cols-4 gap-1.5 w-full"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {LAYER_MODE_ORDER.map((mood) => {
-        const mEntry = layerModes[mood];
-        const isSelected = selectedMood === mood;
-        const isLoading = loadingMood === mood;
-        const hasData = !!mEntry;
-        const isLocked = locked;
+    <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+      <div className="grid grid-cols-4 gap-1.5 w-full">
+        {LAYER_MODE_ORDER.map((mood) => {
+          const mEntry = layerModes[mood];
+          const isSelected = selectedMood === mood;
+          const isLoading = loadingMood === mood;
+          const hasData = !!mEntry;
+          const disabledReason = disabledMoodReasons?.[mood]?.trim() ?? null;
+          const isLocked = locked || !!disabledReason;
 
-        // Color: use entry color if available, fallback for unloaded
-        const mColor = hasData ? (familyColors[mEntry.family_key] ?? '#888') : '#888';
+          // Color: use entry color if available, fallback for unloaded
+          const mColor = hasData ? (familyColors[mEntry.family_key] ?? '#888') : '#888';
 
-        return (
-          <button
-            key={mood}
-            type="button"
-            aria-disabled={isLocked || undefined}
-            disabled={isLocked && !consumeLockedTap}
-            data-mode-chip
-            onPointerDown={(e) => {
-              if (!isLocked) return;
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isLocked) onSelectMood(mood);
-            }}
-            className={`flex items-center justify-center text-[9px] uppercase tracking-[0.14em] h-6 px-3 rounded-full transition-all duration-200 text-center ${
-              isLocked && !isSelected ? 'opacity-30 cursor-default' : ''
-            } ${
-              !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
-            } ${
-              isSelected
-                ? "text-white"
-                : "text-white/40 hover:text-white/70"
-            }`}
-            style={{
-              ...(isSelected ? {
-                background: `${mColor}33`,
-                boxShadow: `inset 0 0 0 1px ${mColor}66`,
-                animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
-              } : undefined),
-            }}
-          >
-            {isLoading ? (
-              <span className="inline-block w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
-            ) : mood}
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={mood}
+              type="button"
+              aria-disabled={isLocked || undefined}
+              disabled={isLocked && !consumeLockedTap}
+              data-mode-chip
+              title={disabledReason ?? undefined}
+              onPointerDown={(e) => {
+                if (!isLocked) return;
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isLocked) onSelectMood(mood);
+              }}
+              className={`flex items-center justify-center text-[9px] uppercase tracking-[0.14em] h-6 px-3 rounded-full transition-all duration-200 text-center ${
+                isLocked && !isSelected ? 'opacity-30 cursor-default' : ''
+              } ${
+                !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
+              } ${
+                isSelected
+                  ? "text-white"
+                  : "text-white/40 hover:text-white/70"
+              }`}
+              style={{
+                ...(isSelected ? {
+                  background: `${mColor}33`,
+                  boxShadow: `inset 0 0 0 1px ${mColor}66`,
+                  animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
+                } : undefined),
+              }}
+            >
+              {isLoading ? (
+                <span className="inline-block w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
+              ) : mood}
+            </button>
+          );
+        })}
+      </div>
+      {disabledMoodNote && (
+        <p className="px-1 text-left text-[10px] text-white/38">
+          {disabledMoodNote}
+        </p>
+      )}
     </div>
   );
 };
