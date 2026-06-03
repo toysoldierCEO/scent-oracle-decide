@@ -434,6 +434,11 @@ const Index = () => {
               context: selectedContext,
               brand: 'Alexandria Fragrances',
               wearDate: selectedDate,
+              diagnostic: {
+                requestGeneration: requestId,
+                oracleKey,
+                timeoutMs: ORACLE_FETCH_TIMEOUT_MS,
+              },
             });
           })(), ORACLE_FETCH_TIMEOUT_MS);
 

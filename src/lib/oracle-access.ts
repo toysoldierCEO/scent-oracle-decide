@@ -16,6 +16,11 @@ export interface FetchHomeOracleParams {
   context: string;
   brand: string;
   wearDate: string;
+  diagnostic?: {
+    oracleKey?: string | null;
+    requestGeneration?: number;
+    timeoutMs?: number;
+  };
 }
 
 export interface FetchHomeOracleResult {
@@ -27,6 +32,30 @@ export interface FetchHomeOracleResult {
     | 'get_guest_oracle_home_v6'
     | 'get_signed_in_card_contract_v6'
     | 'get_signed_in_card_contract_v7';
+}
+
+function isOracleDiagnosticEnabled() {
+  return import.meta.env.DEV;
+}
+
+function getDataTopLevelKeys(data: any): string[] {
+  return data && typeof data === 'object' ? Object.keys(data) : [];
+}
+
+function sanitizeRpcArgs(args: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(args).map(([key, value]) => {
+      if (key === 'p_user_id') {
+        return [key, value ? '(present)' : null];
+      }
+      return [key, value];
+    }),
+  );
+}
+
+function logOracleRpcDiagnostic(event: string, payload: Record<string, unknown>) {
+  if (!isOracleDiagnosticEnabled()) return;
+  console.log(`[Odara][Diag] ${event} ${JSON.stringify(payload)}`);
 }
 
 /** Adapt the canonical signed-in v6 contract into the existing OracleResult
@@ -79,11 +108,19 @@ function adaptSignedInV6ToOracleResult(v6: any): any {
 }
 
 function logRawHomePayload(rpc: string, args: Record<string, unknown>, data: any, error: any) {
+  if (!isOracleDiagnosticEnabled()) return;
   const top = data && typeof data === 'object' ? Object.keys(data) : [];
   console.log('[Odara] RAW home payload', {
     rpc,
-    args,
-    error: error ?? null,
+    args: sanitizeRpcArgs(args),
+    error: error
+      ? {
+          code: error.code ?? null,
+          message: error.message ?? null,
+          details: error.details ?? null,
+          hint: error.hint ?? null,
+        }
+      : null,
     topLevelKeys: top,
     hasTodayPick: !!data?.today_pick,
     todayPickFragranceId: data?.today_pick?.fragrance_id ?? '(none)',
@@ -98,7 +135,7 @@ function logRawHomePayload(rpc: string, args: Record<string, unknown>, data: any
 export async function fetchHomeOracle(
   params: FetchHomeOracleParams,
 ): Promise<FetchHomeOracleResult> {
-  const { access, temperature, context, brand, wearDate } = params;
+  const { access, temperature, context, brand, wearDate, diagnostic } = params;
 
   if (access.isGuestMode) {
     const args = {
@@ -109,33 +146,85 @@ export async function fetchHomeOracle(
     };
     console.log('[Odara][Guest] access mode', { isGuestMode: true });
     console.log('[Odara][Guest] rpc start', { rpc: 'get_guest_oracle_home_v6', args });
-    const { data, error } = await odaraSupabase.rpc('get_guest_oracle_home_v6' as any, args);
-    logRawHomePayload('get_guest_oracle_home_v6', args, data, error);
-    if (error) {
-      console.error('[Odara][Guest] rpc fail', { error });
+    const startedAt = Date.now();
+    const startedAtIso = new Date(startedAt).toISOString();
+    try {
+      const { data, error, status, statusText } = await odaraSupabase.rpc('get_guest_oracle_home_v6' as any, args);
+      logRawHomePayload('get_guest_oracle_home_v6', args, data, error);
+      logOracleRpcDiagnostic('home oracle rpc result', {
+        rpc_name: 'get_guest_oracle_home_v6',
+        access_branch: 'guest',
+        started_at: startedAtIso,
+        duration_ms: Date.now() - startedAt,
+        status: status ?? null,
+        statusText: statusText ?? null,
+        has_data: data != null,
+        data_top_level_keys: getDataTopLevelKeys(data),
+        error_code: error?.code ?? null,
+        error_message: error?.message ?? null,
+        error_details: error?.details ?? null,
+        error_hint: error?.hint ?? null,
+        timed_out_by_frontend: false,
+        returned_after_timeout: false,
+        suppressed_by_frontend_timeout: false,
+        request_generation: diagnostic?.requestGeneration ?? null,
+        oracleKey: diagnostic?.oracleKey ?? null,
+        signedInUserIdPresent: false,
+        context,
+        wear_date: wearDate,
+        temperature,
+      });
+      if (error) {
+        console.error('[Odara][Guest] rpc fail', { error });
+        throw error;
+      }
+      const d: any = data ?? {};
+      const main = d.main_bundle ?? {};
+      const altBundles = Array.isArray(d.alternate_bundles) ? d.alternate_bundles : [];
+      console.log('[Odara][Guest][v6] payload summary', {
+        card_type: d.card_type ?? null,
+        contract: d.guest_mode_contract ?? null,
+        hero_name: main.hero?.name ?? null,
+        recipe_header: main.recipe_header ?? main.hero?.recipe_header ?? null,
+        ui_default_mode: main.ui_default_mode ?? null,
+        layer_mode_order: main.layer_mode_order ?? null,
+        mode_layer_counts: main.layer_modes
+          ? Object.fromEntries(
+              Object.entries(main.layer_modes).map(([k, v]: any) => [
+                k,
+                Array.isArray(v?.layers) ? v.layers.length : (v ? 1 : 0),
+              ]),
+            )
+          : null,
+        alternate_bundles_count: altBundles.length,
+      });
+      return { data, rpcUsed: 'get_guest_oracle_home_v6' };
+    } catch (error: any) {
+      logOracleRpcDiagnostic('home oracle rpc transport error', {
+        rpc_name: 'get_guest_oracle_home_v6',
+        access_branch: 'guest',
+        started_at: startedAtIso,
+        duration_ms: Date.now() - startedAt,
+        status: null,
+        statusText: null,
+        has_data: false,
+        data_top_level_keys: [],
+        error_code: error?.code ?? null,
+        error_message: error?.message ?? String(error),
+        error_details: error?.details ?? null,
+        error_hint: error?.hint ?? null,
+        timed_out_by_frontend: false,
+        returned_after_timeout: false,
+        suppressed_by_frontend_timeout: false,
+        request_generation: diagnostic?.requestGeneration ?? null,
+        oracleKey: diagnostic?.oracleKey ?? null,
+        signedInUserIdPresent: false,
+        context,
+        wear_date: wearDate,
+        temperature,
+      });
       throw error;
     }
-    const d: any = data ?? {};
-    const main = d.main_bundle ?? {};
-    const altBundles = Array.isArray(d.alternate_bundles) ? d.alternate_bundles : [];
-    console.log('[Odara][Guest][v6] payload summary', {
-      card_type: d.card_type ?? null,
-      contract: d.guest_mode_contract ?? null,
-      hero_name: main.hero?.name ?? null,
-      recipe_header: main.recipe_header ?? main.hero?.recipe_header ?? null,
-      ui_default_mode: main.ui_default_mode ?? null,
-      layer_mode_order: main.layer_mode_order ?? null,
-      mode_layer_counts: main.layer_modes
-        ? Object.fromEntries(
-            Object.entries(main.layer_modes).map(([k, v]: any) => [
-              k,
-              Array.isArray(v?.layers) ? v.layers.length : (v ? 1 : 0),
-            ]),
-          )
-        : null,
-      alternate_bundles_count: altBundles.length,
-    });
-    return { data, rpcUsed: 'get_guest_oracle_home_v6' };
   }
 
   if (!access.isSignedIn || !access.signedInUserId) {
@@ -158,29 +247,117 @@ export async function fetchHomeOracle(
     p_wear_date: wearDate,
   };
   console.log('[Odara] oracle access: SIGNED-IN → get_signed_in_card_contract_v7');
-  const { data, error } = await odaraSupabase.rpc(
-    'get_signed_in_card_contract_v7' as any,
-    args,
-  );
-  logRawHomePayload('get_signed_in_card_contract_v7', args, data, error);
-  if (error) throw error;
-  const adapted = adaptSignedInV6ToOracleResult(data);
-  console.log('[Odara][SignedIn][v7] adapted summary', {
-    contract_version: (data as any)?.card_contract_version ?? null,
-    surface_type: (data as any)?.surface_type ?? null,
-    hero_id: adapted?.today_pick?.fragrance_id ?? null,
-    hero_tokens_count: Array.isArray(adapted?.hero_tokens) ? adapted.hero_tokens.length : 0,
-    layer_tokens_count: Array.isArray(adapted?.layer_tokens) ? adapted.layer_tokens.length : 0,
-    layer_modes_keys: adapted?.layer_modes ? Object.keys(adapted.layer_modes) : [],
-    mode_layer_counts: adapted?.layer_modes
-      ? Object.fromEntries(
-          Object.entries(adapted.layer_modes).map(([k, v]: any) => [
-            k,
-            Array.isArray(v?.layers) ? v.layers.length : 0,
-          ]),
-        )
-      : null,
-    ui_default_mode: adapted?.ui_default_mode ?? null,
-  });
-  return { data: adapted, rpcUsed: 'get_signed_in_card_contract_v7' };
+  const startedAt = Date.now();
+  const startedAtIso = new Date(startedAt).toISOString();
+  let frontendTimeoutReached = false;
+  let frontendTimeoutMarkerId: number | null = null;
+
+  if (isOracleDiagnosticEnabled() && typeof window !== 'undefined' && diagnostic?.timeoutMs) {
+    frontendTimeoutMarkerId = window.setTimeout(() => {
+      frontendTimeoutReached = true;
+      logOracleRpcDiagnostic('home oracle rpc pending past frontend timeout', {
+        rpc_name: 'get_signed_in_card_contract_v7',
+        access_branch: 'signed_in',
+        started_at: startedAtIso,
+        elapsed_ms: Date.now() - startedAt,
+        status: null,
+        statusText: null,
+        has_data: false,
+        data_top_level_keys: [],
+        error_code: null,
+        error_message: null,
+        error_details: null,
+        error_hint: null,
+        timed_out_by_frontend: true,
+        returned_after_timeout: false,
+        suppressed_by_frontend_timeout: false,
+        request_generation: diagnostic?.requestGeneration ?? null,
+        oracleKey: diagnostic?.oracleKey ?? null,
+        signedInUserIdPresent: !!access.signedInUserId,
+        context,
+        wear_date: wearDate,
+        temperature,
+      });
+    }, diagnostic.timeoutMs);
+  }
+
+  try {
+    const { data, error, status, statusText } = await odaraSupabase.rpc(
+      'get_signed_in_card_contract_v7' as any,
+      args,
+    );
+    logRawHomePayload('get_signed_in_card_contract_v7', args, data, error);
+    logOracleRpcDiagnostic('home oracle rpc result', {
+      rpc_name: 'get_signed_in_card_contract_v7',
+      access_branch: 'signed_in',
+      started_at: startedAtIso,
+      duration_ms: Date.now() - startedAt,
+      status: status ?? null,
+      statusText: statusText ?? null,
+      has_data: data != null,
+      data_top_level_keys: getDataTopLevelKeys(data),
+      error_code: error?.code ?? null,
+      error_message: error?.message ?? null,
+      error_details: error?.details ?? null,
+      error_hint: error?.hint ?? null,
+      timed_out_by_frontend: frontendTimeoutReached,
+      returned_after_timeout: frontendTimeoutReached,
+      suppressed_by_frontend_timeout: frontendTimeoutReached,
+      request_generation: diagnostic?.requestGeneration ?? null,
+      oracleKey: diagnostic?.oracleKey ?? null,
+      signedInUserIdPresent: !!access.signedInUserId,
+      context,
+      wear_date: wearDate,
+      temperature,
+    });
+    if (error) throw error;
+    const adapted = adaptSignedInV6ToOracleResult(data);
+    console.log('[Odara][SignedIn][v7] adapted summary', {
+      contract_version: (data as any)?.card_contract_version ?? null,
+      surface_type: (data as any)?.surface_type ?? null,
+      hero_id: adapted?.today_pick?.fragrance_id ?? null,
+      hero_tokens_count: Array.isArray(adapted?.hero_tokens) ? adapted.hero_tokens.length : 0,
+      layer_tokens_count: Array.isArray(adapted?.layer_tokens) ? adapted.layer_tokens.length : 0,
+      layer_modes_keys: adapted?.layer_modes ? Object.keys(adapted.layer_modes) : [],
+      mode_layer_counts: adapted?.layer_modes
+        ? Object.fromEntries(
+            Object.entries(adapted.layer_modes).map(([k, v]: any) => [
+              k,
+              Array.isArray(v?.layers) ? v.layers.length : 0,
+            ]),
+          )
+        : null,
+      ui_default_mode: adapted?.ui_default_mode ?? null,
+    });
+    return { data: adapted, rpcUsed: 'get_signed_in_card_contract_v7' };
+  } catch (error: any) {
+    logOracleRpcDiagnostic('home oracle rpc transport error', {
+      rpc_name: 'get_signed_in_card_contract_v7',
+      access_branch: 'signed_in',
+      started_at: startedAtIso,
+      duration_ms: Date.now() - startedAt,
+      status: null,
+      statusText: null,
+      has_data: false,
+      data_top_level_keys: [],
+      error_code: error?.code ?? null,
+      error_message: error?.message ?? String(error),
+      error_details: error?.details ?? null,
+      error_hint: error?.hint ?? null,
+      timed_out_by_frontend: frontendTimeoutReached,
+      returned_after_timeout: frontendTimeoutReached,
+      suppressed_by_frontend_timeout: frontendTimeoutReached,
+      request_generation: diagnostic?.requestGeneration ?? null,
+      oracleKey: diagnostic?.oracleKey ?? null,
+      signedInUserIdPresent: !!access.signedInUserId,
+      context,
+      wear_date: wearDate,
+      temperature,
+    });
+    throw error;
+  } finally {
+    if (frontendTimeoutMarkerId !== null) {
+      window.clearTimeout(frontendTimeoutMarkerId);
+    }
+  }
 }
