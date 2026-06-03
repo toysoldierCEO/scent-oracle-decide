@@ -2395,6 +2395,17 @@ type SignedInResolvedDayDecision = {
   source: 'locked' | 'manual' | 'carryover-main' | 'carryover-layer' | 'oracle';
 };
 
+type SignedInSearchPreviewSnapshot = {
+  visibleCard: DisplayCard | null;
+  forcedLayerCarryCard: DisplayCard | null;
+  selectedMood: LayerMood;
+  layerIdxByMood: Record<LayerMood, number>;
+  promotedAltId: string | null;
+  resolvedDayDecisionSource: SignedInResolvedDayDecision['source'];
+  alternates: OracleAlternate[];
+  alternatesOwnerId: string | null;
+};
+
 type FragranceImageAsset = {
   fragrance_id: string;
   image_url: string | null;
@@ -10566,6 +10577,7 @@ const OdaraScreen = ({
   });
   const signedInLayerIdxByMoodRef = useRef(signedInLayerIdxByMood);
   signedInLayerIdxByMoodRef.current = signedInLayerIdxByMood;
+  const signedInSearchPreviewSnapshotRef = useRef<Record<string, SignedInSearchPreviewSnapshot | null>>({});
   const signedInMoodCycleScopeRef = useRef<{ slot: string; anchorId: string | null } | null>(null);
   const signedInMoodCycleMemoryRef = useRef<Record<string, {
     selectedMood: LayerMood;
@@ -11451,6 +11463,8 @@ const OdaraScreen = ({
   );
   const signedInManualPreviewActive = !isGuestMode
     && (!!signedInDayState.manualHeroCard || !!signedInDayState.manualLayerCard);
+  const signedInSearchPreviewSnapshotActive = !isGuestMode
+    && !!signedInSearchPreviewSnapshotRef.current[currentDayStateKey];
   const signedInSelectedDayIsPast = !isGuestMode && currentDateKey < todayDateKey;
   const signedInSearchPreviewLocked = !isGuestMode && (
     signedInDayState.lockState === 'locked'
@@ -11678,6 +11692,50 @@ const OdaraScreen = ({
     });
   }, [selectedDate, selectedContext]);
 
+  const clearSignedInSearchPreviewSnapshot = useCallback((slotKey: string) => {
+    delete signedInSearchPreviewSnapshotRef.current[slotKey];
+  }, []);
+
+  const captureSignedInSearchPreviewSnapshot = useCallback((slotKey: string) => {
+    if (isGuestMode || signedInSearchPreviewSnapshotRef.current[slotKey]) return;
+    signedInSearchPreviewSnapshotRef.current[slotKey] = {
+      visibleCard,
+      forcedLayerCarryCard: signedInForcedLayerCarryCard,
+      selectedMood: betaSafeSignedInMood,
+      layerIdxByMood: { ...signedInLayerIdxByMoodRef.current },
+      promotedAltId,
+      resolvedDayDecisionSource: signedInResolvedDayDecisionSource,
+      alternates: [...currentCardAlternates],
+      alternatesOwnerId: currentCardAlternatesOwnerId,
+    };
+  }, [
+    betaSafeSignedInMood,
+    currentCardAlternates,
+    currentCardAlternatesOwnerId,
+    isGuestMode,
+    promotedAltId,
+    signedInForcedLayerCarryCard,
+    signedInResolvedDayDecisionSource,
+    visibleCard,
+  ]);
+
+  const restoreSignedInSearchPreviewSnapshot = useCallback((snapshot: SignedInSearchPreviewSnapshot | null) => {
+    if (!snapshot) return;
+    setVisibleCard(snapshot.visibleCard);
+    setSignedInForcedLayerCarryCard(snapshot.forcedLayerCarryCard);
+    setSignedInResolvedDayDecisionSource(snapshot.resolvedDayDecisionSource);
+    setPromotedAltId(snapshot.promotedAltId);
+    setSelectedMood(getBetaSafeLayerMood(snapshot.selectedMood));
+    setSignedInLayerIdxByMood({ ...snapshot.layerIdxByMood });
+    signedInModeHistoryRef.current = [];
+    setSignedInModeHistory([]);
+    setLayerExpanded(false);
+    setLockState('neutral');
+    clearLockedSelection();
+    setCurrentCardAlternates([...snapshot.alternates]);
+    setCurrentCardAlternatesOwnerId(snapshot.alternatesOwnerId);
+  }, [clearLockedSelection, getBetaSafeLayerMood, setLockState]);
+
   useEffect(() => {
     return () => {
       if (signedInWeekMemoryWriteTimeoutRef.current !== null) {
@@ -11693,6 +11751,7 @@ const OdaraScreen = ({
     }
 
     persistedSignedInDayStateRef.current = {};
+    signedInSearchPreviewSnapshotRef.current = {};
     setSignedInDayStateMap((current) => (Object.keys(current).length === 0 ? current : {}));
     setSignedInLockedHistoryDateKeys((current) => (current.length === 0 ? current : []));
     setSignedInWeekMemoryReadyScopeKey(isGuestMode ? 'guest' : '');
@@ -12498,10 +12557,12 @@ const OdaraScreen = ({
     if (isGuestMode) return false;
 
     const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
-    if (!current.manualHeroCard && !current.manualLayerCard) return false;
-
     const shouldClearTop = target === 'all' || target === 'top';
     const shouldClearLayer = target === 'all' || target === 'layer' || shouldClearTop;
+    const restoreSnapshot = shouldClearTop
+      ? (signedInSearchPreviewSnapshotRef.current[currentDayStateKey] ?? null)
+      : null;
+    if (!current.manualHeroCard && !current.manualLayerCard && !restoreSnapshot) return false;
     const nextDayState: SignedInDayState = {
       ...current,
       manualHeroCard: shouldClearTop ? null : current.manualHeroCard,
@@ -12510,6 +12571,12 @@ const OdaraScreen = ({
 
     const capturedSlot = stateKey;
     updateSignedInDayState(currentDayStateKey, () => nextDayState);
+
+    if (restoreSnapshot) {
+      clearSignedInSearchPreviewSnapshot(currentDayStateKey);
+      restoreSignedInSearchPreviewSnapshot(restoreSnapshot);
+      return true;
+    }
 
     const decision = resolveSearchPreviewDecision(nextDayState);
     applySignedInSearchPreviewDecision(decision);
@@ -12526,11 +12593,13 @@ const OdaraScreen = ({
     return true;
   }, [
     applySignedInSearchPreviewDecision,
+    clearSignedInSearchPreviewSnapshot,
     currentDayStateKey,
     isGuestMode,
     primeSignedInPreviewTopCard,
     resolveAlternatesForCard,
     resolveSearchPreviewDecision,
+    restoreSignedInSearchPreviewSnapshot,
     stateKey,
     updateSignedInDayState,
   ]);
@@ -12575,6 +12644,10 @@ const OdaraScreen = ({
         detail,
       );
       if (activeSlotRef.current !== capturedSlot) return;
+
+      if (!current.manualHeroCard && !current.manualLayerCard) {
+        captureSignedInSearchPreviewSnapshot(currentDayStateKey);
+      }
 
       const base: SignedInDayState = {
         ...current,
@@ -12634,6 +12707,7 @@ const OdaraScreen = ({
     }
   }, [
     applySignedInSearchPreviewDecision,
+    captureSignedInSearchPreviewSnapshot,
     clearSearchPreviewFromSelectedDay,
     currentDayStateKey,
     fetchFragranceDetail,
@@ -12660,6 +12734,7 @@ const OdaraScreen = ({
     prevSlotRef.current = stateKey;
 
     odaraDebugLog('[Odara] slot change -> clearing ALL state', oldSlot, '→', stateKey);
+    signedInSearchPreviewSnapshotRef.current = {};
     setSignedInDayStateMap((prev) => {
       let changed = false;
       const next: SignedInDayStateMap = {};
@@ -13679,6 +13754,7 @@ const OdaraScreen = ({
           ? { ...current, manualHeroCard: null, manualLayerCard: null }
           : current
       ));
+      clearSignedInSearchPreviewSnapshot(currentDayStateKey);
 
       applySignedInSearchPreviewDecision(previewClearedDecision);
       if (!previewClearedDecision?.visibleCard) return;
@@ -13742,7 +13818,7 @@ const OdaraScreen = ({
     } finally {
       setSkipLoading(false);
     }
-  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, betaSafeSignedInMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, updateSignedInDayState, resolveSearchPreviewDecision, applySignedInSearchPreviewDecision, getBetaSafeLayerMood]);
+  }, [skipLoading, visibleCard, lockState, signedInIsReadOnlyHistoryCard, signedInResolvedDayDecisionSource, signedInDayState, currentDateKey, queue, queuePointer, fetchQueue, userId, selectedContext, selectedDate, betaSafeSignedInMood, promotedAltId, setLockState, getResolvedMoodLaneEntry, updateSignedInDayState, resolveSearchPreviewDecision, applySignedInSearchPreviewDecision, getBetaSafeLayerMood, clearSignedInSearchPreviewSnapshot, currentDayStateKey]);
 
   // ── Back button — restore exact history snapshot ──
   const handleBack = useCallback(() => {
@@ -14193,6 +14269,7 @@ const OdaraScreen = ({
         ? { ...current, manualHeroCard: null, manualLayerCard: null }
         : current
     ));
+    clearSignedInSearchPreviewSnapshot(currentDayStateKey);
     setModeLoading({ balance: false, bold: false, smooth: false, wild: false });
     setModeErrors({ balance: null, bold: null, smooth: null, wild: null });
 
@@ -14213,7 +14290,7 @@ const OdaraScreen = ({
         balanceLayerId: entry?.layer_fragrance_id ?? '(null)',
       });
     });
-  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext, getResolvedMoodLaneEntry, updateSignedInDayState, currentDateKey]);
+  }, [lockState, visibleCard, queuePointer, promotedAltId, fetchMoodForCard, selectedDate, selectedContext, getResolvedMoodLaneEntry, updateSignedInDayState, currentDateKey, clearSignedInSearchPreviewSnapshot, currentDayStateKey]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SHARED CARD CONTROLLER BRIDGE
@@ -14257,7 +14334,7 @@ const OdaraScreen = ({
     isGuestMode && !guestLockedForCurrentCard && !isReadOnlyHistoryCard && guestModeHistory.length > 0;
   const signedInModeHistoryAvailable =
     !isGuestMode && !signedInResolvedLockActive && !isReadOnlyHistoryCard && signedInModeHistory.length > 0;
-  const showPreviewBack = !isGuestMode && !isReadOnlyHistoryCard && signedInManualPreviewActive;
+  const showPreviewBack = !isGuestMode && !isReadOnlyHistoryCard && (signedInManualPreviewActive || signedInSearchPreviewSnapshotActive);
   const showModeBack = isGuestMode ? guestModeHistoryAvailable : signedInModeHistoryAvailable;
   const showHistoryBack = isGuestMode ? guestHasRealHistory : hasHistory;
   const actionRailState = {
@@ -14426,7 +14503,7 @@ const OdaraScreen = ({
       return true;
     }
 
-    if (!isGuestMode && signedInManualPreviewActive) {
+    if (!isGuestMode && (signedInManualPreviewActive || signedInSearchPreviewSnapshotActive)) {
       void clearSearchPreviewFromSelectedDay('all');
       return true;
     }
@@ -14460,6 +14537,7 @@ const OdaraScreen = ({
     collapseLayerDetail,
     isGuestMode,
     signedInManualPreviewActive,
+    signedInSearchPreviewSnapshotActive,
     clearSearchPreviewFromSelectedDay,
     guestModeHistoryAvailable,
     signedInModeHistoryAvailable,
