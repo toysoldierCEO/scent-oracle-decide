@@ -11451,22 +11451,24 @@ const OdaraScreen = ({
   );
   const signedInManualPreviewActive = !isGuestMode
     && (!!signedInDayState.manualHeroCard || !!signedInDayState.manualLayerCard);
-  const signedInIsReadOnlyHistoryCard = !isGuestMode
-    && !!signedInResolvedLockTruth
-    && currentDateKey < todayDateKey;
+  const signedInSelectedDayIsPast = !isGuestMode && currentDateKey < todayDateKey;
+  const signedInSearchPreviewLocked = !isGuestMode && (
+    signedInDayState.lockState === 'locked'
+    || signedInResolvedDayDecisionSource === 'locked'
+    || !!signedInResolvedLockTruth
+  );
+  const signedInIsReadOnlyHistoryCard = signedInSelectedDayIsPast;
   const signedInSearchPreviewDisabledReason = useMemo(() => {
     if (isGuestMode) return null;
-    if (currentDateKey < todayDateKey) return 'Past days are read-only';
-    if (signedInResolvedLockTruth || signedInDayState.lockState === 'locked') {
+    if (signedInSelectedDayIsPast) return 'Past days are read-only';
+    if (signedInSearchPreviewLocked) {
       return 'Unlock to preview';
     }
     return null;
   }, [
-    currentDateKey,
     isGuestMode,
-    signedInDayState.lockState,
-    signedInResolvedLockTruth,
-    todayDateKey,
+    signedInSearchPreviewLocked,
+    signedInSelectedDayIsPast,
   ]);
   const lockState: LockState = signedInDayState.lockState;
   const persistedSignedInDayStateRef = useRef<Record<string, string | null>>({});
