@@ -2,10 +2,10 @@
  * Normalized Home oracle access layer — single source of truth for which RPC is called.
  *
  * Two explicit branches:
- *   - signed-in: get_todays_oracle_home_v1 (requires auth.uid())
- *   - guest:     get_guest_oracle_home_v1 (anon-callable, no user param)
+ *   - signed-in: get_signed_in_card_contract_v7 (requires auth.uid() / matching p_user_id)
+ *   - guest:     get_guest_oracle_home_v6 (anon-callable, no user param)
  *
- * Do NOT call get_todays_oracle_home_v1 from guest mode — it is RLS-gated.
+ * Do NOT call the signed-in contract from guest mode — it is auth-gated.
  */
 import { odaraSupabase } from '@/lib/odara-client';
 import type { AccessMode } from '@/lib/access-mode';
@@ -34,10 +34,14 @@ export interface FetchHomeOracleResult {
     | 'get_signed_in_card_contract_v7';
 }
 
-/** Adapt the canonical signed-in v6 contract into the existing OracleResult
- *  shape consumed by OdaraScreen (today_pick / layer / alternates / etc.).
- *  The full v6 payload is preserved at __v6 so the per-mode layer stack
- *  (payload.layer_modes[mood].layers[]) remains addressable for cycling. */
+/** Adapt the canonical signed-in contract payload (currently v7) into the
+ *  OracleResult shape consumed by OdaraScreen (today_pick / layer /
+ *  alternates / etc.).
+ *
+ *  The legacy `__v6` field name is retained as an internal compatibility
+ *  handle for the raw signed-in payload. When deferred/lazy surfaces later
+ *  provide per-mode stack data, `payload.layer_modes[mood].layers[]` remains
+ *  addressable without changing the existing view-model plumbing. */
 function adaptSignedInV6ToOracleResult(v6: any): any {
   if (!v6 || typeof v6 !== 'object') return v6;
   const hero = v6.hero ?? null;
@@ -60,7 +64,7 @@ function adaptSignedInV6ToOracleResult(v6: any): any {
     oracle_layer: layer,
     alternates: Array.isArray(v6.alternates) ? v6.alternates : [],
     ui_default_mode: v6.ui_default_mode ?? 'balance',
-    // Propagate the REAL backend contract version (v7 today). Never hardcode v6.
+    // Propagate the real backend contract version. The live launch contract is v7.
     layer_mode_contract: v6.card_contract_version ?? v6.layer_mode_contract ?? null,
     card_contract_version: v6.card_contract_version ?? null,
     surface_type: v6.surface_type ?? null,
@@ -78,7 +82,7 @@ function adaptSignedInV6ToOracleResult(v6: any): any {
     layer_mode_order: Array.isArray(v6.layer_mode_order)
       ? v6.layer_mode_order
       : ['balance', 'bold', 'smooth', 'wild'],
-    // Stash the raw v6 payload so the signed-in VM can address mode stacks
+    // Stash the raw signed-in payload on the legacy field name used by the UI adapter.
     __v6: v6,
   };
 }
@@ -112,12 +116,13 @@ export async function fetchHomeOracle(
 
   // CANONICAL SIGNED-IN CONTRACT: get_signed_in_card_contract_v7 is the
   // single backend source of truth for the signed-in Odara card. Returns
-  // hero, hero_tokens, layer, layer_tokens, layer_modes (with per-mood
-  // layers[] preview stack — preview_depth=3), layer_mode_order,
-  // ui_default_mode, alternates, queue, card_contract_version, surface_type.
-  // The v6/v7 payload shapes are field-compatible for the fields we read,
-  // so the existing adapter remains valid; v7 additionally guarantees the
-  // hard_primary_soft_preview_fallback overlap policy on the backend.
+  // hero, hero_tokens, layer, layer_tokens, layer_mode_order,
+  // ui_default_mode, alternates, queue, card_contract_version, surface_type,
+  // and deferred-mode metadata. At launch, v7 first paint keeps
+  // `layer_modes_deferred=true` and `provider_meta.preview_depth=0`, so full
+  // per-mode stacks are hydrated only on deferred/user-driven paths instead of
+  // an eager first-paint call. The payload shape remains adapter-compatible
+  // for the fields this client reads.
   const args = {
     p_user_id: access.signedInUserId,
     p_temperature: temperature,

@@ -1519,9 +1519,10 @@ function modeValueToBackendModeEntry(
   };
 }
 
-/** Convert a v6 layer entry (from get_signed_in_card_contract_v6, either the
- *  top-level `layer` object or `layer_modes[mood].layers[idx]`) into the
- *  LayerMode shape consumed by LayerCard. Pure mapping — no inference. */
+/** Convert a signed-in layer payload entry from the canonical home contract
+ *  into the LayerMode shape consumed by LayerCard. This may be the top-level
+ *  `layer` object or a deferred/lazy `layer_modes[mood].layers[idx]` entry.
+ *  Pure mapping — no inference. */
 function v6LayerToLayerMode(
   layer: any,
   mood: LayerMood,
@@ -10669,10 +10670,9 @@ const OdaraScreen = ({
     return selectedEntry;
   }, [readMoodLaneStack]);
 
-  // ── Signed-in v6: per-mood active layer index into payload.layer_modes[mood].layers[]
-  // Keep per-slot/per-anchor lane state in runtime memory so leaving Daily and
-  // coming back restores the same mood lane position instead of snapping back
-  // to candidate 0 for that exact card.
+  // Signed-in mood-lane state: keep the per-mood active layer index in runtime
+  // memory so leaving Daily and coming back restores the same lane position
+  // for that slot/anchor instead of snapping back to candidate 0.
   const [signedInLayerIdxByMood, setSignedInLayerIdxByMood] = useState<Record<LayerMood, number>>({
     balance: 0, bold: 0, smooth: 0, wild: 0,
   });
@@ -12963,7 +12963,8 @@ const OdaraScreen = ({
     const currentDayState = dayStateMap[currentDayStateKey] ?? createDefaultSignedInDayState();
     const previousDayState = dayStateMap[previousDayStateKey] ?? createDefaultSignedInDayState();
 
-    // 3) Initialize from v6 contract: ui_default_mode + reset all mode indexes to 0
+    // 3) Initialize from the signed-in home contract payload:
+    // ui_default_mode + restored mode indexes for the current slot/anchor.
     const v6 = (oracle as any)?.__v6 ?? null;
     const v6DefaultMood: LayerMood = (() => {
       const def = v6?.ui_default_mode ?? normalized.defaultMode;
@@ -13019,7 +13020,8 @@ const OdaraScreen = ({
       const slotPfx = `${selectedDate}|${selectedContext}`;
       const heroId = oracle.today_pick.fragrance_id;
 
-      // 4a) Seed every mode block from layer_modes when present
+      // 4a) Seed every mode block only when layer_modes are actually present.
+      // Launch first paint may omit them because v7 defers full mode stacks.
       if (normalized.layerModesRaw) {
         for (const mood of LAYER_MODE_ORDER) {
           const modeData = getNormalizedLayerModeBlock(normalized.layerModesRaw as any, mood);
@@ -13143,7 +13145,8 @@ const OdaraScreen = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracle, stateKey, currentDayStateKey, previousDayStateKey, queueRowsToDisplay, isGuestMode, signedInResolvedMemoryReady]);
 
-  // No eager modes fetch — moods load lazily on user tap
+  // No eager mode-stack fetch on first paint. Full mode data is loaded only
+  // from deferred payloads or user-driven lazy hydration.
 
   // `signedInResolvedOracle` hoisted earlier (see fetchMoodForCard region) to
   // avoid TDZ during useCallback dep evaluation.
@@ -13258,22 +13261,28 @@ const OdaraScreen = ({
     };
   };
 
-  // Build layer modes from slot-scoped mood cache — lazy loaded
-  // Cache is pre-seeded from oracle.layer_modes on hero load (Effect 2)
+  // Build layer modes from slot-scoped mood cache — lazy loaded.
+  // The v7 launch contract can arrive with layer_modes_deferred=true and
+  // provider_meta.preview_depth=0, so first paint must tolerate missing
+  // payload layer stacks. When a deferred surface later provides layer_modes,
+  // the cache can be seeded from that payload.
   // moodCacheVersion is used to trigger re-renders when cache updates
   void moodCacheVersion; // consumed for reactivity
   const cardId = visibleCard?.fragrance_id ?? '';
   const slotPrefix = `${selectedDate}|${selectedContext}`;
 
   // ────────────────────────────────────────────────────────────────────
-  // SIGNED-IN CANONICAL VIEW MODEL — v6 contract (get_signed_in_card_contract_v6)
+  // SIGNED-IN CANONICAL VIEW MODEL — get_signed_in_card_contract_v7.
   // Single resolved source for the visible signed-in card. All signed-in JSX
-  // MUST read hero/layer/tokens through this object.
+  // must read hero/layer/tokens through this object. The raw payload still
+  // sits on `__v6` for legacy adapter compatibility only.
   //
   // Resolution order for the visible layer:
-  //   1) payload.layer_modes[selectedMood].layers[ activeIdx ]
-  //   2) payload.layer_modes[selectedMood] (if backend used flat per-mode shape)
-  //   3) payload.layer (top-level fallback for balance only)
+  //   1) lane cache for the current slot/card/mood
+  //   2) payload.layer_modes[selectedMood].layers[activeIdx] when a deferred
+  //      payload has already supplied mode-stack data
+  //   3) payload.layer_modes[selectedMood] (flat per-mode fallback)
+  //   4) payload.layer (top-level balance fallback)
   //
   // Tokens:
   //   hero  → payload.hero_tokens
@@ -13283,9 +13292,9 @@ const OdaraScreen = ({
     ? signedInPayloadAlternates
     : (currentCardAlternatesOwnerId === visibleCard?.fragrance_id ? currentCardAlternates : []);
 
-  // First-paint mode results — derived directly from v6 layer_modes (preview
-  // stack) instead of the slot-scoped mood cache. The cache is still used as
-  // a fallback (legacy/promoted/queue cards).
+  // Resolve mode results from the slot-scoped mood cache first. Hero cards can
+  // also reuse payload layer_modes when a deferred surface has already supplied
+  // them, but launch first paint must not assume full mode stacks are present.
   const modeResults: LayerModes = useMemo(() => {
     const lm: any = v6Payload?.layer_modes ?? (signedInResolvedOracle as any)?.layer_modes ?? null;
     const resolveMood = (mood: LayerMood) => {
