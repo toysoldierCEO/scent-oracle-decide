@@ -1,6 +1,4 @@
 import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown } from "lucide-react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { normalizeNotes } from "@/lib/normalizeNotes";
@@ -816,12 +814,6 @@ const LayerCard = ({
     ratioDisplayText
       ? { label: 'Ratio', value: ratioDisplayText }
       : null,
-    sprayGuidanceText
-      ? { label: 'Spray guidance', value: sprayGuidanceText }
-      : null,
-    resolvedWhyText
-      ? { label: 'Why it works', value: resolvedWhyText }
-      : null,
     hasPlacement
       ? {
           label: 'Placement',
@@ -830,9 +822,14 @@ const LayerCard = ({
           subline: '',
         }
       : null,
+    resolvedWhyText
+      ? { label: 'Why it works', value: resolvedWhyText }
+      : null,
+    sprayGuidanceText
+      ? { label: 'Spray guidance', value: sprayGuidanceText }
+      : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
   const hasLayerDetailContent = detailSections.length > 0;
-  const detailToggleLabel = isExpanded ? 'Hide layer details' : 'View layer details';
 
   const handleTitlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     titlePressRef.current = {
@@ -856,10 +853,9 @@ const LayerCard = ({
 
   return (
     <div
-      className="relative z-10 mb-[14px] flex w-full cursor-pointer select-none flex-col rounded-xl px-5 py-[12px]"
+      className="relative z-10 mb-[14px] flex w-full select-none flex-col rounded-xl px-5 py-[12px]"
       onClick={(e) => {
         e.stopPropagation();
-        onToggleExpand();
       }}
       style={{
         background: `linear-gradient(135deg, ${layerTint.material}, ${layerTint.bg}), rgba(6,6,8,0.92)`,
@@ -1019,93 +1015,48 @@ const LayerCard = ({
       </div>
 
       {hasLayerDetailContent && (
-        <div className="mt-2 w-full">
-          <button
-            type="button"
-            data-layer-detail-toggle
-            aria-expanded={isExpanded}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onToggleExpand();
-            }}
-            className="mx-auto inline-flex w-full max-w-[16rem] items-center justify-center gap-2 rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-white/54 transition-colors duration-200 hover:text-white/80"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.10)',
-            }}
+        <div
+          className="mt-3 w-full border-t pt-3"
+          style={{ borderColor: "rgba(255,255,255,0.1)" }}
+        >
+          <div
+            key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
+            className="space-y-3"
           >
-            <span>{detailToggleLabel}</span>
-            <ChevronDown
-              className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {!isExpanded && (
-            <p className="mt-1 text-center text-[10px] text-white/34">
-              Ratio, placement, and why it works
-            </p>
-          )}
+            {detailSections.map((section) => (
+              <div key={section.label} className="space-y-1">
+                <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
+                {section.label === 'Placement' && section.placementRows ? (
+                  <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-[13px] leading-relaxed text-white/80">
+                    {section.subline && (
+                      <p className="text-left text-white/90">{section.subline}</p>
+                    )}
+                    {section.placementRows.anchor && (
+                      <p className="text-left">
+                        <span className="font-medium text-white/90">Anchor:</span>{' '}
+                        {section.placementRows.anchor}
+                      </p>
+                    )}
+                    {section.placementRows.layer && (
+                      <p className="text-left">
+                        <span className="font-medium text-white/90">Layer:</span>{' '}
+                        {section.placementRows.layer}
+                      </p>
+                    )}
+                    {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
+                      <p className="text-left">{section.value}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mx-auto max-w-[24rem] text-left text-[13px] leading-relaxed text-white/80">
+                    {section.value}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* Expanded layer detail */}
-      <AnimatePresence initial={false}>
-        {isExpanded && hasLayerDetailContent && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
-            className="w-full overflow-hidden"
-          >
-            <motion.div
-              key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
-              initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-            className="pt-3 mt-2"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
-          >
-              {activeModeEntry && detailSections.length > 0 && (
-                <div className="space-y-3">
-                  {detailSections.map((section) => (
-                    <div key={section.label} className="space-y-1">
-                      <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
-                      {section.label === 'Placement' && section.placementRows ? (
-                        <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-sm leading-relaxed text-white/80">
-                          {section.subline && (
-                            <p className="text-left text-white/90">{section.subline}</p>
-                          )}
-                          {section.placementRows.anchor && (
-                            <p className="text-left">
-                              <span className="font-medium text-white/90">Anchor:</span>{' '}
-                              {section.placementRows.anchor}
-                            </p>
-                          )}
-                          {section.placementRows.layer && (
-                            <p className="text-left">
-                              <span className="font-medium text-white/90">Layer:</span>{' '}
-                              {section.placementRows.layer}
-                            </p>
-                          )}
-                          {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
-                            <p className="text-left">{section.value}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="mx-auto max-w-[24rem] text-left text-sm leading-relaxed text-white/80">
-                          {section.value}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

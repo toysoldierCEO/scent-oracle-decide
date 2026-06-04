@@ -81,9 +81,11 @@ const ModeSelector = ({
   consumeLockedTap = false,
   disabledMoodReasons,
 }: ModeSelectorProps) => {
-  const disabledMoodNote = LAYER_MODE_ORDER
+  const selectedDisabledReason = disabledMoodReasons?.[selectedMood]?.trim() ?? null;
+  const sharedEditableMoodReason = (['balance', 'bold', 'smooth'] as const)
     .map((mood) => disabledMoodReasons?.[mood]?.trim())
     .find(Boolean) ?? null;
+  const disabledMoodNote = selectedDisabledReason || sharedEditableMoodReason;
 
   return (
     <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
