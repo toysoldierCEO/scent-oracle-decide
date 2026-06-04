@@ -381,6 +381,8 @@ function readTransparentBottleImageUrlFromObject(value: any): string | null {
     value.provider_payload?.transparentImageUrl,
     value.provider_payload?.fragella_transparent_image_url,
     value.provider_payload?.['Image URL Transparent'],
+    value.provider_payload?.['image URL Transparent'],
+    value.provider_payload?.['Transparent Image URL'],
     value.image?.transparent_url,
     value.image?.transparentUrl,
     value.photo?.transparent_url,
@@ -401,6 +403,12 @@ function readRegularBottleImageUrlFromObject(value: any): string | null {
     value.photoUrl,
     value.thumbnail_url,
     value.thumbnailUrl,
+    value['Image URL'],
+    value['image URL'],
+    value.provider_payload?.image_url,
+    value.provider_payload?.imageUrl,
+    value.provider_payload?.['Image URL'],
+    value.provider_payload?.['image URL'],
     value.image,
     value.photo,
     value.thumbnail,
@@ -2412,6 +2420,7 @@ type FragranceImageAsset = {
   image_url: string | null;
   image_url_transparent?: string | null;
   thumbnail_url: string | null;
+  provider_payload?: Record<string, unknown> | null;
 };
 
 type SignedInVerifiedPredecessorBaton = {
@@ -4233,8 +4242,7 @@ function scorePreferredBottleImageUrl(url: string | null | undefined) {
   let score = 0;
   if (normalized.endsWith('.webp')) score += 4;
   if (normalized.endsWith('.png')) score += 3;
-  if (normalized.includes('transparent')) score += 5;
-  if (normalized.includes('cutout') || normalized.includes('isolated')) score += 4;
+  if (isLikelyTransparentBottleImageUrl(normalized)) score += 100;
   if (normalized.includes('thumb')) score -= 1;
   if (normalized.includes('placeholder')) score -= 2;
   return score;
@@ -4248,6 +4256,8 @@ function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
     || normalized.includes('isolated')
     || normalized.includes('no-bg')
     || normalized.includes('nobg')
+    || normalized.includes('background-removed')
+    || normalized.includes('removed-background')
     || normalized.includes('alpha');
 }
 
@@ -4344,8 +4354,9 @@ async function fetchWardrobeImageAssetMap(fragranceIds?: string[]) {
       imageAssetMap.set(row.fragrance_id, {
         fragrance_id: row.fragrance_id,
         image_url_transparent: readTransparentBottleImageUrlFromObject(row),
-        image_url: readTrimmedImageUrl(row.image_url),
+        image_url: readRegularBottleImageUrlFromObject(row),
         thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
+        provider_payload: row.provider_payload ?? null,
       });
     }
 
@@ -5131,6 +5142,7 @@ function normalizeCollectionPayload(payload: OdaraCollectionPayload | null): Oda
       role_confidence: typeof item.role_confidence === 'string' ? item.role_confidence : null,
       role_source: typeof item.role_source === 'string' ? item.role_source : null,
       primary_season: normalizeWardrobeSeasonKey(item.primary_season),
+      image_url: resolvePreferredWardrobeBottleImage(item, item.image_url, item.thumbnail_url),
       collection_created_at: readTrimmedLayerText(item.collection_created_at),
       collection_updated_at: readTrimmedLayerText(item.collection_updated_at),
       rating: normalizeCollectionRating(item.rating),
@@ -6638,7 +6650,10 @@ const OdaraFragranceDetailSheet: React.FC<{
         : detail.collection_status === 'queue'
           ? 'Card detail'
           : detail.source_label ?? 'Fragrance profile';
-  const imageUrl = detail.image_url ?? detail.thumbnail_url ?? null;
+  const resolvedDetailBottleImageUrl = resolvePreferredWardrobeBottleImage(detail, detail.image_url, detail.thumbnail_url);
+  const imageUrl = isLikelyTransparentBottleImageUrl(resolvedDetailBottleImageUrl)
+    ? resolvedDetailBottleImageUrl
+    : null;
   const accordLabels = normalizeNotes(detail.accords, 6);
   const noteLabels = normalizeNotes(detail.notes, 6);
   const topLabels = normalizeNotes(detail.top_notes ?? [], 6);
@@ -6708,7 +6723,8 @@ const OdaraFragranceDetailSheet: React.FC<{
               <img
                 src={imageUrl}
                 alt={detail.name ?? 'Fragrance bottle'}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain p-3"
+                style={{ filter: 'drop-shadow(0 18px 26px rgba(0,0,0,0.36))' }}
               />
             ) : (
               <div
@@ -7411,7 +7427,8 @@ const OdaraLegacyCollectionPage: React.FC<{
               {visibleItems.map((item, index) => {
                 const itemKey = item.fragrance_id ?? `${item.brand ?? 'brand'}|${item.name ?? 'name'}|${index}`;
                 const tint = getEnhancedCollectionTint(item);
-                const imageUrl = resolvePreferredWardrobeBottleImage(item, item.image_url, item.thumbnail_url);
+                const resolvedImageUrl = resolvePreferredWardrobeBottleImage(item, item.image_url, item.thumbnail_url);
+                const imageUrl = isLikelyTransparentBottleImageUrl(resolvedImageUrl) ? resolvedImageUrl : null;
                 const familyLabel = item.family_label ?? (item.family_key ? getFamilyLabelText(item.family_key) : 'Unclassified');
                 const roleLabel = getCollectionRoleLabel(item);
                 const itemError = errorById[itemKey];
@@ -7732,7 +7749,8 @@ const OdaraWardrobeBottleArt: React.FC<{
   const resolvedImageUrl = resolvePreferredWardrobeBottleImage(image_url, thumbnail_url);
   const likelyTransparentImage = isLikelyTransparentBottleImageUrl(resolvedImageUrl);
   const useWardrobeGridPresentation = presentation === 'wardrobe_grid';
-  const visibleImageUrl = useWardrobeGridPresentation && resolvedImageUrl && !likelyTransparentImage
+  const shouldUseFallbackForNonTransparent = resolvedImageUrl && !likelyTransparentImage && (useWardrobeGridPresentation || compact);
+  const visibleImageUrl = shouldUseFallbackForNonTransparent
     ? null
     : resolvedImageUrl;
   const monogram = deriveProfileMonogram(name || brand || 'Bottle');
@@ -10736,7 +10754,7 @@ const OdaraScreen = ({
     try {
       const { data, error } = await odaraSupabase
         .from('fragrance_image_assets' as any)
-        .select('fragrance_id, image_url, thumbnail_url')
+        .select('fragrance_id, image_url, thumbnail_url, provider_payload')
         .in('fragrance_id', uniqueIds);
 
       if (error) {
@@ -10745,9 +10763,15 @@ const OdaraScreen = ({
       }
 
       return new Map<string, FragranceImageAsset>(
-        (Array.isArray(data) ? (data as FragranceImageAsset[]) : [])
+        (Array.isArray(data) ? data : [])
           .filter((row) => !!row?.fragrance_id)
-          .map((row) => [row.fragrance_id, row]),
+          .map((row) => [row.fragrance_id, {
+            fragrance_id: row.fragrance_id,
+            image_url_transparent: readTransparentBottleImageUrlFromObject(row),
+            image_url: readRegularBottleImageUrlFromObject(row),
+            thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
+            provider_payload: row.provider_payload ?? null,
+          }] as [string, FragranceImageAsset]),
       );
     } catch {
       return new Map<string, FragranceImageAsset>();
@@ -10811,7 +10835,7 @@ const OdaraScreen = ({
           retired: false,
           rating: null,
           profile_loaded: false,
-          image_url: imageAsset?.image_url ?? readBottleImageUrlFromObject(row as any),
+          image_url: resolvePreferredWardrobeBottleImage(imageAsset, row),
           thumbnail_url: imageAsset?.thumbnail_url ?? null,
         };
         fragranceDetailCacheRef.current.set(row.id, detail);
@@ -10948,7 +10972,7 @@ const OdaraScreen = ({
             retired: Boolean(payload.retired),
             rating: normalizeCollectionRating(payload.rating),
             profile_loaded: true,
-            image_url: payload.image_url ?? null,
+            image_url: resolvePreferredWardrobeBottleImage(payload, payload.image_url, payload.thumbnail_url),
             thumbnail_url: payload.thumbnail_url ?? null,
           };
 
@@ -10993,7 +11017,7 @@ const OdaraScreen = ({
           retired: false,
           rating: null,
           profile_loaded: true,
-          image_url: imageAsset?.image_url ?? readBottleImageUrlFromObject(data as any),
+          image_url: resolvePreferredWardrobeBottleImage(imageAsset, data),
           thumbnail_url: imageAsset?.thumbnail_url ?? null,
         };
 
@@ -14836,7 +14860,10 @@ const OdaraScreen = ({
   const visibleResolvedSelectedMood = getBetaSafeLayerMood(
     (visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood | null | undefined,
   );
-  const visibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
+  const rawVisibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
+  const visibleHeroBottleImageUrl = isLikelyTransparentBottleImageUrl(rawVisibleHeroBottleImageUrl)
+    ? rawVisibleHeroBottleImageUrl
+    : null;
   const visibleLayerBottleImageUrl = visibleResolvedLayer?.image_url ?? null;
   const visibleLayerSprayCounts = useMemo(
     () => deriveSprayCountsFromLayerMode(visibleResolvedLayer as any),
