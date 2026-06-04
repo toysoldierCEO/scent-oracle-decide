@@ -7866,6 +7866,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>(null);
   const [wardrobeSortDirection, setWardrobeSortDirection] = useState<OdaraWardrobeSortDirection>('asc');
   const [wardrobeMenu, setWardrobeMenu] = useState<'filter' | 'sort' | null>(null);
+  const [wardrobeSearchOpen, setWardrobeSearchOpen] = useState(false);
+  const [wardrobeSearchQuery, setWardrobeSearchQuery] = useState('');
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
   const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
@@ -8517,6 +8519,34 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     wardrobeWishlistOnly,
   ]);
 
+  const normalizedWardrobeSearchQuery = useMemo(
+    () => normalizeOdaraSearchQuery(wardrobeSearchQuery),
+    [wardrobeSearchQuery],
+  );
+
+  const filteredWardrobeCards = useMemo(() => {
+    const queryTokens = normalizedWardrobeSearchQuery.split(/\s+/).filter(Boolean);
+    if (queryTokens.length === 0) return visibleWardrobeCards;
+
+    return visibleWardrobeCards.filter((card) => {
+      const searchableValues = [
+        card.name,
+        getWardrobeBrandLabel(card.brand),
+        readTrimmedLayerText(card.family_label, buildFamilyLabel(card.family_key), card.family_key),
+        card.primary_status,
+        card.favorite ? 'favorite favorites wear more' : '',
+        card.retired ? 'retired archive' : '',
+        card.is_unworn ? 'unworn never worn' : '',
+        sanitizeTokenSource(card.item.notes).join(' '),
+        sanitizeTokenSource(card.item.accords).join(' '),
+      ]
+        .map((value) => normalizeOdaraSearchQuery(value))
+        .filter(Boolean);
+
+      return queryTokens.every((token) => searchableValues.some((value) => value.includes(token)));
+    });
+  }, [normalizedWardrobeSearchQuery, visibleWardrobeCards]);
+
   const activeWardrobeFilterCount = [
     wardrobeSeasonFilter,
     wardrobeFamilyFilter,
@@ -8550,6 +8580,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               }
             : null
     : null;
+
+  const hasWardrobeSearchQuery = normalizedWardrobeSearchQuery.length > 0;
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -9627,269 +9659,331 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="relative flex flex-wrap items-center justify-center gap-2 px-1">
-          <div className="flex items-center justify-center gap-2">
+        <div className="relative px-1">
+          {!wardrobeSearchOpen ? (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-2">
 
-            {/* Filter pill + anchored dropdown */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setWardrobeMenu(wardrobeMenu === 'filter' ? null : 'filter')}
-                aria-haspopup="menu"
-                aria-expanded={wardrobeMenu === 'filter'}
-                className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
-                style={{
-                  border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
-                  background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
-                  color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
-                }}
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <line x1="4" y1="6" x2="20" y2="6" />
-                  <line x1="7" y1="12" x2="17" y2="12" />
-                  <line x1="10" y1="18" x2="14" y2="18" />
-                </svg>
-                Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
-              </button>
-              {wardrobeMenu === 'filter' ? (
-                <div
-                  className="absolute left-0 top-[calc(100%+8px)] z-[80] w-60 rounded-[18px] border p-3"
-                  role="menu"
-                  style={{
-                    borderColor: 'rgba(255,255,255,0.1)',
-                    background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
-                    boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
-                    backdropFilter: 'blur(14px)',
-                    WebkitBackdropFilter: 'blur(14px)',
-                  }}
-                >
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {ODARA_WARDROBE_SEASON_FILTER_OPTIONS.map((option) => {
-                          const active = wardrobeSeasonFilter === option.value;
-                          return (
-                            <button
-                              key={option.label}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={active}
-                              onClick={() => {
-                                setWardrobeSeasonFilter(option.value);
-                              }}
-                              className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
-                              style={{
-                                border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                                background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                                color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={wardrobeFamilyFilter === null}
-                          onClick={() => {
-                            setWardrobeFamilyFilter(null);
-                          }}
-                          className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
-                          style={{
-                            border: `1px solid ${wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                            background: wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                            color: wardrobeFamilyFilter === null ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
-                          }}
-                        >
-                          All Families
-                        </button>
-                        {wardrobeFamilyOptions.map((option) => {
-                          const active = wardrobeFamilyFilter === option.key;
-                          return (
-                            <button
-                              key={option.key}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={active}
-                              onClick={() => {
-                                setWardrobeFamilyFilter(active ? null : option.key);
-                              }}
-                              className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
-                              style={{
-                                border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                                background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                                color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Library</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { key: 'wishlist', label: 'Wishlist', active: wardrobeWishlistOnly, toggle: () => setWardrobeWishlistOnly((current) => !current) },
-                          { key: 'liked', label: 'Liked', active: wardrobeLikedOnly, toggle: () => setWardrobeLikedOnly((current) => !current) },
-                          { key: 'retired', label: 'Retired', active: wardrobeRetiredOnly, toggle: () => setWardrobeRetiredOnly((current) => !current) },
-                          { key: 'favorite', label: 'Favorites', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
-                          { key: 'unworn', label: 'Unworn', active: wardrobeUnwornOnly, toggle: () => setWardrobeUnwornOnly((current) => !current) },
-                        ].map((option) => (
-                          <button
-                            key={option.key}
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={option.active}
-                            onClick={option.toggle}
-                            className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
-                            style={{
-                              border: `1px solid ${option.active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                              background: option.active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
-                              color: option.active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
-                            }}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {activeWardrobeFilterCount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clearWardrobeFilters();
-                          setWardrobeMenu(null);
-                        }}
-                        className="w-full rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.08)',
-                          background: 'rgba(255,255,255,0.02)',
-                        }}
-                      >
-                        Clear filters
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Sort pill + anchored dropdown */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setWardrobeMenu(wardrobeMenu === 'sort' ? null : 'sort')}
-                aria-haspopup="menu"
-                aria-expanded={wardrobeMenu === 'sort'}
-                className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
-                style={{
-                  border: `1px solid ${activeWardrobeSortLabel ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
-                  background: activeWardrobeSortLabel ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
-                  color: activeWardrobeSortLabel ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
-                }}
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m3 16 4 4 4-4" />
-                  <path d="M7 20V4" />
-                  <path d="m21 8-4-4-4 4" />
-                  <path d="M17 4v16" />
-                </svg>
-                {activeWardrobeSortLabel ? `Sort · ${activeWardrobeSortLabel}` : 'Sort'}
-              </button>
-              {wardrobeMenu === 'sort' ? (
-                <div
-                  className="absolute left-0 top-[calc(100%+8px)] z-[80] w-56 rounded-[18px] border p-2"
-                  role="menu"
-                  style={{
-                    borderColor: 'rgba(255,255,255,0.1)',
-                    background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
-                    boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
-                    backdropFilter: 'blur(14px)',
-                    WebkitBackdropFilter: 'blur(14px)',
-                  }}
-                >
-                  {ODARA_WARDROBE_SORT_OPTIONS.map((option) => {
-                    const active = wardrobeSortKey === option.value;
-                    const optionLabel = getWardrobeSortLabel(
-                      option.value,
-                      active ? wardrobeSortDirection : option.defaultDirection,
-                    );
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={active}
-                        onClick={() => {
-                          if (active) {
-                            setWardrobeSortDirection((current) => toggleWardrobeSortDirection(current));
-                          } else {
-                            setWardrobeSortKey(option.value);
-                            setWardrobeSortDirection(option.defaultDirection);
-                          }
-                          setWardrobeMenu(null);
-                        }}
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors"
-                        style={{
-                          border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'transparent'}`,
-                          background: active ? 'rgba(218,188,124,0.1)' : 'transparent',
-                          color: active
-                            ? 'rgba(248,229,185,0.96)'
-                            : 'rgba(255,255,255,0.82)',
-                        }}
-                      >
-                        <span>{optionLabel}</span>
-                        {active ? (
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M20 6 9 17l-5-5" />
-                          </svg>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                  {wardrobeSortKey ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearWardrobeSort();
-                        setWardrobeMenu(null);
-                      }}
-                      className="mt-1 flex w-full items-center justify-center rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
+                {/* Filter pill + anchored dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setWardrobeMenu(wardrobeMenu === 'filter' ? null : 'filter')}
+                    aria-haspopup="menu"
+                    aria-expanded={wardrobeMenu === 'filter'}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
+                    style={{
+                      border: `1px solid ${activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                      background: activeWardrobeFilterCount > 0 ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                      color: activeWardrobeFilterCount > 0 ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+                    }}
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <line x1="4" y1="6" x2="20" y2="6" />
+                      <line x1="7" y1="12" x2="17" y2="12" />
+                      <line x1="10" y1="18" x2="14" y2="18" />
+                    </svg>
+                    Filter{activeWardrobeFilterCount > 0 ? ` · ${activeWardrobeFilterCount}` : ''}
+                  </button>
+                  {wardrobeMenu === 'filter' ? (
+                    <div
+                      className="absolute left-0 top-[calc(100%+8px)] z-[80] w-60 rounded-[18px] border p-3"
+                      role="menu"
                       style={{
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.02)',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
+                        boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
+                        backdropFilter: 'blur(14px)',
+                        WebkitBackdropFilter: 'blur(14px)',
                       }}
                     >
-                      Clear sort
-                    </button>
+                      <div className="space-y-3">
+                        <div>
+                          <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Season</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ODARA_WARDROBE_SEASON_FILTER_OPTIONS.map((option) => {
+                              const active = wardrobeSeasonFilter === option.value;
+                              return (
+                                <button
+                                  key={option.label}
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={active}
+                                  onClick={() => {
+                                    setWardrobeSeasonFilter(option.value);
+                                  }}
+                                  className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                                  style={{
+                                    border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                    background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                    color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Family</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={wardrobeFamilyFilter === null}
+                              onClick={() => {
+                                setWardrobeFamilyFilter(null);
+                              }}
+                              className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                              style={{
+                                border: `1px solid ${wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                background: wardrobeFamilyFilter === null ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                color: wardrobeFamilyFilter === null ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                              }}
+                            >
+                              All Families
+                            </button>
+                            {wardrobeFamilyOptions.map((option) => {
+                              const active = wardrobeFamilyFilter === option.key;
+                              return (
+                                <button
+                                  key={option.key}
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={active}
+                                  onClick={() => {
+                                    setWardrobeFamilyFilter(active ? null : option.key);
+                                  }}
+                                  className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                                  style={{
+                                    border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                    background: active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                    color: active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-1.5 text-[9px] uppercase tracking-[0.26em] text-foreground/40">Library</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { key: 'wishlist', label: 'Wishlist', active: wardrobeWishlistOnly, toggle: () => setWardrobeWishlistOnly((current) => !current) },
+                              { key: 'liked', label: 'Liked', active: wardrobeLikedOnly, toggle: () => setWardrobeLikedOnly((current) => !current) },
+                              { key: 'retired', label: 'Retired', active: wardrobeRetiredOnly, toggle: () => setWardrobeRetiredOnly((current) => !current) },
+                              { key: 'favorite', label: 'Favorites', active: wardrobeFavoriteOnly, toggle: () => setWardrobeFavoriteOnly((current) => !current) },
+                              { key: 'unworn', label: 'Unworn', active: wardrobeUnwornOnly, toggle: () => setWardrobeUnwornOnly((current) => !current) },
+                            ].map((option) => (
+                              <button
+                                key={option.key}
+                                type="button"
+                                role="menuitemcheckbox"
+                                aria-checked={option.active}
+                                onClick={option.toggle}
+                                className="rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition-colors"
+                                style={{
+                                  border: `1px solid ${option.active ? 'rgba(218,188,124,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                  background: option.active ? 'rgba(218,188,124,0.1)' : 'rgba(255,255,255,0.02)',
+                                  color: option.active ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.78)',
+                                }}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {activeWardrobeFilterCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              clearWardrobeFilters();
+                              setWardrobeMenu(null);
+                            }}
+                            className="w-full rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
+                            style={{
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              background: 'rgba(255,255,255,0.02)',
+                            }}
+                          >
+                            Clear filters
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
-              ) : null}
+
+                {/* Sort pill + anchored dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setWardrobeMenu(wardrobeMenu === 'sort' ? null : 'sort')}
+                    aria-haspopup="menu"
+                    aria-expanded={wardrobeMenu === 'sort'}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors"
+                    style={{
+                      border: `1px solid ${activeWardrobeSortLabel ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.1)'}`,
+                      background: activeWardrobeSortLabel ? 'rgba(218,188,124,0.12)' : 'rgba(255,255,255,0.04)',
+                      color: activeWardrobeSortLabel ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.74)',
+                    }}
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m3 16 4 4 4-4" />
+                      <path d="M7 20V4" />
+                      <path d="m21 8-4-4-4 4" />
+                      <path d="M17 4v16" />
+                    </svg>
+                    {activeWardrobeSortLabel ? `Sort · ${activeWardrobeSortLabel}` : 'Sort'}
+                  </button>
+                  {wardrobeMenu === 'sort' ? (
+                    <div
+                      className="absolute left-0 top-[calc(100%+8px)] z-[80] w-56 rounded-[18px] border p-2"
+                      role="menu"
+                      style={{
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        background: 'linear-gradient(180deg, rgba(26,24,30,0.98) 0%, rgba(12,12,15,0.99) 100%)',
+                        boxShadow: '0 22px 48px rgba(0,0,0,0.55)',
+                        backdropFilter: 'blur(14px)',
+                        WebkitBackdropFilter: 'blur(14px)',
+                      }}
+                    >
+                      {ODARA_WARDROBE_SORT_OPTIONS.map((option) => {
+                        const active = wardrobeSortKey === option.value;
+                        const optionLabel = getWardrobeSortLabel(
+                          option.value,
+                          active ? wardrobeSortDirection : option.defaultDirection,
+                        );
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={active}
+                            onClick={() => {
+                              if (active) {
+                                setWardrobeSortDirection((current) => toggleWardrobeSortDirection(current));
+                              } else {
+                                setWardrobeSortKey(option.value);
+                                setWardrobeSortDirection(option.defaultDirection);
+                              }
+                              setWardrobeMenu(null);
+                            }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors"
+                            style={{
+                              border: `1px solid ${active ? 'rgba(218,188,124,0.3)' : 'transparent'}`,
+                              background: active ? 'rgba(218,188,124,0.1)' : 'transparent',
+                              color: active
+                                ? 'rgba(248,229,185,0.96)'
+                                : 'rgba(255,255,255,0.82)',
+                            }}
+                          >
+                            <span>{optionLabel}</span>
+                            {active ? (
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M20 6 9 17l-5-5" />
+                              </svg>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                      {wardrobeSortKey ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearWardrobeSort();
+                            setWardrobeMenu(null);
+                          }}
+                          className="mt-1 flex w-full items-center justify-center rounded-xl px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground/72 transition-colors hover:text-foreground/92"
+                          style={{
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'rgba(255,255,255,0.02)',
+                          }}
+                        >
+                          Clear sort
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={openSearch}
+                className="shrink-0 rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
+                style={{
+                  border: '1px solid rgba(218,188,124,0.28)',
+                  background: 'rgba(218,188,124,0.12)',
+                }}
+              >
+                + Add
+              </button>
+              <button
+                type="button"
+                aria-label="Search your collection"
+                onClick={() => {
+                  setWardrobeMenu(null);
+                  setWardrobeSearchOpen(true);
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/72 transition-colors hover:text-foreground/94"
+                style={{
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.04)',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={openSearch}
-            className="shrink-0 rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
-            style={{
-              border: '1px solid rgba(218,188,124,0.28)',
-              background: 'rgba(218,188,124,0.12)',
-            }}
-          >
-            + Add
-          </button>
+          ) : (
+            <div
+              className="flex items-center gap-2 rounded-[18px] px-3 py-2.5"
+              style={{
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(18,20,26,0.66) 0%, rgba(10,12,16,0.54) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 28px rgba(0,0,0,0.18)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/46" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                autoFocus
+                type="search"
+                value={wardrobeSearchQuery}
+                onChange={(event) => setWardrobeSearchQuery(event.target.value)}
+                placeholder="Search your collection"
+                aria-label="Search your collection by fragrance, brand, family, or notes"
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground/92 outline-none placeholder:text-foreground/34"
+                autoCapitalize="words"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                aria-label="Close collection search"
+                onClick={() => {
+                  setWardrobeSearchOpen(false);
+                  setWardrobeSearchQuery('');
+                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-foreground/54 transition-colors hover:text-foreground/94"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 6L6 18" />
+                  <path d="M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           {/* Outside-click catcher for the dropdowns */}
           {wardrobeMenu ? (
@@ -9942,22 +10036,29 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </div>
         ) : null}
 
-        {visibleWardrobeCards.length === 0 ? (
+        {filteredWardrobeCards.length === 0 ? (
           <OdaraInsetGroup emphasis>
             <div className="px-5 py-10 text-center">
               <div
                 className="text-[24px] leading-[1.04] text-foreground/94"
                 style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
               >
-                {presetEmptyState?.title ?? 'No fragrances match these filters.'}
+                {hasWardrobeSearchQuery ? 'No scents found in your collection' : presetEmptyState?.title ?? 'No fragrances match these filters.'}
               </div>
               <div className="mx-auto mt-3 max-w-[260px] text-[12px] leading-[1.6] text-foreground/52">
-                {presetEmptyState?.body ?? 'Try a different brand, clear a filter, or add another fragrance.'}
+                {hasWardrobeSearchQuery
+                  ? 'Try another name, brand, family, or clear your search.'
+                  : presetEmptyState?.body ?? 'Try a different brand, clear a filter, or add another fragrance.'}
               </div>
-              {(activeWardrobeFilterCount > 0 || wardrobeBrandFilter) ? (
+              {(hasWardrobeSearchQuery || activeWardrobeFilterCount > 0 || wardrobeBrandFilter) ? (
                 <button
                   type="button"
                   onClick={() => {
+                    if (hasWardrobeSearchQuery) {
+                      setWardrobeSearchOpen(false);
+                      setWardrobeSearchQuery('');
+                      return;
+                    }
                     clearWardrobeFilters();
                     setWardrobeBrandFilter(null);
                   }}
@@ -9967,14 +10068,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     background: 'rgba(255,255,255,0.03)',
                   }}
                 >
-                  Clear view
+                  {hasWardrobeSearchQuery ? 'Clear search' : 'Clear view'}
                 </button>
               ) : null}
             </div>
           </OdaraInsetGroup>
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
-            {visibleWardrobeCards.map((card) => {
+            {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               return (
                 <button
