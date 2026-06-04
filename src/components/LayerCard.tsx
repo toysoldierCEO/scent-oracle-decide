@@ -853,9 +853,10 @@ const LayerCard = ({
 
   return (
     <div
-      className="relative z-10 mb-[14px] flex w-full select-none flex-col rounded-xl px-5 py-[12px]"
+      className="relative z-10 mb-[14px] flex w-full cursor-pointer select-none flex-col rounded-xl px-5 py-[12px]"
       onClick={(e) => {
         e.stopPropagation();
+        onToggleExpand();
       }}
       style={{
         background: `linear-gradient(135deg, ${layerTint.material}, ${layerTint.bg}), rgba(6,6,8,0.92)`,
@@ -999,63 +1000,67 @@ const LayerCard = ({
         </div>
       )}
 
-      {/* Mode selector */}
-      <div className="mt-[10px] w-full">
-        <ModeSelector
-          layerModes={layerModes}
-          selectedMood={selectedMood}
-          onSelectMood={onSelectMood}
-          familyColors={FAMILY_COLORS}
-          lockPulse={lockPulse}
-          locked={locked}
-          consumeLockedTap={consumeLockedMoodTap}
-          loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
-          disabledMoodReasons={disabledMoodReasons}
-        />
-      </div>
+      {isExpanded && (
+        <>
+          {/* Mode selector */}
+          <div className="mt-[10px] w-full">
+            <ModeSelector
+              layerModes={layerModes}
+              selectedMood={selectedMood}
+              onSelectMood={onSelectMood}
+              familyColors={FAMILY_COLORS}
+              lockPulse={lockPulse}
+              locked={locked}
+              consumeLockedTap={consumeLockedMoodTap}
+              loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
+              disabledMoodReasons={disabledMoodReasons}
+            />
+          </div>
 
-      {hasLayerDetailContent && (
-        <div
-          className="mt-3 w-full border-t pt-3"
-          style={{ borderColor: "rgba(255,255,255,0.1)" }}
-        >
-          <div
-            key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
-            className="space-y-3"
-          >
-            {detailSections.map((section) => (
-              <div key={section.label} className="space-y-1">
-                <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
-                {section.label === 'Placement' && section.placementRows ? (
-                  <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-[13px] leading-relaxed text-white/80">
-                    {section.subline && (
-                      <p className="text-left text-white/90">{section.subline}</p>
-                    )}
-                    {section.placementRows.anchor && (
-                      <p className="text-left">
-                        <span className="font-medium text-white/90">Anchor:</span>{' '}
-                        {section.placementRows.anchor}
+          {hasLayerDetailContent && (
+            <div
+              className="mt-3 w-full border-t pt-3"
+              style={{ borderColor: "rgba(255,255,255,0.1)" }}
+            >
+              <div
+                key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
+                className="space-y-3"
+              >
+                {detailSections.map((section) => (
+                  <div key={section.label} className="space-y-1">
+                    <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
+                    {section.label === 'Placement' && section.placementRows ? (
+                      <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-[13px] leading-relaxed text-white/80">
+                        {section.subline && (
+                          <p className="text-left text-white/90">{section.subline}</p>
+                        )}
+                        {section.placementRows.anchor && (
+                          <p className="text-left">
+                            <span className="font-medium text-white/90">Anchor:</span>{' '}
+                            {section.placementRows.anchor}
+                          </p>
+                        )}
+                        {section.placementRows.layer && (
+                          <p className="text-left">
+                            <span className="font-medium text-white/90">Layer:</span>{' '}
+                            {section.placementRows.layer}
+                          </p>
+                        )}
+                        {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
+                          <p className="text-left">{section.value}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mx-auto max-w-[24rem] text-left text-[13px] leading-relaxed text-white/80">
+                        {section.value}
                       </p>
-                    )}
-                    {section.placementRows.layer && (
-                      <p className="text-left">
-                        <span className="font-medium text-white/90">Layer:</span>{' '}
-                        {section.placementRows.layer}
-                      </p>
-                    )}
-                    {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
-                      <p className="text-left">{section.value}</p>
                     )}
                   </div>
-                ) : (
-                  <p className="mx-auto max-w-[24rem] text-left text-[13px] leading-relaxed text-white/80">
-                    {section.value}
-                  </p>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
