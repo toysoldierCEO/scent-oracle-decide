@@ -1,5 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import { normalizeNotes } from "@/lib/normalizeNotes";
@@ -257,6 +258,13 @@ function sentenceReferencesVisiblePair(
   }
 
   return false;
+}
+
+function areDetailTextsEquivalent(a: string | null | undefined, b: string | null | undefined) {
+  const normalizedA = normalizeComparisonText(a);
+  const normalizedB = normalizeComparisonText(b);
+  if (!normalizedA || !normalizedB) return false;
+  return normalizedA === normalizedB;
 }
 
 function sentenceContainsForeignFragrancePhrase(
@@ -785,12 +793,32 @@ const LayerCard = ({
     layer: placementRowsFromPattern?.layer || parsedPlacementRows.layer || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : ''),
   };
   const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
+  const resolvedWhyText = sprayPattern?.why_it_works || whyText;
+  const rawSprayGuidanceText = activeModeEntry?.spray_guidance?.trim() || '';
+  const sanitizedSprayGuidanceText = sanitizeLayerDetailCopy(
+    rawSprayGuidanceText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const ratioDisplayText = sprayPatternDisplay || sanitizedRatioText;
+  const sprayGuidanceText = areDetailTextsEquivalent(sanitizedSprayGuidanceText, resolvedWhyText)
+    || areDetailTextsEquivalent(sanitizedSprayGuidanceText, placementFallbackText)
+    || areDetailTextsEquivalent(sanitizedSprayGuidanceText, ratioDisplayText)
+    ? ''
+    : sanitizedSprayGuidanceText;
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
-  const resolvedWhyText = sprayPattern?.why_it_works || whyText;
   const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
   const detailSections = [
+    ratioDisplayText
+      ? { label: 'Ratio', value: ratioDisplayText }
+      : null,
+    sprayGuidanceText
+      ? { label: 'Spray guidance', value: sprayGuidanceText }
+      : null,
     resolvedWhyText
       ? { label: 'Why it works', value: resolvedWhyText }
       : null,
@@ -799,10 +827,12 @@ const LayerCard = ({
           label: 'Placement',
           placementRows,
           value: placementFallbackText,
-          subline: sprayPatternDisplay || '',
+          subline: '',
         }
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
+  const hasLayerDetailContent = detailSections.length > 0;
+  const detailToggleLabel = isExpanded ? 'Hide layer details' : 'View layer details';
 
   const handleTitlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     titlePressRef.current = {
@@ -988,9 +1018,39 @@ const LayerCard = ({
         />
       </div>
 
+      {hasLayerDetailContent && (
+        <div className="mt-2 w-full">
+          <button
+            type="button"
+            data-layer-detail-toggle
+            aria-expanded={isExpanded}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleExpand();
+            }}
+            className="mx-auto inline-flex w-full max-w-[16rem] items-center justify-center gap-2 rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-white/54 transition-colors duration-200 hover:text-white/80"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.10)',
+            }}
+          >
+            <span>{detailToggleLabel}</span>
+            <ChevronDown
+              className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {!isExpanded && (
+            <p className="mt-1 text-center text-[10px] text-white/34">
+              Ratio, placement, and why it works
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Expanded layer detail */}
       <AnimatePresence initial={false}>
-        {isExpanded && (
+        {isExpanded && hasLayerDetailContent && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
