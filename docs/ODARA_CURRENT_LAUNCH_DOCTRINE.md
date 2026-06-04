@@ -50,7 +50,7 @@ Ship:
 - search preview Back restore
 - past-day read-only protections
 - locked-card protections
-- compact LayerCard with tap-to-expand details
+- compact LayerCard with visible mode chips and tap-to-expand Placement/Why details
 
 ## Known beta limitations
 

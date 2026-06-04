@@ -57,6 +57,17 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
   return display;
 }
 
+function deriveBottleMonogram(name: string | null | undefined, brand?: string | null) {
+  const source = getDisplayName(name, brand) || brand || 'Bottle';
+  const letters = source
+    .split(/\s+/)
+    .map((part) => part.trim()[0]?.toUpperCase() ?? '')
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('');
+  return letters || 'OD';
+}
+
 function normalizeComparisonText(value: string | null | undefined) {
   return (value ?? '')
     .normalize('NFKD')
@@ -119,6 +130,17 @@ function buildFallbackLayerTokens(
     color_hex: color,
     is_shared: false,
   }));
+}
+
+function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
+  const normalized = typeof url === 'string' ? url.trim().toLowerCase() : '';
+  if (!normalized) return false;
+  return normalized.includes('transparent')
+    || normalized.includes('cutout')
+    || normalized.includes('isolated')
+    || normalized.includes('no-bg')
+    || normalized.includes('nobg')
+    || normalized.includes('alpha');
 }
 
 function readTrimmedDisplayText(value: unknown) {
@@ -809,24 +831,22 @@ const LayerCard = ({
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
+  const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(layerImageUrl);
+  const layerBottleMonogram = deriveBottleMonogram(activeModeEntry?.name, activeModeEntry?.brand);
   const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
+  const placementSubline = ratioDisplayText || '';
+  const condensedWhyText = [resolvedWhyText, sprayGuidanceText].filter(Boolean).join(' ').trim();
   const detailSections = [
-    ratioDisplayText
-      ? { label: 'Ratio', value: ratioDisplayText }
-      : null,
     hasPlacement
       ? {
           label: 'Placement',
           placementRows,
           value: placementFallbackText,
-          subline: '',
+          subline: placementSubline,
         }
       : null,
-    resolvedWhyText
-      ? { label: 'Why it works', value: resolvedWhyText }
-      : null,
-    sprayGuidanceText
-      ? { label: 'Spray guidance', value: sprayGuidanceText }
+    condensedWhyText
+      ? { label: 'Why it works', value: condensedWhyText }
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
   const hasLayerDetailContent = detailSections.length > 0;
@@ -947,8 +967,8 @@ const LayerCard = ({
               })()}
             </div>
 
-            {layerImageUrl ? (
-              <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
+            <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
+              {layerImageUrl && likelyTransparentLayerImage ? (
                 <img
                   src={layerImageUrl}
                   alt={`${activeModeEntry.name} bottle`}
@@ -960,8 +980,36 @@ const LayerCard = ({
                     filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.30))',
                   }}
                 />
-              </div>
-            ) : null}
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <div className="relative">
+                    <svg
+                      width="54"
+                      height="74"
+                      viewBox="0 0 112 148"
+                      aria-hidden="true"
+                      className="drop-shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                    >
+                      <defs>
+                        <linearGradient id="layerCardBottleSilhouette" x1="50%" y1="0%" x2="50%" y2="100%">
+                          <stop offset="0%" stopColor="rgba(255,255,255,0.20)" />
+                          <stop offset="100%" stopColor="rgba(255,255,255,0.07)" />
+                        </linearGradient>
+                      </defs>
+                      <rect x="40" y="10" width="32" height="22" rx="8" fill="url(#layerCardBottleSilhouette)" />
+                      <rect x="30" y="28" width="52" height="98" rx="18" fill="rgba(255,255,255,0.08)" stroke={`${layerColor}55`} />
+                      <rect x="35" y="38" width="42" height="74" rx="14" fill="rgba(255,255,255,0.04)" />
+                    </svg>
+                    <div
+                      className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[9px] uppercase tracking-[0.28em] text-white/44"
+                      style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+                    >
+                      {layerBottleMonogram}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </>
       ) : (
@@ -1000,23 +1048,22 @@ const LayerCard = ({
         </div>
       )}
 
+      <div className="mt-[10px] w-full">
+        <ModeSelector
+          layerModes={layerModes}
+          selectedMood={selectedMood}
+          onSelectMood={onSelectMood}
+          familyColors={FAMILY_COLORS}
+          lockPulse={lockPulse}
+          locked={locked}
+          consumeLockedTap={consumeLockedMoodTap}
+          loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
+          disabledMoodReasons={disabledMoodReasons}
+        />
+      </div>
+
       {isExpanded && (
         <>
-          {/* Mode selector */}
-          <div className="mt-[10px] w-full">
-            <ModeSelector
-              layerModes={layerModes}
-              selectedMood={selectedMood}
-              onSelectMood={onSelectMood}
-              familyColors={FAMILY_COLORS}
-              lockPulse={lockPulse}
-              locked={locked}
-              consumeLockedTap={consumeLockedMoodTap}
-              loadingMood={modeLoading ? (['balance', 'bold', 'smooth', 'wild'] as LayerMood[]).find(m => modeLoading[m]) ?? loadingMood : loadingMood}
-              disabledMoodReasons={disabledMoodReasons}
-            />
-          </div>
-
           {hasLayerDetailContent && (
             <div
               className="mt-3 w-full border-t pt-3"

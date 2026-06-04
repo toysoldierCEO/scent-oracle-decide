@@ -15056,28 +15056,19 @@ const OdaraScreen = ({
     : signedInCarryoverVisualTarget === 'layer'
       ? signedInLayerCarryColor
       : null;
-  const signedInHeroCarryActive = !isGuestMode
-    && signedInCarryoverVisualTarget === 'hero'
-    && !!signedInCurrentHeroCarryCard?.fragrance_id
-    && signedInCurrentHeroCarryCard.fragrance_id === signedInCarryoverSelectedCard?.fragrance_id;
-  const signedInLayerCarryActive = !isGuestMode
-    && signedInCarryoverVisualTarget === 'layer'
-    && !!signedInCurrentLayerCarryCard?.fragrance_id
-    && signedInCurrentLayerCarryCard.fragrance_id === signedInCarryoverSelectedCard?.fragrance_id;
-  const signedInHeroCarryPulsing = signedInCarryoverPulseTarget === 'hero';
-  const signedInLayerCarryPulsing = signedInCarryoverPulseTarget === 'layer';
-  const signedInHeroCarrySurfaceStyle = !isGuestMode && (signedInHeroCarryActive || signedInHeroCarryPulsing)
-    ? {
-        background: `${signedInHeroCarryColor}${signedInHeroCarryPulsing ? '14' : '0F'}`,
-        boxShadow: signedInHeroCarryPulsing
-          ? `inset 0 0 0 1px ${signedInHeroCarryColor}30, 0 16px 36px ${signedInHeroCarryColor}22`
-          : `inset 0 0 0 1px ${signedInHeroCarryColor}22, 0 10px 24px ${signedInHeroCarryColor}14`,
-      }
-    : undefined;
+  const signedInCarryoverUiActive = !isGuestMode
+    && hasStoredSignedInDayState
+    && signedInResolvedSequelState.origin === 'manual'
+    && signedInResolvedSequelState.enabled
+    && signedInCarryoverVisualTarget !== 'off';
+  // The main hero card already owns the atmosphere for the hero scent. Keep the
+  // inner hero shell clean and untinted so it does not read as a second inset card.
+  const signedInHeroCarrySurfaceStyle: React.CSSProperties | undefined = undefined;
   // No wrapper background or ring around the LayerCard — the LayerCard owns its
   // own surface. An outer tint/ring here reads as a hidden "shelf" or duplicate
   // window beneath the card. Keep this undefined to remove that double-window.
   const signedInLayerCarrySurfaceStyle: React.CSSProperties | undefined = undefined;
+  const signedInCarryoverUiColor = signedInCarryoverUiActive ? signedInCarryoverColor : null;
   const signedInCarryoverButtonStyle = signedInCarryoverCloseFlash
     ? {
         color: '#ef4444',
@@ -15085,11 +15076,11 @@ const OdaraScreen = ({
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px rgba(239,68,68,0.20)',
         filter: 'none',
       }
-    : signedInCarryoverColor
+    : signedInCarryoverUiColor
     ? {
-        color: signedInCarryoverColor,
-        background: `${signedInCarryoverColor}16`,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px ${signedInCarryoverColor}18`,
+        color: signedInCarryoverUiColor,
+        background: `${signedInCarryoverUiColor}16`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px ${signedInCarryoverUiColor}18`,
         filter: 'none',
       }
     : {
@@ -15980,8 +15971,8 @@ const OdaraScreen = ({
 
             <div
               className={isGuestMode
-                ? "relative flex w-full flex-col rounded-[20px] px-3 pt-1 pb-1"
-                : "relative flex w-full flex-col rounded-[20px] px-3 pt-1 pb-1 transition-all duration-300"}
+                ? "relative flex w-full flex-col px-3 pt-1 pb-1"
+                : "relative flex w-full flex-col px-3 pt-1 pb-1 transition-all duration-300"}
               style={signedInHeroCarrySurfaceStyle}
             >
               {/* Source badge for queue cards */}
@@ -16391,7 +16382,7 @@ const OdaraScreen = ({
                 ref={daisyButtonRef}
                 type="button"
                 aria-label="Daisy chain"
-                aria-pressed={!isGuestMode && signedInCarryoverVisualTarget !== 'off'}
+                aria-pressed={signedInCarryoverUiActive}
                 aria-disabled={isGuestMode || isReadOnlyHistoryCard || undefined}
                 onClick={isGuestMode || isReadOnlyHistoryCard ? undefined : () => {
                   const nextTarget = handleSignedInCarryoverToggle();
@@ -16592,7 +16583,7 @@ const OdaraScreen = ({
                       {fd.day}
                     </span>
 
-                    <div className="mt-[3px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    <div className="mt-[4px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                       {dayLanes.map((lane, li) => {
                         if (!lane) {
                           return hasAnyLane ? (

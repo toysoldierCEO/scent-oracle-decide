@@ -12,14 +12,12 @@ Collapsed card may show:
 - brand
 - family/tags
 - bottle/image
+- Balance / Bold / Smooth / Wild mode row
 
 Collapsed card must not show:
 
-- Balance/Bold/Smooth/Wild mode row
-- ratio
 - placement
 - Why it works
-- spray guidance
 
 ### Expanded state
 
@@ -28,10 +26,12 @@ User taps the layer card.
 Expanded card shows:
 
 - Balance / Bold / Smooth / Wild mode row
-- ratio
 - placement
 - Why it works
-- spray guidance
+
+Ratio is folded into Placement.
+
+Spray guidance is folded into Why it works.
 
 If collapse behavior exists, tapping again collapses.
 
@@ -52,10 +52,9 @@ Tapping an enabled mode updates:
 
 - selected chip
 - layer fragrance
-- ratio
 - placement
 - Why/reason text
-- spray guidance
+- practical guidance folded into the Why/Placement copy
 
 ### Past/history cards
 

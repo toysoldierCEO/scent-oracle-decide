@@ -62,9 +62,10 @@ Verify:
 Verify:
 
 - collapsed by default on first paint
-- no mode row/details visible when collapsed
+- mode row visible when collapsed
+- no expanded detail copy visible when collapsed
 - tap expands
-- expanded state shows mode row + details
+- expanded state shows mode row + Placement + Why it works only
 - optional second tap collapses if supported
 
 ## Modes
@@ -75,7 +76,9 @@ Verify on editable current-day signed-in card:
 - Bold works
 - Smooth works
 - selected chip matches active content
-- layer/ratio/placement/why/spray guidance match active mode
+- layer/placement/why match active mode
+- ratio is folded into Placement
+- practical spray guidance is folded into Why it works
 - Wild visible and disabled with `Wild is being tuned.`
 - no Wild backend call
 
@@ -87,10 +90,9 @@ For each tested pairing, record:
 - hero
 - selected mode
 - layer
-- ratio
 - placement summary
 - Why/reason text
-- spray guidance if visible
+- note whether folded guidance still feels practical
 - verdict: makes sense / generic acceptable / stale wrong
 
 Blocked if:
