@@ -11055,10 +11055,6 @@ const OdaraScreen = ({
     return !isGuestMode && normalized === 'wild' ? 'balance' : normalized;
   }, [isGuestMode]);
   const betaSafeSignedInMood = getBetaSafeLayerMood(selectedMood);
-  const signedInDisabledMoodReasons = useMemo(
-    () => (isGuestMode ? undefined : { wild: 'Wild is being tuned.' }),
-    [isGuestMode],
-  );
   const persistSignedInMoodCycleMemory = useCallback((
     slotKey: string,
     anchorId: string | null | undefined,
@@ -11472,6 +11468,27 @@ const OdaraScreen = ({
     || !!signedInResolvedLockTruth
   );
   const signedInIsReadOnlyHistoryCard = signedInSelectedDayIsPast;
+  const signedInDisabledMoodReasons = useMemo(() => {
+    if (isGuestMode) return undefined;
+
+    const reasons: Partial<Record<LayerMood, string>> = {
+      wild: 'Wild is being tuned.',
+    };
+
+    const signedInModeReadOnlyReason = signedInSelectedDayIsPast
+      ? 'Past days are read-only'
+      : signedInSearchPreviewLocked
+        ? 'Unlock to adjust'
+        : null;
+
+    if (signedInModeReadOnlyReason) {
+      reasons.balance = signedInModeReadOnlyReason;
+      reasons.bold = signedInModeReadOnlyReason;
+      reasons.smooth = signedInModeReadOnlyReason;
+    }
+
+    return reasons;
+  }, [isGuestMode, signedInSearchPreviewLocked, signedInSelectedDayIsPast]);
   const signedInSearchPreviewDisabledReason = useMemo(() => {
     if (isGuestMode) return null;
     if (signedInSelectedDayIsPast) return 'Past days are read-only';

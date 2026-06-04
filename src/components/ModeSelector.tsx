@@ -95,6 +95,7 @@ const ModeSelector = ({
           const hasData = !!mEntry;
           const disabledReason = disabledMoodReasons?.[mood]?.trim() ?? null;
           const isLocked = locked || !!disabledReason;
+          const isUnavailable = isLocked || !hasData;
 
           // Color: use entry color if available, fallback for unloaded
           const mColor = hasData ? (familyColors[mEntry.family_key] ?? '#888') : '#888';
@@ -117,18 +118,20 @@ const ModeSelector = ({
                 if (!isLocked) onSelectMood(mood);
               }}
               className={`flex items-center justify-center text-[9px] uppercase tracking-[0.14em] h-6 px-3 rounded-full transition-all duration-200 text-center ${
-                isLocked && !isSelected ? 'opacity-30 cursor-default' : ''
-              } ${
-                !hasData && !isSelected ? 'opacity-40 cursor-default' : ''
+                isUnavailable ? 'cursor-default' : ''
               } ${
                 isSelected
-                  ? "text-white"
-                  : "text-white/40 hover:text-white/70"
+                  ? (isLocked ? 'text-white/68 opacity-80' : 'text-white')
+                  : (isLocked
+                    ? 'text-white/30 opacity-55'
+                    : !hasData
+                      ? 'text-white/40 opacity-40'
+                      : 'text-white/40 hover:text-white/70')
               }`}
               style={{
                 ...(isSelected ? {
-                  background: `${mColor}33`,
-                  boxShadow: `inset 0 0 0 1px ${mColor}66`,
+                  background: isLocked ? `${mColor}16` : `${mColor}33`,
+                  boxShadow: `inset 0 0 0 1px ${isLocked ? `${mColor}33` : `${mColor}66`}`,
                   animation: lockPulse ? 'lockConfirmTint 300ms ease-out forwards' : undefined,
                 } : undefined),
               }}
