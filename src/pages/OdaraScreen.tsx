@@ -4258,11 +4258,28 @@ function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
     || normalized.includes('nobg')
     || normalized.includes('background-removed')
     || normalized.includes('removed-background')
-    || normalized.includes('alpha');
+    || normalized.includes('alpha')
+    || (/^https:\/\/cdn\.fragella\.com\/images\//i.test(normalized) && /\.webp(?:$|[?#])/i.test(normalized));
 }
 
-function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
-  const candidates: string[] = [];
+function deriveFragellaTransparentBottleImageUrl(url: string | null | undefined) {
+  const trimmed = readTrimmedImageUrl(url);
+  if (!trimmed) return null;
+  if (!/^https:\/\/cdn\.fragella\.com\/images\//i.test(trimmed)) return null;
+  if (!/\.jpe?g(?:$|[?#])/i.test(trimmed)) return null;
+  return trimmed.replace(/\.jpe?g(?=$|[?#])/i, '.webp');
+}
+
+function pushUniqueImageUrl(target: string[], url: string | null | undefined) {
+  const resolved = readTrimmedImageUrl(url);
+  if (!resolved) return;
+  if (target.some((candidate) => candidate.toLowerCase() === resolved.toLowerCase())) return;
+  target.push(resolved);
+}
+
+function collectWardrobeBottleImageUrls(...sources: unknown[]) {
+  const transparentCandidates: string[] = [];
+  const regularCandidates: string[] = [];
   const visited = new Set<unknown>();
   const queue = [...sources];
 
@@ -4273,7 +4290,11 @@ function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
 
     if (typeof current === 'string') {
       const resolved = readTrimmedImageUrl(current);
-      if (resolved) candidates.push(resolved);
+      if (isLikelyTransparentBottleImageUrl(resolved)) {
+        pushUniqueImageUrl(transparentCandidates, resolved);
+      } else {
+        pushUniqueImageUrl(regularCandidates, resolved);
+      }
       continue;
     }
 
@@ -4281,8 +4302,8 @@ function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
 
     const transparent = readTransparentBottleImageUrlFromObject(current);
     const regular = readRegularBottleImageUrlFromObject(current);
-    if (transparent) candidates.push(transparent);
-    if (regular) candidates.push(regular);
+    pushUniqueImageUrl(transparentCandidates, transparent);
+    pushUniqueImageUrl(regularCandidates, regular);
 
     const value = current as any;
     queue.push(
@@ -4295,8 +4316,56 @@ function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
     );
   }
 
-  if (candidates.length === 0) return null;
-  return [...candidates].sort((a, b) => scorePreferredBottleImageUrl(b) - scorePreferredBottleImageUrl(a))[0] ?? candidates[0] ?? null;
+  return {
+    transparentCandidates: [...transparentCandidates].sort((a, b) => scorePreferredBottleImageUrl(b) - scorePreferredBottleImageUrl(a)),
+    regularCandidates: [...regularCandidates].sort((a, b) => scorePreferredBottleImageUrl(b) - scorePreferredBottleImageUrl(a)),
+  };
+}
+
+function buildPreferredBottleImageCandidates(...sources: unknown[]) {
+  const { transparentCandidates, regularCandidates } = collectWardrobeBottleImageUrls(...sources);
+  const candidates: string[] = [];
+  transparentCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
+  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, deriveFragellaTransparentBottleImageUrl(url)));
+  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
+  return candidates;
+}
+
+function resolvePreferredWardrobeBottleImage(...sources: unknown[]) {
+  const { transparentCandidates, regularCandidates } = collectWardrobeBottleImageUrls(...sources);
+  return transparentCandidates[0] ?? regularCandidates[0] ?? null;
+}
+
+const OdaraBottleImage: React.FC<{
+  candidates: string[];
+  alt: string;
+  className: string;
+  style?: React.CSSProperties;
+  loading?: 'eager' | 'lazy';
+  draggable?: boolean;
+  fallback: React.ReactNode;
+}> = ({ candidates, alt, className, style, loading = 'lazy', draggable = false, fallback }) => {
+  const candidateKey = candidates.join('|');
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidateKey]);
+
+  const imageUrl = candidates[candidateIndex] ?? null;
+  if (!imageUrl) return <>{fallback}</>;
+
+  return (
+    <img
+      src={imageUrl}
+      alt={alt}
+      className={className}
+      loading={loading}
+      draggable={draggable}
+      style={style}
+      onError={() => setCandidateIndex((index) => index + 1)}
+    />
+  );
 }
 
 function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset | null): OdaraWardrobeCatalogItem | null {
@@ -6650,10 +6719,9 @@ const OdaraFragranceDetailSheet: React.FC<{
         : detail.collection_status === 'queue'
           ? 'Card detail'
           : detail.source_label ?? 'Fragrance profile';
-  const resolvedDetailBottleImageUrl = resolvePreferredWardrobeBottleImage(detail, detail.image_url, detail.thumbnail_url);
-  const imageUrl = isLikelyTransparentBottleImageUrl(resolvedDetailBottleImageUrl)
-    ? resolvedDetailBottleImageUrl
-    : null;
+  const detailBottleImageCandidates = buildPreferredBottleImageCandidates(detail, detail.image_url, detail.thumbnail_url);
+  const detailBottleImageUrl = detailBottleImageCandidates[0] ?? null;
+  const likelyTransparentDetailImage = isLikelyTransparentBottleImageUrl(detailBottleImageUrl);
   const accordLabels = normalizeNotes(detail.accords, 6);
   const noteLabels = normalizeNotes(detail.notes, 6);
   const topLabels = normalizeNotes(detail.top_notes ?? [], 6);
@@ -6719,14 +6787,18 @@ const OdaraFragranceDetailSheet: React.FC<{
               boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 36px ${tint.glowStrong}`,
             }}
           >
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={detail.name ?? 'Fragrance bottle'}
-                className="h-full w-full object-contain p-3"
-                style={{ filter: 'drop-shadow(0 18px 26px rgba(0,0,0,0.36))' }}
-              />
-            ) : (
+            <OdaraBottleImage
+              candidates={detailBottleImageCandidates}
+              alt={detail.name ?? 'Fragrance bottle'}
+              className="h-full w-full object-contain p-3"
+              style={{
+                borderRadius: likelyTransparentDetailImage ? undefined : 18,
+                filter: likelyTransparentDetailImage
+                  ? 'drop-shadow(0 18px 26px rgba(0,0,0,0.36))'
+                  : 'contrast(1.03) saturate(0.96) drop-shadow(0 18px 26px rgba(0,0,0,0.38))',
+                mixBlendMode: likelyTransparentDetailImage ? undefined : 'darken',
+              }}
+              fallback={(
               <div
                 className="flex h-full w-full items-center justify-center text-[24px] uppercase tracking-[0.1em] text-foreground/48"
                 style={{
@@ -6737,7 +6809,8 @@ const OdaraFragranceDetailSheet: React.FC<{
                   {deriveProfileMonogram(detail.name ?? detail.brand ?? 'Bottle')}
                 </div>
               </div>
-            )}
+              )}
+            />
           </div>
 
           <div className="min-w-0 flex-1">
@@ -7428,7 +7501,8 @@ const OdaraLegacyCollectionPage: React.FC<{
                 const itemKey = item.fragrance_id ?? `${item.brand ?? 'brand'}|${item.name ?? 'name'}|${index}`;
                 const tint = getEnhancedCollectionTint(item);
                 const resolvedImageUrl = resolvePreferredWardrobeBottleImage(item, item.image_url, item.thumbnail_url);
-                const imageUrl = isLikelyTransparentBottleImageUrl(resolvedImageUrl) ? resolvedImageUrl : null;
+                const imageCandidates = buildPreferredBottleImageCandidates(item, item.image_url, item.thumbnail_url);
+                const likelyTransparentImage = isLikelyTransparentBottleImageUrl(imageCandidates[0] ?? resolvedImageUrl);
                 const familyLabel = item.family_label ?? (item.family_key ? getFamilyLabelText(item.family_key) : 'Unclassified');
                 const roleLabel = getCollectionRoleLabel(item);
                 const itemError = errorById[itemKey];
@@ -7526,14 +7600,18 @@ const OdaraLegacyCollectionPage: React.FC<{
                           background: `radial-gradient(circle at 50% 44%, ${tint.inner} 0%, rgba(255,255,255,0) 72%)`,
                         }}
                       >
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt={item.name ?? 'Fragrance bottle'}
-                            className="h-full w-full object-contain p-1.5"
-                            style={{ filter: `drop-shadow(0 22px 30px rgba(0,0,0,0.42)) drop-shadow(0 0 22px ${tint.glowStrong})` }}
-                          />
-                        ) : (
+                        <OdaraBottleImage
+                          candidates={imageCandidates}
+                          alt={item.name ?? 'Fragrance bottle'}
+                          className="h-full w-full object-contain p-1.5"
+                          style={{
+                            borderRadius: likelyTransparentImage ? undefined : 20,
+                            filter: likelyTransparentImage
+                              ? `drop-shadow(0 22px 30px rgba(0,0,0,0.42)) drop-shadow(0 0 22px ${tint.glowStrong})`
+                              : `contrast(1.03) saturate(0.96) drop-shadow(0 22px 30px rgba(0,0,0,0.42)) drop-shadow(0 0 18px ${tint.glowStrong})`,
+                            mixBlendMode: likelyTransparentImage ? undefined : 'darken',
+                          }}
+                          fallback={(
                           <div
                             className="flex h-full w-full items-center justify-center text-[20px] uppercase tracking-[0.1em] text-foreground/56"
                             style={{
@@ -7544,7 +7622,8 @@ const OdaraLegacyCollectionPage: React.FC<{
                               {deriveProfileMonogram(item.name ?? item.brand ?? 'Bottle')}
                             </div>
                           </div>
-                        )}
+                          )}
+                        />
                         {ratingMarker ? (
                           <div className="pointer-events-none absolute left-2.5 top-2.5 z-[1]">
                             <div
@@ -7747,12 +7826,9 @@ const OdaraWardrobeBottleArt: React.FC<{
     family_label: family_label ?? (family_key ? getFamilyLabelText(family_key) : null),
   });
   const resolvedImageUrl = resolvePreferredWardrobeBottleImage(image_url, thumbnail_url);
-  const likelyTransparentImage = isLikelyTransparentBottleImageUrl(resolvedImageUrl);
+  const imageCandidates = buildPreferredBottleImageCandidates(image_url, thumbnail_url);
+  const likelyTransparentImage = isLikelyTransparentBottleImageUrl(imageCandidates[0] ?? resolvedImageUrl);
   const useWardrobeGridPresentation = presentation === 'wardrobe_grid';
-  const shouldUseFallbackForNonTransparent = resolvedImageUrl && !likelyTransparentImage && (useWardrobeGridPresentation || compact);
-  const visibleImageUrl = shouldUseFallbackForNonTransparent
-    ? null
-    : resolvedImageUrl;
   const monogram = deriveProfileMonogram(name || brand || 'Bottle');
 
   return (
@@ -7781,26 +7857,34 @@ const OdaraWardrobeBottleArt: React.FC<{
           }}
         />
       ) : null}
-      {visibleImageUrl ? (
-        <img
-          src={visibleImageUrl}
-          alt={alt ?? `${name} bottle`}
-          className={`relative h-full w-full object-contain ${frameless ? (compact ? 'p-1' : 'p-2') : compact ? 'p-2.5' : 'p-4'}`}
-          style={useWardrobeGridPresentation
+      <OdaraBottleImage
+        candidates={imageCandidates}
+        alt={alt ?? `${name} bottle`}
+        className={`relative h-full w-full object-contain ${frameless ? (compact ? 'p-1' : 'p-2') : compact ? 'p-2.5' : 'p-4'}`}
+        style={useWardrobeGridPresentation
+          ? {
+              borderRadius: likelyTransparentImage ? undefined : 18,
+              filter: likelyTransparentImage
+                ? 'drop-shadow(0 12px 18px rgba(0,0,0,0.26))'
+                : 'contrast(1.03) saturate(0.96) drop-shadow(0 12px 18px rgba(0,0,0,0.28))',
+              mixBlendMode: likelyTransparentImage ? undefined : 'darken',
+            }
+          : frameless
             ? {
-                filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.26))',
+                borderRadius: likelyTransparentImage ? undefined : 18,
+                filter: likelyTransparentImage
+                  ? `drop-shadow(0 16px 24px rgba(0,0,0,0.42)) drop-shadow(0 0 8px ${tint.glowStrong})`
+                  : 'contrast(1.03) saturate(0.95) drop-shadow(0 14px 22px rgba(0,0,0,0.4))',
+                mixBlendMode: likelyTransparentImage ? undefined : 'darken',
               }
-            : frameless
-              ? {
-                  borderRadius: likelyTransparentImage ? undefined : 18,
-                  filter: likelyTransparentImage
-                    ? `drop-shadow(0 16px 24px rgba(0,0,0,0.42)) drop-shadow(0 0 8px ${tint.glowStrong})`
-                    : 'contrast(1.03) saturate(0.95) drop-shadow(0 14px 22px rgba(0,0,0,0.4))',
-                  mixBlendMode: likelyTransparentImage ? undefined : 'darken',
-                }
-              : undefined}
-        />
-      ) : (
+            : {
+                borderRadius: likelyTransparentImage ? undefined : 18,
+                filter: likelyTransparentImage
+                  ? undefined
+                  : 'contrast(1.03) saturate(0.95)',
+                mixBlendMode: likelyTransparentImage ? undefined : 'darken',
+              }}
+        fallback={(
         <div className="flex h-full w-full items-center justify-center">
           <div className="relative">
             <svg
@@ -7828,7 +7912,8 @@ const OdaraWardrobeBottleArt: React.FC<{
             </div>
           </div>
         </div>
-      )}
+        )}
+      />
     </div>
   );
 };
@@ -14860,10 +14945,9 @@ const OdaraScreen = ({
   const visibleResolvedSelectedMood = getBetaSafeLayerMood(
     (visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood | null | undefined,
   );
-  const rawVisibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
-  const visibleHeroBottleImageUrl = isLikelyTransparentBottleImageUrl(rawVisibleHeroBottleImageUrl)
-    ? rawVisibleHeroBottleImageUrl
-    : null;
+  const visibleHeroBottleImageUrl = visibleResolvedCurrentCard?.image_url ?? null;
+  const visibleHeroBottleImageCandidates = buildPreferredBottleImageCandidates(visibleResolvedCurrentCard, visibleHeroBottleImageUrl);
+  const likelyTransparentHeroBottleImage = isLikelyTransparentBottleImageUrl(visibleHeroBottleImageCandidates[0] ?? visibleHeroBottleImageUrl);
   const visibleLayerBottleImageUrl = visibleResolvedLayer?.image_url ?? null;
   const visibleLayerSprayCounts = useMemo(
     () => deriveSprayCountsFromLayerMode(visibleResolvedLayer as any),
@@ -16140,18 +16224,22 @@ const OdaraScreen = ({
                     )}
                   </div>
 
-                  {visibleHeroBottleImageUrl ? (
+                  {visibleHeroBottleImageCandidates.length > 0 ? (
                     <div className="pointer-events-none relative mt-1 h-[108px] w-[78px] shrink-0 sm:h-[118px] sm:w-[86px]">
-                      <img
-                        src={visibleHeroBottleImageUrl}
+                      <OdaraBottleImage
+                        candidates={visibleHeroBottleImageCandidates}
                         alt={`${visibleResolvedCurrentCard?.name ?? 'Fragrance'} bottle`}
                         className="h-full w-full object-contain object-center"
-                        loading="lazy"
                         draggable={false}
                         style={{
                           opacity: 0.92,
-                          filter: 'drop-shadow(0 16px 24px rgba(0,0,0,0.34))',
+                          borderRadius: likelyTransparentHeroBottleImage ? undefined : 18,
+                          filter: likelyTransparentHeroBottleImage
+                            ? 'drop-shadow(0 16px 24px rgba(0,0,0,0.34))'
+                            : 'contrast(1.03) saturate(0.96) drop-shadow(0 16px 24px rgba(0,0,0,0.34))',
+                          mixBlendMode: likelyTransparentHeroBottleImage ? undefined : 'darken',
                         }}
+                        fallback={null}
                       />
                     </div>
                   ) : null}

@@ -48,7 +48,23 @@ function readNestedString(obj: Record<string, any> | null | undefined, path: str
 }
 
 function extractImageCandidates(hit: FragellaHit): { imageUrl: string | null; thumbnailUrl: string | null } {
-  const imageUrl = firstNonEmptyString(
+  const transparentImageUrl = firstNonEmptyString(
+    hit["Image URL Transparent"],
+    hit["image_url_transparent"],
+    hit["imageUrlTransparent"],
+    hit["transparent_image_url"],
+    hit["transparentImageUrl"],
+    hit["fragella_transparent_image_url"],
+    hit["fragellaTransparentImageUrl"],
+    readNestedString(hit, ["image", "transparent_url"]),
+    readNestedString(hit, ["image", "transparentUrl"]),
+    readNestedString(hit, ["photo", "transparent_url"]),
+    readNestedString(hit, ["photo", "transparentUrl"]),
+    readNestedString(hit, ["preview", "image_url_transparent"]),
+    readNestedString(hit, ["preview", "transparentImageUrl"]),
+  );
+
+  const standardImageUrl = firstNonEmptyString(
     hit["Image URL"],
     hit["image_url"],
     hit["imageUrl"],
@@ -70,6 +86,7 @@ function extractImageCandidates(hit: FragellaHit): { imageUrl: string | null; th
     readNestedString(hit, ["media", "image_url"]),
     readNestedString(hit, ["media", "photo_url"]),
   );
+  const imageUrl = transparentImageUrl ?? standardImageUrl;
 
   const thumbnailUrl = firstNonEmptyString(
     hit["thumbnail_url"],
@@ -77,6 +94,7 @@ function extractImageCandidates(hit: FragellaHit): { imageUrl: string | null; th
     readNestedString(hit, ["thumbnail", "url"]),
     readNestedString(hit, ["thumbnail", "src"]),
     readNestedString(hit, ["preview", "thumbnail_url"]),
+    standardImageUrl,
     imageUrl,
   );
 

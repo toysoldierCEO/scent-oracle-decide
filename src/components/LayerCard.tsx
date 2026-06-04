@@ -140,7 +140,53 @@ function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
     || normalized.includes('isolated')
     || normalized.includes('no-bg')
     || normalized.includes('nobg')
-    || normalized.includes('alpha');
+    || normalized.includes('background-removed')
+    || normalized.includes('removed-background')
+    || normalized.includes('alpha')
+    || (/^https:\/\/cdn\.fragella\.com\/images\//i.test(normalized) && /\.webp(?:$|[?#])/i.test(normalized));
+}
+
+function readTrimmedImageUrl(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (
+    /^https?:\/\//i.test(trimmed)
+    || trimmed.startsWith('/')
+    || trimmed.startsWith('data:image/')
+    || trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+  return null;
+}
+
+function deriveFragellaTransparentBottleImageUrl(url: string | null | undefined) {
+  const trimmed = readTrimmedImageUrl(url);
+  if (!trimmed) return null;
+  if (!/^https:\/\/cdn\.fragella\.com\/images\//i.test(trimmed)) return null;
+  if (!/\.jpe?g(?:$|[?#])/i.test(trimmed)) return null;
+  return trimmed.replace(/\.jpe?g(?=$|[?#])/i, '.webp');
+}
+
+function pushUniqueImageUrl(target: string[], url: string | null | undefined) {
+  const resolved = readTrimmedImageUrl(url);
+  if (!resolved) return;
+  if (target.some((candidate) => candidate.toLowerCase() === resolved.toLowerCase())) return;
+  target.push(resolved);
+}
+
+function buildLayerBottleImageCandidates(url: string | null | undefined) {
+  const resolved = readTrimmedImageUrl(url);
+  if (!resolved) return [];
+  const candidates: string[] = [];
+  if (isLikelyTransparentBottleImageUrl(resolved)) {
+    pushUniqueImageUrl(candidates, resolved);
+  } else {
+    pushUniqueImageUrl(candidates, deriveFragellaTransparentBottleImageUrl(resolved));
+    pushUniqueImageUrl(candidates, resolved);
+  }
+  return candidates;
 }
 
 function readTrimmedDisplayText(value: unknown) {
@@ -831,7 +877,14 @@ const LayerCard = ({
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
-  const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(layerImageUrl);
+  const layerImageCandidates = React.useMemo(() => buildLayerBottleImageCandidates(layerImageUrl), [layerImageUrl]);
+  const layerImageCandidateKey = layerImageCandidates.join('|');
+  const [layerImageCandidateIndex, setLayerImageCandidateIndex] = React.useState(0);
+  React.useEffect(() => {
+    setLayerImageCandidateIndex(0);
+  }, [layerImageCandidateKey]);
+  const activeLayerImageUrl = layerImageCandidates[layerImageCandidateIndex] ?? null;
+  const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(activeLayerImageUrl);
   const layerBottleMonogram = deriveBottleMonogram(activeModeEntry?.name, activeModeEntry?.brand);
   const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
   const placementSubline = ratioDisplayText || '';
@@ -968,16 +1021,21 @@ const LayerCard = ({
             </div>
 
             <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
-              {layerImageUrl && likelyTransparentLayerImage ? (
+              {activeLayerImageUrl ? (
                 <img
-                  src={layerImageUrl}
+                  src={activeLayerImageUrl}
                   alt={`${activeModeEntry.name} bottle`}
                   className="h-full w-full object-contain object-center"
                   loading="lazy"
                   draggable={false}
+                  onError={() => setLayerImageCandidateIndex((index) => index + 1)}
                   style={{
                     opacity: 0.88,
-                    filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.30))',
+                    borderRadius: likelyTransparentLayerImage ? undefined : 16,
+                    filter: likelyTransparentLayerImage
+                      ? 'drop-shadow(0 12px 18px rgba(0,0,0,0.30))'
+                      : 'contrast(1.03) saturate(0.96) drop-shadow(0 12px 18px rgba(0,0,0,0.30))',
+                    mixBlendMode: likelyTransparentLayerImage ? undefined : 'darken',
                   }}
                 />
               ) : (
