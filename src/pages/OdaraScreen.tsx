@@ -10630,6 +10630,7 @@ const OdaraScreen = ({
     };
   }, []);
   const navigationDayCellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const navigationDayIndicatorRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const navigationStripRef = useRef<HTMLDivElement | null>(null);
   const navigationContentRef = useRef<HTMLDivElement | null>(null);
   const searchBarRef = useRef<HTMLDivElement | null>(null);
@@ -10701,12 +10702,13 @@ const OdaraScreen = ({
   }, []);
   // ── LiveMoonPhaseMarker geometry ──
   // Position is a PURE lerp between the measured centers of today's and
-  // tomorrow's day cells, driven by local wall-clock seconds-since-midnight.
-  // No clamping into the inter-cell gap — overlap is handled by `opacity`.
+  // tomorrow's dedicated indicator slots, driven by local wall-clock
+  // seconds-since-midnight. The slot keeps the marker visually separate from
+  // the day number instead of letting it graze the digits.
   const [moonMarker, setMoonMarker] = useState<{
     left: number;          // px, container-relative center of marker
-    topY: number;          // px, vertical center aligned with day-number row
-    weekNotches: number[]; // px positions for full-week subtle notches
+    topY: number;          // px, vertical center aligned with indicator slot
+    weekNotches: number[]; // px positions for full-week subtle indicator notches
     moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
@@ -10735,6 +10737,8 @@ const OdaraScreen = ({
       const todayNavIdx = navigationDays.findIndex((fd) => fd.isToday);
       const todayBtn = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx] : null;
       const nextBtn  = todayNavIdx >= 0 ? navigationDayCellRefs.current[todayNavIdx + 1] : null;
+      const todayIndicator = todayNavIdx >= 0 ? navigationDayIndicatorRefs.current[todayNavIdx] : null;
+      const nextIndicator = todayNavIdx >= 0 ? navigationDayIndicatorRefs.current[todayNavIdx + 1] : null;
       if (!strip || !content || !todayBtn || !nextBtn) {
         setMoonMarker((current) => (current === null ? current : null));
         return;
@@ -10742,8 +10746,14 @@ const OdaraScreen = ({
       const cRect = content.getBoundingClientRect();
       const aRect = todayBtn.getBoundingClientRect();
       const bRect = nextBtn.getBoundingClientRect();
-      const todayAnchorX = aRect.left + aRect.width / 2 - cRect.left;
-      const tomorrowAnchorX = bRect.left + bRect.width / 2 - cRect.left;
+      const todayIndicatorRect = todayIndicator?.getBoundingClientRect() ?? null;
+      const nextIndicatorRect = nextIndicator?.getBoundingClientRect() ?? null;
+      const todayAnchorX = todayIndicatorRect
+        ? (todayIndicatorRect.left + todayIndicatorRect.width / 2 - cRect.left)
+        : (aRect.left + aRect.width / 2 - cRect.left);
+      const tomorrowAnchorX = nextIndicatorRect
+        ? (nextIndicatorRect.left + nextIndicatorRect.width / 2 - cRect.left)
+        : (bRect.left + bRect.width / 2 - cRect.left);
       const d = getNow();
       const secondsSinceMidnight =
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
@@ -10754,13 +10764,21 @@ const OdaraScreen = ({
       // almost on tomorrow's center. At 12:00 AM the new "today" advances
       // and the marker resets onto the new current day cleanly.
       const markerX = todayAnchorX + (tomorrowAnchorX - todayAnchorX) * progress;
-      // Vertical center: align with the day-number row inside the cell.
-      // Cell layout: py-1.5 (6px) + label (10px) + gap(3) + day(14px). Day digit
-      // center ≈ 6 + 10 + 3 + 7 = 26px from cell top.
-      const dayDigitCenterY = aRect.top + 26 - cRect.top;
-      // Full-week notches: a small tick at every cell center.
+      // Vertical center: align with the reserved indicator slot when present.
+      // Fall back to the legacy day-digit row center so the rail keeps working
+      // even during first paint before refs settle.
+      const indicatorCenterY = todayIndicatorRect
+        ? (todayIndicatorRect.top + todayIndicatorRect.height / 2 - cRect.top)
+        : (aRect.top + 26 - cRect.top);
+      // Full-week notches: a small tick at every indicator slot center.
       const weekNotches: number[] = [];
       for (let i = 0; i < navigationDays.length; i++) {
+        const indicator = navigationDayIndicatorRefs.current[i];
+        if (indicator) {
+          const r = indicator.getBoundingClientRect();
+          weekNotches.push(r.left + r.width / 2 - cRect.left);
+          continue;
+        }
         const btn = navigationDayCellRefs.current[i];
         if (!btn) continue;
         const r = btn.getBoundingClientRect();
@@ -10775,7 +10793,7 @@ const OdaraScreen = ({
       const moonWaxing = phaseFrac < 0.5;
       const nextMarker = {
         left: markerX,
-        topY: dayDigitCenterY,
+        topY: indicatorCenterY,
         weekNotches,
         moonLitFrac,
         moonWaxing,
@@ -16942,7 +16960,7 @@ const OdaraScreen = ({
                     onClick={() => {
                       selectNavigationDay(fd.dateStr);
                     }}
-                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-[1px] rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
+                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-[2px] rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
                     style={{
                       width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
@@ -16958,16 +16976,21 @@ const OdaraScreen = ({
                     }`}>
                       {fd.label}
                     </span>
-                    <div className="grid w-full grid-cols-[auto_9px] items-center justify-center gap-[4px]">
+                    <div className="grid w-full grid-cols-[10px_auto_10px] items-center justify-center gap-[5px]">
+                      <span aria-hidden className="block h-[10px] w-[10px] opacity-0" />
                       <span className={`text-[14px] font-medium transition-colors ${
                         fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
                       }`}>
                         {fd.day}
                       </span>
-                      <span aria-hidden className="block h-[7px] w-[7px] opacity-0" />
+                      <span
+                        ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
+                        aria-hidden
+                        className="block h-[10px] w-[10px] rounded-full opacity-0"
+                      />
                     </div>
 
-                    <div className="mt-[4px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
+                    <div className="mt-[5px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                       {dayLanes.map((lane, li) => {
                         if (!lane) {
                           return hasAnyLane ? (
