@@ -14446,11 +14446,26 @@ const OdaraScreen = ({
   }, []);
 
   /* ──────────────────────────────────────────────────────────────
-   * Hero-card pointer gestures:
+   * Hero-card day gestures:
    *   - horizontal swipe → day navigation
    *   - vertical movement → native page scroll only
+   * Touch and pointer each get a native path so real mobile/webview swipes
+   * do not depend on pointer-event quirks.
    * Swipe-up-to-lock and swipe-down-to-skip are intentionally disabled.
    * ────────────────────────────────────────────────────────────── */
+  const buildIdleSwipeState = () => ({
+    active: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    startTs: 0,
+    lastTs: 0,
+    direction: 'none' as const,
+    fired: false,
+    pointerId: null as number | null,
+    source: null as 'pointer' | 'touch' | null,
+  });
   const swipeRef = useRef<{
     active: boolean;
     startX: number;
@@ -14462,7 +14477,8 @@ const OdaraScreen = ({
     direction: 'none' | 'horizontal';
     fired: boolean;
     pointerId: number | null;
-  }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null });
+    source: 'pointer' | 'touch' | null;
+  }>(buildIdleSwipeState());
   const lastCardPointerTypeRef = useRef<string>('');
 
   // ── CARD GESTURE LIFECYCLE RESET ──
@@ -14471,18 +14487,7 @@ const OdaraScreen = ({
   // `fired:true` flag (e.g. from an aborted pointer or rapid card swap) can
   // block subsequent horizontal day-swipes from firing on later cards.
   useEffect(() => {
-    swipeRef.current = {
-      active: false,
-      startX: 0,
-      startY: 0,
-      lastX: 0,
-      lastY: 0,
-      startTs: 0,
-      lastTs: 0,
-      direction: 'none',
-      fired: false,
-      pointerId: null,
-    };
+    swipeRef.current = buildIdleSwipeState();
     lastCardPointerTypeRef.current = '';
     setDaySwipeOffset(0);
     setDaySwipeDragging(false);
@@ -14503,9 +14508,21 @@ const OdaraScreen = ({
     );
   };
 
+  const resolveSwipeStartTarget = (
+    fallbackTarget: EventTarget | null,
+    clientX: number,
+    clientY: number,
+  ) => {
+    if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') {
+      return fallbackTarget;
+    }
+    return document.elementFromPoint(clientX, clientY) ?? fallbackTarget;
+  };
+
   const handleCardPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!visibleCard) return;
-    if (isInteractiveSwipeTarget(e.target)) return;
+    if (e.pointerType === 'touch') return;
+    if (isInteractiveSwipeTarget(resolveSwipeStartTarget(e.target, e.clientX, e.clientY))) return;
     lastCardPointerTypeRef.current = e.pointerType;
     // The hero card uses touchAction: 'pan-y', so native vertical scrolling
     // remains intact while we selectively claim clear horizontal day-swipes.
@@ -14520,12 +14537,13 @@ const OdaraScreen = ({
       direction: 'none',
       fired: false,
       pointerId: e.pointerId,
+      source: 'pointer',
     };
   }, [visibleCard]);
 
   const handleCardPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const s = swipeRef.current;
-    if (!s.active || s.pointerId !== e.pointerId || s.fired) return;
+    if (!s.active || s.source !== 'pointer' || s.pointerId !== e.pointerId || s.fired) return;
     const dx = e.clientX - s.startX;
     const dy = e.clientY - s.startY;
     s.lastX = e.clientX;
@@ -14563,7 +14581,7 @@ const OdaraScreen = ({
 
   const handleCardPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const s = swipeRef.current;
-    if (s.pointerId !== e.pointerId) return;
+    if (s.source !== 'pointer' || s.pointerId !== e.pointerId) return;
     const didCancel = e.type === 'pointercancel';
     try {
       if (e.currentTarget.releasePointerCapture && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
@@ -14598,10 +14616,112 @@ const OdaraScreen = ({
         suppressCardClickRef.current = true;
         haptic('selection');
       }
-      swipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null };
+      swipeRef.current = buildIdleSwipeState();
       return;
     }
-    swipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, startTs: 0, lastTs: 0, direction: 'none', fired: false, pointerId: null };
+    swipeRef.current = buildIdleSwipeState();
+  }, [nextForecastDay, prevForecastDay, selectNavigationDay]);
+
+  const resolveTrackedTouch = (
+    touchList: React.TouchList,
+    touchId: number | null,
+  ) => {
+    if (touchId == null) return null;
+    for (let i = 0; i < touchList.length; i += 1) {
+      const touch = touchList.item(i);
+      if (touch?.identifier === touchId) {
+        return touch;
+      }
+    }
+    return null;
+  };
+
+  const handleCardTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!visibleCard) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    if (isInteractiveSwipeTarget(resolveSwipeStartTarget(e.target, touch.clientX, touch.clientY))) return;
+    lastCardPointerTypeRef.current = 'touch';
+    swipeRef.current = {
+      active: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      startTs: e.timeStamp,
+      lastTs: e.timeStamp,
+      direction: 'none',
+      fired: false,
+      pointerId: touch.identifier,
+      source: 'touch',
+    };
+  }, [visibleCard]);
+
+  const handleCardTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const s = swipeRef.current;
+    if (!s.active || s.source !== 'touch' || s.pointerId == null || s.fired) return;
+    const touch = resolveTrackedTouch(e.touches, s.pointerId) ?? resolveTrackedTouch(e.changedTouches, s.pointerId);
+    if (!touch) return;
+    const dx = touch.clientX - s.startX;
+    const dy = touch.clientY - s.startY;
+    s.lastX = touch.clientX;
+    s.lastY = touch.clientY;
+    s.lastTs = e.timeStamp;
+    if (s.direction === 'none') {
+      if (!shouldLockHorizontalDaySwipe(dx, dy)) return;
+      s.direction = 'horizontal';
+    }
+    if (s.direction === 'horizontal') {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      const clampedDx = clampDayDragOffset(dx, {
+        hasPrevDay: !!prevForecastDay,
+        hasNextDay: !!nextForecastDay,
+        maxOffset: DAY_SWIPE_MAX_OFFSET,
+      });
+      setDaySwipeDragging(true);
+      setDaySwipeOffset(clampedDx);
+      if (Math.abs(dx) > 10) suppressCardClickRef.current = true;
+    }
+  }, [nextForecastDay, prevForecastDay]);
+
+  const handleCardTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const s = swipeRef.current;
+    if (s.source !== 'touch' || s.pointerId == null) return;
+    const didCancel = e.type === 'touchcancel';
+    const touch = resolveTrackedTouch(e.changedTouches, s.pointerId);
+    const clientX = touch?.clientX ?? s.lastX;
+    if (s.direction === 'horizontal') {
+      const dx = clientX - s.startX;
+      const velocityElapsedMs = Math.max(1, e.timeStamp - (s.lastTs || s.startTs));
+      const totalElapsedMs = Math.max(1, e.timeStamp - s.startTs);
+      const releaseVelocityX = touch && Math.abs(clientX - s.lastX) > 0
+        ? (clientX - s.lastX) / velocityElapsedMs
+        : dx / totalElapsedMs;
+      const commit = resolveDayCommit({
+        dx,
+        velocityX: releaseVelocityX,
+        didCancel,
+        hasPrevDay: !!prevForecastDay,
+        hasNextDay: !!nextForecastDay,
+      });
+      const targetDate =
+        commit === 'next'
+          ? (nextForecastDay?.dateStr ?? null)
+          : commit === 'prev'
+            ? (prevForecastDay?.dateStr ?? null)
+            : null;
+      setDaySwipeDragging(false);
+      setDaySwipeOffset(0);
+      if (selectNavigationDay(targetDate)) {
+        suppressCardClickRef.current = true;
+        haptic('selection');
+      }
+      swipeRef.current = buildIdleSwipeState();
+      return;
+    }
+    swipeRef.current = buildIdleSwipeState();
   }, [nextForecastDay, prevForecastDay, selectNavigationDay]);
 
   const handlePromoteAlternate = useCallback((alt: OracleAlternate) => {
@@ -16051,6 +16171,10 @@ const OdaraScreen = ({
                 onPointerMove={handleCardPointerMove}
                 onPointerUp={handleCardPointerEnd}
                 onPointerCancel={handleCardPointerEnd}
+                onTouchStart={handleCardTouchStart}
+                onTouchMove={handleCardTouchMove}
+                onTouchEnd={handleCardTouchEnd}
+                onTouchCancel={handleCardTouchEnd}
               >
             {/* Glow orb */}
             <div
