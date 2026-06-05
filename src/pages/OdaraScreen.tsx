@@ -16692,11 +16692,13 @@ const OdaraScreen = ({
                     }`}>
                       {fd.label}
                     </span>
-                    <span className={`text-[14px] font-medium transition-colors ${
-                      fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
-                    }`}>
-                      {fd.day}
-                    </span>
+                    <div className="flex w-full items-center justify-center pl-[4px]">
+                      <span className={`text-[14px] font-medium transition-colors ${
+                        fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
+                      }`}>
+                        {fd.day}
+                      </span>
+                    </div>
 
                     <div className="mt-[4px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
                       {dayLanes.map((lane, li) => {
