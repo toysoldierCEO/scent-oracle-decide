@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue } from "react";
+import type { User } from "@supabase/supabase-js";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
@@ -142,6 +143,82 @@ function readTrimmedLayerText(...values: unknown[]) {
     if (trimmed.length > 0) return trimmed;
   }
   return '';
+}
+
+function normalizeOdaraAuthUserId(value: unknown) {
+  const normalized = readTrimmedLayerText(value);
+  return normalized || null;
+}
+
+function useOdaraActiveSessionUser({
+  userId,
+  isGuestMode,
+  scope,
+}: {
+  userId: string | null;
+  isGuestMode: boolean;
+  scope: string;
+}) {
+  const [activeSessionUser, setActiveSessionUser] = useState<User | null>(null);
+  const [sessionResolved, setSessionResolved] = useState<boolean>(isGuestMode);
+
+  useEffect(() => {
+    let active = true;
+
+    const applySessionUser = (nextUser: User | null) => {
+      if (!active) return;
+      setActiveSessionUser(nextUser);
+      setSessionResolved(true);
+    };
+
+    if (isGuestMode) {
+      applySessionUser(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    setSessionResolved(false);
+
+    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
+      applySessionUser(session?.user ?? null);
+    });
+
+    odaraSupabase.auth.getSession()
+      .then(({ data }) => {
+        applySessionUser(data?.session?.user ?? null);
+      })
+      .catch(() => {
+        applySessionUser(null);
+      });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [isGuestMode]);
+
+  const activeSessionUserId = normalizeOdaraAuthUserId(activeSessionUser?.id);
+  const propUserId = normalizeOdaraAuthUserId(userId);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (isGuestMode) return;
+    if (!propUserId || !activeSessionUserId) return;
+    if (propUserId === activeSessionUserId) return;
+    console.warn('[Odara] private auth user mismatch suppressed', {
+      scope,
+      propUserPresent: true,
+      sessionUserPresent: true,
+      usingSessionUserId: true,
+    });
+  }, [activeSessionUserId, isGuestMode, propUserId, scope]);
+
+  return {
+    activeSessionUser,
+    activeSessionUserId,
+    sessionResolved,
+  };
 }
 
 function normalizeSearchFamilyKey(value: unknown) {
@@ -5480,6 +5557,15 @@ const OdaraProfilePage: React.FC<{
   userId,
   isGuestMode,
 }) => {
+  const {
+    activeSessionUser,
+    activeSessionUserId,
+    sessionResolved,
+  } = useOdaraActiveSessionUser({
+    userId,
+    isGuestMode,
+    scope: 'profile',
+  });
   const [profilePayload, setProfilePayload] = useState<OdaraProfileDossierPayload | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -5504,7 +5590,15 @@ const OdaraProfilePage: React.FC<{
   useEffect(() => {
     let active = true;
 
-    if (!isGuestMode && !userId) {
+    if (!isGuestMode && !sessionResolved) {
+      setProfileLoading(true);
+      setProfileError(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!isGuestMode && !activeSessionUserId) {
       setProfilePayload(null);
       setProfileLoading(false);
       setProfileError('No signed-in profile is available yet.');
@@ -5519,7 +5613,7 @@ const OdaraProfilePage: React.FC<{
 
     (async () => {
       const { data, error } = await odaraSupabase.rpc('get_odara_profile_dossier_v1' as any, {
-        p_user_id: isGuestMode ? null : userId,
+        p_user_id: isGuestMode ? null : activeSessionUserId,
         p_surface: isGuestMode ? 'guest' : 'signed_in',
       } as any);
 
@@ -5539,11 +5633,11 @@ const OdaraProfilePage: React.FC<{
     return () => {
       active = false;
     };
-  }, [isGuestMode, userId]);
+  }, [activeSessionUserId, isGuestMode, sessionResolved]);
 
   useEffect(() => {
     setActiveSection('dashboard');
-  }, [isGuestMode, userId]);
+  }, [activeSessionUserId, isGuestMode]);
 
   useEffect(() => {
     setSavedLibraryPayload(null);
@@ -5554,28 +5648,11 @@ const OdaraProfilePage: React.FC<{
     setLikedLibraryLoading(false);
     setLikedLibraryError(null);
     setProfileCatalogById({});
-  }, [isGuestMode, userId]);
+  }, [activeSessionUserId, isGuestMode]);
 
   useEffect(() => {
-    let active = true;
-
-    if (isGuestMode) {
-      setAuthIdentity(null);
-      return () => {
-        active = false;
-      };
-    }
-
-    (async () => {
-      const { data } = await odaraSupabase.auth.getSession();
-      if (!active) return;
-      setAuthIdentity(readAuthProfileIdentity(data?.session?.user ?? null));
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [isGuestMode, userId]);
+    setAuthIdentity(isGuestMode ? null : readAuthProfileIdentity(activeSessionUser));
+  }, [activeSessionUser, isGuestMode]);
 
   const mergeProfileCatalogItems = useCallback((items: OdaraWardrobeCatalogItem[]) => {
     setProfileCatalogById((current) => {
@@ -5594,7 +5671,13 @@ const OdaraProfilePage: React.FC<{
   useEffect(() => {
     let active = true;
 
-    if (isGuestMode || !userId) {
+    if (!isGuestMode && !sessionResolved) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (isGuestMode || !activeSessionUserId) {
       setWishlistCount(0);
       return () => {
         active = false;
@@ -5603,7 +5686,7 @@ const OdaraProfilePage: React.FC<{
 
     (async () => {
       const { data, error } = await odaraSupabase.rpc('get_user_collection_wishlist_signals_v1' as any, {
-        p_user_id: userId,
+        p_user_id: activeSessionUserId,
       } as any);
 
       if (!active) return;
@@ -5623,12 +5706,18 @@ const OdaraProfilePage: React.FC<{
     return () => {
       active = false;
     };
-  }, [isGuestMode, userId]);
+  }, [activeSessionUserId, isGuestMode, sessionResolved]);
 
   useEffect(() => {
     let active = true;
 
-    if (activeSection !== 'saved' || isGuestMode || !userId) {
+    if (!isGuestMode && !sessionResolved) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (activeSection !== 'saved' || isGuestMode || !activeSessionUserId) {
       return () => {
         active = false;
       };
@@ -5640,7 +5729,7 @@ const OdaraProfilePage: React.FC<{
 
     (async () => {
       const { data, error } = await odaraSupabase.rpc('get_odara_profile_saved_items_v1' as any, {
-        p_user_id: userId,
+        p_user_id: activeSessionUserId,
       } as any);
 
       if (!active) return;
@@ -5678,12 +5767,18 @@ const OdaraProfilePage: React.FC<{
     return () => {
       active = false;
     };
-  }, [activeSection, isGuestMode, mergeProfileCatalogItems, userId]);
+  }, [activeSection, activeSessionUserId, isGuestMode, mergeProfileCatalogItems, sessionResolved]);
 
   useEffect(() => {
     let active = true;
 
-    if (activeSection !== 'liked' || isGuestMode || !userId) {
+    if (!isGuestMode && !sessionResolved) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (activeSection !== 'liked' || isGuestMode || !activeSessionUserId) {
       return () => {
         active = false;
       };
@@ -5698,12 +5793,12 @@ const OdaraProfilePage: React.FC<{
       try {
         const [{ data: preferenceData, error: preferenceError }, { data: dayMemoryRows, error: dayMemoryError }] = await Promise.all([
           odaraSupabase.rpc('get_user_fragrance_preference_signals_v1' as any, {
-            p_user_id: userId,
+            p_user_id: activeSessionUserId,
           } as any),
           odaraSupabase
             .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
             .select('date_key, context_key, state_json, updated_at')
-            .eq('user_id', userId),
+            .eq('user_id', activeSessionUserId),
         ]);
 
         if (!active) return;
@@ -5792,7 +5887,7 @@ const OdaraProfilePage: React.FC<{
     return () => {
       active = false;
     };
-  }, [activeSection, isGuestMode, mergeProfileCatalogItems, userId]);
+  }, [activeSection, activeSessionUserId, isGuestMode, mergeProfileCatalogItems, sessionResolved]);
 
   const displayName =
     profilePayload?.profile_identity?.display_name
@@ -7065,6 +7160,14 @@ const OdaraLegacyCollectionPage: React.FC<{
   userId: string | null;
   isGuestMode: boolean;
 }> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode }) => {
+  const {
+    activeSessionUserId,
+    sessionResolved,
+  } = useOdaraActiveSessionUser({
+    userId,
+    isGuestMode,
+    scope: 'legacy_collection',
+  });
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -7117,7 +7220,15 @@ const OdaraLegacyCollectionPage: React.FC<{
   useEffect(() => {
     let active = true;
 
-    if (!isGuestMode && !userId) {
+    if (!isGuestMode && !sessionResolved) {
+      setLoading(true);
+      setError(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!isGuestMode && !activeSessionUserId) {
       setPayload(null);
       setLoading(false);
       setError('No signed-in collection is available yet.');
@@ -7131,7 +7242,7 @@ const OdaraLegacyCollectionPage: React.FC<{
 
     (async () => {
       const rpcName = isGuestMode ? 'get_guest_collection_preview_v1' : 'get_collection_wardrobe_v1';
-      const rpcArgs = isGuestMode ? {} : { p_user: userId, p_filter: 'all', p_sort: 'role' };
+      const rpcArgs = isGuestMode ? {} : { p_user: activeSessionUserId, p_filter: 'all', p_sort: 'role' };
       const { data, error: rpcError } = await odaraSupabase.rpc(rpcName as any, rpcArgs as any);
 
       if (!active) return;
@@ -7150,7 +7261,7 @@ const OdaraLegacyCollectionPage: React.FC<{
     return () => {
       active = false;
     };
-  }, [isGuestMode, userId]);
+  }, [activeSessionUserId, isGuestMode, sessionResolved]);
 
   useEffect(() => () => {
     clearActiveRatingGesture();
@@ -7942,6 +8053,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } | null;
   }) => void;
 }> = ({ onClose, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
+  const {
+    activeSessionUserId,
+    sessionResolved,
+  } = useOdaraActiveSessionUser({
+    userId,
+    isGuestMode: false,
+    scope: 'collection',
+  });
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
@@ -7974,9 +8093,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeSearchQuery, setWardrobeSearchQuery] = useState('');
   const [selectedFragranceId, setSelectedFragranceId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<OdaraWardrobeConfirmationState | null>(null);
-  const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(userId));
+  const [sessionSignals, setSessionSignals] = useState<Record<string, OdaraWardrobeSessionSignal>>(() => readStoredWardrobeSessionSignals(activeSessionUserId));
   const [actionLabelCount, setActionLabelCount] = useState(() => readStoredWardrobeActionLabelCount());
-  const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(userId));
+  const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(activeSessionUserId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -7992,7 +8111,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [entryPreset]);
 
   const loadCollection = useCallback(async () => {
-    if (!userId) {
+    if (!sessionResolved) {
+      setLoading(true);
+      setError(null);
+      return;
+    }
+
+    if (!activeSessionUserId) {
       setPayload(null);
       setLoading(false);
       setError('No signed-in wardrobe is available yet.');
@@ -8002,7 +8127,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setLoading(true);
     setError(null);
     const { data, error: rpcError } = await odaraSupabase.rpc('get_collection_wardrobe_v1' as any, {
-      p_user: userId,
+      p_user: activeSessionUserId,
       p_filter: 'all',
       p_sort: 'role',
     } as any);
@@ -8016,16 +8141,20 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     setPayload(normalizeCollectionPayload((data ?? null) as OdaraCollectionPayload | null));
     setLoading(false);
-  }, [userId]);
+  }, [activeSessionUserId, sessionResolved]);
 
   const loadPersistedPreferences = useCallback(async () => {
-    if (!userId) {
+    if (!sessionResolved) {
+      return;
+    }
+
+    if (!activeSessionUserId) {
       setPersistedPreferencesById({});
       return;
     }
 
     const { data, error: preferenceError } = await odaraSupabase.rpc('get_user_fragrance_preference_signals_v1' as any, {
-      p_user_id: userId,
+      p_user_id: activeSessionUserId,
     } as any);
 
     if (preferenceError) {
@@ -8084,16 +8213,20 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       }
       return next;
     });
-  }, [userId]);
+  }, [activeSessionUserId, sessionResolved]);
 
   const loadPersistedWishlists = useCallback(async () => {
-    if (!userId) {
+    if (!sessionResolved) {
+      return;
+    }
+
+    if (!activeSessionUserId) {
       setPersistedWishlistsById({});
       return;
     }
 
     const { data, error: wishlistError } = await odaraSupabase.rpc('get_user_collection_wishlist_signals_v1' as any, {
-      p_user_id: userId,
+      p_user_id: activeSessionUserId,
     } as any);
 
     if (wishlistError) {
@@ -8147,10 +8280,15 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       }
       return next;
     });
-  }, [userId]);
+  }, [activeSessionUserId, sessionResolved]);
 
   const loadPersistedWearHistory = useCallback(async () => {
-    if (!userId) {
+    if (!sessionResolved) {
+      setWearHistoryLoading(true);
+      return;
+    }
+
+    if (!activeSessionUserId) {
       setPersistedWearById({});
       setWearHistoryLoading(false);
       return;
@@ -8161,7 +8299,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       const { data, error: historyError } = await odaraSupabase
         .from(ODARA_SIGNED_IN_DAY_MEMORY_TABLE as any)
         .select('date_key, context_key, state_json')
-        .eq('user_id', userId)
+        .eq('user_id', activeSessionUserId)
         .eq('context_key', normalizePersistedContextKey(selectedContext));
 
       if (historyError) throw historyError;
@@ -8205,7 +8343,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setWearHistoryLoading(false);
     }
-  }, [selectedContext, userId]);
+  }, [activeSessionUserId, selectedContext, sessionResolved]);
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
@@ -8268,8 +8406,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [loadPersistedWearHistory]);
 
   useEffect(() => {
-    setSessionSignals(readStoredWardrobeSessionSignals(userId));
-    setOnboardingSeen(readStoredWardrobeOnboardingSeen(userId));
+    setSessionSignals(readStoredWardrobeSessionSignals(activeSessionUserId));
+    setOnboardingSeen(readStoredWardrobeOnboardingSeen(activeSessionUserId));
     setSurface('wardrobe');
     setSelectedFragranceId(null);
     setConfirmationState(null);
@@ -8282,7 +8420,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeUnwornOnly(false);
     setWardrobeSortKey(null);
     setWardrobeSortDirection('asc');
-  }, [userId]);
+  }, [activeSessionUserId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -8294,16 +8432,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [searchQuery]);
 
   useEffect(() => {
-    writeStoredWardrobeSessionSignals(userId, sessionSignals);
-  }, [sessionSignals, userId]);
+    writeStoredWardrobeSessionSignals(activeSessionUserId, sessionSignals);
+  }, [activeSessionUserId, sessionSignals]);
 
   useEffect(() => {
     writeStoredWardrobeActionLabelCount(actionLabelCount);
   }, [actionLabelCount]);
 
   useEffect(() => {
-    writeStoredWardrobeOnboardingSeen(userId, onboardingSeen);
-  }, [onboardingSeen, userId]);
+    writeStoredWardrobeOnboardingSeen(activeSessionUserId, onboardingSeen);
+  }, [activeSessionUserId, onboardingSeen]);
 
   const collectionItems = payload?.items ?? [];
 
@@ -8834,13 +8972,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [effectiveSignalMap]);
 
   const handleOwn = useCallback(async () => {
-    if (!selectedCatalogItem || !userId || selectedOwned) return;
+    if (!selectedCatalogItem || !activeSessionUserId || selectedOwned) return;
     setPendingActionKey(`own:${selectedCatalogItem.fragrance_id}`);
     setActionError(null);
 
     try {
       const { data, error: rpcError } = await odaraSupabase.rpc('add_to_collection_v2' as any, {
-        p_user_id: userId,
+        p_user_id: activeSessionUserId,
         p_name: selectedCatalogItem.name,
         p_brand: selectedCatalogItem.brand ?? '',
         p_release_year: selectedCatalogItem.release_year,
@@ -8891,10 +9029,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setPendingActionKey(null);
     }
-  }, [loadCollection, loadPersistedWishlists, recordActionInteraction, selectedCatalogItem, selectedOwned, upsertSessionSignal, userId]);
+  }, [activeSessionUserId, loadCollection, loadPersistedWishlists, recordActionInteraction, selectedCatalogItem, selectedOwned, upsertSessionSignal]);
 
   const handleWishlist = useCallback(async () => {
-    if (!selectedCatalogItem || !userId || selectedOwned) return;
+    if (!selectedCatalogItem || !activeSessionUserId || selectedOwned) return;
     const nextWishlist = !selectedWishlist;
     setActionError(null);
     setPendingActionKey(`wishlist:${selectedCatalogItem.fragrance_id}`);
@@ -8953,11 +9091,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     selectedOwned,
     selectedWishlist,
     upsertSessionSignal,
-    userId,
+    activeSessionUserId,
   ]);
 
   const handleHeart = useCallback(async () => {
-    if (!selectedCatalogItem || !userId) return;
+    if (!selectedCatalogItem || !activeSessionUserId) return;
     const nextHeartState: HeartState = selectedHeartState === 0 ? 1 : selectedHeartState === 1 ? 2 : 0;
     setPendingActionKey(`heart:${selectedCatalogItem.fragrance_id}`);
     setActionError(null);
@@ -9018,10 +9156,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     } finally {
       setPendingActionKey(null);
     }
-  }, [loadCollection, loadPersistedPreferences, onCapturePreferenceMoment, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal, userId]);
+  }, [activeSessionUserId, loadCollection, loadPersistedPreferences, onCapturePreferenceMoment, recordActionInteraction, selectedCatalogItem, selectedHeartState, upsertSessionSignal]);
 
   const handleNegative = useCallback(async () => {
-    if (!selectedCatalogItem || !userId) return;
+    if (!selectedCatalogItem || !activeSessionUserId) return;
     const nextNegativeState: OdaraNegativeState = selectedNegativeState === 0 ? 1 : selectedNegativeState === 1 ? 2 : 0;
     setPendingActionKey(`negative:${selectedCatalogItem.fragrance_id}`);
     setActionError(null);
@@ -9093,7 +9231,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     selectedNegativeState,
     selectedWishlist,
     upsertSessionSignal,
-    userId,
+    activeSessionUserId,
   ]);
 
   const renderSearchContent = () => (
