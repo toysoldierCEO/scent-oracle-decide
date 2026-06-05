@@ -6732,6 +6732,54 @@ type ResolvedTaxonomyPayload = {
 const fragranceTaxonomyCache = new Map<string, ResolvedTaxonomyPayload | null>();
 const fragranceTaxonomyInFlight = new Map<string, Promise<ResolvedTaxonomyPayload | null>>();
 
+type ScentIntelInput = {
+  label: string;
+  slug?: string | null;
+  fragranceId?: string | null;
+  position?: string | null;
+};
+
+type ScentIntelTerm = {
+  slug?: string | null;
+  label?: string | null;
+  term_type?: string | null;
+  scent_category?: string | null;
+  short_label?: string | null;
+  smells_like?: unknown;
+  used_for?: string | null;
+  what_it_does?: string | null;
+  pairs_well_with?: unknown;
+  odara_read?: string | null;
+};
+
+type ScentIntelWardrobeMatch = {
+  fragrance_id?: string | null;
+  name?: string | null;
+  brand?: string | null;
+  status?: string | null;
+  positions?: unknown;
+};
+
+type ScentIntelPayload = {
+  found?: boolean;
+  term_slug?: string | null;
+  label?: string | null;
+  message?: string | null;
+  term?: ScentIntelTerm | null;
+  context_position?: string | null;
+  wardrobe_matches?: ScentIntelWardrobeMatch[] | null;
+};
+
+type ScentIntelSheetState = {
+  input: ScentIntelInput;
+  status: 'loading' | 'ready' | 'error';
+  payload?: ScentIntelPayload | null;
+  error?: string | null;
+  requestKey?: string | null;
+};
+
+const SCENT_INTEL_UNMAPPED_MESSAGE = 'Odara has not mapped this note yet.';
+
 async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxonomyPayload | null> {
   if (fragranceTaxonomyCache.has(fragranceId)) return fragranceTaxonomyCache.get(fragranceId) ?? null;
   const existing = fragranceTaxonomyInFlight.get(fragranceId);
@@ -6762,11 +6810,282 @@ function formatTaxonomyReviewStatus(status: string | null | undefined): string |
   return null;
 }
 
+function scentIntelSlugify(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function normalizeScentIntelStringList(value: unknown, max = 8): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const values: string[] = [];
+  value.forEach((item) => {
+    if (typeof item !== 'string') return;
+    const label = item.trim();
+    if (!label) return;
+    const key = label.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    values.push(label);
+  });
+  return values.slice(0, max);
+}
+
+function formatScentIntelListPhrase(values: string[]): string {
+  const text = values.join(', ').trim();
+  if (!text) return '';
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function formatScentIntelPosition(position: string | null | undefined): string | null {
+  const normalized = String(position ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'top':
+      return 'Top Note';
+    case 'heart':
+    case 'middle':
+      return 'Heart Note';
+    case 'base':
+      return 'Base Note';
+    case 'accord':
+      return 'Accord';
+    case 'material':
+      return 'Material';
+    case 'family':
+      return 'Family / Style';
+    default:
+      return null;
+  }
+}
+
+function formatScentIntelTermType(type: string | null | undefined): string {
+  const normalized = String(type ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'note':
+      return 'Note';
+    case 'accord':
+      return 'Accord';
+    case 'material':
+      return 'Material';
+    case 'family':
+      return 'Family / Style';
+    case 'chord':
+      return 'Chord';
+    default:
+      return 'Scent Intel';
+  }
+}
+
+function getScentIntelCategory(term: ScentIntelTerm | null | undefined, position: string | null | undefined): string {
+  return formatScentIntelPosition(position)
+    ?? (typeof term?.scent_category === 'string' && term.scent_category.trim() ? term.scent_category.trim() : null)
+    ?? formatScentIntelTermType(term?.term_type);
+}
+
+function getScentIntelChipClass(extra = '') {
+  return `rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors hover:text-foreground/92 ${extra}`.trim();
+}
+
+const ScentIntelChipButton: React.FC<{
+  label: string;
+  onOpen?: (input: ScentIntelInput) => void;
+  fragranceId?: string | null;
+  position?: string | null;
+  className?: string;
+  style?: React.CSSProperties;
+  ariaPrefix?: string;
+}> = ({ label, onOpen, fragranceId, position, className, style, ariaPrefix = 'Open scent intel for' }) => {
+  const cleanLabel = String(label ?? '').trim();
+  if (!cleanLabel) return null;
+  return (
+    <button
+      type="button"
+      data-no-card-swipe
+      aria-label={`${ariaPrefix} ${cleanLabel}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen?.({
+          label: cleanLabel,
+          slug: scentIntelSlugify(cleanLabel),
+          fragranceId: fragranceId ?? null,
+          position: position ?? null,
+        });
+      }}
+      className={className}
+      style={{
+        WebkitTapHighlightColor: 'transparent',
+        ...style,
+      }}
+    >
+      {cleanLabel}
+    </button>
+  );
+};
+
+const ScentIntelSection: React.FC<{
+  title: string;
+  children: React.ReactNode;
+}> = ({ title, children }) => (
+  <div>
+    <div className="mb-1.5 text-[9px] uppercase tracking-[0.24em] text-foreground/38">{title}</div>
+    <div className="text-[12px] leading-[1.5] text-foreground/76">{children}</div>
+  </div>
+);
+
+const OdaraScentIntelSheet: React.FC<{
+  state: ScentIntelSheetState | null;
+  onClose: () => void;
+  onOpenTerm: (input: ScentIntelInput) => void;
+}> = ({ state, onClose, onOpenTerm }) => {
+  if (!state) return null;
+  const payload = state.payload ?? null;
+  const found = Boolean(payload?.found);
+  const term = found ? payload?.term ?? null : null;
+  const label = (found ? term?.label : payload?.label) || state.input.label || 'Scent Intel';
+  const category = found
+    ? getScentIntelCategory(term, payload?.context_position ?? state.input.position)
+    : 'Unmapped Term';
+  const smellsLike = normalizeScentIntelStringList(term?.smells_like, 6);
+  const pairsWith = normalizeScentIntelStringList(term?.pairs_well_with, 8);
+  const wardrobeMatches = Array.isArray(payload?.wardrobe_matches)
+    ? payload!.wardrobe_matches!.filter((match) => String(match?.name ?? '').trim()).slice(0, 8)
+    : [];
+
+  return (
+    <OdaraBottomSheet open={!!state} onClose={onClose}>
+      <div
+        className="px-5 pt-4"
+        style={{
+          maxHeight: 'calc(100dvh - 132px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)',
+        }}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/38">Scent Intel</div>
+            <div
+              className="mt-1 text-[25px] leading-[1.02] text-foreground/92"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+            >
+              {label}
+              <span className="text-foreground/36"> · </span>
+              <span className="text-[18px] text-foreground/62">{category}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Close scent intel"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88"
+            style={{
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(255,255,255,0.03)',
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M18 6L6 18" />
+              <path d="M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {state.status === 'loading' ? (
+          <div className="space-y-3">
+            <div className="h-10 animate-pulse rounded-[14px] bg-white/[0.035]" />
+            <div className="h-10 animate-pulse rounded-[14px] bg-white/[0.03]" />
+            <div className="h-16 animate-pulse rounded-[14px] bg-white/[0.025]" />
+          </div>
+        ) : state.status === 'error' ? (
+          <div className="rounded-[18px] border px-4 py-4 text-[12px] leading-[1.5] text-rose-200/82" style={{ borderColor: 'rgba(244,114,182,0.18)', background: 'rgba(244,114,182,0.06)' }}>
+            {state.error || 'Scent Intel is unavailable right now.'}
+          </div>
+        ) : !found ? (
+          <div className="rounded-[18px] border px-4 py-4 text-[12px] leading-[1.5] text-foreground/70" style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.025)' }}>
+            {payload?.message || SCENT_INTEL_UNMAPPED_MESSAGE}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {smellsLike.length > 0 ? (
+              <ScentIntelSection title="Smells like">
+                {formatScentIntelListPhrase(smellsLike)}
+              </ScentIntelSection>
+            ) : null}
+            {term?.used_for ? (
+              <ScentIntelSection title="Used for">
+                {term.used_for}
+              </ScentIntelSection>
+            ) : null}
+            {term?.what_it_does ? (
+              <ScentIntelSection title="What it does">
+                {term.what_it_does}
+              </ScentIntelSection>
+            ) : null}
+            {pairsWith.length > 0 ? (
+              <ScentIntelSection title="Pairs with">
+                <div className="flex flex-wrap gap-2">
+                  {pairsWith.map((pairLabel) => (
+                    <ScentIntelChipButton
+                      key={`pair-${pairLabel}`}
+                      label={pairLabel}
+                      onOpen={onOpenTerm}
+                      className="rounded-full px-2.5 py-[5px] text-[10px] text-foreground/72 transition-colors hover:text-foreground/92"
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.03)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </ScentIntelSection>
+            ) : null}
+            {term?.odara_read ? (
+              <ScentIntelSection title="Odara Read">
+                {term.odara_read}
+              </ScentIntelSection>
+            ) : null}
+            {wardrobeMatches.length > 0 ? (
+              <ScentIntelSection title="Found in your wardrobe">
+                <div className="flex flex-wrap gap-2">
+                  {wardrobeMatches.map((match) => {
+                    const positions = normalizeScentIntelStringList(match.positions, 3)
+                      .map(formatScentIntelPosition)
+                      .filter((value): value is string => Boolean(value));
+                    return (
+                      <span
+                        key={`wardrobe-${match.fragrance_id ?? match.name}`}
+                        className="rounded-full px-2.5 py-[5px] text-[10px] text-foreground/70"
+                        style={{
+                          border: '1px solid rgba(255,255,255,0.07)',
+                          background: 'rgba(255,255,255,0.022)',
+                        }}
+                      >
+                        {match.name}
+                        {positions[0] ? <span className="text-foreground/38"> · {positions[0]}</span> : null}
+                      </span>
+                    );
+                  })}
+                </div>
+              </ScentIntelSection>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </OdaraBottomSheet>
+  );
+};
+
 const OdaraFragranceDetailSheet: React.FC<{
   detail: OdaraFragranceDetailSurfaceState | null;
   open: boolean;
   onClose: () => void;
-}> = ({ detail, open, onClose }) => {
+  onOpenScentIntel?: (input: ScentIntelInput) => void;
+}> = ({ detail, open, onClose, onOpenScentIntel }) => {
   const fragranceId = detail?.fragrance_id ?? null;
   const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
   const [taxonomyLoading, setTaxonomyLoading] = useState(false);
@@ -6910,12 +7229,14 @@ const OdaraFragranceDetailSheet: React.FC<{
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
-              <div
+              <ScentIntelChipButton
+                label={familyLabel}
+                onOpen={onOpenScentIntel}
+                fragranceId={detail.fragrance_id}
+                position="family"
                 className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/82"
                 style={{ boxShadow: `inset 0 0 0 1px ${tint.frame}`, background: tint.inner }}
-              >
-                {familyLabel}
-              </div>
+              />
               {roleLabel ? (
                 <div
                   className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/72"
@@ -7016,21 +7337,25 @@ const OdaraFragranceDetailSheet: React.FC<{
                   {(txFamily || facetItems.length > 0) ? (
                     <div className="flex flex-wrap items-center gap-1.5">
                       {txFamily ? (
-                        <span
+                        <ScentIntelChipButton
+                          label={txFamily}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={detail.fragrance_id}
+                          position="family"
                           className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.18em] text-foreground/88"
                           style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.05)' }}
-                        >
-                          {txFamily}
-                        </span>
+                        />
                       ) : null}
                       {facetItems.map((label, i) => (
-                        <span
+                        <ScentIntelChipButton
                           key={`facet-${label}-${i}`}
+                          label={label}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={detail.fragrance_id}
+                          position="accord"
                           className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.04em] text-foreground/74"
                           style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.022)' }}
-                        >
-                          {label}
-                        </span>
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -7070,18 +7395,20 @@ const OdaraFragranceDetailSheet: React.FC<{
                     (() => {
                       const tone = getAccordChipTone(label, detail.family_key);
                       return (
-                        <span
+                        <ScentIntelChipButton
                           key={`accord-${label}-${index}`}
-                          className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]"
+                          label={label}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={detail.fragrance_id}
+                          position="accord"
+                          className={getScentIntelChipClass()}
                           style={{
                             color: tone.color,
                             border: `1px solid ${tone.border}`,
                             background: tone.background,
                             boxShadow: `0 0 14px ${tone.glow}`,
                           }}
-                        >
-                          {label}
-                        </span>
+                        />
                       );
                     })()
                   ))}
@@ -7091,9 +7418,9 @@ const OdaraFragranceDetailSheet: React.FC<{
             {hasStructureSections ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
-                  { label: 'Top', values: topLabels },
-                  { label: 'Heart', values: middleLabels },
-                  { label: 'Base', values: baseLabels },
+                  { label: 'Top', values: topLabels, position: 'top' },
+                  { label: 'Heart', values: middleLabels, position: 'heart' },
+                  { label: 'Base', values: baseLabels, position: 'base' },
                 ].map((section) => (
                   section.values.length > 0 ? (
                     <div
@@ -7105,8 +7432,21 @@ const OdaraFragranceDetailSheet: React.FC<{
                       }}
                     >
                       <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">{section.label}</div>
-                      <div className="mt-2 text-[11px] leading-[1.55] text-foreground/72">
-                        {section.values.join(' · ')}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {section.values.map((label, index) => (
+                          <ScentIntelChipButton
+                            key={`${section.position}-${label}-${index}`}
+                            label={label}
+                            onOpen={onOpenScentIntel}
+                            fragranceId={detail.fragrance_id}
+                            position={section.position}
+                            className="rounded-full px-2.5 py-[5px] text-[10px] text-foreground/72 transition-colors hover:text-foreground/92"
+                            style={{
+                              border: '1px solid rgba(255,255,255,0.07)',
+                              background: 'rgba(255,255,255,0.025)',
+                            }}
+                          />
+                        ))}
                       </div>
                     </div>
                   ) : null
@@ -7117,17 +7457,19 @@ const OdaraFragranceDetailSheet: React.FC<{
                 <div className="mb-2 text-[9px] uppercase tracking-[0.24em] text-foreground/38">Notes</div>
                 <div className="flex flex-wrap gap-2">
                   {noteLabels.map((label, index) => (
-                    <span
+                    <ScentIntelChipButton
                       key={`note-${label}-${index}`}
-                      className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]"
+                      label={label}
+                      onOpen={onOpenScentIntel}
+                      fragranceId={detail.fragrance_id}
+                      position="unknown"
+                      className={getScentIntelChipClass()}
                       style={{
                         color: 'rgba(255,255,255,0.76)',
                         border: '1px solid rgba(255,255,255,0.08)',
                         background: 'rgba(255,255,255,0.03)',
                       }}
-                    >
-                      {label}
-                    </span>
+                    />
                   ))}
                 </div>
               </div>
@@ -10597,6 +10939,14 @@ const OdaraScreen = ({
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
   const menuPanelVisual = getOdaraGlassCardVisualRecipe(DEFAULT_TINT, 'hero');
+  const {
+    activeSessionUserId: scentIntelSessionUserId,
+    sessionResolved: scentIntelSessionResolved,
+  } = useOdaraActiveSessionUser({
+    userId,
+    isGuestMode,
+    scope: 'scent-intel',
+  });
 
   // ── Time-orb tick (forecast strip): aligned to local-clock minute boundary ──
   // Uses Date#getHours/getMinutes/getSeconds which return values in the user's
@@ -10884,6 +11234,9 @@ const OdaraScreen = ({
   const [signedInQueuedHeroVersion, setSignedInQueuedHeroVersion] = useState(0);
   const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
   const [fragranceDetailSheet, setFragranceDetailSheet] = useState<OdaraFragranceDetailSurfaceState | null>(null);
+  const scentIntelCacheRef = useRef<Map<string, ScentIntelPayload>>(new Map());
+  const scentIntelInFlightRef = useRef<Map<string, Promise<ScentIntelPayload>>>(new Map());
+  const [scentIntelSheet, setScentIntelSheet] = useState<ScentIntelSheetState | null>(null);
 
   const hasHistory = viewHistory.length > 0;
 
@@ -11317,6 +11670,96 @@ const OdaraScreen = ({
         : current
     ));
   }, [fetchFragranceDetail]);
+
+  const openScentIntelSheet = useCallback((input: ScentIntelInput) => {
+    const label = String(input?.label ?? '').trim();
+    if (!label) return;
+
+    const normalizedInput: ScentIntelInput = {
+      label,
+      slug: input.slug || scentIntelSlugify(label),
+      fragranceId: input.fragranceId ?? null,
+      position: input.position ?? null,
+    };
+    const requestUserId = (!isGuestMode && scentIntelSessionResolved && scentIntelSessionUserId)
+      ? scentIntelSessionUserId
+      : null;
+    const requestKey = [
+      requestUserId ?? 'public',
+      normalizedInput.slug || scentIntelSlugify(label),
+      normalizedInput.fragranceId ?? 'no-fragrance',
+      normalizedInput.position ?? 'no-position',
+    ].join('|');
+
+    const cached = scentIntelCacheRef.current.get(requestKey);
+    setScentIntelSheet({
+      input: normalizedInput,
+      status: cached ? 'ready' : 'loading',
+      payload: cached ?? null,
+      error: null,
+      requestKey,
+    });
+    if (cached) return;
+
+    const existing = scentIntelInFlightRef.current.get(requestKey);
+    const request = existing ?? (async (): Promise<ScentIntelPayload> => {
+      const { data, error } = await odaraSupabase.rpc('get_scent_term_dossier_v1' as any, {
+        p_user: requestUserId,
+        p_term_slug: normalizedInput.slug,
+        p_term_label: normalizedInput.label,
+        p_fragrance_id: normalizedInput.fragranceId,
+        p_position: normalizedInput.position,
+      } as any);
+
+      if (error) {
+        throw error;
+      }
+      return (data && typeof data === 'object')
+        ? (data as ScentIntelPayload)
+        : {
+            found: false,
+            term_slug: normalizedInput.slug,
+            label: normalizedInput.label,
+            message: SCENT_INTEL_UNMAPPED_MESSAGE,
+          };
+    })();
+
+    if (!existing) {
+      scentIntelInFlightRef.current.set(requestKey, request);
+    }
+
+    request
+      .then((payload) => {
+        scentIntelCacheRef.current.set(requestKey, payload);
+        setScentIntelSheet((current) => (
+          current?.requestKey === requestKey
+            ? {
+                input: normalizedInput,
+                status: 'ready',
+                payload,
+                error: null,
+                requestKey,
+              }
+            : current
+        ));
+      })
+      .catch((error) => {
+        setScentIntelSheet((current) => (
+          current?.requestKey === requestKey
+            ? {
+                input: normalizedInput,
+                status: 'error',
+                payload: null,
+                error: error?.message ?? 'Scent Intel is unavailable right now.',
+                requestKey,
+              }
+            : current
+        ));
+      })
+      .finally(() => {
+        scentIntelInFlightRef.current.delete(requestKey);
+      });
+  }, [isGuestMode, scentIntelSessionResolved, scentIntelSessionUserId]);
 
   const runFallbackFragranceSearch = useCallback(async (query: string) => {
     const normalizedQuery = normalizeOdaraSearchQuery(query);
@@ -15758,6 +16201,13 @@ const OdaraScreen = ({
         open={!!fragranceDetailSheet}
         detail={fragranceDetailSheet}
         onClose={() => setFragranceDetailSheet(null)}
+        onOpenScentIntel={openScentIntelSheet}
+      />
+
+      <OdaraScentIntelSheet
+        state={scentIntelSheet}
+        onClose={() => setScentIntelSheet(null)}
+        onOpenTerm={openScentIntelSheet}
       />
 
       <div className="max-w-md mx-auto px-4 pt-3 pb-6 flex flex-col gap-0">
