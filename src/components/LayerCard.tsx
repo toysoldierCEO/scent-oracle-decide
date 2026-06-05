@@ -948,6 +948,7 @@ const LayerCard = ({
             <button
               type="button"
               data-odara-layer-title-button
+              data-card-swipe-allow
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -980,6 +981,7 @@ const LayerCard = ({
 
               {resolvedLayerTokens.length > 0 && (
                 <div
+                  data-no-card-swipe
                   className="odara-token-rail-fade hide-horizontal-scrollbar mt-1.5 flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-1"
                   style={{ WebkitOverflowScrolling: 'touch' }}
                   onClick={(e) => e.stopPropagation()}

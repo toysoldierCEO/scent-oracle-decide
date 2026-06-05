@@ -14496,6 +14496,7 @@ const OdaraScreen = ({
   const isInteractiveSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el || !el.closest) return false;
+    if (el.closest('[data-card-swipe-allow]')) return false;
     return !!(
       el.closest('[data-no-card-swipe]') ||
       el.closest('button, a, input, textarea, select, [role="button"], [role="slider"], [role="switch"]')
@@ -16265,6 +16266,7 @@ const OdaraScreen = ({
                       <button
                         type="button"
                         data-odara-hero-title-button
+                        data-card-swipe-allow
                         data-guest-profile-reserved
                         onClick={(event) => {
                           event.preventDefault();
@@ -16304,6 +16306,7 @@ const OdaraScreen = ({
                     {(activeReasonChip || heroRailTokens.length > 0) && (
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
+                          data-no-card-swipe
                           className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
                           style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                         >
@@ -16455,6 +16458,7 @@ const OdaraScreen = ({
                     Alternatives
                   </span>
                   <div
+                    data-no-card-swipe
                     className="hide-horizontal-scrollbar w-full overflow-x-auto pb-1"
                     style={{
                       scrollbarWidth: 'none',
