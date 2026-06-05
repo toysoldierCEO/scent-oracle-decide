@@ -16834,12 +16834,13 @@ const OdaraScreen = ({
                     }`}>
                       {fd.label}
                     </span>
-                    <div className="flex w-full items-center justify-center pl-[4px]">
+                    <div className="grid w-full grid-cols-[auto_9px] items-center justify-center gap-[4px]">
                       <span className={`text-[14px] font-medium transition-colors ${
                         fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
                       }`}>
                         {fd.day}
                       </span>
+                      <span aria-hidden className="block h-[7px] w-[7px] opacity-0" />
                     </div>
 
                     <div className="mt-[4px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
