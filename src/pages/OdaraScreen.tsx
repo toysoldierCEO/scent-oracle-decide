@@ -1270,6 +1270,12 @@ interface FragranceDetail {
   wardrobe_role_label?: string | null;
   role_confidence?: string | null;
   role_source?: string | null;
+  release_year?: number | null;
+  concentration?: string | null;
+  perfumer?: string | null;
+  short_description?: string | null;
+  description_source?: string | null;
+  description_generated_at?: string | null;
   notes: string[];
   accords: string[];
   top_notes?: string[];
@@ -1277,6 +1283,10 @@ interface FragranceDetail {
   base_notes?: string[];
   longevity_score?: number | null;
   projection_score?: number | null;
+  odor_impact_score?: number | null;
+  density_score?: number | null;
+  transparency_score?: number | null;
+  beast_mode_score?: number | null;
   why_it_fits_wardrobe?: string | null;
   source_confidence?: string | null;
   retired?: boolean;
@@ -1284,6 +1294,10 @@ interface FragranceDetail {
   profile_loaded?: boolean;
   image_url: string | null;
   thumbnail_url: string | null;
+  image_source?: string | null;
+  source_page_url?: string | null;
+  image_license_status?: string | null;
+  image_last_checked_at?: string | null;
 }
 
 /** Normalized card for display — shared between hero and queue */
@@ -2225,6 +2239,73 @@ function areSameMoonMarkerState(
   );
 }
 
+const ODARA_DAY_TRACK_TICKS = Array.from({ length: 8 }, (_, index) => index);
+
+function getOdaraLunarPhaseForDate(dateStr: string) {
+  const parsed = new Date(`${dateStr}T12:00:00`);
+  const d = isNaN(parsed.getTime()) ? new Date() : parsed;
+  const SYNODIC = 29.530588853;
+  const refMs = Date.UTC(2000, 0, 6, 18, 14, 0);
+  const daysSince = (d.getTime() - refMs) / 86400000;
+  const phaseFrac = ((daysSince % SYNODIC) + SYNODIC) % SYNODIC / SYNODIC;
+  return {
+    lit: (1 - Math.cos(2 * Math.PI * phaseFrac)) / 2,
+    waxing: phaseFrac < 0.5,
+  };
+}
+
+const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; selected?: boolean }> = ({ dateStr, selected = false }) => {
+  const { lit, waxing } = getOdaraLunarPhaseForDate(dateStr);
+  const D = 13;
+  const C = D / 2;
+  const R = 5.7;
+  const rx = R * Math.abs(1 - 2 * lit);
+  const litRectX = waxing ? C : 0;
+  const ellipseAdds = lit >= 0.5;
+  const safeId = dateStr.replace(/[^a-zA-Z0-9_-]/g, '');
+  const maskId = `odara-day-moon-${safeId}-${waxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
+  const moonOpacity = selected ? 0.86 : 0.62;
+
+  return (
+    <svg
+      aria-hidden
+      width={D}
+      height={D}
+      viewBox={`0 0 ${D} ${D}`}
+      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+      style={{
+        opacity: moonOpacity,
+        filter: selected
+          ? 'drop-shadow(0 0 5px rgba(246,242,232,0.28))'
+          : 'drop-shadow(0 0 3px rgba(246,242,232,0.16))',
+      }}
+    >
+      <defs>
+        <radialGradient id={`${maskId}-surface`} cx="35%" cy="24%" r="72%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.98)" />
+          <stop offset="54%" stopColor="rgba(220,218,210,0.88)" />
+          <stop offset="100%" stopColor="rgba(135,135,132,0.70)" />
+        </radialGradient>
+        <mask id={maskId}>
+          <rect x="0" y="0" width={D} height={D} fill="black" />
+          <rect x={litRectX} y="0" width={C} height={D} fill="white" />
+          <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
+        </mask>
+        <clipPath id={`${maskId}-clip`}>
+          <circle cx={C} cy={C} r={R} />
+        </clipPath>
+      </defs>
+      <circle cx={C} cy={C} r={R} fill="rgba(16,17,20,0.78)" stroke="rgba(255,255,255,0.16)" strokeWidth="0.45" />
+      <circle cx={C} cy={C} r={R} fill={`url(#${maskId}-surface)`} mask={`url(#${maskId})`} />
+      <g clipPath={`url(#${maskId}-clip)`} opacity="0.18">
+        <circle cx="4.4" cy="4.2" r="0.55" fill="rgba(66,68,72,0.75)" />
+        <circle cx="8.2" cy="5.7" r="0.42" fill="rgba(66,68,72,0.62)" />
+        <circle cx="6.2" cy="8.1" r="0.5" fill="rgba(66,68,72,0.58)" />
+      </g>
+    </svg>
+  );
+};
+
 function normalizeFragranceIdentityText(value: string | null | undefined) {
   return (value ?? '')
     .trim()
@@ -2497,6 +2578,9 @@ type FragranceImageAsset = {
   image_url: string | null;
   image_url_transparent?: string | null;
   thumbnail_url: string | null;
+  image_source?: string | null;
+  source_url?: string | null;
+  updated_at?: string | null;
   provider_payload?: Record<string, unknown> | null;
 };
 
@@ -4445,6 +4529,52 @@ const OdaraBottleImage: React.FC<{
   );
 }
 
+const OdaraBottleSilhouetteFallback: React.FC<{
+  tint: { wash: string; inner: string; frame: string; glowStrong: string };
+  monogram: string;
+  compact?: boolean;
+}> = ({ tint, monogram, compact = false }) => (
+  <div
+    className="relative flex h-full w-full items-center justify-center overflow-hidden"
+    style={{
+      background: `radial-gradient(circle at 50% 22%, ${tint.wash} 0%, rgba(255,255,255,0.05) 26%, rgba(10,11,15,0.92) 100%)`,
+    }}
+  >
+    <div
+      className="pointer-events-none absolute inset-x-[18%] top-[10%] h-[14%] rounded-t-[10px]"
+      style={{
+        border: `1px solid ${tint.frame}`,
+        borderBottom: 'none',
+        background: 'rgba(255,255,255,0.03)',
+        boxShadow: `0 0 12px ${tint.glowStrong}`,
+      }}
+    />
+    <div
+      className={`relative ${compact ? 'h-[72%] w-[54%]' : 'h-[74%] w-[56%]'} rounded-[28px]`}
+      style={{
+        border: `1px solid ${tint.frame}`,
+        background: `linear-gradient(180deg, rgba(255,255,255,0.10) 0%, ${tint.inner} 22%, rgba(12,13,17,0.78) 100%)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.10), 0 18px 30px ${tint.glowStrong}`,
+      }}
+    >
+      <div
+        className="absolute left-[18%] right-[18%] top-[12%] h-[18%] rounded-full"
+        style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 100%)' }}
+      />
+      <div
+        className="absolute inset-x-[16%] bottom-[16%] flex items-center justify-center rounded-[18px] px-2 py-2 text-center text-[10px] uppercase tracking-[0.18em] text-foreground/70"
+        style={{
+          border: `1px solid ${tint.frame}`,
+          background: 'rgba(255,255,255,0.035)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
+      >
+        {monogram}
+      </div>
+    </div>
+  </div>
+);
+
 function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset | null): OdaraWardrobeCatalogItem | null {
   const fragranceId = typeof row?.id === 'string' ? row.id.trim() : '';
   const name = typeof row?.name === 'string' ? row.name.trim() : '';
@@ -4481,7 +4611,7 @@ async function fetchWardrobeImageAssetMap(fragranceIds?: string[]) {
   try {
     let query = odaraSupabase
       .from('fragrance_image_assets' as any)
-      .select('fragrance_id, image_url, thumbnail_url, provider_payload, updated_at, created_at')
+      .select('fragrance_id, image_url, thumbnail_url, image_source, source_url, provider_payload, updated_at, created_at')
       .order('updated_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false, nullsFirst: false });
 
@@ -4502,6 +4632,9 @@ async function fetchWardrobeImageAssetMap(fragranceIds?: string[]) {
         image_url_transparent: readTransparentBottleImageUrlFromObject(row),
         image_url: readRegularBottleImageUrlFromObject(row),
         thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
+        image_source: readTrimmedLayerText(row.image_source),
+        source_url: readTrimmedLayerText(row.source_url),
+        updated_at: readTrimmedLayerText(row.updated_at),
         provider_payload: row.provider_payload ?? null,
       });
     }
@@ -4929,8 +5062,18 @@ type OdaraFragranceDetailSurfaceState = {
   wardrobe_role_label?: string | null;
   role_confidence?: string | null;
   role_source?: string | null;
+  release_year?: number | null;
+  concentration?: string | null;
+  perfumer?: string | null;
+  short_description?: string | null;
+  description_source?: string | null;
+  description_generated_at?: string | null;
   image_url: string | null;
   thumbnail_url: string | null;
+  image_source?: string | null;
+  source_page_url?: string | null;
+  image_license_status?: string | null;
+  image_last_checked_at?: string | null;
   notes: string[];
   accords: string[];
   top_notes?: string[];
@@ -4938,6 +5081,10 @@ type OdaraFragranceDetailSurfaceState = {
   base_notes?: string[];
   longevity_score?: number | null;
   projection_score?: number | null;
+  odor_impact_score?: number | null;
+  density_score?: number | null;
+  transparency_score?: number | null;
+  beast_mode_score?: number | null;
   why_it_fits_wardrobe?: string | null;
   source_confidence?: string | null;
   retired?: boolean;
@@ -4946,6 +5093,318 @@ type OdaraFragranceDetailSurfaceState = {
   source_label?: string | null;
   detail_loading?: boolean;
   detail_error?: string | null;
+};
+
+function normalizeDetailText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeDetailReleaseYear(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  if (rounded < 1900 || rounded > 2100) return null;
+  return rounded;
+}
+
+function normalizeUnitIntervalDetailScore(value: unknown): number | null {
+  const numeric = normalizeDetailScore(value);
+  if (numeric == null) return null;
+  const normalized = numeric > 10
+    ? numeric / 100
+    : numeric > 1
+      ? numeric / 10
+      : numeric;
+  return Math.max(0, Math.min(1, normalized));
+}
+
+function joinFragrancePhrases(parts: string[]): string {
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0]!;
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts[0]}, ${parts[1]}, and ${parts[2]}`;
+}
+
+function toSentenceCase(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+function buildFragranceDescriptionHighlights(source: {
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+}) {
+  const values = [
+    ...sanitizeTokenSource(source.accords),
+    ...sanitizeTokenSource(source.notes),
+  ].map((value) => value.trim().toLowerCase());
+  const joined = values.join(' | ');
+  const highlightSpecs: Array<{ match: RegExp; label: string }> = [
+    { match: /warm spicy|cinnamon|cardamom|nutmeg|clove|ginger|saffron|pepper|allspice|chai/, label: 'warm spice' },
+    { match: /tobacco|tobac/, label: 'tobacco' },
+    { match: /vanilla|tonka/, label: 'vanilla' },
+    { match: /amber|labdanum|benzoin|resin|resinous|myrrh|olibanum|incense/, label: 'amber resin' },
+    { match: /oud|agarwood/, label: 'oud' },
+    { match: /leather|suede/, label: 'leather' },
+    { match: /bergamot|lemon|lime|grapefruit|orange|mandarin|citrus|neroli/, label: 'bright citrus' },
+    { match: /lavender|sage|rosemary|basil|mint|herbal|aromatic|tea/, label: 'aromatic herbs' },
+    { match: /rose|jasmine|orange blossom|violet|iris|tuberose|floral/, label: 'florals' },
+    { match: /cedar|sandalwood|patchouli|vetiver|cashmeran|guaiac|woody|wood/, label: 'woods' },
+    { match: /musk|powdery|orris/, label: 'soft musk' },
+    { match: /gourmand|caramel|honey|cacao|chocolate|coffee|sweet/, label: 'gourmand sweetness' },
+    { match: /smoky|smoke|birch tar|tar/, label: 'smoke' },
+    { match: /marine|aquatic|ozonic|sea|fresh/, label: 'fresh air' },
+  ];
+
+  const highlights: string[] = [];
+  for (const spec of highlightSpecs) {
+    if (!spec.match.test(joined)) continue;
+    highlights.push(spec.label);
+    if (highlights.length >= 3) break;
+  }
+
+  return highlights;
+}
+
+function buildFragranceTexturePhrase(source: {
+  family_key?: string | null | undefined;
+  family_label?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+}) {
+  const familyKey = normalizeSearchFamilyKey(readTrimmedLayerText(source.family_key, source.family_label));
+  const joined = [
+    ...sanitizeTokenSource(source.accords),
+    ...sanitizeTokenSource(source.notes),
+  ].join(' ').toLowerCase();
+  const projection = normalizeUnitIntervalDetailScore(source.projection_score) ?? 0.5;
+  const longevity = normalizeUnitIntervalDetailScore(source.longevity_score) ?? 0.5;
+  const density = normalizeUnitIntervalDetailScore(source.density_score) ?? 0.5;
+
+  if (/warm spicy|tobacco|vanilla|amber|resin|boozy/.test(joined) || ['amber-oriental', 'tobacco-boozy', 'dark-leather', 'sweet-gourmand'].includes(familyKey)) {
+    if (projection >= 0.66 || density >= 0.62) return 'a dense cold-air trail';
+    if (longevity >= 0.62) return 'a warm, slow drydown';
+    return 'a cozy amber glow';
+  }
+  if (/citrus|bergamot|lemon|grapefruit|marine|aquatic|fresh/.test(joined) || ['fresh-aquatic', 'citrus-cologne', 'fresh-blue'].includes(familyKey)) {
+    if (projection >= 0.6) return 'an easy bright lift';
+    return 'a clean open finish';
+  }
+  if (/tea|herbal|green|lavender|sage|basil|mint/.test(joined) || ['green-aromatic'].includes(familyKey)) {
+    return 'a crisp aromatic edge';
+  }
+  if (/leather|smoke|oud|incense/.test(joined) || ['dark-leather', 'oud-amber'].includes(familyKey)) {
+    return 'darker textured edges';
+  }
+  if (/musk|powdery|iris|violet/.test(joined)) {
+    return 'a softer skin-close finish';
+  }
+  if (/woody|cedar|sandalwood|vetiver|patchouli/.test(joined) || ['woody', 'woody-clean'].includes(familyKey)) {
+    return 'a dry woody drydown';
+  }
+  return projection >= 0.64 ? 'a noticeable presence' : 'an easy-wearing finish';
+}
+
+function buildGeneratedFragranceDescription(source: {
+  family_key?: string | null | undefined;
+  family_label?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+}) {
+  const highlights = buildFragranceDescriptionHighlights(source);
+  const texture = buildFragranceTexturePhrase(source);
+  const lead = highlights.length > 0
+    ? joinFragrancePhrases(highlights)
+    : (source.family_label ?? (source.family_key ? getFamilyLabelText(source.family_key) : 'the scent profile')).toLowerCase();
+
+  const longTexture = texture ? ` with ${texture}` : '';
+  let sentence = `${toSentenceCase(lead)}${longTexture}.`;
+  if (sentence.length <= 140) return sentence;
+
+  const shorterLead = highlights.slice(0, 2);
+  if (shorterLead.length > 0) {
+    sentence = `${toSentenceCase(joinFragrancePhrases(shorterLead))}${longTexture}.`;
+    if (sentence.length <= 140) return sentence;
+  }
+
+  const fallback = `${toSentenceCase(joinFragrancePhrases(shorterLead.length > 0 ? shorterLead : ['fragrance character']))}.`;
+  return fallback.length <= 140 ? fallback : `${fallback.slice(0, 137).trimEnd()}...`;
+}
+
+function buildCompactFragranceSummary(source: {
+  family_key?: string | null | undefined;
+  family_label?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+}) {
+  const highlights = buildFragranceDescriptionHighlights(source);
+  const familyLabel = source.family_label ?? (source.family_key ? getFamilyLabelText(source.family_key) : null);
+  const leadParts = highlights.length > 0
+    ? highlights
+    : (familyLabel ? [familyLabel.toLowerCase()] : []);
+  if (leadParts.length === 0) return null;
+
+  const texture = buildFragranceTexturePhrase(source);
+  const summary = `${toSentenceCase(joinFragrancePhrases(leadParts.slice(0, 3)))} with ${texture}.`;
+  return summary.length <= 112 ? summary : `${toSentenceCase(joinFragrancePhrases(leadParts.slice(0, 2)))}.`;
+}
+
+function formatPlainFamilyStyleLabel(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value);
+  if (!normalized) return null;
+  if (normalized.includes(' ') && /[A-Z]/.test(normalized)) return normalized;
+  return normalized
+    .replace(/[-_]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function finalizeFragranceDetail(detail: FragranceDetail): FragranceDetail {
+  const normalized: FragranceDetail = {
+    ...detail,
+    release_year: normalizeDetailReleaseYear(detail.release_year),
+    concentration: normalizeDetailText(detail.concentration),
+    perfumer: normalizeDetailText(detail.perfumer),
+    short_description: normalizeDetailText(detail.short_description),
+    description_source: normalizeDetailText(detail.description_source),
+    description_generated_at: normalizeDetailText(detail.description_generated_at),
+    odor_impact_score: normalizeUnitIntervalDetailScore(detail.odor_impact_score),
+    density_score: normalizeUnitIntervalDetailScore(detail.density_score),
+    transparency_score: normalizeUnitIntervalDetailScore(detail.transparency_score),
+    beast_mode_score: normalizeUnitIntervalDetailScore(detail.beast_mode_score),
+    image_source: normalizeDetailText(detail.image_source),
+    source_page_url: normalizeDetailText(detail.source_page_url),
+    image_license_status: normalizeDetailText(detail.image_license_status),
+    image_last_checked_at: normalizeDetailText(detail.image_last_checked_at),
+  };
+  const generated = normalized.short_description ?? buildGeneratedFragranceDescription(normalized);
+  return {
+    ...normalized,
+    short_description: generated,
+    description_source: normalized.short_description ? (normalized.description_source ?? 'stored') : (generated ? 'derived_client' : null),
+  };
+}
+
+type FragrancePerformanceBarDescriptor = {
+  key: string;
+  label: string;
+  score: number;
+  valueLabel: string;
+};
+
+function formatFragrancePerformanceStrength(score: number) {
+  if (score <= 0.3) return 'Soft';
+  if (score <= 0.55) return 'Moderate';
+  if (score <= 0.75) return 'Strong';
+  return 'Very strong';
+}
+
+function formatFragrancePerformanceScale(score: number) {
+  return `${Math.max(1, Math.min(10, Math.round(score * 10)))}/10`;
+}
+
+function buildFragrancePerformanceBars(detail: {
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  odor_impact_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+  beast_mode_score?: number | null | undefined;
+}) {
+  const metrics: FragrancePerformanceBarDescriptor[] = [];
+  const projection = normalizeUnitIntervalDetailScore(detail.projection_score);
+  const longevity = normalizeUnitIntervalDetailScore(detail.longevity_score);
+  const trail = normalizeUnitIntervalDetailScore(detail.odor_impact_score ?? detail.beast_mode_score ?? detail.projection_score);
+  const density = normalizeUnitIntervalDetailScore(detail.density_score);
+
+  if (longevity != null) {
+    metrics.push({
+      key: 'longevity',
+      label: 'Longevity',
+      score: longevity,
+      valueLabel: formatFragrancePerformanceScale(longevity),
+    });
+  }
+
+  if (projection != null) {
+    metrics.push({
+      key: 'projection',
+      label: 'Projection',
+      score: projection,
+      valueLabel: formatFragrancePerformanceScale(projection),
+    });
+  }
+
+  if (trail != null) {
+    metrics.push({
+      key: 'trail',
+      label: 'Trail',
+      score: trail,
+      valueLabel: formatFragrancePerformanceStrength(trail),
+    });
+  }
+
+  if (density != null) {
+    metrics.push({
+      key: 'density',
+      label: 'Density',
+      score: density,
+      valueLabel: formatFragrancePerformanceStrength(density),
+    });
+  }
+
+  return metrics;
+}
+
+const ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS = 10;
+
+const OdaraPerformanceLifeBar: React.FC<{
+  metric: FragrancePerformanceBarDescriptor;
+  tint: { frame: string; glowStrong: string };
+}> = ({ metric, tint }) => {
+  const activeSegments = Math.max(
+    1,
+    Math.min(ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS, Math.round(metric.score * ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS)),
+  );
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-[12px] text-foreground/78">
+        <span>{metric.label}</span>
+        <span className="text-foreground/62">{metric.valueLabel}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-10 gap-[3px]" aria-hidden="true">
+        {Array.from({ length: ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS }, (_, index) => {
+          const active = index < activeSegments;
+          return (
+            <span
+              key={`${metric.key}-segment-${index}`}
+              className="h-[5px] rounded-full"
+              style={{
+                background: active
+                  ? `linear-gradient(90deg, ${tint.frame} 0%, rgba(255,255,255,0.78) 100%)`
+                  : 'rgba(255,255,255,0.055)',
+                boxShadow: active ? `0 0 9px ${tint.glowStrong}` : 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                opacity: active ? 0.92 : 0.72,
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 function deriveProfileMonogram(value: string | null | undefined): string {
@@ -5126,6 +5585,25 @@ function getOdaraGlassCardVisualRecipe(
   } as const;
 }
 
+function getOdaraHeroLiquidGlassMaterialStyle(
+  tint: { bg: string; glow: string; border: string },
+  heroVisual: ReturnType<typeof getOdaraGlassCardVisualRecipe>,
+): React.CSSProperties {
+  return {
+    ...heroVisual.surfaceStyle,
+    background: `linear-gradient(165deg, ${tint.bg.replace('0.08', '0.16').replace('0.07', '0.15').replace('0.06', '0.14')} 0%, rgba(13,14,18,0.72) 56%, rgba(8,9,12,0.90) 100%)`,
+    border: typeof heroVisual.surfaceStyle.border === 'string'
+      ? heroVisual.surfaceStyle.border
+          .replace('0.32', '0.18')
+          .replace('0.3', '0.18')
+          .replace('0.28', '0.18')
+      : heroVisual.surfaceStyle.border,
+    boxShadow: '0 28px 64px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 16px 30px rgba(255,255,255,0.03)',
+    backdropFilter: 'blur(22px) saturate(138%)',
+    WebkitBackdropFilter: 'blur(22px) saturate(138%)',
+  };
+}
+
 function getCollectionRoleRank(value: string | null | undefined) {
   switch (value) {
     case 'anchor':
@@ -5162,13 +5640,63 @@ function getEnhancedCollectionTint(item: Pick<OdaraCollectionItem, 'family_key' 
   };
 }
 
+type OdaraChipTone = {
+  border: string;
+  background: string;
+  color: string;
+  glow: string;
+};
+
+function odaraHexToRgba(hex: string | null | undefined, alpha: number) {
+  const normalized = (hex ?? '').replace('#', '').trim();
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return `rgba(242,242,242,${alpha})`;
+  const red = parseInt(normalized.slice(0, 2), 16);
+  const green = parseInt(normalized.slice(2, 4), 16);
+  const blue = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red},${green},${blue},${alpha})`;
+}
+
+function getOdaraMappedChipTone(colorHex: string | null | undefined): OdaraChipTone {
+  const color = colorHex ?? SEMANTIC_TOKEN_COLORS.default;
+  return {
+    border: odaraHexToRgba(color, 0.42),
+    background: odaraHexToRgba(color, 0.12),
+    color: odaraHexToRgba(color, 0.96),
+    glow: odaraHexToRgba(color, 0.18),
+  };
+}
+
+function getOdaraFamilyMappedChipTone(familyKey: string): OdaraChipTone {
+  return getOdaraMappedChipTone(FAMILY_COLORS[familyKey] ?? SEMANTIC_TOKEN_COLORS.default);
+}
+
+function getKnownOdaraAccordChipTone(normalized: string): OdaraChipTone | null {
+  const term = normalized.replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!term) return null;
+  if (/\b(bergamot|orange|mandarin|lemon|lime|grapefruit|citrus)\b/.test(term)) return getOdaraFamilyMappedChipTone('citrus-cologne');
+  if (/\b(petitgrain|neroli)\b/.test(term)) return getOdaraFamilyMappedChipTone('citrus-aromatic');
+  if (/\b(basil|artemisia|wormwood|sage|lavender|rosemary|mint|herbal|aromatic)\b/.test(term)) return getOdaraFamilyMappedChipTone('aromatic-fougere');
+  if (/\b(green notes?|green accord|green|leaf|leafy|galbanum|stem)\b/.test(term)) return getOdaraFamilyMappedChipTone('green-earthy');
+  if (/\b(woody accord|woody|woods?|cedar|sandalwood|vetiver|oakmoss|moss)\b/.test(term)) return getOdaraFamilyMappedChipTone('earthy-patchouli');
+  if (/\b(fresh spicy|spicy fresh|spicy|spice|cinnamon|cardamom|pepper|saffron|clove|ginger)\b/.test(term)) return getOdaraFamilyMappedChipTone('spicy-warm');
+  if (/\b(sweet|vanilla|gourmand|honey|caramel|tonka|praline|cocoa|chocolate)\b/.test(term)) return getOdaraFamilyMappedChipTone('sweet-gourmand');
+  if (/\b(fruity|fruit|apple|pear|peach|plum|berry|berries|cassis|blackcurrant|cherry|fig)\b/.test(term)) return getOdaraMappedChipTone(SEMANTIC_TOKEN_COLORS.fruity);
+  if (/\b(tea|black tea|mate)\b/.test(term)) return getOdaraFamilyMappedChipTone('aromatic-fougere');
+  if (/\b(amber|resin|resinous|labdanum|benzoin|myrrh|olibanum|incense)\b/.test(term)) return getOdaraFamilyMappedChipTone('oud-amber');
+  if (/\b(leather|suede)\b/.test(term)) return getOdaraFamilyMappedChipTone('dark-leather');
+  if (/\b(musk|white musk|powdery|iris|orris)\b/.test(term)) return getOdaraFamilyMappedChipTone('floral-musk');
+  return null;
+}
+
 function getAccordChipTone(label: string, familyKey?: string | null) {
   const normalized = label.trim().toLowerCase();
   const familyTint = FAMILY_TINTS[familyKey ?? ''] ?? DEFAULT_TINT;
+  const knownTone = getKnownOdaraAccordChipTone(normalized);
+  if (knownTone) return knownTone;
 
   const tones = [
     {
-      match: ['oud', 'amber', 'balsamic', 'resin', 'resinous', 'incense', 'olibanum', 'labdanum'],
+      match: ['oud', 'amber', 'balsamic', 'resin', 'resinous', 'incense', 'olibanum', 'labdanum', 'benzoin', 'myrrh', 'elemi'],
       border: 'rgba(230,178,96,0.42)',
       background: 'rgba(230,178,96,0.12)',
       color: 'rgba(247,221,165,0.96)',
@@ -5180,6 +5708,13 @@ function getAccordChipTone(label: string, familyKey?: string | null) {
       background: 'rgba(198,212,112,0.12)',
       color: 'rgba(236,246,181,0.96)',
       glow: 'rgba(198,212,112,0.18)',
+    },
+    {
+      match: ['spice', 'spicy', 'cinnamon', 'cardamom', 'pepper', 'saffron', 'clove', 'nutmeg', 'ginger', 'allspice', 'chai'],
+      border: 'rgba(223,143,97,0.42)',
+      background: 'rgba(223,143,97,0.12)',
+      color: 'rgba(248,214,188,0.96)',
+      glow: 'rgba(223,143,97,0.18)',
     },
     {
       match: ['woody', 'wood', 'cedar', 'sandalwood', 'patchouli', 'vetiver', 'oakmoss', 'guaiac'],
@@ -5210,11 +5745,67 @@ function getAccordChipTone(label: string, familyKey?: string | null) {
       glow: 'rgba(204,152,118,0.18)',
     },
     {
-      match: ['smoke', 'smoky', 'leather', 'tobacco', 'boozy', 'rum', 'whiskey'],
+      match: ['tobacco', 'boozy', 'rum', 'whiskey', 'cognac', 'brandy'],
       border: 'rgba(170,138,121,0.42)',
       background: 'rgba(170,138,121,0.12)',
       color: 'rgba(233,215,204,0.95)',
       glow: 'rgba(170,138,121,0.18)',
+    },
+    {
+      match: ['leather', 'suede'],
+      border: 'rgba(186,145,112,0.42)',
+      background: 'rgba(186,145,112,0.12)',
+      color: 'rgba(239,220,205,0.95)',
+      glow: 'rgba(186,145,112,0.18)',
+    },
+    {
+      match: ['tea', 'mate', 'black tea'],
+      border: 'rgba(126,185,157,0.42)',
+      background: 'rgba(126,185,157,0.12)',
+      color: 'rgba(212,241,228,0.95)',
+      glow: 'rgba(126,185,157,0.18)',
+    },
+    {
+      match: ['green', 'aromatic', 'herbal', 'basil', 'sage', 'lavender', 'mint', 'rosemary'],
+      border: 'rgba(118,184,198,0.42)',
+      background: 'rgba(118,184,198,0.12)',
+      color: 'rgba(208,240,246,0.95)',
+      glow: 'rgba(118,184,198,0.18)',
+    },
+    {
+      match: ['fresh', 'marine', 'aquatic', 'ozonic', 'sea', 'water'],
+      border: 'rgba(120,170,214,0.42)',
+      background: 'rgba(120,170,214,0.12)',
+      color: 'rgba(214,231,249,0.95)',
+      glow: 'rgba(120,170,214,0.18)',
+    },
+    {
+      match: ['smoke', 'smoky', 'charred', 'burnt'],
+      border: 'rgba(155,145,139,0.42)',
+      background: 'rgba(155,145,139,0.12)',
+      color: 'rgba(228,221,217,0.94)',
+      glow: 'rgba(155,145,139,0.18)',
+    },
+    {
+      match: ['family', 'style', 'accord'],
+      border: familyTint.border.replace('0.32', '0.42').replace('0.3', '0.42').replace('0.28', '0.4'),
+      background: familyTint.bg.replace('0.08', '0.12').replace('0.07', '0.12').replace('0.06', '0.12'),
+      color: 'rgba(244,244,244,0.94)',
+      glow: familyTint.glow.replace('0.22', '0.18').replace('0.2', '0.18'),
+    },
+    {
+      match: ['powder', 'musk', 'iris', 'aldehydic', 'orris'],
+      border: 'rgba(177,173,214,0.38)',
+      background: 'rgba(177,173,214,0.1)',
+      color: 'rgba(231,229,247,0.94)',
+      glow: 'rgba(177,173,214,0.16)',
+    },
+    {
+      match: ['clean', 'soap', 'soapy', 'linen'],
+      border: 'rgba(171,196,214,0.38)',
+      background: 'rgba(171,196,214,0.10)',
+      color: 'rgba(232,241,248,0.94)',
+      glow: 'rgba(171,196,214,0.16)',
     },
     {
       match: ['green', 'aromatic', 'herbal', 'tea', 'fresh', 'marine', 'aquatic', 'ozonic'],
@@ -5387,8 +5978,18 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
     wardrobe_role_label: item.wardrobe_role_label ?? null,
     role_confidence: item.role_confidence ?? null,
     role_source: item.role_source ?? null,
+    release_year: null,
+    concentration: null,
+    perfumer: null,
+    short_description: null,
+    description_source: null,
+    description_generated_at: null,
     image_url: item.image_url ?? null,
     thumbnail_url: item.thumbnail_url ?? null,
+    image_source: null,
+    source_page_url: null,
+    image_license_status: null,
+    image_last_checked_at: null,
     notes: [],
     accords: [],
     top_notes: [],
@@ -5398,6 +5999,10 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
     source_confidence: null,
     longevity_score: null,
     projection_score: null,
+    odor_impact_score: null,
+    density_score: null,
+    transparency_score: null,
+    beast_mode_score: null,
     retired: Boolean(item.retired),
     collection_status: item.collection_status ?? null,
     rating: normalizeCollectionRating(item.rating),
@@ -5419,8 +6024,18 @@ function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWard
     wardrobe_role_label: null,
     role_confidence: null,
     role_source: null,
+    release_year: item.release_year ?? null,
+    concentration: item.concentration ?? null,
+    perfumer: null,
+    short_description: null,
+    description_source: null,
+    description_generated_at: null,
     image_url: item.image_url ?? null,
     thumbnail_url: item.thumbnail_url ?? null,
+    image_source: null,
+    source_page_url: item.source_url ?? null,
+    image_license_status: null,
+    image_last_checked_at: null,
     notes: sanitizeTokenSource(item.notes),
     accords: sanitizeTokenSource(item.accords),
     top_notes: sanitizeTokenSource(item.top_notes),
@@ -5430,6 +6045,10 @@ function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWard
     source_confidence: item.source_confidence ?? null,
     longevity_score: null,
     projection_score: null,
+    odor_impact_score: null,
+    density_score: null,
+    transparency_score: null,
+    beast_mode_score: null,
     retired: false,
     collection_status: null,
     rating: null,
@@ -5451,8 +6070,18 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
     wardrobe_role_label: null,
     role_confidence: null,
     role_source: null,
+    release_year: null,
+    concentration: null,
+    perfumer: null,
+    short_description: null,
+    description_source: null,
+    description_generated_at: null,
     image_url: card.image_url ?? null,
     thumbnail_url: null,
+    image_source: null,
+    source_page_url: null,
+    image_license_status: null,
+    image_last_checked_at: null,
     notes: sanitizeTokenSource(card.notes),
     accords: sanitizeTokenSource(card.accords),
     top_notes: [],
@@ -5462,6 +6091,10 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
     source_confidence: null,
     longevity_score: null,
     projection_score: null,
+    odor_impact_score: null,
+    density_score: null,
+    transparency_score: null,
+    beast_mode_score: null,
     retired: false,
     collection_status: card.isHero ? 'today_pick' : 'queue',
     rating: null,
@@ -5484,8 +6117,18 @@ function buildFragranceDetailSurfaceStateFromLayerEntry(
     wardrobe_role_label: null,
     role_confidence: null,
     role_source: null,
+    release_year: null,
+    concentration: null,
+    perfumer: null,
+    short_description: null,
+    description_source: null,
+    description_generated_at: null,
     image_url: imageUrl ?? entry.image_url ?? null,
     thumbnail_url: null,
+    image_source: null,
+    source_page_url: null,
+    image_license_status: null,
+    image_last_checked_at: null,
     notes: sanitizeTokenSource(entry.notes),
     accords: sanitizeTokenSource(entry.accords),
     top_notes: [],
@@ -5495,6 +6138,10 @@ function buildFragranceDetailSurfaceStateFromLayerEntry(
     source_confidence: null,
     longevity_score: null,
     projection_score: null,
+    odor_impact_score: null,
+    density_score: null,
+    transparency_score: null,
+    beast_mode_score: null,
     retired: false,
     collection_status: 'layer',
     rating: null,
@@ -5524,8 +6171,18 @@ function mergeFragranceDetailSurfaceState(
     wardrobe_role_label: current.wardrobe_role_label ?? detail.wardrobe_role_label ?? null,
     role_confidence: current.role_confidence ?? detail.role_confidence ?? null,
     role_source: current.role_source ?? detail.role_source ?? null,
+    release_year: current.release_year ?? detail.release_year ?? null,
+    concentration: current.concentration ?? detail.concentration ?? null,
+    perfumer: current.perfumer ?? detail.perfumer ?? null,
+    short_description: current.short_description ?? detail.short_description ?? null,
+    description_source: current.description_source ?? detail.description_source ?? null,
+    description_generated_at: current.description_generated_at ?? detail.description_generated_at ?? null,
     image_url: current.image_url ?? detail.image_url ?? null,
     thumbnail_url: current.thumbnail_url ?? detail.thumbnail_url ?? null,
+    image_source: current.image_source ?? detail.image_source ?? null,
+    source_page_url: current.source_page_url ?? detail.source_page_url ?? null,
+    image_license_status: current.image_license_status ?? detail.image_license_status ?? null,
+    image_last_checked_at: current.image_last_checked_at ?? detail.image_last_checked_at ?? null,
     notes: current.notes.length > 0 ? current.notes : sanitizeTokenSource(detail.notes),
     accords: current.accords.length > 0 ? current.accords : sanitizeTokenSource(detail.accords),
     top_notes: (current.top_notes?.length ?? 0) > 0 ? current.top_notes : sanitizeTokenSource(detail.top_notes),
@@ -5533,6 +6190,10 @@ function mergeFragranceDetailSurfaceState(
     base_notes: (current.base_notes?.length ?? 0) > 0 ? current.base_notes : sanitizeTokenSource(detail.base_notes),
     longevity_score: current.longevity_score ?? detail.longevity_score ?? null,
     projection_score: current.projection_score ?? detail.projection_score ?? null,
+    odor_impact_score: current.odor_impact_score ?? detail.odor_impact_score ?? null,
+    density_score: current.density_score ?? detail.density_score ?? null,
+    transparency_score: current.transparency_score ?? detail.transparency_score ?? null,
+    beast_mode_score: current.beast_mode_score ?? detail.beast_mode_score ?? null,
     why_it_fits_wardrobe: current.why_it_fits_wardrobe ?? detail.why_it_fits_wardrobe ?? null,
     source_confidence: current.source_confidence ?? detail.source_confidence ?? null,
     retired: current.retired ?? detail.retired ?? false,
@@ -6684,7 +7345,10 @@ const OdaraBottomSheet: React.FC<{
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
-}> = ({ open, onClose, children }) => {
+  surfaceStyle?: React.CSSProperties;
+  atmosphereClassName?: string;
+  atmosphereStyle?: React.CSSProperties;
+}> = ({ open, onClose, children, surfaceStyle, atmosphereClassName, atmosphereStyle }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[72]">
@@ -6700,15 +7364,21 @@ const OdaraBottomSheet: React.FC<{
           style={{
             borderColor: 'rgba(255,255,255,0.08)',
             background: 'linear-gradient(180deg, rgba(18,19,24,0.96) 0%, rgba(10,11,14,0.98) 100%)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            boxShadow: '0 28px 72px rgba(0,0,0,0.56), inset 0 1px 0 rgba(255,255,255,0.06)',
+            ...surfaceStyle,
+            backdropFilter: surfaceStyle?.backdropFilter ?? 'blur(24px)',
+            WebkitBackdropFilter: surfaceStyle?.WebkitBackdropFilter ?? 'blur(24px)',
+            boxShadow: surfaceStyle?.boxShadow ?? '0 28px 72px rgba(0,0,0,0.56), inset 0 1px 0 rgba(255,255,255,0.06)',
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-white/14" />
-          {children}
+          {atmosphereClassName ? (
+            <div className={atmosphereClassName} style={atmosphereStyle} />
+          ) : null}
+          <div className="relative z-[1] mx-auto mt-3 h-1.5 w-12 rounded-full bg-white/14" />
+          <div className="relative z-[1]">
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -7123,16 +7793,18 @@ const OdaraFragranceDetailSheet: React.FC<{
     family_key: detail.family_key,
     family_label: detail.family_label,
   });
-  const familyLabel = detail.family_label ?? (detail.family_key ? getFamilyLabelText(detail.family_key) : 'Unclassified');
-  const statusLabel = detail.collection_status === 'guest_demo'
-    ? 'Guest preview'
-    : detail.collection_status === 'layer'
-      ? 'Layer detail'
-      : detail.collection_status === 'today_pick'
-        ? 'Today pick'
-        : detail.collection_status === 'queue'
-          ? 'Card detail'
-          : detail.source_label ?? 'Fragrance profile';
+  const detailBaseTint = getCollectionTileTint({
+    family_key: detail.family_key,
+    family_label: detail.family_label,
+  });
+  const detailGlassVisual = getOdaraGlassCardVisualRecipe(
+    detailBaseTint,
+    'hero',
+  );
+  const detailLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(detailBaseTint, detailGlassVisual);
+  const familyLabel = formatPlainFamilyStyleLabel(
+    detail.family_label ?? (detail.family_key ? getFamilyLabelText(detail.family_key) : null),
+  ) ?? 'Unclassified';
   const detailBottleImageCandidates = buildPreferredBottleImageCandidates(detail, detail.image_url, detail.thumbnail_url);
   const detailBottleImageUrl = detailBottleImageCandidates[0] ?? null;
   const likelyTransparentDetailImage = isLikelyTransparentBottleImageUrl(detailBottleImageUrl);
@@ -7143,12 +7815,36 @@ const OdaraFragranceDetailSheet: React.FC<{
   const baseLabels = normalizeNotes(detail.base_notes ?? [], 6);
   const ratingLabel = formatCollectionRatingChip(detail.rating);
   const roleLabel = detail.wardrobe_role_label?.trim() || null;
-  const showStatusChip = Boolean(statusLabel) && statusLabel !== 'Collection profile';
   const hasStructureSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const hasTokenSections = accordLabels.length > 0 || noteLabels.length > 0 || hasStructureSections;
+  const detailDescription = buildCompactFragranceSummary(detail) ?? buildGeneratedFragranceDescription(detail);
+  const detailPerformanceBars = buildFragrancePerformanceBars(detail);
+  const detailMetaEntries = [
+    {
+      key: 'released',
+      label: 'Released',
+      value: detail.release_year ? String(detail.release_year) : 'Unknown',
+    },
+    {
+      key: 'perfumer',
+      label: 'Perfumer',
+      value: detail.perfumer ?? 'Unknown',
+    },
+    {
+      key: 'house',
+      label: 'House',
+      value: detail.brand ?? 'Unknown',
+    },
+  ];
 
   return (
-    <OdaraBottomSheet open={open} onClose={onClose}>
+    <OdaraBottomSheet
+      open={open}
+      onClose={onClose}
+      surfaceStyle={detailLiquidGlassStyle}
+      atmosphereClassName={detailGlassVisual.atmosphereClassName}
+      atmosphereStyle={{ ...detailGlassVisual.atmosphereStyle, opacity: 0.22 }}
+    >
       <div
         ref={scrollRef}
         className="px-5 pt-4"
@@ -7162,17 +7858,14 @@ const OdaraFragranceDetailSheet: React.FC<{
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.28em] text-foreground/38">
-              {statusLabel ?? 'Fragrance detail'}
-            </div>
             <div
-              className="mt-1 text-[28px] leading-[1.02] text-foreground/92"
+              className="text-[30px] leading-[1.02] text-foreground/94"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
             >
               {getDisplayName(detail.name ?? '', detail.brand ?? null)}
             </div>
             {detail.brand ? (
-              <div className="mt-1 text-[13px] text-foreground/56">{detail.brand}</div>
+              <div className="mt-1.5 text-[13px] text-foreground/58">{detail.brand}</div>
             ) : null}
           </div>
           <button
@@ -7197,8 +7890,10 @@ const OdaraFragranceDetailSheet: React.FC<{
             className="relative h-[148px] w-[104px] shrink-0 overflow-hidden rounded-[22px] border"
             style={{
               borderColor: tint.frame,
-              background: `radial-gradient(circle at top, ${tint.wash} 0%, rgba(255,255,255,0.02) 32%, rgba(11,12,16,0.92) 100%)`,
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 36px ${tint.glowStrong}`,
+              background: `linear-gradient(180deg, rgba(255,255,255,0.10) 0%, ${tint.inner} 18%, rgba(11,12,16,0.82) 100%)`,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 42px ${tint.glowStrong}`,
+              backdropFilter: 'blur(18px) saturate(130%)',
+              WebkitBackdropFilter: 'blur(18px) saturate(130%)',
             }}
           >
             <OdaraBottleImage
@@ -7213,16 +7908,10 @@ const OdaraFragranceDetailSheet: React.FC<{
                 mixBlendMode: likelyTransparentDetailImage ? undefined : 'darken',
               }}
               fallback={(
-              <div
-                className="flex h-full w-full items-center justify-center text-[24px] uppercase tracking-[0.1em] text-foreground/48"
-                style={{
-                  background: `radial-gradient(circle at 50% 22%, ${tint.wash} 0%, rgba(255,255,255,0.03) 36%, rgba(10,11,15,0.92) 100%)`,
-                }}
-              >
-                <div className="rounded-full px-4 py-2" style={{ boxShadow: `inset 0 0 0 1px ${tint.frame}` }}>
-                  {deriveProfileMonogram(detail.name ?? detail.brand ?? 'Bottle')}
-                </div>
-              </div>
+                <OdaraBottleSilhouetteFallback
+                  tint={tint}
+                  monogram={deriveProfileMonogram(detail.name ?? detail.brand ?? 'Bottle')}
+                />
               )}
             />
           </div>
@@ -7235,8 +7924,21 @@ const OdaraFragranceDetailSheet: React.FC<{
                 fragranceId={detail.fragrance_id}
                 position="family"
                 className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/82"
-                style={{ boxShadow: `inset 0 0 0 1px ${tint.frame}`, background: tint.inner }}
+                style={{
+                  boxShadow: `inset 0 0 0 1px ${tint.frame}`,
+                  background: `linear-gradient(180deg, rgba(255,255,255,0.10) 0%, ${tint.inner} 100%)`,
+                  backdropFilter: 'blur(14px)',
+                  WebkitBackdropFilter: 'blur(14px)',
+                }}
               />
+              {detail.concentration ? (
+                <div
+                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em] text-foreground/68"
+                  style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.04)' }}
+                >
+                  {detail.concentration}
+                </div>
+              ) : null}
               {roleLabel ? (
                 <div
                   className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/72"
@@ -7254,21 +7956,19 @@ const OdaraFragranceDetailSheet: React.FC<{
                 </div>
               ) : null}
             </div>
-            {(ratingLabel || showStatusChip) ? (
+            {ratingLabel ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {ratingLabel ? (
-                  <div
-                    className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em]"
-                    style={{ boxShadow: 'inset 0 0 0 1px rgba(231,181,95,0.26)', background: 'rgba(231,181,95,0.1)', color: 'rgba(241,205,129,0.94)' }}
-                  >
-                    {ratingLabel}
-                  </div>
-                ) : null}
-                {showStatusChip ? (
-                  <div className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em] text-foreground/54" style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.07)' }}>
-                    {statusLabel}
-                  </div>
-                ) : null}
+                <div
+                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em]"
+                  style={{ boxShadow: 'inset 0 0 0 1px rgba(231,181,95,0.26)', background: 'rgba(231,181,95,0.1)', color: 'rgba(241,205,129,0.94)' }}
+                >
+                  {ratingLabel}
+                </div>
+              </div>
+            ) : null}
+            {detailDescription ? (
+              <div className="mt-4 text-[15px] leading-[1.42] text-foreground/82">
+                {detailDescription}
               </div>
             ) : null}
             {detail.detail_loading ? (
@@ -7281,11 +7981,40 @@ const OdaraFragranceDetailSheet: React.FC<{
               </div>
             ) : null}
             {detail.why_it_fits_wardrobe ? (
-              <div className="mt-3 text-[11px] leading-[1.58] text-foreground/54">
-                {detail.why_it_fits_wardrobe}
-              </div>
+              <details className="group mt-3">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-foreground/42 transition-colors group-open:text-foreground/58">
+                  <span>Why it fits</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </summary>
+                <div className="mt-2 text-[12px] leading-[1.55] text-foreground/58">
+                  {detail.why_it_fits_wardrobe}
+                </div>
+              </details>
             ) : null}
           </div>
+        </div>
+
+        <div
+          className="mt-4 grid grid-cols-2 gap-2.5"
+        >
+          {detailMetaEntries.map((entry, index) => (
+            <div
+              key={entry.key}
+              className={`rounded-[18px] border px-3.5 py-3 ${index === detailMetaEntries.length - 1 ? 'col-span-2' : ''}`}
+              style={{
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(14px)',
+                WebkitBackdropFilter: 'blur(14px)',
+              }}
+            >
+              <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">{entry.label}</div>
+              <div className="mt-1.5 text-[12px] leading-[1.45] text-foreground/84">{entry.value}</div>
+            </div>
+          ))}
         </div>
 
         {(() => {
@@ -7343,19 +8072,34 @@ const OdaraFragranceDetailSheet: React.FC<{
                           fragranceId={detail.fragrance_id}
                           position="family"
                           className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.18em] text-foreground/88"
-                          style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.05)' }}
+                          style={{
+                            border: `1px solid ${getAccordChipTone(txFamily, detail.family_key).border}`,
+                            background: getAccordChipTone(txFamily, detail.family_key).background,
+                            color: getAccordChipTone(txFamily, detail.family_key).color,
+                            boxShadow: `0 0 12px ${getAccordChipTone(txFamily, detail.family_key).glow}`,
+                          }}
                         />
                       ) : null}
                       {facetItems.map((label, i) => (
-                        <ScentIntelChipButton
-                          key={`facet-${label}-${i}`}
-                          label={label}
-                          onOpen={onOpenScentIntel}
-                          fragranceId={detail.fragrance_id}
-                          position="accord"
-                          className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.04em] text-foreground/74"
-                          style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.022)' }}
-                        />
+                        (() => {
+                          const tone = getAccordChipTone(label, detail.family_key);
+                          return (
+                            <ScentIntelChipButton
+                              key={`facet-${label}-${i}`}
+                              label={label}
+                              onOpen={onOpenScentIntel}
+                              fragranceId={detail.fragrance_id}
+                              position="accord"
+                              className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.04em]"
+                              style={{
+                                color: tone.color,
+                                border: `1px solid ${tone.border}`,
+                                background: tone.background,
+                                boxShadow: `0 0 12px ${tone.glow}`,
+                              }}
+                            />
+                          );
+                        })()
                       ))}
                     </div>
                   ) : null}
@@ -7428,25 +8172,33 @@ const OdaraFragranceDetailSheet: React.FC<{
                       className="rounded-[18px] border px-3 py-3"
                       style={{
                         borderColor: 'rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.02)',
+                        background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                        backdropFilter: 'blur(14px)',
+                        WebkitBackdropFilter: 'blur(14px)',
                       }}
                     >
                       <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">{section.label}</div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {section.values.map((label, index) => (
-                          <ScentIntelChipButton
-                            key={`${section.position}-${label}-${index}`}
-                            label={label}
-                            onOpen={onOpenScentIntel}
-                            fragranceId={detail.fragrance_id}
-                            position={section.position}
-                            className="rounded-full px-2.5 py-[5px] text-[10px] text-foreground/72 transition-colors hover:text-foreground/92"
-                            style={{
-                              border: '1px solid rgba(255,255,255,0.07)',
-                              background: 'rgba(255,255,255,0.025)',
-                            }}
-                          />
-                        ))}
+                        {section.values.map((label, index) => {
+                          const tone = getAccordChipTone(label, detail.family_key);
+                          return (
+                            <ScentIntelChipButton
+                              key={`${section.position}-${label}-${index}`}
+                              label={label}
+                              onOpen={onOpenScentIntel}
+                              fragranceId={detail.fragrance_id}
+                              position={section.position}
+                              className={getScentIntelChipClass()}
+                              style={{
+                                color: tone.color,
+                                border: `1px solid ${tone.border}`,
+                                background: tone.background,
+                                boxShadow: `0 0 14px ${tone.glow}`,
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ) : null
@@ -7456,41 +8208,54 @@ const OdaraFragranceDetailSheet: React.FC<{
               <div>
                 <div className="mb-2 text-[9px] uppercase tracking-[0.24em] text-foreground/38">Notes</div>
                 <div className="flex flex-wrap gap-2">
-                  {noteLabels.map((label, index) => (
-                    <ScentIntelChipButton
-                      key={`note-${label}-${index}`}
-                      label={label}
-                      onOpen={onOpenScentIntel}
-                      fragranceId={detail.fragrance_id}
-                      position="unknown"
-                      className={getScentIntelChipClass()}
-                      style={{
-                        color: 'rgba(255,255,255,0.76)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.03)',
-                      }}
-                    />
-                  ))}
+                  {noteLabels.map((label, index) => {
+                    const tone = getAccordChipTone(label, detail.family_key);
+                    return (
+                      <ScentIntelChipButton
+                        key={`note-${label}-${index}`}
+                        label={label}
+                        onOpen={onOpenScentIntel}
+                        fragranceId={detail.fragrance_id}
+                        position="unknown"
+                        className={getScentIntelChipClass()}
+                        style={{
+                          color: tone.color,
+                          border: `1px solid ${tone.border}`,
+                          background: tone.background,
+                          boxShadow: `0 0 14px ${tone.glow}`,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
           </div>
         ) : null}
 
-        {(detail.longevity_score != null || detail.projection_score != null) ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {detail.longevity_score != null ? (
-              <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                {`Longevity ${Math.round(detail.longevity_score * 100)}`}
-              </div>
-            ) : null}
-            {detail.projection_score != null ? (
-              <div className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.18em] text-foreground/60" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                {`Projection ${Math.round(detail.projection_score * 100)}`}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <div
+          className="mt-4 rounded-[18px] border px-3.5 py-3"
+          style={{
+            borderColor: 'rgba(255,255,255,0.08)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+          }}
+        >
+          <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">Performance</div>
+          {detailPerformanceBars.length > 0 ? (
+            <div className="mt-3 space-y-3.5">
+              {detailPerformanceBars.map((metric) => (
+                <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2.5 text-[12px] leading-[1.5] text-foreground/58">
+              Not enough performance data yet.
+            </div>
+          )}
+        </div>
       </div>
     </OdaraBottomSheet>
   );
@@ -11348,7 +12113,7 @@ const OdaraScreen = ({
     try {
       const { data, error } = await odaraSupabase
         .from('fragrance_image_assets' as any)
-        .select('fragrance_id, image_url, thumbnail_url, provider_payload')
+        .select('fragrance_id, image_url, thumbnail_url, image_source, source_url, provider_payload, updated_at')
         .in('fragrance_id', uniqueIds);
 
       if (error) {
@@ -11364,6 +12129,9 @@ const OdaraScreen = ({
             image_url_transparent: readTransparentBottleImageUrlFromObject(row),
             image_url: readRegularBottleImageUrlFromObject(row),
             thumbnail_url: readTrimmedImageUrl(row.thumbnail_url),
+            image_source: readTrimmedLayerText(row.image_source),
+            source_url: readTrimmedLayerText(row.source_url),
+            updated_at: readTrimmedLayerText(row.updated_at),
             provider_payload: row.provider_payload ?? null,
           }] as [string, FragranceImageAsset]),
       );
@@ -11394,7 +12162,7 @@ const OdaraScreen = ({
       const [{ data, error }, imageAssets] = await Promise.all([
         odaraSupabase
           .from('fragrances')
-          .select('id, name, brand, family_key, notes, accords')
+          .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, odor_impact_confidence, density_score, transparency_score, beast_mode_score, source_confidence, source_url')
           .in('id', missingIds),
         fetchFragranceImageAssets(missingIds),
       ]);
@@ -11407,7 +12175,7 @@ const OdaraScreen = ({
       for (const row of Array.isArray(data) ? data : []) {
         if (!row?.id) continue;
         const imageAsset = imageAssets.get(row.id) ?? null;
-        const detail: FragranceDetail = {
+        const detail = finalizeFragranceDetail({
           id: row.id,
           name: row.name ?? '',
           brand: row.brand ?? null,
@@ -11417,21 +12185,35 @@ const OdaraScreen = ({
           wardrobe_role_label: null,
           role_confidence: null,
           role_source: null,
+          release_year: typeof (row as any).release_year === 'number' ? (row as any).release_year : null,
+          concentration: typeof (row as any).concentration === 'string' ? (row as any).concentration : null,
+          perfumer: typeof (row as any).perfumer === 'string' ? (row as any).perfumer : null,
+          short_description: null,
+          description_source: null,
+          description_generated_at: null,
           notes: Array.isArray(row.notes) ? row.notes : [],
           accords: Array.isArray(row.accords) ? row.accords : [],
-          top_notes: [],
-          middle_notes: [],
-          base_notes: [],
-          longevity_score: null,
-          projection_score: null,
+          top_notes: Array.isArray((row as any).top_notes) ? (row as any).top_notes : [],
+          middle_notes: Array.isArray((row as any).heart_notes) ? (row as any).heart_notes : [],
+          base_notes: Array.isArray((row as any).base_notes) ? (row as any).base_notes : [],
+          longevity_score: normalizeDetailScore((row as any).longevity_score),
+          projection_score: normalizeDetailScore((row as any).projection_score),
+          odor_impact_score: normalizeDetailScore((row as any).odor_impact_confidence),
+          density_score: normalizeDetailScore((row as any).density_score),
+          transparency_score: normalizeDetailScore((row as any).transparency_score),
+          beast_mode_score: normalizeDetailScore((row as any).beast_mode_score),
           why_it_fits_wardrobe: null,
-          source_confidence: null,
+          source_confidence: typeof (row as any).source_confidence === 'string' ? (row as any).source_confidence : null,
           retired: false,
           rating: null,
           profile_loaded: false,
           image_url: resolvePreferredWardrobeBottleImage(imageAsset, row),
           thumbnail_url: imageAsset?.thumbnail_url ?? null,
-        };
+          image_source: imageAsset?.image_source ?? null,
+          source_page_url: imageAsset?.source_url ?? (typeof (row as any).source_url === 'string' ? (row as any).source_url : null),
+          image_license_status: null,
+          image_last_checked_at: imageAsset?.updated_at ?? null,
+        });
         fragranceDetailCacheRef.current.set(row.id, detail);
         details.set(row.id, detail);
         cacheUpdated = true;
@@ -11537,83 +12319,73 @@ const OdaraScreen = ({
 
     const request = (async (): Promise<FragranceDetail | null> => {
       try {
-        const { data: profileData, error: profileError } = await odaraSupabase.rpc('get_fragrance_profile_v1' as any, {
-          p_user: isGuestMode ? null : userId,
-          p_fragrance_id: fragranceId,
-        } as any);
-
-        if (!profileError && profileData && (profileData as any)?.found) {
-          const payload = profileData as any;
-          const detail: FragranceDetail = {
-            id: payload.fragrance_id ?? fragranceId,
-            name: payload.name ?? '',
-            brand: payload.brand ?? null,
-            family_key: payload.family_key ?? null,
-            family_color_token: payload.family_color_token ?? payload.family_key ?? null,
-            wardrobe_role_key: payload.wardrobe_role_key ?? null,
-            wardrobe_role_label: payload.wardrobe_role_label ?? null,
-            role_confidence: payload.role_confidence ?? null,
-            role_source: payload.role_source ?? null,
-            notes: Array.isArray(payload.notes) ? payload.notes : [],
-            accords: Array.isArray(payload.accords) ? payload.accords : [],
-            top_notes: Array.isArray(payload.top_notes) ? payload.top_notes : [],
-            middle_notes: Array.isArray(payload.middle_notes) ? payload.middle_notes : [],
-            base_notes: Array.isArray(payload.base_notes) ? payload.base_notes : [],
-            longevity_score: normalizeDetailScore(payload.longevity_score),
-            projection_score: normalizeDetailScore(payload.projection_score),
-            why_it_fits_wardrobe: typeof payload.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
-            source_confidence: typeof payload.source_confidence === 'string' ? payload.source_confidence : null,
-            retired: Boolean(payload.retired),
-            rating: normalizeCollectionRating(payload.rating),
-            profile_loaded: true,
-            image_url: resolvePreferredWardrobeBottleImage(payload, payload.image_url, payload.thumbnail_url),
-            thumbnail_url: payload.thumbnail_url ?? null,
-          };
-
-          fragranceDetailCacheRef.current.set(fragranceId, detail);
-          setFragranceDetailVersion((version) => version + 1);
-          return detail;
-        }
-
-        const [{ data, error }, imageAssets] = await Promise.all([
+        const [
+          { data: profileData, error: profileError },
+          { data, error },
+          imageAssets,
+        ] = await Promise.all([
+          odaraSupabase.rpc('get_fragrance_profile_v1' as any, {
+            p_user: isGuestMode ? null : userId,
+            p_fragrance_id: fragranceId,
+          } as any),
           odaraSupabase
             .from('fragrances')
-            .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, longevity_score, projection_score, source_confidence')
+            .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, odor_impact_confidence, density_score, transparency_score, beast_mode_score, source_confidence, source_url')
             .eq('id', fragranceId)
             .maybeSingle(),
           fetchFragranceImageAssets([fragranceId]),
         ]);
 
-        if (error || !data?.id) {
+        const payload = (!profileError && profileData && (profileData as any)?.found)
+          ? (profileData as any)
+          : null;
+
+        if (!payload && (error || !data?.id)) {
           return null;
         }
 
         const imageAsset = imageAssets.get(fragranceId) ?? null;
-        const detail: FragranceDetail = {
-          id: data.id,
-          name: data.name ?? '',
-          brand: data.brand ?? null,
-          family_key: data.family_key ?? null,
-          family_color_token: data.family_key ?? null,
-          wardrobe_role_key: null,
-          wardrobe_role_label: null,
-          role_confidence: null,
-          role_source: null,
-          notes: Array.isArray(data.notes) ? data.notes : [],
-          accords: Array.isArray(data.accords) ? data.accords : [],
-          top_notes: Array.isArray((data as any).top_notes) ? (data as any).top_notes : [],
-          middle_notes: Array.isArray((data as any).heart_notes) ? (data as any).heart_notes : [],
-          base_notes: Array.isArray((data as any).base_notes) ? (data as any).base_notes : [],
-          longevity_score: normalizeDetailScore((data as any).longevity_score),
-          projection_score: normalizeDetailScore((data as any).projection_score),
-          why_it_fits_wardrobe: null,
-          source_confidence: typeof (data as any).source_confidence === 'string' ? (data as any).source_confidence : null,
-          retired: false,
-          rating: null,
+        const detail = finalizeFragranceDetail({
+          id: payload?.fragrance_id ?? data?.id ?? fragranceId,
+          name: payload?.name ?? data?.name ?? '',
+          brand: payload?.brand ?? data?.brand ?? null,
+          family_key: payload?.family_key ?? data?.family_key ?? null,
+          family_color_token: payload?.family_color_token ?? payload?.family_key ?? data?.family_key ?? null,
+          wardrobe_role_key: payload?.wardrobe_role_key ?? null,
+          wardrobe_role_label: payload?.wardrobe_role_label ?? null,
+          role_confidence: payload?.role_confidence ?? null,
+          role_source: payload?.role_source ?? null,
+          release_year: payload?.release_year ?? (typeof (data as any)?.release_year === 'number' ? (data as any).release_year : null),
+          concentration: payload?.concentration ?? (typeof (data as any)?.concentration === 'string' ? (data as any).concentration : null),
+          perfumer: payload?.perfumer ?? (typeof (data as any)?.perfumer === 'string' ? (data as any).perfumer : null),
+          short_description: payload?.short_description ?? null,
+          description_source: payload?.description_source ?? null,
+          description_generated_at: payload?.description_generated_at ?? null,
+          notes: Array.isArray(payload?.notes) ? payload.notes : (Array.isArray(data?.notes) ? data.notes : []),
+          accords: Array.isArray(payload?.accords) ? payload.accords : (Array.isArray(data?.accords) ? data.accords : []),
+          top_notes: Array.isArray(payload?.top_notes) ? payload.top_notes : (Array.isArray((data as any)?.top_notes) ? (data as any).top_notes : []),
+          middle_notes: Array.isArray(payload?.middle_notes) ? payload.middle_notes : (Array.isArray((data as any)?.heart_notes) ? (data as any).heart_notes : []),
+          base_notes: Array.isArray(payload?.base_notes) ? payload.base_notes : (Array.isArray((data as any)?.base_notes) ? (data as any).base_notes : []),
+          longevity_score: normalizeDetailScore(payload?.longevity_score ?? (data as any)?.longevity_score),
+          projection_score: normalizeDetailScore(payload?.projection_score ?? (data as any)?.projection_score),
+          odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence ?? (data as any)?.odor_impact_confidence),
+          density_score: normalizeDetailScore(payload?.density_score ?? (data as any)?.density_score),
+          transparency_score: normalizeDetailScore(payload?.transparency_score ?? (data as any)?.transparency_score),
+          beast_mode_score: normalizeDetailScore(payload?.beast_mode_score ?? (data as any)?.beast_mode_score),
+          why_it_fits_wardrobe: typeof payload?.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
+          source_confidence: typeof payload?.source_confidence === 'string'
+            ? payload.source_confidence
+            : (typeof (data as any)?.source_confidence === 'string' ? (data as any).source_confidence : null),
+          retired: Boolean(payload?.retired),
+          rating: normalizeCollectionRating(payload?.rating),
           profile_loaded: true,
-          image_url: resolvePreferredWardrobeBottleImage(imageAsset, data),
-          thumbnail_url: imageAsset?.thumbnail_url ?? null,
-        };
+          image_url: resolvePreferredWardrobeBottleImage(payload, imageAsset, data, payload?.image_url, payload?.thumbnail_url),
+          thumbnail_url: payload?.thumbnail_url ?? imageAsset?.thumbnail_url ?? null,
+          image_source: payload?.image_source ?? imageAsset?.image_source ?? null,
+          source_page_url: payload?.source_page_url ?? payload?.source_url ?? imageAsset?.source_url ?? (typeof (data as any)?.source_url === 'string' ? (data as any).source_url : null),
+          image_license_status: payload?.image_license_status ?? null,
+          image_last_checked_at: payload?.image_last_checked_at ?? imageAsset?.updated_at ?? null,
+        });
 
         fragranceDetailCacheRef.current.set(fragranceId, detail);
         setFragranceDetailVersion((version) => version + 1);
@@ -12026,20 +12798,12 @@ const OdaraScreen = ({
     if (!isGuestMode || !visibleGuestRender?.activeHero) return;
 
     const heroId = visibleGuestRender.activeHero?.fragrance_id ?? visibleGuestRender.activeHero?.id ?? null;
-    if (
-      heroId
-      && !resolveBottleImageUrl(visibleGuestRender.activeHero)
-      && !hasResolvedImageValue(fragranceDetailCacheRef.current.get(heroId)?.image_url)
-    ) {
+    if (heroId && !fragranceDetailCacheRef.current.has(heroId)) {
       void fetchFragranceDetail(heroId);
     }
 
     const activeLayer = guestLayerToModeEntry(visibleGuestRender.activeLayer);
-    if (
-      activeLayer?.id
-      && !resolveBottleImageUrl(visibleGuestRender.activeLayer, activeLayer)
-      && !hasResolvedImageValue(fragranceDetailCacheRef.current.get(activeLayer.id)?.image_url)
-    ) {
+    if (activeLayer?.id && !fragranceDetailCacheRef.current.has(activeLayer.id)) {
       void fetchFragranceDetail(activeLayer.id);
     }
   }, [isGuestMode, visibleGuestRender, fetchFragranceDetail, fragranceDetailVersion]);
@@ -12242,7 +13006,6 @@ const OdaraScreen = ({
   const currentWeekDateKeys = useMemo(() => currentWeekDays.map((fd) => fd.dateStr), [currentWeekDays]);
   const visibleWeekDateKeys = currentWeekDateKeys;
   const visibleWeekDateKeysKey = useMemo(() => visibleWeekDateKeys.join('|'), [visibleWeekDateKeys]);
-  const forecastLaneContexts = useMemo(() => ['daily', 'work', 'hangout', 'date'] as const, []);
   const signedInWeekHydrationDateKeys = useMemo(() => {
     if (visibleWeekDateKeys.length === 0) return [];
     return Array.from(new Set([getPreviousDateKey(visibleWeekDateKeys[0]), ...visibleWeekDateKeys]));
@@ -14088,8 +14851,7 @@ const OdaraScreen = ({
     if (isGuestMode) return;
 
     const visibleHeroNeedsDetail = !!visibleCard?.fragrance_id
-      && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id)
-      && displayCardNeedsDetailHydration(visibleCard);
+      && !fragranceDetailCacheRef.current.has(visibleCard.fragrance_id);
     if (visibleHeroNeedsDetail) {
       void fetchFragranceDetail(visibleCard!.fragrance_id).then((detail) => {
         if (!detail || !visibleCard || visibleCard.isHero) return;
@@ -14105,7 +14867,7 @@ const OdaraScreen = ({
     const visibleLayerId = signedInForcedLayerCarryCard?.fragrance_id ?? visibleModeEntry?.id ?? null;
     const visibleLayerNeedsDetail = !!visibleLayerId
       && !fragranceDetailCacheRef.current.has(visibleLayerId);
-    if (visibleLayerNeedsDetail && layerModeNeedsDetailHydration(visibleModeEntry ?? (signedInForcedLayerCarryCard ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, betaSafeSignedInMood) : null))) {
+    if (visibleLayerNeedsDetail) {
       void fetchFragranceDetail(visibleLayerId!);
     }
   }, [isGuestMode, visibleCard, visibleModeEntry, signedInForcedLayerCarryCard, fetchFragranceDetail, fragranceDetailVersion, commitSignedInQueuedHero, betaSafeSignedInMood]);
@@ -15695,11 +16457,15 @@ const OdaraScreen = ({
   ]);
   const openVisibleHeroDetail = useCallback(() => {
     if (!visibleResolvedCurrentCard) return;
+    const heroFamilyLabelForDetail = visibleResolvedHeroRail?.familyLabel ?? '';
     openFragranceDetailSheet({
       ...buildFragranceDetailSurfaceStateFromDisplayCard(visibleResolvedCurrentCard as any),
+      collection_status: 'today_pick',
+      source_label: 'Today pick',
+      family_label: formatPlainFamilyStyleLabel(heroFamilyLabelForDetail) ?? heroFamilyLabelForDetail ?? null,
       image_url: visibleHeroBottleImageUrl ?? visibleResolvedCurrentCard.image_url ?? null,
     });
-  }, [openFragranceDetailSheet, visibleHeroBottleImageUrl, visibleResolvedCurrentCard]);
+  }, [openFragranceDetailSheet, visibleHeroBottleImageUrl, visibleResolvedCurrentCard, visibleResolvedHeroRail?.familyLabel]);
   const openVisibleLayerDetail = useCallback(() => {
     if (!visibleResolvedLayer) return;
     openFragranceDetailSheet(buildFragranceDetailSurfaceStateFromLayerEntry(
@@ -15867,6 +16633,30 @@ const OdaraScreen = ({
   const alternatesRendered = visibleAlternateRailItems.length > 0;
   const visibleHeroFamilyColor = visibleResolvedHeroRail?.familyColor ?? '#888';
   const visibleHeroFamilyLabel = visibleResolvedHeroRail?.familyLabel ?? '';
+  const visibleHeroDetail = useMemo(() => {
+    const heroId = visibleResolvedCurrentCard?.fragrance_id ?? null;
+    return heroId ? (fragranceDetailCacheRef.current.get(heroId) ?? null) : null;
+  }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
+  const visibleHeroShortDescription = useMemo(() => {
+    return visibleHeroDetail?.short_description ?? buildGeneratedFragranceDescription({
+      family_key: visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null,
+      family_label: visibleHeroDetail?.family_key
+        ? getFamilyLabelText(visibleHeroDetail.family_key)
+        : visibleHeroFamilyLabel,
+      notes: visibleHeroDetail?.notes ?? visibleResolvedCurrentCard?.notes ?? [],
+      accords: visibleHeroDetail?.accords ?? visibleResolvedCurrentCard?.accords ?? [],
+      projection_score: visibleHeroDetail?.projection_score ?? null,
+      longevity_score: visibleHeroDetail?.longevity_score ?? null,
+      density_score: visibleHeroDetail?.density_score ?? null,
+    });
+  }, [visibleHeroDetail, visibleResolvedCurrentCard, visibleHeroFamilyLabel]);
+  const visibleHeroMetaBits = useMemo(() => {
+    const bits = [
+      visibleHeroDetail?.release_year ? `Released ${visibleHeroDetail.release_year}` : null,
+      visibleHeroDetail?.perfumer ? `By ${visibleHeroDetail.perfumer}` : null,
+    ].filter(Boolean) as string[];
+    return bits.slice(0, 2);
+  }, [visibleHeroDetail]);
   const activeReasonChip = visibleResolvedHeroRail?.reasonChip ?? null;
   const heroRailTokens: Array<any> = Array.isArray(visibleResolvedHeroRail?.tokens)
     ? visibleResolvedHeroRail.tokens
@@ -16620,7 +17410,7 @@ const OdaraScreen = ({
               <div
                 className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
                 style={{
-                  ...heroCardVisual.surfaceStyle,
+                  ...getOdaraHeroLiquidGlassMaterialStyle(tint, heroCardVisual),
                   // Allow native vertical scroll from the hero card. We only
                   // claim the gesture on clear horizontal intent (day-swipe).
                   touchAction: 'pan-y',
@@ -16895,6 +17685,30 @@ const OdaraScreen = ({
                       </span>
                     ) : null}
 
+                    {visibleHeroShortDescription ? (
+                      <p className="mb-2.5 max-w-[28rem] text-left text-[12px] leading-[1.55] text-foreground/78">
+                        {visibleHeroShortDescription}
+                      </p>
+                    ) : null}
+
+                    {visibleHeroMetaBits.length > 0 ? (
+                      <div className="mb-2.5 flex flex-wrap gap-1.5">
+                        {visibleHeroMetaBits.map((bit) => (
+                          <span
+                            key={bit}
+                            className="inline-flex rounded-full px-2.5 py-[5px] text-[9px] uppercase tracking-[0.18em] text-foreground/68"
+                            style={{
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              background: 'rgba(255,255,255,0.04)',
+                              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                            }}
+                          >
+                            {bit}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+
                     {(activeReasonChip || heroRailTokens.length > 0) && (
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
@@ -16957,8 +17771,29 @@ const OdaraScreen = ({
                     )}
                   </div>
 
-                  {visibleHeroBottleImageCandidates.length > 0 ? (
-                    <div className="pointer-events-none relative mt-1 h-[108px] w-[78px] shrink-0 sm:h-[118px] sm:w-[86px]">
+                  <button
+                    type="button"
+                    data-no-card-swipe
+                    aria-label={`Open fragrance profile for ${getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openVisibleHeroDetail();
+                    }}
+                    className="relative mt-1 h-[108px] w-[78px] shrink-0 overflow-hidden rounded-[22px] border sm:h-[118px] sm:w-[86px]"
+                    style={{
+                      borderColor: 'rgba(255,255,255,0.10)',
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 18%, rgba(12,13,16,0.56) 100%)',
+                      boxShadow: '0 18px 34px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(18px) saturate(135%)',
+                      WebkitBackdropFilter: 'blur(18px) saturate(135%)',
+                    }}
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 26%)' }}
+                    />
+                    <div className="relative h-full w-full p-2.5">
                       <OdaraBottleImage
                         candidates={visibleHeroBottleImageCandidates}
                         alt={`${visibleResolvedCurrentCard?.name ?? 'Fragrance'} bottle`}
@@ -16972,10 +17807,19 @@ const OdaraScreen = ({
                             : 'contrast(1.03) saturate(0.96) drop-shadow(0 16px 24px rgba(0,0,0,0.34))',
                           mixBlendMode: likelyTransparentHeroBottleImage ? undefined : 'darken',
                         }}
-                        fallback={null}
+                        fallback={(
+                          <OdaraBottleSilhouetteFallback
+                            tint={getEnhancedCollectionTint({
+                              family_key: visibleResolvedCurrentCard?.family ?? null,
+                              family_label: visibleHeroFamilyLabel || null,
+                            })}
+                            monogram={deriveProfileMonogram(visibleResolvedCurrentCard?.name ?? visibleResolvedCurrentCard?.brand ?? 'Bottle')}
+                            compact
+                          />
+                        )}
                       />
                     </div>
-                  ) : null}
+                  </button>
                 </div>
               </div>
             </div>
@@ -17313,96 +18157,49 @@ const OdaraScreen = ({
         )}
         {/* ── Weekly navigator + lane tracker ── */}
         <div
-          className="mt-0 rounded-[16px] px-3.5 py-2.5"
+          className="mt-6 rounded-[18px] px-0 py-1.5"
           style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0.004) 100%)',
           }}
         >
           <div
             ref={navigationStripRef}
-            className="hide-horizontal-scrollbar overflow-x-auto pb-0.5"
+            className="hide-horizontal-scrollbar overflow-x-auto px-1 pb-0.5"
             style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
           >
             <div
               ref={navigationContentRef}
-              className="relative flex w-max min-w-full gap-1"
+              className="relative flex w-max min-w-full gap-0"
             >
-              {/* Subtle full-week notches at every day center, behind day cells */}
-              {orbGeom && orbGeom.weekNotches.map((nx, ni) => (
+              {orbGeom && (
                 <div
-                  key={`notch-${ni}`}
                   aria-hidden
                   className="pointer-events-none absolute"
                   style={{
-                    left: `${nx}px`,
+                    left: `${orbGeom.left}px`,
                     top: `${orbGeom.topY}px`,
                     transform: 'translate(-50%, -50%)',
-                    width: '1px',
-                    height: '2px',
-                    background: 'rgba(255,255,255,0.08)',
-                    borderRadius: '1px',
-                    zIndex: 0,
+                    width: '11px',
+                    height: '11px',
+                    zIndex: 5,
+                    transition: 'left 800ms ease',
+                    borderRadius: '999px',
+                    background: 'radial-gradient(circle, rgba(255,245,206,0.98) 0%, rgba(255,183,72,0.88) 36%, rgba(244,126,24,0.20) 64%, rgba(244,126,24,0) 72%)',
+                    boxShadow: '0 0 7px rgba(255,177,56,0.55), 0 0 15px rgba(242,123,23,0.24)',
                   }}
-                />
-              ))}
-              {/* Live moon-phase marker — visual unchanged. Sits BEHIND the day
-                  cells (zIndex 0 vs cells' zIndex 2) so it peeks out from behind
-                  the day labels as it travels along the same horizontal line. */}
-              {orbGeom && (() => {
-                const D = 7;
-                const C = D / 2;
-                const R = D / 2;
-                const lit = orbGeom.moonLitFrac;
-                const rx = R * Math.abs(1 - 2 * lit);
-                const litRectX = orbGeom.moonWaxing ? C : 0;
-                const ellipseAdds = lit >= 0.5;
-                const maskId = `moonmask-${orbGeom.moonWaxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
-                return (
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute"
-                    style={{
-                      left: `${orbGeom.left}px`,
-                      top: `${orbGeom.topY}px`,
-                      transform: 'translate(-50%, -50%)',
-                      width: `${D}px`,
-                      height: `${D}px`,
-                      opacity: 0.6,
-                      zIndex: 3,
-                      transition: 'left 800ms ease',
-                      filter: 'drop-shadow(0 0 2px rgba(245,243,235,0.30))',
-                    }}
-                  >
-                    <svg width={D} height={D} viewBox={`0 0 ${D} ${D}`}>
-                      <defs>
-                        <mask id={maskId}>
-                          <rect x="0" y="0" width={D} height={D} fill="black" />
-                          <rect x={litRectX} y="0" width={C} height={D} fill="white" />
-                          <ellipse cx={C} cy={C} rx={rx} ry={R} fill={ellipseAdds ? 'white' : 'black'} />
-                        </mask>
-                      </defs>
-                      <circle cx={C} cy={C} r={R} fill="rgba(245,243,235,0.85)" mask={`url(#${maskId})`} />
-                    </svg>
-                  </div>
-                );
-              })()}
+                >
+                  <span
+                    className="absolute left-1/2 top-1/2 h-px w-[17px] -translate-x-1/2 -translate-y-1/2"
+                    style={{ background: 'linear-gradient(90deg, rgba(255,191,75,0), rgba(255,211,121,0.55), rgba(255,191,75,0))' }}
+                  />
+                  <span
+                    className="absolute left-1/2 top-1/2 h-[17px] w-px -translate-x-1/2 -translate-y-1/2"
+                    style={{ background: 'linear-gradient(180deg, rgba(255,191,75,0), rgba(255,211,121,0.44), rgba(255,191,75,0))' }}
+                  />
+                </div>
+              )}
 
               {navigationDays.map((fd, i) => {
-                const dayLanes = isGuestMode
-                  ? forecastLaneContexts.map((ctx) => {
-                      const key = `${fd.dateStr}:${ctx}`;
-                      return lockedSelections[key] ?? null;
-                    })
-                  : forecastLaneContexts.map((ctx) => {
-                      const normalizedContext = normalizePersistedContextKey(ctx);
-                      const lane = signedInLockedLaneByDate[fd.dateStr]?.[normalizedContext] ?? null;
-                      return lane
-                        ? { mainColor: lane.mainColor, layerColor: lane.layerColor }
-                        : null;
-                    });
-                const hasAnyLane = dayLanes.some(Boolean);
-
                 return (
                   <button
                     key={fd.dateStr}
@@ -17410,59 +18207,68 @@ const OdaraScreen = ({
                     onClick={() => {
                       selectNavigationDay(fd.dateStr);
                     }}
-                    className="relative flex min-w-[44px] flex-none flex-col items-center gap-[2px] rounded-lg px-1.5 py-1.5 transition-all duration-200 sm:min-w-[46px]"
+                    className="relative flex min-w-[44px] flex-none flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
                     style={{
                       width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       ...(fd.isSelected ? {
-                        background: 'rgba(255,255,255,0.08)',
+                        background: 'linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
                         zIndex: 2,
                       } : { zIndex: 2 }),
                     }}
                   >
-                    <span className={`text-[10px] tracking-[0.04em] transition-colors ${
-                      fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/40'
+                    <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
+                      fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/62' : 'text-muted-foreground/42'
                     }`}>
                       {fd.label}
                     </span>
-                    <div className="grid w-full grid-cols-[10px_auto_10px] items-center justify-center gap-[5px]">
-                      <span aria-hidden className="block h-[10px] w-[10px] opacity-0" />
-                      <span className={`text-[14px] font-medium transition-colors ${
-                        fd.isSelected ? 'text-foreground' : fd.isToday ? 'text-foreground/60' : 'text-muted-foreground/30'
-                      }`}>
-                        {fd.day}
-                      </span>
+                    <div className="relative mt-3 h-[24px] w-full">
                       <span
-                        ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
                         aria-hidden
-                        className="block h-[10px] w-[10px] rounded-full opacity-0"
+                        className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
+                        style={{
+                          background: 'linear-gradient(90deg, rgba(182,132,54,0.06), rgba(217,159,68,0.32) 42%, rgba(217,159,68,0.32) 58%, rgba(182,132,54,0.06))',
+                        }}
                       />
-                    </div>
-
-                    <div className="mt-[5px] flex w-full flex-col items-center gap-[2px]" style={{ minHeight: hasAnyLane ? 'auto' : '0px' }}>
-                      {dayLanes.map((lane, li) => {
-                        if (!lane) {
-                          return hasAnyLane ? (
-                            <div key={li} style={{ width: '16px', height: '2px' }} />
-                          ) : null;
-                        }
+                      {ODARA_DAY_TRACK_TICKS.map((tickIndex) => {
+                        const isNoonTick = tickIndex === 4;
                         return (
-                          <div
-                            key={li}
-                            className="rounded-full"
+                          <span
+                            key={tickIndex}
+                            aria-hidden
+                            className="absolute top-1/2 w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
                             style={{
-                              width: '16px',
-                              height: '2px',
-                              background: lane.mainColor,
-                              boxShadow: lane.layerColor
-                                ? `0 0 4px ${lane.layerColor}, 0 0 8px ${lane.layerColor}44`
-                                : `0 0 3px ${lane.mainColor}66`,
+                              left: `${(tickIndex / 7) * 100}%`,
+                              height: isNoonTick ? '9px' : '5px',
+                              background: isNoonTick ? 'rgba(236,188,98,0.54)' : 'rgba(222,172,83,0.24)',
+                              boxShadow: isNoonTick ? '0 0 5px rgba(230,166,62,0.22)' : undefined,
                             }}
                           />
                         );
                       })}
+                      <span
+                        ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
+                        aria-hidden
+                        className="absolute left-1/2 top-1/2 block h-px w-px -translate-x-1/2 -translate-y-1/2 opacity-0"
+                      />
+                      <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} selected={fd.isSelected} />
                     </div>
+                    <span className={`mt-2 text-[15px] leading-none transition-colors ${
+                      fd.isSelected ? 'font-medium text-foreground' : fd.isToday ? 'text-foreground/62' : 'text-muted-foreground/34'
+                    }`}>
+                      {fd.day}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="mt-2 block h-[2px] w-5 rounded-full transition-opacity duration-200"
+                      style={{
+                        opacity: fd.isSelected ? 1 : 0,
+                        background: 'linear-gradient(90deg, rgba(194,93,255,0.70), rgba(211,107,255,0.98))',
+                        boxShadow: '0 0 8px rgba(206,88,255,0.34)',
+                      }}
+                    />
                   </button>
                 );
               })}
