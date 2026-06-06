@@ -11699,7 +11699,6 @@ const OdaraScreen = ({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchAddPendingFragranceId, setSearchAddPendingFragranceId] = useState<string | null>(null);
   const [searchAddFeedback, setSearchAddFeedback] = useState<{ fragranceId: string; text: string } | null>(null);
-  const [reasonChipExpanded, setReasonChipExpanded] = useState(false);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
@@ -15547,10 +15546,6 @@ const OdaraScreen = ({
     clearCarryoverCloseFlashTimeout();
   }, [selectedDate, clearCarryoverPulseTimeout, clearCarryoverCloseFlashTimeout]);
 
-  useEffect(() => {
-    setReasonChipExpanded(false);
-  }, [visibleCard?.fragrance_id, selectedDate, selectedContext, isGuestMode, selectedAlternateIdx]);
-
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
    *   - guest: double tap on the main scent-card shell = lock
@@ -16631,19 +16626,100 @@ const OdaraScreen = ({
   const alternatesRendered = visibleAlternateRailItems.length > 0;
   const visibleHeroFamilyColor = visibleResolvedHeroRail?.familyColor ?? '#888';
   const visibleHeroFamilyLabel = visibleResolvedHeroRail?.familyLabel ?? '';
-  const activeReasonChip = visibleResolvedHeroRail?.reasonChip ?? null;
-  const heroRailTokens: Array<any> = useMemo(() => {
-    const resolvedTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
+  const visibleHeroDetail = useMemo(() => {
+    const fragranceId = visibleResolvedCurrentCard?.fragrance_id;
+    if (!fragranceId) return null;
+    return fragranceDetailCacheRef.current.get(fragranceId) ?? null;
+  }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
+  const heroCardChips = useMemo<Array<{ label: string; position: string }>>(() => {
+    const chips: Array<{ label: string; position: string }> = [];
+    const seen = new Set<string>();
+    const pushChip = (rawLabel: string | null | undefined, position: string) => {
+      const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      chips.push({ label, position });
+    };
+
+    const accordSource = (visibleHeroDetail?.accords?.length ?? 0) > 0
+      ? visibleHeroDetail?.accords
+      : visibleResolvedCurrentCard?.accords;
+    const accordLabels = normalizeNotes(sanitizeTokenSource(accordSource), 6).slice(0, 3);
+    accordLabels.forEach((label) => pushChip(label, 'accord'));
+
+    const structuredNotes = [
+      { position: 'top', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.top_notes), 4) },
+      { position: 'heart', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.middle_notes), 4) },
+      { position: 'base', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.base_notes), 4) },
+    ];
+    const hasStructuredNotes = structuredNotes.some((section) => section.values.length > 0);
+    let noteCount = 0;
+
+    if (hasStructuredNotes) {
+      for (const section of structuredNotes) {
+        for (const label of section.values) {
+          if (chips.length >= 6 || noteCount >= 3) break;
+          const before = chips.length;
+          pushChip(label, section.position);
+          if (chips.length > before) noteCount += 1;
+        }
+        if (chips.length >= 6 || noteCount >= 3) break;
+      }
+    } else {
+      const noteSource = (visibleHeroDetail?.notes?.length ?? 0) > 0
+        ? visibleHeroDetail?.notes
+        : visibleResolvedCurrentCard?.notes;
+      for (const label of normalizeNotes(sanitizeTokenSource(noteSource), 6)) {
+        if (chips.length >= 6 || noteCount >= 3) break;
+        const before = chips.length;
+        pushChip(label, 'material');
+        if (chips.length > before) noteCount += 1;
+      }
+    }
+
+    const familyKey = visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null;
+    const familyLabel = formatPlainFamilyStyleLabel(
+      visibleHeroFamilyLabel || (familyKey ? getFamilyLabelText(familyKey) : null),
+    );
+
+    if (familyLabel && (chips.length === 0 || chips.length <= 4)) {
+      pushChip(familyLabel, 'family');
+    }
+
+    if (chips.length > 0) {
+      return chips.slice(0, 6);
+    }
+
+    const fallbackTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
       ? visibleResolvedHeroRail.tokens
       : [];
-    if (resolvedTokens.length > 0) return resolvedTokens;
-    return buildSemanticSurfaceTokens(
-      visibleResolvedCurrentCard?.notes ?? [],
-      visibleResolvedCurrentCard?.accords ?? [],
-      new Set(),
-      4,
-    );
-  }, [visibleResolvedCurrentCard?.accords, visibleResolvedCurrentCard?.notes, visibleResolvedHeroRail?.tokens]);
+    for (const token of fallbackTokens) {
+      if (chips.length >= 2) break;
+      const label = typeof (token?.token_label ?? token?.label ?? token?.name) === 'string'
+        ? String(token.token_label ?? token.label ?? token.name).trim()
+        : '';
+      if (!label) continue;
+      if (/\b(day|night|office|weekend|mood|weather|context|queue|today|pick)\b/i.test(label)) continue;
+      pushChip(label, 'accord');
+    }
+
+    return chips.slice(0, 2);
+  }, [
+    fragranceDetailVersion,
+    visibleHeroDetail?.accords,
+    visibleHeroDetail?.family_key,
+    visibleHeroDetail?.middle_notes,
+    visibleHeroDetail?.notes,
+    visibleHeroDetail?.top_notes,
+    visibleHeroDetail?.base_notes,
+    visibleHeroFamilyLabel,
+    visibleResolvedCurrentCard?.accords,
+    visibleResolvedCurrentCard?.family,
+    visibleResolvedCurrentCard?.notes,
+    visibleResolvedHeroRail?.tokens,
+  ]);
   const signedInCarryoverSelectedCard = signedInResolvedSequelState.selectedCard;
   const signedInHeroCarryColor = signedInCarryoverSelectedCard?.family
     ? (FAMILY_COLORS[signedInCarryoverSelectedCard.family] ?? '#888')
@@ -17668,64 +17744,36 @@ const OdaraScreen = ({
                       </span>
                     ) : null}
 
-                    {(activeReasonChip || heroRailTokens.length > 0) && (
+                    {heroCardChips.length > 0 && (
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
                           data-no-card-swipe
                           className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center justify-start gap-1.5 overflow-x-auto pr-2"
                           style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                         >
-                          {activeReasonChip && (
-                            <button
-                              type="button"
-                              data-no-card-swipe
-                              aria-expanded={reasonChipExpanded}
-                              aria-disabled={isReadOnlyHistoryCard || undefined}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isReadOnlyHistoryCard) return;
-                                setReasonChipExpanded((expanded) => !expanded);
-                              }}
-                              className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground/88 transition-colors duration-200"
-                              style={{
-                                background: 'rgba(9,9,11,0.82)',
-                                border: '1px solid rgba(255,255,255,0.10)',
-                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-                              }}
-                            >
-                              {activeReasonChip.label}
-                            </button>
-                          )}
-
-                          {heroRailTokens.map((t, i) => {
-                            const tokenLabel = t?.token_label ?? t?.label ?? t?.name ?? null;
-                            if (!tokenLabel) return null;
-                            const tokenColor = t?.color_hex || '#888';
-                            const isSharedToken = !!t?.is_shared;
+                          {heroCardChips.map((chip, i) => {
+                            const tone = getAccordChipTone(
+                              chip.label,
+                              visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null,
+                            );
                             return (
-                              <span
-                                key={`hero-tok-${t?.token_key ?? 'tok'}-${i}`}
+                              <ScentIntelChipButton
+                                key={`hero-tok-${chip.position}-${chip.label}-${i}`}
+                                label={chip.label}
+                                onOpen={isReadOnlyHistoryCard ? undefined : openScentIntelSheet}
+                                fragranceId={visibleResolvedCurrentCard?.fragrance_id ?? null}
+                                position={chip.position}
                                 className="flex-shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.12em]"
                                 style={{
-                                  color: tokenColor,
-                                  border: `1px solid ${tokenColor}${isSharedToken ? '88' : '55'}`,
-                                  background: `${tokenColor}${isSharedToken ? '18' : '10'}`,
-                                  boxShadow: isSharedToken ? `inset 0 0 0 1px ${tokenColor}22` : undefined,
+                                  color: tone.color,
+                                  border: `1px solid ${tone.border}`,
+                                  background: tone.background,
+                                  boxShadow: `0 0 12px ${tone.glow}`,
                                 }}
-                              >
-                                {tokenLabel}
-                              </span>
+                              />
                             );
                           })}
                         </div>
-
-                        {activeReasonChip && reasonChipExpanded && activeReasonChip.explanation && (
-                          <div className="pt-2 pr-3">
-                            <p className="text-left text-[12px] leading-[1.5] text-foreground/72">
-                              {activeReasonChip.explanation}
-                            </p>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
