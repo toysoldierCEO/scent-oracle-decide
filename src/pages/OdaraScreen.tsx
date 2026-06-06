@@ -1260,6 +1260,9 @@ interface QueueCard {
   reason_chip_explanation?: string | null;
 }
 
+type FragranceTimelineSource = 'official_note_pyramid' | 'source_description' | 'inferred_from_notes' | 'none';
+type FragrancePerformanceSource = 'direct' | 'derived' | 'estimated' | 'projection_fallback' | 'unknown';
+
 interface FragranceDetail {
   id: string;
   name: string;
@@ -1276,17 +1279,21 @@ interface FragranceDetail {
   short_description?: string | null;
   description_source?: string | null;
   description_generated_at?: string | null;
+  timeline_source?: FragranceTimelineSource | null;
   notes: string[];
   accords: string[];
   top_notes?: string[];
   middle_notes?: string[];
   base_notes?: string[];
   longevity_score?: number | null;
+  longevity_source?: FragrancePerformanceSource | null;
   projection_score?: number | null;
+  projection_source?: FragrancePerformanceSource | null;
   odor_impact_score?: number | null;
   density_score?: number | null;
   transparency_score?: number | null;
   beast_mode_score?: number | null;
+  trail_source?: FragrancePerformanceSource | null;
   why_it_fits_wardrobe?: string | null;
   source_confidence?: string | null;
   retired?: boolean;
@@ -5068,6 +5075,7 @@ type OdaraFragranceDetailSurfaceState = {
   short_description?: string | null;
   description_source?: string | null;
   description_generated_at?: string | null;
+  timeline_source?: FragranceTimelineSource | null;
   image_url: string | null;
   thumbnail_url: string | null;
   image_source?: string | null;
@@ -5080,11 +5088,14 @@ type OdaraFragranceDetailSurfaceState = {
   middle_notes?: string[];
   base_notes?: string[];
   longevity_score?: number | null;
+  longevity_source?: FragrancePerformanceSource | null;
   projection_score?: number | null;
+  projection_source?: FragrancePerformanceSource | null;
   odor_impact_score?: number | null;
   density_score?: number | null;
   transparency_score?: number | null;
   beast_mode_score?: number | null;
+  trail_source?: FragrancePerformanceSource | null;
   why_it_fits_wardrobe?: string | null;
   source_confidence?: string | null;
   retired?: boolean;
@@ -5211,6 +5222,217 @@ function buildFragranceTexturePhrase(source: {
   return projection >= 0.64 ? 'a noticeable presence' : 'an easy-wearing finish';
 }
 
+const DERIVED_DESCRIPTION_SOURCES = new Set(['derived_client', 'fallback_generated']);
+const NOTE_TIMELINE_ALIASES: Record<string, string> = {
+  olibanum: 'frankincense',
+  musc: 'musk',
+};
+
+function isDerivedDescriptionSource(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value);
+  return normalized ? DERIVED_DESCRIPTION_SOURCES.has(normalized) : false;
+}
+
+function formatTimelineNoteLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return '';
+  return NOTE_TIMELINE_ALIASES[normalized] ?? normalized;
+}
+
+function selectTimelinePhraseNotes(values: string[], section: 'opening' | 'heart' | 'drydown') {
+  const formatted: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawValue of values) {
+    const label = formatTimelineNoteLabel(rawValue);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    formatted.push(label);
+  }
+
+  if (formatted.length === 0) return formatted;
+  if (section === 'heart' && /(leather|suede|rose|jasmine|iris|oud)$/.test(formatted[0]!)) {
+    return formatted.slice(0, 1);
+  }
+  if (section === 'drydown' && /(frankincense|labdanum|styrax|benzoin|amber|incense|musk|patchouli|cedar|sandalwood|vetiver|birch|leather|suede)$/.test(formatted[0]!)) {
+    return formatted.slice(0, 1);
+  }
+  return formatted.slice(0, 2);
+}
+
+function buildTimelineOpeningPhrase(opening: string[], accords?: string[] | null | undefined) {
+  const joined = `${opening.join(' ')} ${sanitizeTokenSource(accords).join(' ')}`.toLowerCase();
+  if (/(raspberry|berry|peach|pear|apple|plum|fig|fruit)/.test(joined) && /(saffron|pepper|clove|cardamom|cumin|ginger|spice)/.test(joined)) {
+    return 'open sweet and sharp';
+  }
+  if (/(bergamot|lemon|lime|grapefruit|orange|mandarin|neroli|citrus|juniper)/.test(joined)) {
+    return 'open bright and crisp';
+  }
+  if (/(basil|mint|sage|lavender|coriander|artemisia|green|herbal|aromatic)/.test(joined)) {
+    return 'open crisp and aromatic';
+  }
+  if (/(saffron|pepper|clove|cardamom|cumin|ginger|spice)/.test(joined)) {
+    return 'open warm and spiced';
+  }
+  if (/(rose|jasmine|lily|iris|violet|floral)/.test(joined)) {
+    return 'open soft and floral';
+  }
+  return 'open first';
+}
+
+function buildTimelineDrydownPhrase(drydown: string[], accords?: string[] | null | undefined) {
+  const joined = `${drydown.join(' ')} ${sanitizeTokenSource(accords).join(' ')}`.toLowerCase();
+  if (/(frankincense|olibanum|labdanum|styrax|benzoin|amber|resin|incense)/.test(joined) && /(smoky|smoke|birch)/.test(joined)) {
+    return 'leaves a smoky resin drydown';
+  }
+  if (/(frankincense|olibanum|labdanum|styrax|benzoin|amber|resin|incense)/.test(joined)) {
+    return 'leaves a resinous drydown';
+  }
+  if (/(cedar|sandalwood|vetiver|patchouli|guaiac|wood)/.test(joined)) {
+    return 'settles into a dry woody finish';
+  }
+  if (/(musk|powder|orris|skin)/.test(joined)) {
+    return 'settles into a soft skin-close finish';
+  }
+  return 'lingers through the drydown';
+}
+
+function buildTimelineDescriptionFromSections(
+  sections: { opening: string[]; heart: string[]; drydown: string[] },
+  accords?: string[] | null | undefined,
+) {
+  const opening = selectTimelinePhraseNotes(sections.opening, 'opening');
+  const heart = selectTimelinePhraseNotes(sections.heart, 'heart');
+  const drydown = selectTimelinePhraseNotes(sections.drydown, 'drydown');
+  const phrases: string[] = [];
+
+  if (opening.length > 0) {
+    phrases.push(`${toSentenceCase(joinFragrancePhrases(opening))} ${buildTimelineOpeningPhrase(opening, accords)}`);
+  }
+
+  if (heart.length > 0) {
+    phrases.push(`${joinFragrancePhrases(heart)} settles into the heart`);
+  }
+
+  if (drydown.length > 0) {
+    const lead = phrases.length > 0 ? 'and ' : '';
+    phrases.push(`${lead}${joinFragrancePhrases(drydown)} ${buildTimelineDrydownPhrase(drydown, accords)}`);
+  }
+
+  if (phrases.length === 0) return null;
+  const sentence = toSentenceCase(phrases.join(', ').replace(/,\s+and\s+/i, ', and ').trim());
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
+function buildTimelineDescriptionFromStructuredNotes(source: {
+  top_notes?: string[] | null | undefined;
+  middle_notes?: string[] | null | undefined;
+  base_notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+}) {
+  const top = normalizeNotes(sanitizeTokenSource(source.top_notes), 4);
+  const heart = normalizeNotes(sanitizeTokenSource(source.middle_notes), 4);
+  const base = normalizeNotes(sanitizeTokenSource(source.base_notes), 4);
+  if (top.length === 0 && heart.length === 0 && base.length === 0) return null;
+
+  return buildTimelineDescriptionFromSections({
+    opening: top.length > 0 ? top : heart,
+    heart: heart.length > 0 ? heart : top,
+    drydown: base.length > 0 ? base : heart,
+  }, source.accords);
+}
+
+function pickTimelineNotesByPatterns(
+  notes: string[],
+  patterns: RegExp[],
+  used: Set<string>,
+  max: number,
+) {
+  const selected: string[] = [];
+
+  for (const pattern of patterns) {
+    const match = notes.find((note) => !used.has(note) && pattern.test(note));
+    if (!match) continue;
+    used.add(match);
+    selected.push(match);
+    if (selected.length >= max) return selected;
+  }
+
+  for (const note of notes) {
+    if (used.has(note)) continue;
+    used.add(note);
+    selected.push(note);
+    if (selected.length >= max) break;
+  }
+
+  return selected;
+}
+
+function inferTimelineSectionsFromFlatNotes(source: {
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+}) {
+  const notes = normalizeNotes(sanitizeTokenSource(source.notes), 14);
+  if (notes.length === 0) return null;
+
+  const accordJoined = sanitizeTokenSource(source.accords).join(' ').toLowerCase();
+  const used = new Set<string>();
+  const openingPatterns = [
+    /bergamot|lemon|lime|grapefruit|orange|mandarin|neroli|citrus|juniper|aldehyd/,
+    /raspberry|berry|peach|pear|apple|plum|fig|fruit/,
+    /saffron|pink pepper|black pepper|pepper|cardamom|clove/,
+    /ginger|coriander|mint|basil|sage|lavender|artemisia|juniper/,
+    /cumin|nutmeg|allspice/,
+  ];
+  const heartPatterns = [
+    ...(accordJoined.includes('leather') ? [/leather|suede/] : []),
+    /rose|jasmine|lily|iris|violet|orange blossom|floral/,
+    /coffee|tea|cacao|licorice|honey/,
+    /leather|suede|orris|powder/,
+  ];
+  const drydownPatterns = [
+    /olibanum|frankincense|labdanum|styrax|benzoin|balsam|amber|resin|incense|myrrh/,
+    /birch|cedar|sandalwood|patchouli|vetiver|guaiac|oud|wood/,
+    /musk|suede|leather|tonka|vanilla|licorice/,
+  ];
+
+  const opening = pickTimelineNotesByPatterns(notes, openingPatterns, used, 2);
+  const heart = pickTimelineNotesByPatterns(notes, heartPatterns, used, 2);
+  const drydown = pickTimelineNotesByPatterns(notes, drydownPatterns, used, 2);
+
+  return { opening, heart, drydown };
+}
+
+function rewriteSourceBackedDescription(sourceDescription: string) {
+  let rewritten = sourceDescription.replace(/\s+/g, ' ').trim();
+  rewritten = rewritten
+    .replace(/^official [^.]*?\b(describes|highlights)\b\s*/i, '')
+    .replace(/\bthis fragrance\b/i, 'It')
+    .replace(/\bthis scent\b/i, 'It')
+    .replace(/\bopens with\b/i, 'opens on')
+    .replace(/\bdries down\b/i, 'settles into')
+    .replace(/\bdrying down\b/i, 'settling into')
+    .replace(/\bblended with\b/i, 'layered with')
+    .replace(/\bcentered around\b/i, 'built around')
+    .replace(/\bbalanced by\b/i, 'cut by');
+
+  const sentences = rewritten
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  let candidate = sentences.slice(0, 2).join(' ').trim();
+  if (candidate.length > 160) {
+    candidate = candidate
+      .split(/,\s+/)
+      .slice(0, 3)
+      .join(', ')
+      .trim();
+  }
+  if (!candidate) return null;
+  candidate = toSentenceCase(candidate);
+  return /[.!?]$/.test(candidate) ? candidate : `${candidate}.`;
+}
+
 function buildGeneratedFragranceDescription(source: {
   family_key?: string | null | undefined;
   family_label?: string | null | undefined;
@@ -5268,42 +5490,31 @@ function buildVesperizedDetailDescription(source: {
   family_label?: string | null | undefined;
   notes?: string[] | null | undefined;
   accords?: string[] | null | undefined;
+  top_notes?: string[] | null | undefined;
+  middle_notes?: string[] | null | undefined;
+  base_notes?: string[] | null | undefined;
   projection_score?: number | null | undefined;
   longevity_score?: number | null | undefined;
   density_score?: number | null | undefined;
 }) {
   const sourceDescription = normalizeDetailText(source.short_description);
   const sourceType = normalizeDetailText(source.description_source);
+  const sourceBackedTimeline = buildTimelineDescriptionFromStructuredNotes(source);
+  const inferredTimeline = (() => {
+    const sections = inferTimelineSectionsFromFlatNotes(source);
+    return sections ? buildTimelineDescriptionFromSections(sections, source.accords) : null;
+  })();
 
-  if (sourceDescription && sourceType && sourceType !== 'derived_client') {
-    let rewritten = sourceDescription.replace(/\s+/g, ' ').trim();
-    rewritten = rewritten
-      .replace(/\bthis fragrance\b/i, 'It')
-      .replace(/\bthis scent\b/i, 'It')
-      .replace(/\bopens with\b/i, 'opens on')
-      .replace(/\bdries down\b/i, 'settles into')
-      .replace(/\bdrying down\b/i, 'settling into')
-      .replace(/\bblended with\b/i, 'layered with')
-      .replace(/\bcentered around\b/i, 'built around')
-      .replace(/\bbalanced by\b/i, 'cut by');
-
-    const sentences = rewritten
-      .split(/(?<=[.!?])\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    let candidate = sentences.slice(0, 2).join(' ').trim();
-    if (candidate.length > 150) {
-      candidate = candidate
-        .split(/,\s+/)
-        .slice(0, 3)
-        .join(', ')
-        .trim();
-    }
-    if (candidate) {
-      return /[.!?]$/.test(candidate) ? candidate : `${candidate}.`;
-    }
+  if (sourceDescription && sourceType && !isDerivedDescriptionSource(sourceType)) {
+    return sourceBackedTimeline
+      ?? rewriteSourceBackedDescription(sourceDescription)
+      ?? inferredTimeline
+      ?? buildCompactFragranceSummary(source)
+      ?? buildGeneratedFragranceDescription(source);
   }
 
+  if (sourceBackedTimeline) return sourceBackedTimeline;
+  if (inferredTimeline) return inferredTimeline;
   return buildCompactFragranceSummary(source) ?? buildGeneratedFragranceDescription(source);
 }
 
@@ -5319,6 +5530,63 @@ function formatPlainFamilyStyleLabel(value: string | null | undefined) {
     .join(' ');
 }
 
+function resolveTimelineSource(detail: Pick<FragranceDetail, 'description_source' | 'top_notes' | 'middle_notes' | 'base_notes' | 'notes'>): FragranceTimelineSource {
+  if (normalizeDetailText(detail.description_source) && !isDerivedDescriptionSource(detail.description_source)) {
+    return 'source_description';
+  }
+  if (sanitizeTokenSource(detail.top_notes).length > 0 || sanitizeTokenSource(detail.middle_notes).length > 0 || sanitizeTokenSource(detail.base_notes).length > 0) {
+    return 'official_note_pyramid';
+  }
+  if (sanitizeTokenSource(detail.notes).length > 0) {
+    return 'inferred_from_notes';
+  }
+  return 'none';
+}
+
+function resolveTrailMetric(detail: {
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  odor_impact_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+  beast_mode_score?: number | null | undefined;
+}): { score: number | null; source: FragrancePerformanceSource } {
+  const projection = normalizeUnitIntervalDetailScore(detail.projection_score);
+  const longevity = normalizeUnitIntervalDetailScore(detail.longevity_score);
+  const odorImpact = normalizeUnitIntervalDetailScore(detail.odor_impact_score);
+  const density = normalizeUnitIntervalDetailScore(detail.density_score);
+  const beastMode = normalizeUnitIntervalDetailScore(detail.beast_mode_score);
+
+  if (odorImpact != null) {
+    return { score: odorImpact, source: 'direct' };
+  }
+
+  const contributors = [
+    beastMode != null ? { score: beastMode, weight: 0.35 } : null,
+    density != null ? { score: density, weight: 0.2 } : null,
+    longevity != null ? { score: longevity, weight: 0.2 } : null,
+    projection != null ? { score: projection, weight: 0.25 } : null,
+  ].filter((value): value is { score: number; weight: number } => !!value);
+
+  if (contributors.length >= 2 && projection != null) {
+    const weighted = contributors.reduce((sum, contributor) => sum + (contributor.score * contributor.weight), 0);
+    const totalWeight = contributors.reduce((sum, contributor) => sum + contributor.weight, 0);
+    const conservative = Math.max(0, Math.min(1, (weighted / totalWeight) - 0.06));
+    return { score: conservative, source: 'derived' };
+  }
+
+  if (contributors.length >= 2) {
+    const weighted = contributors.reduce((sum, contributor) => sum + (contributor.score * contributor.weight), 0);
+    const totalWeight = contributors.reduce((sum, contributor) => sum + contributor.weight, 0);
+    return { score: Math.max(0, Math.min(1, (weighted / totalWeight) - 0.04)), source: 'estimated' };
+  }
+
+  if (projection != null) {
+    return { score: null, source: 'projection_fallback' };
+  }
+
+  return { score: null, source: 'unknown' };
+}
+
 function finalizeFragranceDetail(detail: FragranceDetail): FragranceDetail {
   const normalized: FragranceDetail = {
     ...detail,
@@ -5328,20 +5596,29 @@ function finalizeFragranceDetail(detail: FragranceDetail): FragranceDetail {
     short_description: normalizeDetailText(detail.short_description),
     description_source: normalizeDetailText(detail.description_source),
     description_generated_at: normalizeDetailText(detail.description_generated_at),
+    timeline_source: detail.timeline_source ?? null,
     odor_impact_score: normalizeUnitIntervalDetailScore(detail.odor_impact_score),
     density_score: normalizeUnitIntervalDetailScore(detail.density_score),
     transparency_score: normalizeUnitIntervalDetailScore(detail.transparency_score),
     beast_mode_score: normalizeUnitIntervalDetailScore(detail.beast_mode_score),
+    longevity_source: normalizeDetailText(detail.longevity_source) as FragrancePerformanceSource | null,
+    projection_source: normalizeDetailText(detail.projection_source) as FragrancePerformanceSource | null,
+    trail_source: normalizeDetailText(detail.trail_source) as FragrancePerformanceSource | null,
     image_source: normalizeDetailText(detail.image_source),
     source_page_url: normalizeDetailText(detail.source_page_url),
     image_license_status: normalizeDetailText(detail.image_license_status),
     image_last_checked_at: normalizeDetailText(detail.image_last_checked_at),
   };
+  const trail = resolveTrailMetric(normalized);
   const generated = normalized.short_description ?? buildGeneratedFragranceDescription(normalized);
   return {
     ...normalized,
     short_description: generated,
-    description_source: normalized.short_description ? (normalized.description_source ?? 'stored') : (generated ? 'derived_client' : null),
+    description_source: normalized.short_description ? (normalized.description_source ?? 'stored') : (generated ? 'fallback_generated' : null),
+    timeline_source: normalized.timeline_source ?? resolveTimelineSource(normalized),
+    longevity_source: normalized.longevity_source ?? (normalized.longevity_score != null ? 'direct' : 'unknown'),
+    projection_source: normalized.projection_source ?? (normalized.projection_score != null ? 'direct' : 'unknown'),
+    trail_source: normalized.trail_source ?? trail.source,
   };
 }
 
@@ -5350,6 +5627,7 @@ type FragrancePerformanceBarDescriptor = {
   label: string;
   score: number;
   valueLabel: string;
+  source: FragrancePerformanceSource;
 };
 
 function formatFragrancePerformanceStrength(score: number) {
@@ -5369,12 +5647,15 @@ function buildFragrancePerformanceBars(detail: {
   odor_impact_score?: number | null | undefined;
   density_score?: number | null | undefined;
   beast_mode_score?: number | null | undefined;
+  longevity_source?: FragrancePerformanceSource | null | undefined;
+  projection_source?: FragrancePerformanceSource | null | undefined;
+  trail_source?: FragrancePerformanceSource | null | undefined;
 }) {
   const metrics: FragrancePerformanceBarDescriptor[] = [];
   const projection = normalizeUnitIntervalDetailScore(detail.projection_score);
   const longevity = normalizeUnitIntervalDetailScore(detail.longevity_score);
-  const trail = normalizeUnitIntervalDetailScore(detail.odor_impact_score ?? detail.beast_mode_score ?? detail.projection_score);
   const density = normalizeUnitIntervalDetailScore(detail.density_score);
+  const trail = resolveTrailMetric(detail);
 
   if (longevity != null) {
     metrics.push({
@@ -5382,6 +5663,7 @@ function buildFragrancePerformanceBars(detail: {
       label: 'Longevity',
       score: longevity,
       valueLabel: formatFragrancePerformanceScale(longevity),
+      source: detail.longevity_source ?? 'direct',
     });
   }
 
@@ -5391,15 +5673,17 @@ function buildFragrancePerformanceBars(detail: {
       label: 'Projection',
       score: projection,
       valueLabel: formatFragrancePerformanceScale(projection),
+      source: detail.projection_source ?? 'direct',
     });
   }
 
-  if (trail != null) {
+  if (trail.score != null) {
     metrics.push({
       key: 'trail',
       label: 'Trail',
-      score: trail,
-      valueLabel: formatFragrancePerformanceStrength(trail),
+      score: trail.score,
+      valueLabel: formatFragrancePerformanceStrength(trail.score),
+      source: detail.trail_source ?? trail.source,
     });
   }
 
@@ -5409,6 +5693,7 @@ function buildFragrancePerformanceBars(detail: {
       label: 'Density',
       score: density,
       valueLabel: formatFragrancePerformanceStrength(density),
+      source: 'direct',
     });
   }
 
@@ -6223,6 +6508,7 @@ function mergeFragranceDetailSurfaceState(
     short_description: current.short_description ?? detail.short_description ?? null,
     description_source: current.description_source ?? detail.description_source ?? null,
     description_generated_at: current.description_generated_at ?? detail.description_generated_at ?? null,
+    timeline_source: current.timeline_source ?? detail.timeline_source ?? null,
     image_url: current.image_url ?? detail.image_url ?? null,
     thumbnail_url: current.thumbnail_url ?? detail.thumbnail_url ?? null,
     image_source: current.image_source ?? detail.image_source ?? null,
@@ -6235,11 +6521,14 @@ function mergeFragranceDetailSurfaceState(
     middle_notes: (current.middle_notes?.length ?? 0) > 0 ? current.middle_notes : sanitizeTokenSource(detail.middle_notes),
     base_notes: (current.base_notes?.length ?? 0) > 0 ? current.base_notes : sanitizeTokenSource(detail.base_notes),
     longevity_score: current.longevity_score ?? detail.longevity_score ?? null,
+    longevity_source: current.longevity_source ?? detail.longevity_source ?? null,
     projection_score: current.projection_score ?? detail.projection_score ?? null,
+    projection_source: current.projection_source ?? detail.projection_source ?? null,
     odor_impact_score: current.odor_impact_score ?? detail.odor_impact_score ?? null,
     density_score: current.density_score ?? detail.density_score ?? null,
     transparency_score: current.transparency_score ?? detail.transparency_score ?? null,
     beast_mode_score: current.beast_mode_score ?? detail.beast_mode_score ?? null,
+    trail_source: current.trail_source ?? detail.trail_source ?? null,
     why_it_fits_wardrobe: current.why_it_fits_wardrobe ?? detail.why_it_fits_wardrobe ?? null,
     source_confidence: current.source_confidence ?? detail.source_confidence ?? null,
     retired: current.retired ?? detail.retired ?? false,
@@ -7835,6 +8124,8 @@ const OdaraFragranceDetailSheet: React.FC<{
   const detailDescription = buildVesperizedDetailDescription(detail);
   const detailPerformanceBars = buildFragrancePerformanceBars(detail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
+  const showTrailPendingNote = !detailPerformanceBars.some((metric) => metric.key === 'trail')
+    && ['projection_fallback', 'unknown'].includes(detail.trail_source ?? 'unknown');
   const topIdentityChips = (() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -8005,6 +8296,11 @@ const OdaraFragranceDetailSheet: React.FC<{
                 {detailPerformanceBars.map((metric) => (
                   <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
                 ))}
+                {showTrailPendingNote ? (
+                  <div className="text-[11px] leading-[1.45] text-foreground/54">
+                    Trail data is still filling in.
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="text-[12px] leading-[1.5] text-foreground/58">
@@ -11979,7 +12275,7 @@ const OdaraScreen = ({
       const [{ data, error }, imageAssets] = await Promise.all([
         odaraSupabase
           .from('fragrances')
-          .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, odor_impact_confidence, density_score, transparency_score, beast_mode_score, source_confidence, source_url')
+          .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
           .in('id', missingIds),
         fetchFragranceImageAssets(missingIds),
       ]);
@@ -12008,17 +12304,21 @@ const OdaraScreen = ({
           short_description: null,
           description_source: null,
           description_generated_at: null,
+          timeline_source: null,
           notes: Array.isArray(row.notes) ? row.notes : [],
           accords: Array.isArray(row.accords) ? row.accords : [],
           top_notes: Array.isArray((row as any).top_notes) ? (row as any).top_notes : [],
           middle_notes: Array.isArray((row as any).heart_notes) ? (row as any).heart_notes : [],
           base_notes: Array.isArray((row as any).base_notes) ? (row as any).base_notes : [],
           longevity_score: normalizeDetailScore((row as any).longevity_score),
+          longevity_source: null,
           projection_score: normalizeDetailScore((row as any).projection_score),
-          odor_impact_score: normalizeDetailScore((row as any).odor_impact_confidence),
-          density_score: normalizeDetailScore((row as any).density_score),
-          transparency_score: normalizeDetailScore((row as any).transparency_score),
-          beast_mode_score: normalizeDetailScore((row as any).beast_mode_score),
+          projection_source: null,
+          odor_impact_score: null,
+          density_score: null,
+          transparency_score: null,
+          beast_mode_score: null,
+          trail_source: null,
           why_it_fits_wardrobe: null,
           source_confidence: typeof (row as any).source_confidence === 'string' ? (row as any).source_confidence : null,
           retired: false,
@@ -12147,7 +12447,7 @@ const OdaraScreen = ({
           } as any),
           odaraSupabase
             .from('fragrances')
-            .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, odor_impact_confidence, density_score, transparency_score, beast_mode_score, source_confidence, source_url')
+            .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
             .eq('id', fragranceId)
             .maybeSingle(),
           fetchFragranceImageAssets([fragranceId]),
@@ -12178,17 +12478,21 @@ const OdaraScreen = ({
           short_description: payload?.short_description ?? null,
           description_source: payload?.description_source ?? null,
           description_generated_at: payload?.description_generated_at ?? null,
+          timeline_source: null,
           notes: Array.isArray(payload?.notes) ? payload.notes : (Array.isArray(data?.notes) ? data.notes : []),
           accords: Array.isArray(payload?.accords) ? payload.accords : (Array.isArray(data?.accords) ? data.accords : []),
           top_notes: Array.isArray(payload?.top_notes) ? payload.top_notes : (Array.isArray((data as any)?.top_notes) ? (data as any).top_notes : []),
           middle_notes: Array.isArray(payload?.middle_notes) ? payload.middle_notes : (Array.isArray((data as any)?.heart_notes) ? (data as any).heart_notes : []),
           base_notes: Array.isArray(payload?.base_notes) ? payload.base_notes : (Array.isArray((data as any)?.base_notes) ? (data as any).base_notes : []),
           longevity_score: normalizeDetailScore(payload?.longevity_score ?? (data as any)?.longevity_score),
+          longevity_source: null,
           projection_score: normalizeDetailScore(payload?.projection_score ?? (data as any)?.projection_score),
-          odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence ?? (data as any)?.odor_impact_confidence),
-          density_score: normalizeDetailScore(payload?.density_score ?? (data as any)?.density_score),
-          transparency_score: normalizeDetailScore(payload?.transparency_score ?? (data as any)?.transparency_score),
-          beast_mode_score: normalizeDetailScore(payload?.beast_mode_score ?? (data as any)?.beast_mode_score),
+          projection_source: null,
+          odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence),
+          density_score: normalizeDetailScore(payload?.density_score),
+          transparency_score: normalizeDetailScore(payload?.transparency_score),
+          beast_mode_score: normalizeDetailScore(payload?.beast_mode_score),
+          trail_source: null,
           why_it_fits_wardrobe: typeof payload?.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
           source_confidence: typeof payload?.source_confidence === 'string'
             ? payload.source_confidence
