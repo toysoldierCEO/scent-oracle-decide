@@ -5261,6 +5261,52 @@ function buildCompactFragranceSummary(source: {
   return summary.length <= 112 ? summary : `${toSentenceCase(joinFragrancePhrases(leadParts.slice(0, 2)))}.`;
 }
 
+function buildVesperizedDetailDescription(source: {
+  short_description?: string | null | undefined;
+  description_source?: string | null | undefined;
+  family_key?: string | null | undefined;
+  family_label?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  projection_score?: number | null | undefined;
+  longevity_score?: number | null | undefined;
+  density_score?: number | null | undefined;
+}) {
+  const sourceDescription = normalizeDetailText(source.short_description);
+  const sourceType = normalizeDetailText(source.description_source);
+
+  if (sourceDescription && sourceType && sourceType !== 'derived_client') {
+    let rewritten = sourceDescription.replace(/\s+/g, ' ').trim();
+    rewritten = rewritten
+      .replace(/\bthis fragrance\b/i, 'It')
+      .replace(/\bthis scent\b/i, 'It')
+      .replace(/\bopens with\b/i, 'opens on')
+      .replace(/\bdries down\b/i, 'settles into')
+      .replace(/\bdrying down\b/i, 'settling into')
+      .replace(/\bblended with\b/i, 'layered with')
+      .replace(/\bcentered around\b/i, 'built around')
+      .replace(/\bbalanced by\b/i, 'cut by');
+
+    const sentences = rewritten
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    let candidate = sentences.slice(0, 2).join(' ').trim();
+    if (candidate.length > 150) {
+      candidate = candidate
+        .split(/,\s+/)
+        .slice(0, 3)
+        .join(', ')
+        .trim();
+    }
+    if (candidate) {
+      return /[.!?]$/.test(candidate) ? candidate : `${candidate}.`;
+    }
+  }
+
+  return buildCompactFragranceSummary(source) ?? buildGeneratedFragranceDescription(source);
+}
+
 function formatPlainFamilyStyleLabel(value: string | null | undefined) {
   const normalized = normalizeDetailText(value);
   if (!normalized) return null;
@@ -5369,39 +5415,39 @@ function buildFragrancePerformanceBars(detail: {
   return metrics;
 }
 
-const ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS = 10;
-
 const OdaraPerformanceLifeBar: React.FC<{
   metric: FragrancePerformanceBarDescriptor;
   tint: { frame: string; glowStrong: string };
 }> = ({ metric, tint }) => {
-  const activeSegments = Math.max(
-    1,
-    Math.min(ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS, Math.round(metric.score * ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS)),
-  );
+  const clampedWidth = `${Math.max(8, Math.min(100, Math.round(metric.score * 100)))}%`;
   return (
     <div>
       <div className="flex items-center justify-between gap-3 text-[12px] text-foreground/78">
         <span>{metric.label}</span>
         <span className="text-foreground/62">{metric.valueLabel}</span>
       </div>
-      <div className="mt-2 grid grid-cols-10 gap-[3px]" aria-hidden="true">
-        {Array.from({ length: ODARA_PERFORMANCE_LIFE_BAR_SEGMENTS }, (_, index) => {
-          const active = index < activeSegments;
-          return (
-            <span
-              key={`${metric.key}-segment-${index}`}
-              className="h-[5px] rounded-full"
-              style={{
-                background: active
-                  ? `linear-gradient(90deg, ${tint.frame} 0%, rgba(255,255,255,0.78) 100%)`
-                  : 'rgba(255,255,255,0.055)',
-                boxShadow: active ? `0 0 9px ${tint.glowStrong}` : 'inset 0 1px 0 rgba(255,255,255,0.035)',
-                opacity: active ? 0.92 : 0.72,
-              }}
-            />
-          );
-        })}
+      <div
+        className="mt-2 h-[14px] overflow-hidden rounded-full border"
+        aria-hidden="true"
+        style={{
+          borderColor: 'rgba(255,255,255,0.12)',
+          background: 'linear-gradient(180deg, rgba(7,10,16,0.92) 0%, rgba(2,6,12,0.96) 100%)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -8px 18px rgba(0,0,0,0.34)',
+        }}
+      >
+        <span
+          className="relative block h-full rounded-full"
+          style={{
+            width: clampedWidth,
+            background: `linear-gradient(90deg, rgba(80,248,245,0.96) 0%, ${tint.frame} 72%, rgba(91,168,255,0.98) 100%)`,
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.42), 0 0 18px ${tint.glowStrong}`,
+          }}
+        >
+          <span
+            className="pointer-events-none absolute inset-x-[8%] top-[2px] h-[3px] rounded-full"
+            style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.82) 54%, rgba(255,255,255,0.26) 100%)' }}
+          />
+        </span>
       </div>
     </div>
   );
@@ -7756,38 +7802,13 @@ const OdaraFragranceDetailSheet: React.FC<{
   onClose: () => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
 }> = ({ detail, open, onClose, onOpenScentIntel }) => {
-  const fragranceId = detail?.fragrance_id ?? null;
-  const [taxonomy, setTaxonomy] = useState<ResolvedTaxonomyPayload | null>(null);
-  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || !fragranceId) {
-      setTaxonomy(null);
-      setTaxonomyLoading(false);
-      return;
-    }
-    // Reset scroll to top whenever the sheet opens or the fragrance changes.
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    const cached = fragranceTaxonomyCache.get(fragranceId);
-    if (cached !== undefined) {
-      setTaxonomy(cached);
-      setTaxonomyLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setTaxonomyLoading(true);
-    setTaxonomy(null);
-    fetchResolvedTaxonomy(fragranceId).then((payload) => {
-      if (cancelled) return;
-      setTaxonomy(payload);
-      setTaxonomyLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [open, fragranceId]);
+  }, [open, detail?.fragrance_id]);
 
   if (!open || !detail) return null;
-
 
   const tint = getEnhancedCollectionTint({
     family_key: detail.family_key,
@@ -7804,38 +7825,83 @@ const OdaraFragranceDetailSheet: React.FC<{
   const detailLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(detailBaseTint, detailGlassVisual);
   const familyLabel = formatPlainFamilyStyleLabel(
     detail.family_label ?? (detail.family_key ? getFamilyLabelText(detail.family_key) : null),
-  ) ?? 'Unclassified';
-  const detailBottleImageCandidates = buildPreferredBottleImageCandidates(detail, detail.image_url, detail.thumbnail_url);
-  const detailBottleImageUrl = detailBottleImageCandidates[0] ?? null;
-  const likelyTransparentDetailImage = isLikelyTransparentBottleImageUrl(detailBottleImageUrl);
-  const accordLabels = normalizeNotes(detail.accords, 6);
-  const noteLabels = normalizeNotes(detail.notes, 6);
+  );
+  const accordLabels = normalizeNotes(detail.accords, 8);
   const topLabels = normalizeNotes(detail.top_notes ?? [], 6);
   const middleLabels = normalizeNotes(detail.middle_notes ?? [], 6);
   const baseLabels = normalizeNotes(detail.base_notes ?? [], 6);
-  const ratingLabel = formatCollectionRatingChip(detail.rating);
+  const flatNoteLabels = normalizeNotes(detail.notes, 8);
   const roleLabel = detail.wardrobe_role_label?.trim() || null;
-  const hasStructureSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
-  const hasTokenSections = accordLabels.length > 0 || noteLabels.length > 0 || hasStructureSections;
-  const detailDescription = buildCompactFragranceSummary(detail) ?? buildGeneratedFragranceDescription(detail);
-  const detailPerformanceBars = buildFragrancePerformanceBars(detail);
-  const detailMetaEntries = [
-    {
-      key: 'released',
-      label: 'Released',
-      value: detail.release_year ? String(detail.release_year) : 'Unknown',
-    },
-    {
-      key: 'perfumer',
-      label: 'Perfumer',
-      value: detail.perfumer ?? 'Unknown',
-    },
-    {
-      key: 'house',
-      label: 'House',
-      value: detail.brand ?? 'Unknown',
-    },
-  ];
+  const detailDescription = buildVesperizedDetailDescription(detail);
+  const detailPerformanceBars = buildFragrancePerformanceBars(detail)
+    .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
+  const topIdentityChips = (() => {
+    const chips: Array<{ label: string; position: string }> = [];
+    const seen = new Set<string>();
+    const pushChip = (label: string | null | undefined, position: string) => {
+      const trimmed = typeof label === 'string' ? label.trim() : '';
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      chips.push({ label: trimmed, position });
+    };
+
+    pushChip(familyLabel, 'family');
+    const availableAccords = accordLabels.filter((accord) => accord.trim().toLowerCase() !== familyLabel?.trim().toLowerCase());
+    const priorityPatterns = [
+      /\bleather|leathery\b/i,
+      /\boud|amber|resin|resinous|incense\b/i,
+      /\bcitrus|bergamot|neroli|orange|grapefruit|lemon\b/i,
+      /\bgreen|aromatic|herbal\b/i,
+      /\bwoody|wood\b/i,
+      /\bspicy|spice\b/i,
+      /\bfloral\b/i,
+      /\bgourmand|sweet\b/i,
+      /\bfruity|fruit\b/i,
+    ];
+    const preferredAccord = priorityPatterns
+      .map((pattern) => availableAccords.find((accord) => pattern.test(accord)))
+      .find(Boolean)
+      ?? availableAccords[0]
+      ?? null;
+    pushChip(preferredAccord, 'accord');
+    return chips.slice(0, 2);
+  })();
+  const orderedNoteChips = (() => {
+    const notes: Array<{ label: string; position: string }> = [];
+    const seen = new Set<string>();
+    const pushNote = (label: string | null | undefined, position: string) => {
+      const trimmed = typeof label === 'string' ? label.trim() : '';
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      notes.push({ label: trimmed, position });
+    };
+
+    const structuredSections = [
+      { position: 'top', values: topLabels },
+      { position: 'heart', values: middleLabels },
+      { position: 'base', values: baseLabels },
+    ];
+    const hasStructuredNotes = structuredSections.some((section) => section.values.length > 0);
+    if (hasStructuredNotes) {
+      for (const section of structuredSections) {
+        for (const label of section.values) {
+          pushNote(label, section.position);
+          if (notes.length >= 6) return notes;
+        }
+      }
+    } else {
+      for (const label of flatNoteLabels) {
+        pushNote(label, 'material');
+        if (notes.length >= 6) return notes;
+      }
+    }
+    return notes;
+  })();
+  const detailFactLine = `Released: ${detail.release_year ? String(detail.release_year) : 'Unknown'} • Perfumer: ${detail.perfumer ?? 'Unknown'}`;
 
   return (
     <OdaraBottomSheet
@@ -7856,8 +7922,8 @@ const OdaraFragranceDetailSheet: React.FC<{
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)',
         }}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div
               className="text-[30px] leading-[1.02] text-foreground/94"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
@@ -7866,6 +7932,11 @@ const OdaraFragranceDetailSheet: React.FC<{
             </div>
             {detail.brand ? (
               <div className="mt-1.5 text-[13px] text-foreground/58">{detail.brand}</div>
+            ) : null}
+            {detailDescription ? (
+              <div className="mt-3 max-w-[34ch] text-[15px] leading-[1.48] text-foreground/84">
+                {detailDescription}
+              </div>
             ) : null}
           </div>
           <button
@@ -7885,376 +7956,123 @@ const OdaraFragranceDetailSheet: React.FC<{
           </button>
         </div>
 
-        <div className="flex items-start gap-4">
-          <div
-            className="relative h-[148px] w-[104px] shrink-0 overflow-hidden rounded-[22px] border"
-            style={{
-              borderColor: tint.frame,
-              background: `linear-gradient(180deg, rgba(255,255,255,0.10) 0%, ${tint.inner} 18%, rgba(11,12,16,0.82) 100%)`,
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 42px ${tint.glowStrong}`,
-              backdropFilter: 'blur(18px) saturate(130%)',
-              WebkitBackdropFilter: 'blur(18px) saturate(130%)',
-            }}
-          >
-            <OdaraBottleImage
-              candidates={detailBottleImageCandidates}
-              alt={detail.name ?? 'Fragrance bottle'}
-              className="h-full w-full object-contain p-3"
-              style={{
-                borderRadius: likelyTransparentDetailImage ? undefined : 18,
-                filter: likelyTransparentDetailImage
-                  ? 'drop-shadow(0 18px 26px rgba(0,0,0,0.36))'
-                  : 'contrast(1.03) saturate(0.96) drop-shadow(0 18px 26px rgba(0,0,0,0.38))',
-                mixBlendMode: likelyTransparentDetailImage ? undefined : 'darken',
-              }}
-              fallback={(
-                <OdaraBottleSilhouetteFallback
-                  tint={tint}
-                  monogram={deriveProfileMonogram(detail.name ?? detail.brand ?? 'Bottle')}
-                />
-              )}
-            />
-          </div>
-
-          <div className="min-w-0 flex-1">
+        <div className="space-y-5">
+          {topIdentityChips.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              <ScentIntelChipButton
-                label={familyLabel}
-                onOpen={onOpenScentIntel}
-                fragranceId={detail.fragrance_id}
-                position="family"
-                className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/82"
-                style={{
-                  boxShadow: `inset 0 0 0 1px ${tint.frame}`,
-                  background: `linear-gradient(180deg, rgba(255,255,255,0.10) 0%, ${tint.inner} 100%)`,
-                  backdropFilter: 'blur(14px)',
-                  WebkitBackdropFilter: 'blur(14px)',
-                }}
-              />
-              {detail.concentration ? (
-                <div
-                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em] text-foreground/68"
-                  style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.04)' }}
-                >
-                  {detail.concentration}
-                </div>
-              ) : null}
-              {roleLabel ? (
-                <div
-                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em] text-foreground/72"
-                  style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.035)' }}
-                >
-                  {roleLabel}
-                </div>
-              ) : null}
-              {detail.retired ? (
-                <div
-                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.24em]"
-                  style={{ boxShadow: 'inset 0 0 0 1px rgba(226,87,87,0.28)', background: 'rgba(226,87,87,0.12)', color: 'rgba(252,179,179,0.92)' }}
-                >
-                  Retired
-                </div>
-              ) : null}
+              {topIdentityChips.map((chip, index) => {
+                const tone = getAccordChipTone(chip.label, detail.family_key);
+                return (
+                  <ScentIntelChipButton
+                    key={`detail-top-identity-${chip.position}-${chip.label}-${index}`}
+                    label={chip.label}
+                    onOpen={onOpenScentIntel}
+                    fragranceId={detail.fragrance_id}
+                    position={chip.position}
+                    className="inline-flex rounded-full px-3 py-[6px] text-[10px] uppercase tracking-[0.24em]"
+                    style={{
+                      color: tone.color,
+                      border: `1px solid ${tone.border}`,
+                      background: tone.background,
+                      boxShadow: `0 0 12px ${tone.glow}`,
+                    }}
+                  />
+                );
+              })}
             </div>
-            {ratingLabel ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <div
-                  className="inline-flex rounded-full px-3 py-[5px] text-[9px] uppercase tracking-[0.22em]"
-                  style={{ boxShadow: 'inset 0 0 0 1px rgba(231,181,95,0.26)', background: 'rgba(231,181,95,0.1)', color: 'rgba(241,205,129,0.94)' }}
-                >
-                  {ratingLabel}
-                </div>
-              </div>
-            ) : null}
-            {detailDescription ? (
-              <div className="mt-4 text-[15px] leading-[1.42] text-foreground/82">
-                {detailDescription}
-              </div>
-            ) : null}
-            {detail.detail_loading ? (
-              <div className="mt-3 text-[10px] uppercase tracking-[0.2em] text-foreground/42">
-                Loading live fragrance profile…
-              </div>
-            ) : detail.detail_error ? (
-              <div className="mt-3 text-[10px] leading-[1.45] text-rose-300/78">
-                {detail.detail_error}
-              </div>
-            ) : null}
-            {detail.why_it_fits_wardrobe ? (
-              <details className="group mt-3">
-                <summary className="flex cursor-pointer list-none items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-foreground/42 transition-colors group-open:text-foreground/58">
-                  <span>Why it fits</span>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </summary>
-                <div className="mt-2 text-[12px] leading-[1.55] text-foreground/58">
-                  {detail.why_it_fits_wardrobe}
-                </div>
-              </details>
-            ) : null}
-          </div>
-        </div>
+          ) : null}
 
-        <div
-          className="mt-4 grid grid-cols-2 gap-2.5"
-        >
-          {detailMetaEntries.map((entry, index) => (
-            <div
-              key={entry.key}
-              className={`rounded-[18px] border px-3.5 py-3 ${index === detailMetaEntries.length - 1 ? 'col-span-2' : ''}`}
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-              }}
-            >
-              <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">{entry.label}</div>
-              <div className="mt-1.5 text-[12px] leading-[1.45] text-foreground/84">{entry.value}</div>
+          {roleLabel ? (
+            <div className="text-[14px] leading-[1.4] text-foreground/72">
+              <span className="text-foreground/54">Best worn:</span>{' '}
+              <span className="text-foreground/88">{roleLabel}</span>
             </div>
-          ))}
-        </div>
+          ) : null}
 
-        {(() => {
-          const tx = taxonomy;
-          const txFamily = tx?.family_display_label?.trim() || tx?.universal_family_label?.trim() || null;
-          const facetItems = Array.isArray(tx?.facets)
-            ? (tx!.facets as ResolvedTaxonomyFacet[])
-                .map((f) => (f?.display_label || f?.label || '').toString().trim())
-                .filter(Boolean)
-                .slice(0, 6)
-            : [];
-          const rolesRaw = (Array.isArray(tx?.wardrobe_roles) ? tx!.wardrobe_roles : tx?.roles) as ResolvedTaxonomyRole[] | null | undefined;
-          const roleItems = Array.isArray(rolesRaw)
-            ? [...rolesRaw]
-                .map((r) => ({
-                  label: (r?.display_label || r?.label || '').toString().trim(),
-                  priority: typeof r?.role_priority === 'number' ? r.role_priority : (typeof r?.priority === 'number' ? r.priority : 99),
-                }))
-                .filter((r) => r.label)
-                .sort((a, b) => a.priority - b.priority)
-                .slice(0, 2)
-            : [];
-          const reviewLabel = formatTaxonomyReviewStatus(tx?.review_status);
-          const hasContent = Boolean(txFamily || facetItems.length || roleItems.length);
-          if (!taxonomyLoading && !hasContent) return null;
-          return (
-            <div
-              className="mt-4 rounded-[18px] border px-3.5 py-3"
-              style={{
-                borderColor: 'rgba(255,255,255,0.06)',
-                background: 'rgba(255,255,255,0.018)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/40">Scent Map</div>
-                {reviewLabel && hasContent ? (
-                  <div className="text-[9px] uppercase tracking-[0.18em] text-foreground/38">{reviewLabel}</div>
-                ) : null}
-              </div>
-              {taxonomyLoading && !hasContent ? (
-                <div className="mt-2.5 flex gap-1.5">
-                  <div className="h-5 w-16 animate-pulse rounded-full bg-white/[0.04]" />
-                  <div className="h-5 w-12 animate-pulse rounded-full bg-white/[0.04]" />
-                  <div className="h-5 w-14 animate-pulse rounded-full bg-white/[0.04]" />
-                </div>
-              ) : (
-                <div className="mt-2 space-y-2">
-                  {(txFamily || facetItems.length > 0) ? (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {txFamily ? (
-                        <ScentIntelChipButton
-                          label={txFamily}
-                          onOpen={onOpenScentIntel}
-                          fragranceId={detail.fragrance_id}
-                          position="family"
-                          className="rounded-full px-2.5 py-[5px] text-[10px] uppercase tracking-[0.18em] text-foreground/88"
-                          style={{
-                            border: `1px solid ${getAccordChipTone(txFamily, detail.family_key).border}`,
-                            background: getAccordChipTone(txFamily, detail.family_key).background,
-                            color: getAccordChipTone(txFamily, detail.family_key).color,
-                            boxShadow: `0 0 12px ${getAccordChipTone(txFamily, detail.family_key).glow}`,
-                          }}
-                        />
-                      ) : null}
-                      {facetItems.map((label, i) => (
-                        (() => {
-                          const tone = getAccordChipTone(label, detail.family_key);
-                          return (
-                            <ScentIntelChipButton
-                              key={`facet-${label}-${i}`}
-                              label={label}
-                              onOpen={onOpenScentIntel}
-                              fragranceId={detail.fragrance_id}
-                              position="accord"
-                              className="rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.04em]"
-                              style={{
-                                color: tone.color,
-                                border: `1px solid ${tone.border}`,
-                                background: tone.background,
-                                boxShadow: `0 0 12px ${tone.glow}`,
-                              }}
-                            />
-                          );
-                        })()
-                      ))}
-                    </div>
-                  ) : null}
-                  {roleItems.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {roleItems.map((r, i) => (
-                        <span
-                          key={`role-${r.label}-${i}`}
-                          className="rounded-full px-2.5 py-[5px] text-[9px] uppercase tracking-[0.2em]"
-                          style={{
-                            border: `1px solid rgba(255,255,255,${i === 0 ? 0.11 : 0.06})`,
-                            background: `rgba(255,255,255,${i === 0 ? 0.038 : 0.018})`,
-                            color: `rgba(255,255,255,${i === 0 ? 0.82 : 0.56})`,
-                          }}
-                        >
-                          {r.label}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              )}
+          {detail.detail_loading ? (
+            <div className="text-[10px] uppercase tracking-[0.2em] text-foreground/42">
+              Loading live fragrance profile…
             </div>
-          );
-        })()}
+          ) : detail.detail_error ? (
+            <div className="text-[10px] leading-[1.45] text-rose-300/78">
+              {detail.detail_error}
+            </div>
+          ) : null}
 
-
-
-
-        {hasTokenSections ? (
-          <div className="mt-4 space-y-3">
-            {accordLabels.length > 0 ? (
-              <div>
-                <div className="mb-2 text-[9px] uppercase tracking-[0.24em] text-foreground/38">Accords</div>
-                <div className="flex flex-wrap gap-2">
-                  {accordLabels.map((label, index) => (
-                    (() => {
-                      const tone = getAccordChipTone(label, detail.family_key);
-                      return (
-                        <ScentIntelChipButton
-                          key={`accord-${label}-${index}`}
-                          label={label}
-                          onOpen={onOpenScentIntel}
-                          fragranceId={detail.fragrance_id}
-                          position="accord"
-                          className={getScentIntelChipClass()}
-                          style={{
-                            color: tone.color,
-                            border: `1px solid ${tone.border}`,
-                            background: tone.background,
-                            boxShadow: `0 0 14px ${tone.glow}`,
-                          }}
-                        />
-                      );
-                    })()
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {hasStructureSections ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {[
-                  { label: 'Top', values: topLabels, position: 'top' },
-                  { label: 'Heart', values: middleLabels, position: 'heart' },
-                  { label: 'Base', values: baseLabels, position: 'base' },
-                ].map((section) => (
-                  section.values.length > 0 ? (
-                    <div
-                      key={section.label}
-                      className="rounded-[18px] border px-3 py-3"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.08)',
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-                        backdropFilter: 'blur(14px)',
-                        WebkitBackdropFilter: 'blur(14px)',
-                      }}
-                    >
-                      <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">{section.label}</div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {section.values.map((label, index) => {
-                          const tone = getAccordChipTone(label, detail.family_key);
-                          return (
-                            <ScentIntelChipButton
-                              key={`${section.position}-${label}-${index}`}
-                              label={label}
-                              onOpen={onOpenScentIntel}
-                              fragranceId={detail.fragrance_id}
-                              position={section.position}
-                              className={getScentIntelChipClass()}
-                              style={{
-                                color: tone.color,
-                                border: `1px solid ${tone.border}`,
-                                background: tone.background,
-                                boxShadow: `0 0 14px ${tone.glow}`,
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null
+          <section>
+            <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
+            {detailPerformanceBars.length > 0 ? (
+              <div className="space-y-4">
+                {detailPerformanceBars.map((metric) => (
+                  <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
                 ))}
               </div>
-            ) : noteLabels.length > 0 ? (
-              <div>
-                <div className="mb-2 text-[9px] uppercase tracking-[0.24em] text-foreground/38">Notes</div>
-                <div className="flex flex-wrap gap-2">
-                  {noteLabels.map((label, index) => {
-                    const tone = getAccordChipTone(label, detail.family_key);
-                    return (
-                      <ScentIntelChipButton
-                        key={`note-${label}-${index}`}
-                        label={label}
-                        onOpen={onOpenScentIntel}
-                        fragranceId={detail.fragrance_id}
-                        position="unknown"
-                        className={getScentIntelChipClass()}
-                        style={{
-                          color: tone.color,
-                          border: `1px solid ${tone.border}`,
-                          background: tone.background,
-                          boxShadow: `0 0 14px ${tone.glow}`,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+            ) : (
+              <div className="text-[12px] leading-[1.5] text-foreground/58">
+                Not enough performance data yet.
               </div>
-            ) : null}
-          </div>
-        ) : null}
+            )}
+          </section>
 
-        <div
-          className="mt-4 rounded-[18px] border px-3.5 py-3"
-          style={{
-            borderColor: 'rgba(255,255,255,0.08)',
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-          }}
-        >
-          <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/38">Performance</div>
-          {detailPerformanceBars.length > 0 ? (
-            <div className="mt-3 space-y-3.5">
-              {detailPerformanceBars.map((metric) => (
-                <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2.5 text-[12px] leading-[1.5] text-foreground/58">
-              Not enough performance data yet.
-            </div>
-          )}
+          {accordLabels.length > 0 ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
+              <div className="flex flex-wrap gap-2">
+                {accordLabels.slice(0, 6).map((label, index) => {
+                  const tone = getAccordChipTone(label, detail.family_key);
+                  return (
+                    <ScentIntelChipButton
+                      key={`detail-accord-${label}-${index}`}
+                      label={label}
+                      onOpen={onOpenScentIntel}
+                      fragranceId={detail.fragrance_id}
+                      position="accord"
+                      className={getScentIntelChipClass()}
+                      style={{
+                        color: tone.color,
+                        border: `1px solid ${tone.border}`,
+                        background: tone.background,
+                        boxShadow: `0 0 14px ${tone.glow}`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {orderedNoteChips.length > 0 ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
+              <div className="flex flex-wrap gap-2">
+                {orderedNoteChips.map((note, index) => {
+                  const tone = getAccordChipTone(note.label, detail.family_key);
+                  return (
+                    <ScentIntelChipButton
+                      key={`detail-note-${note.position}-${note.label}-${index}`}
+                      label={note.label}
+                      onOpen={onOpenScentIntel}
+                      fragranceId={detail.fragrance_id}
+                      position={note.position}
+                      className={getScentIntelChipClass()}
+                      style={{
+                        color: tone.color,
+                        border: `1px solid ${tone.border}`,
+                        background: tone.background,
+                        boxShadow: `0 0 14px ${tone.glow}`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          <div
+            className="pt-1 text-[13px] leading-[1.5] text-foreground/66"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            {detailFactLine}
+          </div>
         </div>
       </div>
     </OdaraBottomSheet>
