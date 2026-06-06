@@ -7848,6 +7848,19 @@ function formatScentIntelListPhrase(values: string[]): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+function formatScentIntelInlineList(values: string[]) {
+  if (values.length === 0) return '';
+  return values
+    .map((value, index) => {
+      const trimmed = value.trim();
+      if (!trimmed) return trimmed;
+      return index === 0
+        ? `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`
+        : trimmed;
+    })
+    .join(', ');
+}
+
 function formatScentIntelPosition(position: string | null | undefined): string | null {
   const normalized = String(position ?? '').trim().toLowerCase();
   switch (normalized) {
@@ -7892,6 +7905,92 @@ function getScentIntelHeaderCategory(term: ScentIntelTerm | null | undefined): s
   return storedCategory || formatScentIntelTermType(term?.term_type);
 }
 
+type ScentIntelCopyOverride = {
+  whatItIs?: string;
+  smellsLike?: string[];
+  usedFor?: string;
+  whatItDoes?: string;
+  tintKey?: string;
+};
+
+const SCENT_INTEL_COPY_OVERRIDES: Record<string, ScentIntelCopyOverride> = {
+  amber: {
+    whatItIs: 'An accord built from resins, balsams, soft vanilla warmth, and spice to create an amber effect.',
+    tintKey: 'oud-amber',
+  },
+  oud: {
+    whatItIs: 'A dark woody material profile built to suggest agarwood, resin, smoke, and warm animalic depth.',
+    tintKey: 'oud-amber',
+  },
+  leather: {
+    whatItIs: 'A fragrance accord built to suggest tanned hide, suede, smoke, dry woods, resins, or saffron warmth.',
+    smellsLike: ['Polished leather', 'suede', 'smoke', 'dark woods', 'warm spice', 'dry resin'],
+    usedFor: 'Adds depth, texture, darkness, and a dressed-up edge to woods, ambers, florals, tobacco, and spice.',
+    whatItDoes: 'Makes a fragrance feel richer, darker, smoother, more mature, and more tactile.',
+    tintKey: 'dark-leather',
+  },
+  incense: {
+    whatItIs: 'An accord built to suggest dry burning resin, smoke, mineral ash, and incense warmth.',
+    smellsLike: ['Dry resin', 'church incense', 'ash', 'cool spice', 'smoky wood'],
+    whatItDoes: 'Makes a fragrance feel smokier, drier, darker, and more textured.',
+    tintKey: 'oud-amber',
+  },
+  saffron: {
+    whatItIs: 'A spice note from saffron crocus stigmas, used for dry warmth, radiance, and a leathery metallic edge.',
+    tintKey: 'spicy-warm',
+  },
+  woody: {
+    whatItIs: 'A broad scent family built from wood notes like cedar, sandalwood, vetiver, patchouli, guaiac wood, or woody aroma molecules.',
+    smellsLike: ['Dry timber', 'cedar pencils', 'sandalwood', 'vetiver root', 'bark', 'forest floor'],
+    usedFor: 'Gives a fragrance structure, dryness, warmth, polish, and a stronger base.',
+    whatItDoes: 'Makes a scent feel grounded, cleaner, more mature, less sugary, and more durable.',
+    tintKey: 'woody-clean',
+  },
+  'dark-leather': {
+    whatItIs: 'A darker leather chord built to suggest black leather, smoke, resin, and dry woods in one blended effect.',
+    tintKey: 'dark-leather',
+  },
+  'woody-clean': {
+    whatItIs: 'A clean woody chord that blends polished woods, soft musk, and airy freshness into a restrained everyday profile.',
+    tintKey: 'woody-clean',
+  },
+};
+
+function getScentIntelCopyKey(term: ScentIntelTerm | null | undefined) {
+  return scentIntelSlugify(term?.slug ?? term?.label ?? '');
+}
+
+function getScentIntelCopyOverride(term: ScentIntelTerm | null | undefined): ScentIntelCopyOverride | null {
+  const key = getScentIntelCopyKey(term);
+  return key ? (SCENT_INTEL_COPY_OVERRIDES[key] ?? null) : null;
+}
+
+function isScentIntelCategoryRedundant(term: ScentIntelTerm | null | undefined, category: string) {
+  const normalizedCategory = normalizeSearchFamilyKey(category).replace(/-(note|accord|material|style|family|chord)$/g, '');
+  const normalizedLabel = normalizeSearchFamilyKey(term?.label ?? '');
+  const normalizedShort = normalizeSearchFamilyKey(term?.short_label ?? '');
+  if (!normalizedCategory) return false;
+  return normalizedCategory === normalizedLabel || normalizedCategory === normalizedShort;
+}
+
+function getDefaultScentIntelWhatItIs(term: ScentIntelTerm | null | undefined): string | null {
+  if (!term) return null;
+  switch (String(term.term_type ?? '').trim().toLowerCase()) {
+    case 'note':
+      return 'A perfumery note used to shape part of a fragrance opening, heart, or drydown.';
+    case 'accord':
+      return 'A blended fragrance accord built from multiple materials to suggest one recognizable scent effect.';
+    case 'material':
+      return 'A perfumery material used to add structure, texture, or a specific smell character.';
+    case 'family':
+      return 'A broad scent family used to describe the main character of a fragrance.';
+    case 'chord':
+      return 'A recurring scent chord built from multiple notes and materials into one style effect.';
+    default:
+      return 'A scent term used to describe a fragrance character.';
+  }
+}
+
 function getScentIntelCategory(term: ScentIntelTerm | null | undefined, position: string | null | undefined): string {
   return formatScentIntelPosition(position)
     ?? (typeof term?.scent_category === 'string' && term.scent_category.trim() ? term.scent_category.trim() : null)
@@ -7900,24 +7999,58 @@ function getScentIntelCategory(term: ScentIntelTerm | null | undefined, position
 
 function getScentIntelWhatItIs(term: ScentIntelTerm | null | undefined): string | null {
   if (!term) return null;
+  const override = getScentIntelCopyOverride(term);
+  if (override?.whatItIs) return override.whatItIs;
 
   const storedCategory = typeof term.scent_category === 'string' ? term.scent_category.trim() : '';
-  if (storedCategory) {
-    const lowered = storedCategory.toLowerCase();
-    const article = /^[aeiou]/i.test(lowered) ? 'An' : 'A';
-    return `${article} ${lowered}.`;
+  const subject = readTrimmedLayerText(term.label, term.short_label, 'This term');
+  const smellsLike = normalizeScentIntelStringList(term.smells_like, 4);
+  if (storedCategory && smellsLike.length > 0) {
+    return `${subject} is a ${storedCategory.toLowerCase()} with a profile of ${formatScentIntelInlineList(smellsLike)}.`;
+  }
+
+  if (storedCategory && !isScentIntelCategoryRedundant(term, storedCategory)) {
+    return `${subject} is a ${storedCategory.toLowerCase()}.`;
   }
 
   const shortLabel = typeof term.short_label === 'string' ? term.short_label.trim() : '';
   const typeLabel = formatScentIntelTermType(term.term_type).toLowerCase();
   if (shortLabel) {
     const lowered = shortLabel.toLowerCase();
-    const article = /^[aeiou]/i.test(lowered) ? 'An' : 'A';
-    return `${article} ${lowered} ${typeLabel}.`;
+    return `${subject} is a ${lowered} ${typeLabel}.`;
   }
 
-  const article = /^[aeiou]/i.test(typeLabel) ? 'An' : 'A';
-  return `${article} ${typeLabel}.`;
+  return getDefaultScentIntelWhatItIs(term);
+}
+
+function getScentIntelSmellsLike(term: ScentIntelTerm | null | undefined) {
+  const override = getScentIntelCopyOverride(term);
+  return override?.smellsLike ?? normalizeScentIntelStringList(term?.smells_like, 6);
+}
+
+function getScentIntelUsedFor(term: ScentIntelTerm | null | undefined) {
+  const override = getScentIntelCopyOverride(term);
+  return override?.usedFor ?? (typeof term?.used_for === 'string' ? term.used_for.trim() : '');
+}
+
+function getScentIntelWhatItDoes(term: ScentIntelTerm | null | undefined) {
+  const override = getScentIntelCopyOverride(term);
+  return override?.whatItDoes ?? (typeof term?.what_it_does === 'string' ? term.what_it_does.trim() : '');
+}
+
+function getScentIntelGlassTint(term: ScentIntelTerm | null | undefined) {
+  const override = getScentIntelCopyOverride(term);
+  const preferredKeys = [
+    override?.tintKey ?? null,
+    term?.family_key ?? null,
+    term?.slug ?? null,
+    term?.label ?? null,
+    term?.short_label ?? null,
+  ]
+    .map((value) => normalizeSearchFamilyKey(value))
+    .filter(Boolean);
+  const matchedKey = preferredKeys.find((key) => Boolean(FAMILY_TINTS[key]));
+  return FAMILY_TINTS[matchedKey ?? ''] ?? FAMILY_TINTS['woody-clean'] ?? DEFAULT_TINT;
 }
 
 function getScentIntelChipClass(extra = '') {
@@ -7991,8 +8124,13 @@ const OdaraScentIntelSheet: React.FC<{
     ? formatScentIntelPosition(payload?.context_position ?? state.input.position)
     : null;
   const whatItIs = getScentIntelWhatItIs(term);
-  const smellsLike = normalizeScentIntelStringList(term?.smells_like, 6);
+  const smellsLike = getScentIntelSmellsLike(term);
+  const usedFor = getScentIntelUsedFor(term);
+  const whatItDoes = getScentIntelWhatItDoes(term);
   const pairsWith = normalizeScentIntelStringList(term?.pairs_well_with, 8);
+  const intelTint = getScentIntelGlassTint(term);
+  const intelGlassVisual = getOdaraGlassCardVisualRecipe(intelTint, 'hero');
+  const intelLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(intelTint, intelGlassVisual);
   const foundInMatches = (() => {
     const entries: Array<{
       fragrance_id: string | null;
@@ -8052,7 +8190,13 @@ const OdaraScentIntelSheet: React.FC<{
   })();
 
   return (
-    <OdaraBottomSheet open={!!state} onClose={onClose}>
+    <OdaraBottomSheet
+      open={!!state}
+      onClose={onClose}
+      surfaceStyle={intelLiquidGlassStyle}
+      atmosphereClassName={intelGlassVisual.atmosphereClassName}
+      atmosphereStyle={{ ...intelGlassVisual.atmosphereStyle, opacity: 0.2 }}
+    >
       <div
         className="px-5 pt-4"
         style={{
@@ -8119,14 +8263,14 @@ const OdaraScentIntelSheet: React.FC<{
                 {formatScentIntelListPhrase(smellsLike)}
               </ScentIntelSection>
             ) : null}
-            {term?.used_for ? (
+            {usedFor ? (
               <ScentIntelSection title="Used for">
-                {term.used_for}
+                {usedFor}
               </ScentIntelSection>
             ) : null}
-            {term?.what_it_does ? (
+            {whatItDoes ? (
               <ScentIntelSection title="What it does">
-                {term.what_it_does}
+                {whatItDoes}
               </ScentIntelSection>
             ) : null}
             {pairsWith.length > 0 ? (
