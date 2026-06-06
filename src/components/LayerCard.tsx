@@ -57,17 +57,6 @@ function getDisplayName(name: string | null | undefined, brand?: string | null):
   return display;
 }
 
-function deriveBottleMonogram(name: string | null | undefined, brand?: string | null) {
-  const source = getDisplayName(name, brand) || brand || 'Bottle';
-  const letters = source
-    .split(/\s+/)
-    .map((part) => part.trim()[0]?.toUpperCase() ?? '')
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('');
-  return letters || 'OD';
-}
-
 function normalizeComparisonText(value: string | null | undefined) {
   return (value ?? '')
     .normalize('NFKD')
@@ -775,6 +764,25 @@ const LayerCard = ({
   // COLOR: derived solely from the selected layer fragrance's family_key
   const layerColor = activeModeEntry ? (FAMILY_COLORS[activeModeEntry.family_key] ?? '#888') : '#888';
   const layerTint = activeModeEntry ? (FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT) : DEFAULT_TINT;
+  const interactionType = (
+    (activeModeEntry as any)?.interaction_type
+    ?? (activeModeEntry as any)?.interactionType
+    ?? selectedMood
+  ) as InteractionType;
+  const resolvedRatioOption: RatioOption = selectedRatio === '2:1' || selectedRatio === '1:1' || selectedRatio === '1:2'
+    ? selectedRatio
+    : recommendedRatio;
+  const cfg = activeModeEntry
+    ? buildMoodConfig(
+        selectedMood,
+        mainName,
+        mainBrand,
+        activeModeEntry.name,
+        activeModeEntry.brand,
+        mainFamily,
+        activeModeEntry.family_key,
+      )
+    : null;
 
   // Backend-driven text
   const sameDnaPair = activeModeEntry
@@ -788,6 +796,8 @@ const LayerCard = ({
       )
     : false;
   const rawWhyText = activeModeEntry?.why_it_works?.trim() || activeModeEntry?.reason?.trim() || '';
+  const rawReasonText = activeModeEntry?.reason?.trim() || '';
+  const rawWearText = activeModeEntry?.application_style?.trim() || '';
   const sanitizedWhyText = sanitizeLayerDetailCopy(
     rawWhyText,
     mainName,
@@ -812,6 +822,20 @@ const LayerCard = ({
   );
   const sanitizedRatioText = sanitizeLayerDetailCopy(
     ratioText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const sanitizedReasonText = sanitizeLayerDetailCopy(
+    rawReasonText,
+    mainName,
+    mainBrand,
+    activeModeEntry?.name,
+    activeModeEntry?.brand,
+  );
+  const sanitizedWearText = sanitizeLayerDetailCopy(
+    rawWearText,
     mainName,
     mainBrand,
     activeModeEntry?.name,
@@ -855,8 +879,14 @@ const LayerCard = ({
     : null;
   const parsedPlacementRows = parsePlacementRowsFromText(sanitizedPlacementText);
   const placementRows = {
-    anchor: placementRowsFromPattern?.anchor || parsedPlacementRows.anchor || (resolvedMainSprayCount ? `${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : ''),
-    layer: placementRowsFromPattern?.layer || parsedPlacementRows.layer || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : ''),
+    anchor: placementRowsFromPattern?.anchor
+      || parsedPlacementRows.anchor
+      || (resolvedMainSprayCount ? `${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : '')
+      || (cfg ? `${cfg.baseLabel} · ${cfg.baseZones}` : ''),
+    layer: placementRowsFromPattern?.layer
+      || parsedPlacementRows.layer
+      || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : '')
+      || (cfg ? `${cfg.topLabel} · ${cfg.topZones}` : ''),
   };
   const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
   const resolvedWhyText = sprayPattern?.why_it_works || whyText;
@@ -885,11 +915,44 @@ const LayerCard = ({
   }, [layerImageCandidateKey]);
   const activeLayerImageUrl = layerImageCandidates[layerImageCandidateIndex] ?? null;
   const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(activeLayerImageUrl);
-  const layerBottleMonogram = deriveBottleMonogram(activeModeEntry?.name, activeModeEntry?.brand);
   const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
   const placementSubline = ratioDisplayText || '';
-  const condensedWhyText = [resolvedWhyText, sprayGuidanceText].filter(Boolean).join(' ').trim();
+  const generatedEffectText = activeModeEntry
+    ? buildEffectText(
+        selectedMood,
+        mainName,
+        activeModeEntry.name,
+        mainNotes ?? [],
+        activeModeEntry.notes ?? [],
+        interactionType,
+        resolvedRatioOption,
+      )
+    : '';
+  const effectTextCandidate = sanitizedReasonText || generatedEffectText;
+  const effectText = areDetailTextsEquivalent(effectTextCandidate, resolvedWhyText)
+    ? ''
+    : effectTextCandidate;
+  const wearText = areDetailTextsEquivalent(sanitizedWearText, resolvedWhyText)
+    || areDetailTextsEquivalent(sanitizedWearText, effectText)
+    || areDetailTextsEquivalent(sanitizedWearText, ratioDisplayText)
+    ? ''
+    : sanitizedWearText;
+  const ratioOnlyText = hasPlacement || !ratioDisplayText || areDetailTextsEquivalent(ratioDisplayText, wearText)
+    ? ''
+    : ratioDisplayText;
   const detailSections = [
+    resolvedWhyText
+      ? { label: 'Why it works', value: resolvedWhyText }
+      : null,
+    effectText
+      ? { label: 'Effect', value: effectText }
+      : null,
+    wearText
+      ? { label: 'How to wear it', value: wearText }
+      : null,
+    sprayGuidanceText
+      ? { label: 'Spray guidance', value: sprayGuidanceText }
+      : null,
     hasPlacement
       ? {
           label: 'Placement',
@@ -898,8 +961,8 @@ const LayerCard = ({
           subline: placementSubline,
         }
       : null,
-    condensedWhyText
-      ? { label: 'Why it works', value: condensedWhyText }
+    ratioOnlyText
+      ? { label: 'Ratio', value: ratioOnlyText }
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
   const hasLayerDetailContent = detailSections.length > 0;
@@ -1022,8 +1085,8 @@ const LayerCard = ({
               })()}
             </div>
 
-            <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
-              {activeLayerImageUrl ? (
+            {activeLayerImageUrl ? (
+              <div className="pointer-events-none relative mt-0.5 h-[92px] w-[70px] shrink-0">
                 <img
                   src={activeLayerImageUrl}
                   alt={`${activeModeEntry.name} bottle`}
@@ -1040,36 +1103,8 @@ const LayerCard = ({
                     mixBlendMode: likelyTransparentLayerImage ? undefined : 'darken',
                   }}
                 />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <div className="relative">
-                    <svg
-                      width="54"
-                      height="74"
-                      viewBox="0 0 112 148"
-                      aria-hidden="true"
-                      className="drop-shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
-                    >
-                      <defs>
-                        <linearGradient id="layerCardBottleSilhouette" x1="50%" y1="0%" x2="50%" y2="100%">
-                          <stop offset="0%" stopColor="rgba(255,255,255,0.20)" />
-                          <stop offset="100%" stopColor="rgba(255,255,255,0.07)" />
-                        </linearGradient>
-                      </defs>
-                      <rect x="40" y="10" width="32" height="22" rx="8" fill="url(#layerCardBottleSilhouette)" />
-                      <rect x="30" y="28" width="52" height="98" rx="18" fill="rgba(255,255,255,0.08)" stroke={`${layerColor}55`} />
-                      <rect x="35" y="38" width="42" height="74" rx="14" fill="rgba(255,255,255,0.04)" />
-                    </svg>
-                    <div
-                      className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[9px] uppercase tracking-[0.28em] text-white/44"
-                      style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
-                    >
-                      {layerBottleMonogram}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            ) : null}
           </div>
         </>
       ) : (

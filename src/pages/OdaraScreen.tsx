@@ -13049,9 +13049,7 @@ const OdaraScreen = ({
 
     const signedInModeReadOnlyReason = signedInSelectedDayIsPast
       ? 'Past days are read-only'
-      : signedInSearchPreviewLocked
-        ? 'Unlock to adjust'
-        : null;
+      : null;
 
     if (signedInModeReadOnlyReason) {
       reasons.balance = signedInModeReadOnlyReason;
@@ -16633,34 +16631,19 @@ const OdaraScreen = ({
   const alternatesRendered = visibleAlternateRailItems.length > 0;
   const visibleHeroFamilyColor = visibleResolvedHeroRail?.familyColor ?? '#888';
   const visibleHeroFamilyLabel = visibleResolvedHeroRail?.familyLabel ?? '';
-  const visibleHeroDetail = useMemo(() => {
-    const heroId = visibleResolvedCurrentCard?.fragrance_id ?? null;
-    return heroId ? (fragranceDetailCacheRef.current.get(heroId) ?? null) : null;
-  }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
-  const visibleHeroShortDescription = useMemo(() => {
-    return visibleHeroDetail?.short_description ?? buildGeneratedFragranceDescription({
-      family_key: visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null,
-      family_label: visibleHeroDetail?.family_key
-        ? getFamilyLabelText(visibleHeroDetail.family_key)
-        : visibleHeroFamilyLabel,
-      notes: visibleHeroDetail?.notes ?? visibleResolvedCurrentCard?.notes ?? [],
-      accords: visibleHeroDetail?.accords ?? visibleResolvedCurrentCard?.accords ?? [],
-      projection_score: visibleHeroDetail?.projection_score ?? null,
-      longevity_score: visibleHeroDetail?.longevity_score ?? null,
-      density_score: visibleHeroDetail?.density_score ?? null,
-    });
-  }, [visibleHeroDetail, visibleResolvedCurrentCard, visibleHeroFamilyLabel]);
-  const visibleHeroMetaBits = useMemo(() => {
-    const bits = [
-      visibleHeroDetail?.release_year ? `Released ${visibleHeroDetail.release_year}` : null,
-      visibleHeroDetail?.perfumer ? `By ${visibleHeroDetail.perfumer}` : null,
-    ].filter(Boolean) as string[];
-    return bits.slice(0, 2);
-  }, [visibleHeroDetail]);
   const activeReasonChip = visibleResolvedHeroRail?.reasonChip ?? null;
-  const heroRailTokens: Array<any> = Array.isArray(visibleResolvedHeroRail?.tokens)
-    ? visibleResolvedHeroRail.tokens
-    : [];
+  const heroRailTokens: Array<any> = useMemo(() => {
+    const resolvedTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
+      ? visibleResolvedHeroRail.tokens
+      : [];
+    if (resolvedTokens.length > 0) return resolvedTokens;
+    return buildSemanticSurfaceTokens(
+      visibleResolvedCurrentCard?.notes ?? [],
+      visibleResolvedCurrentCard?.accords ?? [],
+      new Set(),
+      4,
+    );
+  }, [visibleResolvedCurrentCard?.accords, visibleResolvedCurrentCard?.notes, visibleResolvedHeroRail?.tokens]);
   const signedInCarryoverSelectedCard = signedInResolvedSequelState.selectedCard;
   const signedInHeroCarryColor = signedInCarryoverSelectedCard?.family
     ? (FAMILY_COLORS[signedInCarryoverSelectedCard.family] ?? '#888')
@@ -17410,7 +17393,7 @@ const OdaraScreen = ({
               <div
                 className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
                 style={{
-                  ...getOdaraHeroLiquidGlassMaterialStyle(tint, heroCardVisual),
+                  ...heroCardVisual.surfaceStyle,
                   // Allow native vertical scroll from the hero card. We only
                   // claim the gesture on clear horizontal intent (day-swipe).
                   touchAction: 'pan-y',
@@ -17685,30 +17668,6 @@ const OdaraScreen = ({
                       </span>
                     ) : null}
 
-                    {visibleHeroShortDescription ? (
-                      <p className="mb-2.5 max-w-[28rem] text-left text-[12px] leading-[1.55] text-foreground/78">
-                        {visibleHeroShortDescription}
-                      </p>
-                    ) : null}
-
-                    {visibleHeroMetaBits.length > 0 ? (
-                      <div className="mb-2.5 flex flex-wrap gap-1.5">
-                        {visibleHeroMetaBits.map((bit) => (
-                          <span
-                            key={bit}
-                            className="inline-flex rounded-full px-2.5 py-[5px] text-[9px] uppercase tracking-[0.18em] text-foreground/68"
-                            style={{
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              background: 'rgba(255,255,255,0.04)',
-                              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                            }}
-                          >
-                            {bit}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-
                     {(activeReasonChip || heroRailTokens.length > 0) && (
                       <div className="mt-0.5 mb-2.5 w-full">
                         <div
@@ -17771,29 +17730,8 @@ const OdaraScreen = ({
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    data-no-card-swipe
-                    aria-label={`Open fragrance profile for ${getDisplayName(visibleResolvedCurrentCard?.name ?? '', visibleResolvedCurrentCard?.brand ?? null)}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      openVisibleHeroDetail();
-                    }}
-                    className="relative mt-1 h-[108px] w-[78px] shrink-0 overflow-hidden rounded-[22px] border sm:h-[118px] sm:w-[86px]"
-                    style={{
-                      borderColor: 'rgba(255,255,255,0.10)',
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 18%, rgba(12,13,16,0.56) 100%)',
-                      boxShadow: '0 18px 34px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.08)',
-                      backdropFilter: 'blur(18px) saturate(135%)',
-                      WebkitBackdropFilter: 'blur(18px) saturate(135%)',
-                    }}
-                  >
-                    <div
-                      className="pointer-events-none absolute inset-0"
-                      style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 26%)' }}
-                    />
-                    <div className="relative h-full w-full p-2.5">
+                  {visibleHeroBottleImageCandidates.length > 0 ? (
+                    <div className="pointer-events-none relative mt-1 h-[108px] w-[78px] shrink-0 sm:h-[118px] sm:w-[86px]">
                       <OdaraBottleImage
                         candidates={visibleHeroBottleImageCandidates}
                         alt={`${visibleResolvedCurrentCard?.name ?? 'Fragrance'} bottle`}
@@ -17807,19 +17745,10 @@ const OdaraScreen = ({
                             : 'contrast(1.03) saturate(0.96) drop-shadow(0 16px 24px rgba(0,0,0,0.34))',
                           mixBlendMode: likelyTransparentHeroBottleImage ? undefined : 'darken',
                         }}
-                        fallback={(
-                          <OdaraBottleSilhouetteFallback
-                            tint={getEnhancedCollectionTint({
-                              family_key: visibleResolvedCurrentCard?.family ?? null,
-                              family_label: visibleHeroFamilyLabel || null,
-                            })}
-                            monogram={deriveProfileMonogram(visibleResolvedCurrentCard?.name ?? visibleResolvedCurrentCard?.brand ?? 'Bottle')}
-                            compact
-                          />
-                        )}
+                        fallback={null}
                       />
                     </div>
-                  </button>
+                  ) : null}
                 </div>
               </div>
             </div>
