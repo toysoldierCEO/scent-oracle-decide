@@ -7753,6 +7753,7 @@ type ScentIntelTerm = {
   scent_category?: string | null;
   family_key?: string | null;
   short_label?: string | null;
+  what_it_is?: string | null;
   smells_like?: unknown;
   used_for?: string | null;
   what_it_does?: string | null;
@@ -7787,6 +7788,63 @@ type ScentIntelSheetState = {
 };
 
 const SCENT_INTEL_UNMAPPED_MESSAGE = 'Odara has not mapped this note yet.';
+
+const SCENT_INTEL_LOCAL_SEEDS: Record<string, ScentIntelPayload> = {
+  mango: {
+    found: true,
+    term_slug: 'mango',
+    label: 'Mango',
+    message: null,
+    context_position: null,
+    wardrobe_matches: [],
+    term: {
+      slug: 'mango',
+      label: 'Mango',
+      term_type: 'note',
+      scent_category: 'Fruit Note',
+      family_key: 'fresh-citrus',
+      short_label: 'Reconstructed fruit',
+      what_it_is: 'Mango is the smell of ripe or green mango recreated for perfume. Most of the time, perfumers build it rather than relying on one common mango extract.',
+      smells_like: ['Juicy tropical flesh', 'peachy sweetness', 'soft green peel', 'tart resinous snap'],
+      used_for: 'Brightening fruity florals and adding a tropical pop to openings and hearts.',
+      what_it_does: 'Makes a fragrance feel juicier, sunnier, and more vivid, or greener in fresher mango styles.',
+      pairs_well_with: ['Bergamot', 'Green', 'Jasmine', 'Vanilla', 'Leather', 'Oud', 'Amber', 'Woody'],
+    },
+  },
+  praline: {
+    found: true,
+    term_slug: 'praline',
+    label: 'Praline',
+    message: null,
+    context_position: null,
+    wardrobe_matches: [],
+    term: {
+      slug: 'praline',
+      label: 'Praline',
+      term_type: 'note',
+      scent_category: 'Gourmand Note',
+      family_key: 'sweet-gourmand',
+      short_label: 'Gourmand effect',
+      what_it_is: 'Praline is the smell of caramelized nuts and sugar translated into perfume. It usually names a built gourmand effect, not one ingredient.',
+      smells_like: ['Toasted nuts', 'warm sugar', 'vanilla cream', 'soft candy-like richness'],
+      used_for: 'Building dessert-like bases and adding nutty caramel warmth.',
+      what_it_does: 'Makes a fragrance feel sweeter, softer, richer, and more comforting.',
+      pairs_well_with: ['Vanilla', 'Tonka Bean', 'Amber', 'Sandalwood', 'Coffee', 'Woody', 'Benzoin'],
+    },
+  },
+};
+
+function getLocalScentIntelSeed(input: Pick<ScentIntelInput, 'label' | 'slug'>): ScentIntelPayload | null {
+  const candidates = [
+    scentIntelSlugify(input.slug ?? ''),
+    scentIntelSlugify(input.label ?? ''),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const seed = SCENT_INTEL_LOCAL_SEEDS[candidate];
+    if (seed) return seed;
+  }
+  return null;
+}
 
 async function fetchResolvedTaxonomy(fragranceId: string): Promise<ResolvedTaxonomyPayload | null> {
   if (fragranceTaxonomyCache.has(fragranceId)) return fragranceTaxonomyCache.get(fragranceId) ?? null;
@@ -7882,6 +7940,12 @@ function formatScentIntelPosition(position: string | null | undefined): string |
   }
 }
 
+function getScentIntelDisplayPosition(position: string | null | undefined) {
+  const formatted = formatScentIntelPosition(position);
+  if (!formatted) return null;
+  return ['Top Note', 'Heart Note', 'Base Note'].includes(formatted) ? formatted : null;
+}
+
 function formatScentIntelTermType(type: string | null | undefined): string {
   const normalized = String(type ?? '').trim().toLowerCase();
   switch (normalized) {
@@ -7900,9 +7964,28 @@ function formatScentIntelTermType(type: string | null | undefined): string {
   }
 }
 
+function normalizeScentIntelHeaderCategory(
+  termLabel: string | null | undefined,
+  category: string | null | undefined,
+  termType: string | null | undefined,
+) {
+  const cleanLabel = String(termLabel ?? '').trim();
+  const cleanCategory = String(category ?? '').trim();
+  if (!cleanCategory) return formatScentIntelTermType(termType);
+  if (!cleanLabel) return cleanCategory;
+
+  const escapedLabel = cleanLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const trimmedCategory = cleanCategory
+    .replace(new RegExp(`^${escapedLabel}[\\s:/-]*`, 'i'), '')
+    .trim();
+
+  if (trimmedCategory) return trimmedCategory;
+  return formatScentIntelTermType(termType);
+}
+
 function getScentIntelHeaderCategory(term: ScentIntelTerm | null | undefined): string {
   const storedCategory = typeof term?.scent_category === 'string' ? term.scent_category.trim() : '';
-  return storedCategory || formatScentIntelTermType(term?.term_type);
+  return normalizeScentIntelHeaderCategory(term?.label, storedCategory, term?.term_type);
 }
 
 type ScentIntelCopyOverride = {
@@ -7947,7 +8030,10 @@ const SCENT_INTEL_COPY_OVERRIDES: Record<string, ScentIntelCopyOverride> = {
     tintKey: 'woody-clean',
   },
   'dark-leather': {
-    whatItIs: 'A darker leather chord built to suggest black leather, smoke, resin, and dry woods in one blended effect.',
+    whatItIs: 'A dark blended effect made from smoky, resinous, tar-like, and dry-wood facets.',
+    smellsLike: ['Smoked suede', 'birch tar', 'dry resin', 'charred wood', 'and tobacco leaf'],
+    usedFor: 'Adds smoky dryness and texture to oud, amber, saffron, rose, tobacco, and woods.',
+    whatItDoes: 'Makes a fragrance feel drier, darker, and more formal.',
     tintKey: 'dark-leather',
   },
   'woody-clean': {
@@ -8001,6 +8087,8 @@ function getScentIntelWhatItIs(term: ScentIntelTerm | null | undefined): string 
   if (!term) return null;
   const override = getScentIntelCopyOverride(term);
   if (override?.whatItIs) return override.whatItIs;
+  const storedDefinition = typeof term.what_it_is === 'string' ? term.what_it_is.trim() : '';
+  if (storedDefinition) return storedDefinition;
 
   const storedCategory = typeof term.scent_category === 'string' ? term.scent_category.trim() : '';
   const subject = readTrimmedLayerText(term.label, term.short_label, 'This term');
@@ -8053,6 +8141,16 @@ function getScentIntelGlassTint(term: ScentIntelTerm | null | undefined) {
   return FAMILY_TINTS[matchedKey ?? ''] ?? FAMILY_TINTS['woody-clean'] ?? DEFAULT_TINT;
 }
 
+function softenScentIntelGlow(glow: string) {
+  return glow
+    .replace('0.22', '0.11')
+    .replace('0.2', '0.1')
+    .replace('0.18', '0.09')
+    .replace('0.16', '0.08')
+    .replace('0.14', '0.07')
+    .replace('0.12', '0.06');
+}
+
 function getScentIntelChipClass(extra = '') {
   return `rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors hover:text-foreground/92 ${extra}`.trim();
 }
@@ -8101,9 +8199,9 @@ const ScentIntelSection: React.FC<{
   title: string;
   children: React.ReactNode;
 }> = ({ title, children }) => (
-  <div>
-    <div className="mb-1.5 text-[9px] uppercase tracking-[0.24em] text-foreground/38">{title}</div>
-    <div className="text-[12px] leading-[1.5] text-foreground/76">{children}</div>
+  <div className="pt-1">
+    <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-foreground/62">{title}</div>
+    <div className="text-[12px] leading-[1.55] text-foreground/78">{children}</div>
   </div>
 );
 
@@ -8121,12 +8219,13 @@ const OdaraScentIntelSheet: React.FC<{
     ? getScentIntelHeaderCategory(term)
     : 'Unmapped Term';
   const positionLabel = found
-    ? formatScentIntelPosition(payload?.context_position ?? state.input.position)
+    ? getScentIntelDisplayPosition(payload?.context_position ?? state.input.position)
     : null;
   const whatItIs = getScentIntelWhatItIs(term);
   const smellsLike = getScentIntelSmellsLike(term);
   const usedFor = getScentIntelUsedFor(term);
   const whatItDoes = getScentIntelWhatItDoes(term);
+  const inPerfumeCopy = [usedFor, whatItDoes].map((value) => value.trim()).filter(Boolean).join(' ');
   const pairsWith = normalizeScentIntelStringList(term?.pairs_well_with, 8);
   const intelTint = getScentIntelGlassTint(term);
   const intelGlassVisual = getOdaraGlassCardVisualRecipe(intelTint, 'hero');
@@ -8137,7 +8236,6 @@ const OdaraScentIntelSheet: React.FC<{
       name: string;
       brand?: string | null;
       positions: string[];
-      isCurrent: boolean;
     }> = [];
     const seen = new Set<string>();
     const push = (entry: {
@@ -8145,7 +8243,6 @@ const OdaraScentIntelSheet: React.FC<{
       name: string | null | undefined;
       brand?: string | null | undefined;
       positions?: string[] | null | undefined;
-      isCurrent: boolean;
     }) => {
       const cleanName = String(entry.name ?? '').trim();
       if (!cleanName) return;
@@ -8157,19 +8254,8 @@ const OdaraScentIntelSheet: React.FC<{
         name: cleanName,
         brand: entry.brand ?? null,
         positions: Array.isArray(entry.positions) ? entry.positions : [],
-        isCurrent: entry.isCurrent,
       });
     };
-
-    if (state.input.fragranceName) {
-      push({
-        fragrance_id: state.input.fragranceId ?? null,
-        name: state.input.fragranceName,
-        brand: state.input.fragranceBrand ?? null,
-        positions: [payload?.context_position ?? state.input.position].filter((value): value is string => !!value),
-        isCurrent: true,
-      });
-    }
 
     if (Array.isArray(payload?.wardrobe_matches)) {
       payload.wardrobe_matches
@@ -8181,7 +8267,6 @@ const OdaraScentIntelSheet: React.FC<{
             name: match?.name ?? null,
             brand: match?.brand ?? null,
             positions: normalizeScentIntelStringList(match?.positions, 3),
-            isCurrent: false,
           });
         });
     }
@@ -8207,7 +8292,7 @@ const OdaraScentIntelSheet: React.FC<{
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)',
         }}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div
               className="text-[28px] leading-[1.02] text-foreground/92"
@@ -8227,7 +8312,8 @@ const OdaraScentIntelSheet: React.FC<{
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88"
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
-              background: 'rgba(255,255,255,0.03)',
+              background: 'rgba(255,255,255,0.02)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035), 0 0 4px rgba(255,255,255,0.022)',
             }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -8252,7 +8338,7 @@ const OdaraScentIntelSheet: React.FC<{
             {payload?.message || SCENT_INTEL_UNMAPPED_MESSAGE}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {whatItIs ? (
               <ScentIntelSection title="What it is">
                 {whatItIs}
@@ -8263,18 +8349,13 @@ const OdaraScentIntelSheet: React.FC<{
                 {formatScentIntelListPhrase(smellsLike)}
               </ScentIntelSection>
             ) : null}
-            {usedFor ? (
-              <ScentIntelSection title="Used for">
-                {usedFor}
-              </ScentIntelSection>
-            ) : null}
-            {whatItDoes ? (
-              <ScentIntelSection title="What it does">
-                {whatItDoes}
+            {inPerfumeCopy ? (
+              <ScentIntelSection title="In Perfume">
+                {inPerfumeCopy}
               </ScentIntelSection>
             ) : null}
             {pairsWith.length > 0 ? (
-              <ScentIntelSection title="Pairs with">
+              <ScentIntelSection title="Pairs With">
                 <div className="flex flex-wrap gap-2">
                   {pairsWith.map((pairLabel) => {
                     const tone = getAccordChipTone(pairLabel, term?.family_key ?? null);
@@ -8291,7 +8372,7 @@ const OdaraScentIntelSheet: React.FC<{
                           color: tone.color,
                           border: `1px solid ${tone.border}`,
                           background: tone.background,
-                          boxShadow: `0 0 14px ${tone.glow}`,
+                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 0 7px ${softenScentIntelGlow(tone.glow)}`,
                         }}
                       />
                     );
@@ -8300,23 +8381,23 @@ const OdaraScentIntelSheet: React.FC<{
               </ScentIntelSection>
             ) : null}
             {foundInMatches.length > 0 ? (
-              <ScentIntelSection title="Found in">
+              <ScentIntelSection title="Found In">
                 <div className="flex flex-wrap gap-2">
                   {foundInMatches.map((match) => {
-                    const positions = match.positions
-                      .map(formatScentIntelPosition)
-                      .filter((value): value is string => Boolean(value));
+                    const pillLabel = match.brand
+                      ? `${match.name} · ${match.brand}`
+                      : match.name;
                     return (
                       <span
                         key={`wardrobe-${match.fragrance_id ?? match.name}`}
-                        className="rounded-full px-2.5 py-[5px] text-[10px] text-foreground/70"
+                        className="max-w-full rounded-full px-3 py-[6px] text-[11px] leading-[1.35] text-foreground/78"
                         style={{
-                          border: '1px solid rgba(255,255,255,0.07)',
-                          background: 'rgba(255,255,255,0.022)',
+                          border: '1px solid rgba(255,255,255,0.075)',
+                          background: 'rgba(255,255,255,0.03)',
+                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
                         }}
                       >
-                        {match.name}
-                        {positions[0] ? <span className="text-foreground/38"> · {positions[0]}</span> : null}
+                        {pillLabel}
                       </span>
                     );
                   })}
@@ -12878,14 +12959,25 @@ const OdaraScreen = ({
       if (error) {
         throw error;
       }
-      return (data && typeof data === 'object')
+      const payload = (data && typeof data === 'object')
         ? (data as ScentIntelPayload)
-        : {
-            found: false,
-            term_slug: normalizedInput.slug,
-            label: normalizedInput.label,
-            message: SCENT_INTEL_UNMAPPED_MESSAGE,
-          };
+        : null;
+      if (payload?.found) return payload;
+
+      const localSeed = getLocalScentIntelSeed(normalizedInput);
+      if (localSeed) {
+        return {
+          ...localSeed,
+          context_position: payload?.context_position ?? normalizedInput.position ?? localSeed.context_position ?? null,
+        };
+      }
+
+      return payload ?? {
+        found: false,
+        term_slug: normalizedInput.slug,
+        label: normalizedInput.label,
+        message: SCENT_INTEL_UNMAPPED_MESSAGE,
+      };
     })();
 
     if (!existing) {
