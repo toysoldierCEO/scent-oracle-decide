@@ -6021,7 +6021,10 @@ function getCanonicalOdaraTermSlug(value: string | null | undefined) {
   if (['marine', 'aquatic', 'marine-aquatic', 'fresh-aquatic', 'fresh-marine'].includes(normalized)) return 'aquatic';
   if (['powder', 'powdery'].includes(normalized)) return 'powdery';
   if (['ambery', 'amber'].includes(normalized)) return 'amber';
-  if (['resinous', 'resin'].includes(normalized)) return 'resin';
+  if (['balsam', 'balsamic', 'resinous', 'resin', 'amber-resin', 'resinous-amber', 'amber-resinous'].includes(normalized)) return 'resin';
+  if (['roasted-coffee', 'coffee-roasted', 'coffee-accord', 'espresso'].includes(normalized)) return 'coffee';
+  if (['warm-spicy', 'spices', 'spice', 'spicy'].includes(normalized)) return 'spicy';
+  if (['musk-clean', 'clean-musk', 'white-musk', 'musk-clean-note'].includes(normalized)) return 'musk';
   if (['green-notes', 'green-note', 'green-accord', 'green'].includes(normalized)) return 'green';
   if (['fresh-spicy', 'spicy-fresh'].includes(normalized)) return 'spicy';
 
@@ -6038,6 +6041,7 @@ function getCanonicalOdaraTermFamilyKey(
       return 'earthy-patchouli';
     case 'amber':
     case 'resin':
+    case 'balsamic':
     case 'incense':
     case 'olibanum':
     case 'oud':
@@ -6084,7 +6088,24 @@ function getCanonicalOdaraTermFamilyKey(
     case 'vanilla':
     case 'praline':
     case 'tonka':
+    case 'coffee':
+    case 'cacao':
+    case 'cocoa':
+    case 'chocolate':
       return 'sweet-gourmand';
+    case 'spicy':
+    case 'cinnamon':
+    case 'cardamom':
+    case 'pepper':
+    case 'saffron':
+    case 'clove':
+    case 'ginger':
+      return 'spicy-warm';
+    case 'patchouli':
+    case 'vetiver':
+    case 'oakmoss':
+    case 'moss':
+      return 'earthy-patchouli';
     case 'fruity':
     case 'raspberry':
     case 'plum':
@@ -8072,6 +8093,33 @@ function normalizeScentIntelStringList(value: unknown, max = 8): string[] {
   return values.slice(0, max);
 }
 
+function formatScentIntelFallbackTitle(value: string | null | undefined) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  const normalized = raw
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s*\/\s*/g, ' / ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalized
+    .split(' ')
+    .map((part) => {
+      if (part === '/') return part;
+      if (/^m#$/i.test(part)) return part.toUpperCase();
+      return part
+        .split("'")
+        .map((segment) => (
+          segment
+            ? `${segment.charAt(0).toUpperCase()}${segment.slice(1).toLowerCase()}`
+            : segment
+        ))
+        .join("'");
+    })
+    .join(' ');
+}
+
 function formatScentIntelListPhrase(values: string[]): string {
   const text = values.join(', ').trim();
   if (!text) return '';
@@ -8240,7 +8288,15 @@ function getScentIntelTintKeyOverride(value: string | null | undefined): string 
     case 'fresh-spicy':
     case 'spicy-fresh':
       return 'spicy-warm';
+    case 'amber':
+    case 'resin':
+    case 'balsamic':
+    case 'incense':
+    case 'olibanum':
+    case 'oud':
+      return 'oud-amber';
     case 'coffee':
+    case 'roasted-coffee':
     case 'espresso':
     case 'cappuccino':
     case 'latte':
@@ -8250,6 +8306,15 @@ function getScentIntelTintKeyOverride(value: string | null | undefined): string 
     case 'fresh-aquatic':
     case 'fresh-marine':
       return 'fresh-aquatic';
+    case 'musk':
+    case 'powdery':
+    case 'clean-musk':
+    case 'musk-clean':
+      return 'floral-musk';
+    case 'patchouli':
+    case 'vetiver':
+    case 'oakmoss':
+      return 'earthy-patchouli';
     case 'woody':
       return 'woody-clean';
     default:
@@ -8456,7 +8521,8 @@ const OdaraScentIntelSheet: React.FC<{
   const payload = state.payload ?? null;
   const found = Boolean(payload?.found);
   const term = found ? payload?.term ?? null : null;
-  const label = (found ? term?.label : payload?.label) || state.input.label || 'Scent Intel';
+  const rawLabel = (found ? term?.label : payload?.label) || state.input.label || 'Scent Intel';
+  const label = found ? rawLabel : (formatScentIntelFallbackTitle(rawLabel) || rawLabel);
   const isUnmappedPayload = !found && (payload?.message ?? '').trim() === SCENT_INTEL_UNMAPPED_MESSAGE;
   const category = found
     ? getScentIntelHeaderCategory(term)
