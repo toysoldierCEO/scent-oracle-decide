@@ -7888,6 +7888,27 @@ type ScentIntelSheetState = {
 };
 
 const SCENT_INTEL_UNMAPPED_MESSAGE = 'Odara has not mapped this note yet.';
+const SCENT_INTEL_COMING_SOON_MESSAGE = 'Intel coming soon';
+
+function isScentIntelAccessDeniedError(error: unknown) {
+  const message = typeof error === 'object' && error && 'message' in error
+    ? String((error as { message?: unknown }).message ?? '')
+    : String(error ?? '');
+  return /p_user must match auth\.uid\(\)/i.test(message) || /access denied/i.test(message);
+}
+
+function buildScentIntelSafeFallbackPayload(
+  input: ScentIntelInput,
+  message: string = SCENT_INTEL_COMING_SOON_MESSAGE,
+): ScentIntelPayload {
+  return {
+    found: false,
+    term_slug: input.slug ?? scentIntelSlugify(input.label ?? ''),
+    label: input.label ?? null,
+    message,
+    wardrobe_matches: [],
+  };
+}
 
 const SCENT_INTEL_LOCAL_SEEDS: Record<string, ScentIntelPayload> = {
   mango: {
@@ -8318,9 +8339,10 @@ const OdaraScentIntelSheet: React.FC<{
   const found = Boolean(payload?.found);
   const term = found ? payload?.term ?? null : null;
   const label = (found ? term?.label : payload?.label) || state.input.label || 'Scent Intel';
+  const isUnmappedPayload = !found && (payload?.message ?? '').trim() === SCENT_INTEL_UNMAPPED_MESSAGE;
   const category = found
     ? getScentIntelHeaderCategory(term)
-    : 'Unmapped Term';
+    : (isUnmappedPayload ? 'Unmapped Term' : null);
   const positionLabel = found
     ? getScentIntelDisplayPosition(payload?.context_position ?? state.input.position)
     : null;
@@ -8433,7 +8455,9 @@ const OdaraScentIntelSheet: React.FC<{
             >
               {label}
             </div>
-            <div className="mt-1.5 text-[13px] text-foreground/62">{category}</div>
+            {category ? (
+              <div className="mt-1.5 text-[13px] text-foreground/62">{category}</div>
+            ) : null}
             {positionLabel ? (
               <div className="mt-1 text-[12px] text-foreground/48">{positionLabel}</div>
             ) : null}
@@ -13059,11 +13083,13 @@ const OdaraScreen = ({
       fragranceBrand: input.fragranceBrand ?? cachedFragrance?.brand ?? null,
       position: input.position ?? null,
     };
-    const requestUserId = (!isGuestMode && scentIntelSessionResolved && scentIntelSessionUserId)
-      ? scentIntelSessionUserId
-      : null;
+    const requestUserScopeKey = isGuestMode
+      ? 'public'
+      : (scentIntelSessionResolved
+        ? (scentIntelSessionUserId ?? 'authenticated-no-user')
+        : 'auth-pending');
     const requestKey = [
-      requestUserId ?? 'public',
+      requestUserScopeKey,
       normalizedInput.slug || scentIntelSlugify(label),
       normalizedInput.fragranceId ?? 'no-fragrance',
       normalizedInput.position ?? 'no-position',
@@ -13081,36 +13107,80 @@ const OdaraScreen = ({
 
     const existing = scentIntelInFlightRef.current.get(requestKey);
     const request = existing ?? (async (): Promise<ScentIntelPayload> => {
-      const { data, error } = await odaraSupabase.rpc('get_scent_term_dossier_v1' as any, {
-        p_user: requestUserId,
-        p_term_slug: normalizedInput.slug,
-        p_term_label: normalizedInput.label,
-        p_fragrance_id: normalizedInput.fragranceId,
-        p_position: normalizedInput.position,
-      } as any);
+      const resolvePayload = (
+        payload: ScentIntelPayload | null,
+        fallbackMessage: string = SCENT_INTEL_UNMAPPED_MESSAGE,
+      ): ScentIntelPayload => {
+        if (payload?.found) return payload;
 
-      if (error) {
-        throw error;
-      }
-      const payload = (data && typeof data === 'object')
-        ? (data as ScentIntelPayload)
-        : null;
-      if (payload?.found) return payload;
+        const localSeed = getLocalScentIntelSeed(normalizedInput);
+        if (localSeed) {
+          return {
+            ...localSeed,
+            context_position: payload?.context_position ?? normalizedInput.position ?? localSeed.context_position ?? null,
+          };
+        }
 
-      const localSeed = getLocalScentIntelSeed(normalizedInput);
-      if (localSeed) {
-        return {
-          ...localSeed,
-          context_position: payload?.context_position ?? normalizedInput.position ?? localSeed.context_position ?? null,
-        };
-      }
-
-      return payload ?? {
-        found: false,
-        term_slug: normalizedInput.slug,
-        label: normalizedInput.label,
-        message: SCENT_INTEL_UNMAPPED_MESSAGE,
+        return payload ?? buildScentIntelSafeFallbackPayload(normalizedInput, fallbackMessage);
       };
+
+      const runDossierLookup = async (pUser: string | null) => {
+        const { data, error } = await odaraSupabase.rpc('get_scent_term_dossier_v1' as any, {
+          p_user: pUser,
+          p_term_slug: normalizedInput.slug,
+          p_term_label: normalizedInput.label,
+          p_fragrance_id: normalizedInput.fragranceId,
+          p_position: normalizedInput.position,
+        } as any);
+        if (error) throw error;
+        return (data && typeof data === 'object')
+          ? (data as ScentIntelPayload)
+          : null;
+      };
+
+      const getVerifiedScentIntelUserId = async () => {
+        if (isGuestMode) return null;
+        try {
+          const { data, error } = await odaraSupabase.auth.getUser();
+          if (error) {
+            if (import.meta.env.DEV) {
+              console.warn('[Odara] scent intel auth verification failed', error.message);
+            }
+            return null;
+          }
+          return normalizeOdaraAuthUserId(data?.user?.id);
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.warn('[Odara] scent intel auth verification threw', error);
+          }
+          return null;
+        }
+      };
+
+      const verifiedUserId = await getVerifiedScentIntelUserId();
+
+      try {
+        const payload = await runDossierLookup(verifiedUserId);
+        return resolvePayload(payload);
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[Odara] scent intel private lookup failed', error);
+        }
+
+        const shouldRetryPublic = verifiedUserId != null || isScentIntelAccessDeniedError(error);
+        if (shouldRetryPublic) {
+          try {
+            const payload = await runDossierLookup(null);
+            return resolvePayload(payload);
+          } catch (publicError) {
+            if (import.meta.env.DEV) {
+              console.warn('[Odara] scent intel public fallback failed', publicError);
+            }
+          }
+        }
+
+        return resolvePayload(null, SCENT_INTEL_COMING_SOON_MESSAGE);
+      }
     })();
 
     if (!existing) {
@@ -13133,13 +13203,16 @@ const OdaraScreen = ({
         ));
       })
       .catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error('[Odara] scent intel sheet request failed', error);
+        }
         setScentIntelSheet((current) => (
           current?.requestKey === requestKey
             ? {
                 input: normalizedInput,
                 status: 'error',
                 payload: null,
-                error: error?.message ?? 'Scent Intel is unavailable right now.',
+                error: 'Scent Intel is unavailable right now.',
                 requestKey,
               }
             : current
