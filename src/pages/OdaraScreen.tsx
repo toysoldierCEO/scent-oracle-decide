@@ -7844,6 +7844,8 @@ type ScentIntelInput = {
   fragranceName?: string | null;
   fragranceBrand?: string | null;
   position?: string | null;
+  sourceFamilyKey?: string | null;
+  sourceFamilyLabel?: string | null;
 };
 
 type ScentIntelTerm = {
@@ -8221,6 +8223,40 @@ function getScentIntelCopyOverride(term: ScentIntelTerm | null | undefined): Sce
   return key ? (SCENT_INTEL_COPY_OVERRIDES[key] ?? null) : null;
 }
 
+function getScentIntelTintKeyOverride(value: string | null | undefined): string | null {
+  const canonical = getCanonicalOdaraTermSlug(value);
+  if (!canonical) return null;
+  const override = SCENT_INTEL_COPY_OVERRIDES[canonical];
+  if (override?.tintKey) return override.tintKey;
+
+  switch (canonical) {
+    case 'cinnamon':
+    case 'cardamom':
+    case 'pepper':
+    case 'saffron':
+    case 'clove':
+    case 'ginger':
+    case 'spicy':
+    case 'fresh-spicy':
+    case 'spicy-fresh':
+      return 'spicy-warm';
+    case 'coffee':
+    case 'espresso':
+    case 'cappuccino':
+    case 'latte':
+      return 'sweet-gourmand';
+    case 'marine':
+    case 'aquatic':
+    case 'fresh-aquatic':
+    case 'fresh-marine':
+      return 'fresh-aquatic';
+    case 'woody':
+      return 'woody-clean';
+    default:
+      return null;
+  }
+}
+
 function isScentIntelCategoryRedundant(term: ScentIntelTerm | null | undefined, category: string) {
   const normalizedCategory = normalizeSearchFamilyKey(category).replace(/-(note|accord|material|style|family|chord)$/g, '');
   const normalizedLabel = normalizeSearchFamilyKey(term?.label ?? '');
@@ -8296,22 +8332,55 @@ function getScentIntelWhatItDoes(term: ScentIntelTerm | null | undefined) {
   return override?.whatItDoes ?? (typeof term?.what_it_does === 'string' ? term.what_it_does.trim() : '');
 }
 
-function getScentIntelGlassTint(term: ScentIntelTerm | null | undefined) {
+function resolveScentIntelFamilyKey(
+  input: Pick<ScentIntelInput, 'label' | 'slug' | 'sourceFamilyKey' | 'sourceFamilyLabel'>,
+  term: ScentIntelTerm | null | undefined,
+  payload?: ScentIntelPayload | null,
+) {
   const override = getScentIntelCopyOverride(term);
   const preferredKeys = [
     override?.tintKey ?? null,
+    getScentIntelTintKeyOverride(term?.slug ?? null),
+    getScentIntelTintKeyOverride(term?.label ?? null),
+    getScentIntelTintKeyOverride(term?.short_label ?? null),
     term?.family_key ?? null,
     getCanonicalOdaraTermFamilyKey(term?.slug ?? null, term?.family_key ?? null),
     getCanonicalOdaraTermFamilyKey(term?.label ?? null, term?.family_key ?? null),
     getCanonicalOdaraTermFamilyKey(term?.short_label ?? null, term?.family_key ?? null),
-    term?.slug ?? null,
-    term?.label ?? null,
-    term?.short_label ?? null,
+    getScentIntelTintKeyOverride(payload?.term_slug ?? null),
+    getScentIntelTintKeyOverride(payload?.label ?? null),
+    getScentIntelTintKeyOverride(input.slug ?? null),
+    getScentIntelTintKeyOverride(input.label ?? null),
+    getScentIntelTintKeyOverride(getScentIntelAliasSlug(input.label ?? null)),
+    getCanonicalOdaraTermFamilyKey(payload?.term_slug ?? null, null),
+    getCanonicalOdaraTermFamilyKey(payload?.label ?? null, null),
+    getCanonicalOdaraTermFamilyKey(input.slug ?? null, null),
+    getCanonicalOdaraTermFamilyKey(input.label ?? null, null),
+    getCanonicalOdaraTermFamilyKey(getScentIntelAliasSlug(input.label ?? null), null),
+    input.sourceFamilyKey ?? null,
+    input.sourceFamilyLabel ?? null,
   ]
     .map((value) => normalizeSearchFamilyKey(value))
     .filter(Boolean);
-  const matchedKey = preferredKeys.find((key) => Boolean(FAMILY_TINTS[key]));
-  return FAMILY_TINTS[matchedKey ?? ''] ?? FAMILY_TINTS['woody-clean'] ?? DEFAULT_TINT;
+  return preferredKeys.find((key) => Boolean(FAMILY_TINTS[key])) ?? null;
+}
+
+function getScentIntelGlassTint(
+  input: Pick<ScentIntelInput, 'label' | 'slug' | 'sourceFamilyKey' | 'sourceFamilyLabel'>,
+  term: ScentIntelTerm | null | undefined,
+  payload?: ScentIntelPayload | null,
+) {
+  const familyKey = resolveScentIntelFamilyKey(input, term, payload);
+  if (familyKey) {
+    return getCollectionTileTint({ family_key: familyKey, family_label: null });
+  }
+  if (input.sourceFamilyKey || input.sourceFamilyLabel) {
+    return getCollectionTileTint({
+      family_key: input.sourceFamilyKey ?? null,
+      family_label: input.sourceFamilyLabel ?? null,
+    });
+  }
+  return DEFAULT_TINT;
 }
 
 function softenScentIntelGlow(glow: string) {
@@ -8401,32 +8470,9 @@ const OdaraScentIntelSheet: React.FC<{
   const whatItDoes = getScentIntelWhatItDoes(term);
   const inPerfumeCopy = [usedFor, whatItDoes].map((value) => value.trim()).filter(Boolean).join(' ');
   const pairsWith = normalizeScentIntelStringList(term?.pairs_well_with, 8);
-  const intelTint = getScentIntelGlassTint(term);
+  const intelTint = getScentIntelGlassTint(state.input, term, payload);
   const intelGlassVisual = getOdaraGlassCardVisualRecipe(intelTint, 'hero');
   const intelLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(intelTint, intelGlassVisual);
-  const intelMaterialWash = typeof intelTint.material === 'string'
-    ? intelTint.material.replace('0.10', '0.13').replace('0.08', '0.11')
-    : 'rgba(255,255,255,0.11)';
-  const intelBorder = typeof intelTint.border === 'string'
-    ? intelTint.border.replace('0.30', '0.24').replace('0.28', '0.22').replace('0.24', '0.2')
-    : 'rgba(255,255,255,0.18)';
-  const intelSheetSurfaceStyle: React.CSSProperties = {
-    ...intelLiquidGlassStyle,
-    background: `
-      linear-gradient(172deg,
-        rgba(255,255,255,0.05) 0%,
-        rgba(255,255,255,0.024) 8%,
-        ${intelMaterialWash} 20%,
-        rgba(13,14,18,0.64) 54%,
-        rgba(7,8,12,0.84) 100%
-      ),
-      radial-gradient(circle at 20% 0%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 24%, rgba(255,255,255,0) 52%)
-    `,
-    border: `1px solid ${intelBorder}`,
-    boxShadow: '0 30px 76px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 10px 18px rgba(255,255,255,0.024), inset 0 -20px 30px rgba(4,6,10,0.14)',
-    backdropFilter: 'blur(30px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(30px) saturate(160%)',
-  };
   const foundInMatches = (() => {
     const entries: Array<{
       fragrance_id: string | null;
@@ -8475,9 +8521,9 @@ const OdaraScentIntelSheet: React.FC<{
     <OdaraBottomSheet
       open={!!state}
       onClose={onClose}
-      surfaceStyle={intelSheetSurfaceStyle}
+      surfaceStyle={intelLiquidGlassStyle}
       atmosphereClassName={intelGlassVisual.atmosphereClassName}
-      atmosphereStyle={{ ...intelGlassVisual.atmosphereStyle, opacity: 0.28 }}
+      atmosphereStyle={intelGlassVisual.atmosphereStyle}
     >
       <div
         className="relative px-5 pt-4"
@@ -13106,16 +13152,30 @@ const OdaraScreen = ({
           id: fragranceDetailSheet.fragrance_id,
           name: fragranceDetailSheet.name,
           brand: fragranceDetailSheet.brand,
+          familyKey: fragranceDetailSheet.family_key ?? null,
+          familyLabel: fragranceDetailSheet.family_label ?? null,
         }
       : null;
+    const cachedDetail = input.fragranceId
+      ? (fragranceDetailCacheRef.current.get(input.fragranceId) ?? null)
+      : null;
     const cachedFragrance = input.fragranceId
-      ? (fragranceDetailCacheRef.current.get(input.fragranceId)
-        ?? detailSheetFragrance
+      ? (cachedDetail
+        ? {
+            id: cachedDetail.fragrance_id,
+            name: cachedDetail.name,
+            brand: cachedDetail.brand,
+            familyKey: cachedDetail.family_key ?? null,
+            familyLabel: cachedDetail.family_key ? getFamilyLabelText(cachedDetail.family_key) : null,
+          }
+        : detailSheetFragrance
         ?? (visibleCard?.fragrance_id === input.fragranceId
           ? {
               id: visibleCard.fragrance_id,
               name: visibleCard.name,
               brand: visibleCard.brand,
+              familyKey: visibleCard.family ?? null,
+              familyLabel: visibleCard.family ? getFamilyLabelText(visibleCard.family) : null,
             }
           : null))
       : null;
@@ -13126,6 +13186,8 @@ const OdaraScreen = ({
       fragranceName: input.fragranceName ?? cachedFragrance?.name ?? null,
       fragranceBrand: input.fragranceBrand ?? cachedFragrance?.brand ?? null,
       position: input.position ?? null,
+      sourceFamilyKey: input.sourceFamilyKey ?? cachedFragrance?.familyKey ?? null,
+      sourceFamilyLabel: input.sourceFamilyLabel ?? cachedFragrance?.familyLabel ?? null,
     };
     const requestUserScopeKey = isGuestMode
       ? 'public'
