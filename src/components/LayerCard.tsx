@@ -1003,6 +1003,8 @@ const LayerCard = ({
   const handleOpenLayerScentIntel = React.useCallback((
     event: React.MouseEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
     label: string,
+    slug?: string | null,
+    position?: string | null,
   ) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1010,12 +1012,17 @@ const LayerCard = ({
     if (!cleanLabel) return;
     onOpenScentIntel?.({
       label: cleanLabel,
+      slug: slug ?? null,
       fragranceId: activeModeEntry?.fragrance_id ?? null,
       fragranceName: activeModeEntry?.name ?? null,
       fragranceBrand: activeModeEntry?.brand ?? null,
-      position: null,
+      position: position ?? null,
     });
   }, [activeModeEntry, onOpenScentIntel]);
+
+  const layerFamilyLabel = activeModeEntry?.family_key?.trim()
+    ? activeModeEntry.family_key.toUpperCase()
+    : '';
 
   const handleTitlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     titlePressRef.current = {
@@ -1085,12 +1092,30 @@ const LayerCard = ({
               {activeModeEntry.brand && (
                 <p className="mt-[1px] text-left text-[10px] text-white/50">{activeModeEntry.brand}</p>
               )}
-              <span
-                className="mt-[4px] inline-flex w-auto rounded-full px-3 py-[2px] text-left text-[9px] uppercase tracking-[0.25em] text-white/70"
-                style={{ boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)` }}
-              >
-                {activeModeEntry.family_key?.toUpperCase() ?? ''}
-              </span>
+              {layerFamilyLabel ? (
+                <button
+                  type="button"
+                  data-no-card-swipe
+                  aria-label={`Open scent intel for ${layerFamilyLabel}`}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onPointerUp={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => handleOpenLayerScentIntel(event, layerFamilyLabel, activeModeEntry.family_key ?? null, 'family')}
+                  className="mt-[4px] inline-flex w-auto rounded-full px-3 py-[2px] text-left text-[9px] uppercase tracking-[0.25em] text-white/70"
+                  style={{
+                    boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.2)`,
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation',
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  {layerFamilyLabel}
+                </button>
+              ) : null}
 
               {resolvedLayerTokens.length > 0 && (
                 <div
@@ -1110,9 +1135,28 @@ const LayerCard = ({
                         data-no-card-swipe
                         aria-label={`Open scent intel for ${tokenLabel}`}
                         onPointerDown={(event) => {
+                          event.preventDefault();
                           event.stopPropagation();
                         }}
-                        onClick={(event) => handleOpenLayerScentIntel(event, tokenLabel)}
+                        onPointerUp={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => handleOpenLayerScentIntel(
+                          event,
+                          tokenLabel,
+                          typeof t?.slug === 'string'
+                            ? t.slug
+                            : typeof t?.term_slug === 'string'
+                              ? t.term_slug
+                              : typeof t?.token_slug === 'string'
+                                ? t.token_slug
+                                : null,
+                          typeof t?.position === 'string'
+                            ? t.position
+                            : typeof t?.context_position === 'string'
+                              ? t.context_position
+                              : null,
+                        )}
                         className="flex-shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.12em]"
                         style={{
                           color: tone.color,
@@ -1122,6 +1166,8 @@ const LayerCard = ({
                             ? `inset 0 0 0 1px ${tone.border}, 0 0 8px ${tone.glow}`
                             : `0 0 6px ${tone.glow}`,
                           WebkitTapHighlightColor: 'transparent',
+                          touchAction: 'manipulation',
+                          pointerEvents: 'auto',
                         }}
                       >
                         {tokenLabel}

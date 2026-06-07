@@ -7956,10 +7956,7 @@ const SCENT_INTEL_LOCAL_SEEDS: Record<string, ScentIntelPayload> = {
 };
 
 function getLocalScentIntelSeed(input: Pick<ScentIntelInput, 'label' | 'slug'>): ScentIntelPayload | null {
-  const candidates = [
-    scentIntelSlugify(input.slug ?? ''),
-    scentIntelSlugify(input.label ?? ''),
-  ].filter(Boolean);
+  const candidates = getScentIntelLookupSlugCandidates(input);
   for (const candidate of candidates) {
     const seed = SCENT_INTEL_LOCAL_SEEDS[candidate];
     if (seed) return seed;
@@ -8003,6 +8000,58 @@ function scentIntelSlugify(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function getScentIntelAliasSlug(value: string | null | undefined): string {
+  const normalized = scentIntelSlugify(value ?? '');
+  if (!normalized) return '';
+
+  switch (normalized) {
+    case 'roasted-coffee':
+    case 'coffee-roasted':
+      return 'coffee';
+    case 'woods':
+    case 'wood':
+    case 'woody-accord':
+      return 'woody';
+    case 'leathery':
+    case 'suede':
+    case 'leather-accord':
+      return 'leather';
+    case 'oudh':
+      return 'oud';
+    default:
+      return normalized;
+  }
+}
+
+function getScentIntelLookupSlugCandidates(input: Pick<ScentIntelInput, 'label' | 'slug'>): string[] {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  const push = (value: string | null | undefined) => {
+    const normalized = scentIntelSlugify(value ?? '');
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized);
+      candidates.push(normalized);
+    }
+    const alias = getScentIntelAliasSlug(value ?? '');
+    if (alias && !seen.has(alias)) {
+      seen.add(alias);
+      candidates.push(alias);
+    }
+  };
+
+  push(input.slug ?? '');
+  push(input.label ?? '');
+
+  const canonicalLabel = getCanonicalOdaraTermSlug(input.label ?? '');
+  if (canonicalLabel && !seen.has(canonicalLabel)) {
+    seen.add(canonicalLabel);
+    candidates.push(canonicalLabel);
+  }
+
+  return candidates;
 }
 
 function normalizeScentIntelStringList(value: unknown, max = 8): string[] {
@@ -13056,6 +13105,8 @@ const OdaraScreen = ({
   const openScentIntelSheet = useCallback((input: ScentIntelInput) => {
     const label = String(input?.label ?? '').trim();
     if (!label) return;
+    const lookupSlugCandidates = getScentIntelLookupSlugCandidates(input);
+    const resolvedLookupSlug = lookupSlugCandidates[0] ?? scentIntelSlugify(label);
 
     const detailSheetFragrance = input.fragranceId && fragranceDetailSheet?.fragrance_id === input.fragranceId
       ? {
@@ -13077,7 +13128,7 @@ const OdaraScreen = ({
       : null;
     const normalizedInput: ScentIntelInput = {
       label,
-      slug: input.slug || scentIntelSlugify(label),
+      slug: resolvedLookupSlug,
       fragranceId: input.fragranceId ?? null,
       fragranceName: input.fragranceName ?? cachedFragrance?.name ?? null,
       fragranceBrand: input.fragranceBrand ?? cachedFragrance?.brand ?? null,
@@ -13090,7 +13141,7 @@ const OdaraScreen = ({
         : 'auth-pending');
     const requestKey = [
       requestUserScopeKey,
-      normalizedInput.slug || scentIntelSlugify(label),
+      resolvedLookupSlug,
       normalizedInput.fragranceId ?? 'no-fragrance',
       normalizedInput.position ?? 'no-position',
     ].join('|');
@@ -13125,17 +13176,25 @@ const OdaraScreen = ({
       };
 
       const runDossierLookup = async (pUser: string | null) => {
-        const { data, error } = await odaraSupabase.rpc('get_scent_term_dossier_v1' as any, {
-          p_user: pUser,
-          p_term_slug: normalizedInput.slug,
-          p_term_label: normalizedInput.label,
-          p_fragrance_id: normalizedInput.fragranceId,
-          p_position: normalizedInput.position,
-        } as any);
-        if (error) throw error;
-        return (data && typeof data === 'object')
-          ? (data as ScentIntelPayload)
-          : null;
+        let lastPayload: ScentIntelPayload | null = null;
+
+        for (const candidateSlug of lookupSlugCandidates) {
+          const { data, error } = await odaraSupabase.rpc('get_scent_term_dossier_v1' as any, {
+            p_user: pUser,
+            p_term_slug: candidateSlug,
+            p_term_label: normalizedInput.label,
+            p_fragrance_id: normalizedInput.fragranceId,
+            p_position: normalizedInput.position,
+          } as any);
+          if (error) throw error;
+          const payload = (data && typeof data === 'object')
+            ? (data as ScentIntelPayload)
+            : null;
+          if (payload?.found) return payload;
+          lastPayload = payload ?? lastPayload;
+        }
+
+        return lastPayload;
       };
 
       const getVerifiedScentIntelUserId = async () => {
