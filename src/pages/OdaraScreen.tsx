@@ -6001,8 +6001,106 @@ function getOdaraFamilyMappedChipTone(familyKey: string): OdaraChipTone {
   return getOdaraMappedChipTone(FAMILY_COLORS[familyKey] ?? SEMANTIC_TOKEN_COLORS.default);
 }
 
+function normalizeOdaraTermSlug(value: string | null | undefined) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[\/,+]/g, ' ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getCanonicalOdaraTermSlug(value: string | null | undefined) {
+  const normalized = normalizeOdaraTermSlug(value);
+  if (!normalized) return '';
+
+  if (['woody', 'wood', 'woods', 'woody-accord'].includes(normalized)) return 'woody';
+  if (['leather', 'leathery', 'dark-leather', 'suede', 'leather-accord'].includes(normalized)) return 'leather';
+  if (['oudh', 'oud'].includes(normalized)) return 'oud';
+  if (['marine', 'aquatic', 'marine-aquatic', 'fresh-aquatic', 'fresh-marine'].includes(normalized)) return 'aquatic';
+  if (['powder', 'powdery'].includes(normalized)) return 'powdery';
+  if (['ambery', 'amber'].includes(normalized)) return 'amber';
+  if (['resinous', 'resin'].includes(normalized)) return 'resin';
+  if (['green-notes', 'green-note', 'green-accord', 'green'].includes(normalized)) return 'green';
+  if (['fresh-spicy', 'spicy-fresh'].includes(normalized)) return 'spicy';
+
+  return normalized;
+}
+
+function getCanonicalOdaraTermFamilyKey(
+  value: string | null | undefined,
+  fallbackFamilyKey?: string | null,
+) {
+  const canonical = getCanonicalOdaraTermSlug(value);
+  switch (canonical) {
+    case 'woody':
+      return 'earthy-patchouli';
+    case 'amber':
+    case 'resin':
+    case 'incense':
+    case 'olibanum':
+    case 'oud':
+      return 'oud-amber';
+    case 'leather':
+      return 'dark-leather';
+    case 'aquatic':
+      return 'fresh-aquatic';
+    case 'powdery':
+    case 'musk':
+    case 'aldehydic':
+    case 'iris':
+    case 'orris':
+      return 'floral-musk';
+    case 'bergamot':
+    case 'orange':
+    case 'mandarin':
+    case 'lemon':
+    case 'lime':
+    case 'grapefruit':
+    case 'citrus':
+      return 'citrus-cologne';
+    case 'petitgrain':
+    case 'neroli':
+      return 'citrus-aromatic';
+    case 'basil':
+    case 'artemisia':
+    case 'wormwood':
+    case 'sage':
+    case 'lavender':
+    case 'rosemary':
+    case 'mint':
+    case 'herbal':
+    case 'aromatic':
+      return 'aromatic-fougere';
+    case 'green':
+    case 'leaf':
+    case 'leafy':
+    case 'galbanum':
+    case 'stem':
+      return 'green-earthy';
+    case 'sweet':
+    case 'gourmand':
+    case 'vanilla':
+    case 'praline':
+    case 'tonka':
+      return 'sweet-gourmand';
+    case 'fruity':
+    case 'raspberry':
+    case 'plum':
+    case 'berry':
+    case 'pear':
+    case 'peach':
+    case 'apple':
+      return 'floral-rich';
+    default:
+      return fallbackFamilyKey ?? null;
+  }
+}
+
 function getKnownOdaraAccordChipTone(normalized: string): OdaraChipTone | null {
-  const term = normalized.replace(/[^a-z0-9]+/g, ' ').trim();
+  const canonical = getCanonicalOdaraTermSlug(normalized);
+  const term = canonical.replace(/[^a-z0-9]+/g, ' ').trim();
   if (!term) return null;
   if (/\b(bergamot|orange|mandarin|lemon|lime|grapefruit|citrus)\b/.test(term)) return getOdaraFamilyMappedChipTone('citrus-cologne');
   if (/\b(petitgrain|neroli)\b/.test(term)) return getOdaraFamilyMappedChipTone('citrus-aromatic');
@@ -6021,8 +6119,10 @@ function getKnownOdaraAccordChipTone(normalized: string): OdaraChipTone | null {
 
 function getAccordChipTone(label: string, familyKey?: string | null) {
   const normalized = label.trim().toLowerCase();
-  const familyTint = FAMILY_TINTS[familyKey ?? ''] ?? DEFAULT_TINT;
-  const knownTone = getKnownOdaraAccordChipTone(normalized);
+  const canonical = getCanonicalOdaraTermSlug(normalized);
+  const canonicalFamilyKey = getCanonicalOdaraTermFamilyKey(canonical, familyKey);
+  const familyTint = FAMILY_TINTS[canonicalFamilyKey ?? familyKey ?? ''] ?? DEFAULT_TINT;
+  const knownTone = getKnownOdaraAccordChipTone(canonical || normalized);
   if (knownTone) return knownTone;
 
   const tones = [
@@ -8131,6 +8231,9 @@ function getScentIntelGlassTint(term: ScentIntelTerm | null | undefined) {
   const preferredKeys = [
     override?.tintKey ?? null,
     term?.family_key ?? null,
+    getCanonicalOdaraTermFamilyKey(term?.slug ?? null, term?.family_key ?? null),
+    getCanonicalOdaraTermFamilyKey(term?.label ?? null, term?.family_key ?? null),
+    getCanonicalOdaraTermFamilyKey(term?.short_label ?? null, term?.family_key ?? null),
     term?.slug ?? null,
     term?.label ?? null,
     term?.short_label ?? null,
@@ -8230,6 +8333,29 @@ const OdaraScentIntelSheet: React.FC<{
   const intelTint = getScentIntelGlassTint(term);
   const intelGlassVisual = getOdaraGlassCardVisualRecipe(intelTint, 'hero');
   const intelLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(intelTint, intelGlassVisual);
+  const intelMaterialWash = typeof intelTint.material === 'string'
+    ? intelTint.material.replace('0.10', '0.13').replace('0.08', '0.11')
+    : 'rgba(255,255,255,0.11)';
+  const intelBorder = typeof intelTint.border === 'string'
+    ? intelTint.border.replace('0.30', '0.24').replace('0.28', '0.22').replace('0.24', '0.2')
+    : 'rgba(255,255,255,0.18)';
+  const intelSheetSurfaceStyle: React.CSSProperties = {
+    ...intelLiquidGlassStyle,
+    background: `
+      linear-gradient(168deg,
+        rgba(255,255,255,0.075) 0%,
+        rgba(255,255,255,0.028) 10%,
+        ${intelMaterialWash} 24%,
+        rgba(13,14,18,0.64) 58%,
+        rgba(7,8,12,0.84) 100%
+      ),
+      radial-gradient(circle at top left, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.03) 26%, rgba(255,255,255,0) 56%)
+    `,
+    border: `1px solid ${intelBorder}`,
+    boxShadow: '0 30px 76px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 18px 30px rgba(255,255,255,0.045), inset 0 -20px 30px rgba(4,6,10,0.14)',
+    backdropFilter: 'blur(30px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(30px) saturate(160%)',
+  };
   const foundInMatches = (() => {
     const entries: Array<{
       fragrance_id: string | null;
@@ -8278,12 +8404,12 @@ const OdaraScentIntelSheet: React.FC<{
     <OdaraBottomSheet
       open={!!state}
       onClose={onClose}
-      surfaceStyle={intelLiquidGlassStyle}
+      surfaceStyle={intelSheetSurfaceStyle}
       atmosphereClassName={intelGlassVisual.atmosphereClassName}
-      atmosphereStyle={{ ...intelGlassVisual.atmosphereStyle, opacity: 0.2 }}
+      atmosphereStyle={{ ...intelGlassVisual.atmosphereStyle, opacity: 0.28 }}
     >
       <div
-        className="px-5 pt-4"
+        className="relative px-5 pt-4"
         style={{
           maxHeight: 'calc(100dvh - 132px)',
           overflowY: 'auto',
@@ -8292,6 +8418,13 @@ const OdaraScentIntelSheet: React.FC<{
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)',
         }}
       >
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-24"
+            style={{
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.038) 24%, rgba(255,255,255,0) 100%)',
+              opacity: 0.72,
+            }}
+          />
           <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div
@@ -18343,6 +18476,8 @@ const OdaraScreen = ({
                   detailIdentityKey={layerDetailIdentityKey}
                   showLegacyAccordsText={false}
                   onOpenFragranceDetail={openVisibleLayerDetail}
+                  onOpenScentIntel={isReadOnlyHistoryCard ? undefined : openScentIntelSheet}
+                  resolveScentChipTone={getAccordChipTone}
                 />
               </div>
             ) : null}

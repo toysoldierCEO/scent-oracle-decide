@@ -709,6 +709,23 @@ interface LayerCardProps {
   detailIdentityKey?: string;
   showLegacyAccordsText?: boolean;
   onOpenFragranceDetail?: () => void;
+  onOpenScentIntel?: (input: {
+    label: string;
+    slug?: string | null;
+    fragranceId?: string | null;
+    fragranceName?: string | null;
+    fragranceBrand?: string | null;
+    position?: string | null;
+  }) => void;
+  resolveScentChipTone?: (
+    label: string,
+    familyKey?: string | null,
+  ) => {
+    border: string;
+    background: string;
+    color: string;
+    glow: string;
+  };
 }
 
 const LayerCard = ({
@@ -740,6 +757,8 @@ const LayerCard = ({
   detailIdentityKey = '',
   showLegacyAccordsText = true,
   onOpenFragranceDetail,
+  onOpenScentIntel,
+  resolveScentChipTone,
 }: LayerCardProps) => {
   const titlePressRef = React.useRef<{
     pointerId: number;
@@ -966,6 +985,37 @@ const LayerCard = ({
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
   const hasLayerDetailContent = detailSections.length > 0;
+  const layerChipFamilyKey = activeModeEntry?.family_key ?? mainFamily ?? null;
+
+  const resolveFallbackTokenTone = React.useCallback((label: string, colorHex?: string | null) => {
+    if (resolveScentChipTone) {
+      return resolveScentChipTone(label, layerChipFamilyKey);
+    }
+    const baseColor = colorHex ?? layerColor;
+    return {
+      color: `${baseColor}`,
+      border: `${baseColor}55`,
+      background: `${baseColor}12`,
+      glow: `${baseColor}22`,
+    };
+  }, [layerChipFamilyKey, layerColor, resolveScentChipTone]);
+
+  const handleOpenLayerScentIntel = React.useCallback((
+    event: React.MouseEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
+    label: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const cleanLabel = String(label ?? '').trim();
+    if (!cleanLabel) return;
+    onOpenScentIntel?.({
+      label: cleanLabel,
+      fragranceId: activeModeEntry?.fragrance_id ?? null,
+      fragranceName: activeModeEntry?.name ?? null,
+      fragranceBrand: activeModeEntry?.brand ?? null,
+      position: null,
+    });
+  }, [activeModeEntry, onOpenScentIntel]);
 
   const handleTitlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     titlePressRef.current = {
@@ -1049,20 +1099,35 @@ const LayerCard = ({
                   style={{ WebkitOverflowScrolling: 'touch' }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {resolvedLayerTokens.map((t: any, i: number) => (
-                    <span
-                      key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
-                      className="flex-shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.12em]"
-                      style={{
-                        color: t?.color_hex || '#aaa',
-                        border: `1px solid ${(t?.color_hex || '#888')}${t?.is_shared ? '88' : '44'}`,
-                        background: `${(t?.color_hex || '#888')}${t?.is_shared ? '16' : '0A'}`,
-                        boxShadow: t?.is_shared ? `inset 0 0 0 1px ${(t?.color_hex || '#888')}22` : undefined,
-                      }}
-                    >
-                      {t?.token_label}
-                    </span>
-                  ))}
+                  {resolvedLayerTokens.map((t: any, i: number) => {
+                    const tokenLabel = String(t?.token_label ?? '').trim();
+                    if (!tokenLabel) return null;
+                    const tone = resolveFallbackTokenTone(tokenLabel, t?.color_hex || layerColor);
+                    return (
+                      <button
+                        type="button"
+                        key={`mlayer-tok-${t?.token_key ?? 'tok'}-${i}`}
+                        data-no-card-swipe
+                        aria-label={`Open scent intel for ${tokenLabel}`}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => handleOpenLayerScentIntel(event, tokenLabel)}
+                        className="flex-shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.12em]"
+                        style={{
+                          color: tone.color,
+                          border: `1px solid ${tone.border}`,
+                          background: tone.background,
+                          boxShadow: t?.is_shared
+                            ? `inset 0 0 0 1px ${tone.border}, 0 0 8px ${tone.glow}`
+                            : `0 0 6px ${tone.glow}`,
+                          WebkitTapHighlightColor: 'transparent',
+                        }}
+                      >
+                        {tokenLabel}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
