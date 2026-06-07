@@ -8413,17 +8413,17 @@ const OdaraScentIntelSheet: React.FC<{
   const intelSheetSurfaceStyle: React.CSSProperties = {
     ...intelLiquidGlassStyle,
     background: `
-      linear-gradient(168deg,
-        rgba(255,255,255,0.075) 0%,
-        rgba(255,255,255,0.028) 10%,
-        ${intelMaterialWash} 24%,
-        rgba(13,14,18,0.64) 58%,
+      linear-gradient(172deg,
+        rgba(255,255,255,0.05) 0%,
+        rgba(255,255,255,0.024) 8%,
+        ${intelMaterialWash} 20%,
+        rgba(13,14,18,0.64) 54%,
         rgba(7,8,12,0.84) 100%
       ),
-      radial-gradient(circle at top left, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.03) 26%, rgba(255,255,255,0) 56%)
+      radial-gradient(circle at 20% 0%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 24%, rgba(255,255,255,0) 52%)
     `,
     border: `1px solid ${intelBorder}`,
-    boxShadow: '0 30px 76px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 18px 30px rgba(255,255,255,0.045), inset 0 -20px 30px rgba(4,6,10,0.14)',
+    boxShadow: '0 30px 76px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 10px 18px rgba(255,255,255,0.024), inset 0 -20px 30px rgba(4,6,10,0.14)',
     backdropFilter: 'blur(30px) saturate(160%)',
     WebkitBackdropFilter: 'blur(30px) saturate(160%)',
   };
@@ -8489,14 +8489,7 @@ const OdaraScentIntelSheet: React.FC<{
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)',
         }}
       >
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-24"
-            style={{
-              background: 'linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.038) 24%, rgba(255,255,255,0) 100%)',
-              opacity: 0.72,
-            }}
-          />
-          <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div
               className="text-[28px] leading-[1.02] text-foreground/92"
