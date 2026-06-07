@@ -6020,6 +6020,7 @@ function getCanonicalOdaraTermSlug(value: string | null | undefined) {
   if (['oudh', 'oud'].includes(normalized)) return 'oud';
   if (['marine', 'aquatic', 'marine-aquatic', 'fresh-aquatic', 'fresh-marine'].includes(normalized)) return 'aquatic';
   if (['powder', 'powdery'].includes(normalized)) return 'powdery';
+  if (['aldehydes', 'aldehyde', 'aldehydic', 'aldehydic-notes', 'aldehydic-note'].includes(normalized)) return 'aldehydic';
   if (['ambery', 'amber'].includes(normalized)) return 'amber';
   if (['balsam', 'balsamic', 'resinous', 'resin', 'amber-resin', 'resinous-amber', 'amber-resinous'].includes(normalized)) return 'resin';
   if (['roasted-coffee', 'coffee-roasted', 'coffee-accord', 'espresso'].includes(normalized)) return 'coffee';
@@ -8030,6 +8031,14 @@ function getScentIntelAliasSlug(value: string | null | undefined): string {
   if (!normalized) return '';
 
   switch (normalized) {
+    case 'spice':
+    case 'spices':
+    case 'spicy':
+      return 'spice';
+    case 'warm-spicy':
+      return 'spicy-warm';
+    case 'amber-resin-and-incense':
+      return 'amber-resin-incense';
     case 'roasted-coffee':
     case 'coffee-roasted':
       return 'coffee';
@@ -8041,6 +8050,11 @@ function getScentIntelAliasSlug(value: string | null | undefined): string {
     case 'suede':
     case 'leather-accord':
       return 'leather';
+    case 'aldehydes':
+    case 'aldehyde':
+    case 'aldehydic-notes':
+    case 'aldehydic-note':
+      return 'aldehydic';
     case 'oudh':
       return 'oud';
     default:
