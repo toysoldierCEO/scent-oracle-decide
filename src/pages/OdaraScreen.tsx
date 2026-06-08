@@ -11,7 +11,11 @@ import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { odaraDebugLog } from "@/lib/odara-debug";
 import { haptic } from "@/lib/haptics";
-import { expandAndDeduplicateScentIntelDisplayTerms } from "@/lib/scentIntelChipTerms";
+import {
+  expandAndDeduplicateScentIntelDisplayTerms,
+  normalizeScentIntelChipSlug,
+  resolveCanonicalScentIntelSlug,
+} from "@/lib/scentIntelChipTerms";
 import {
   CARD_ACTION_BUTTON_BASE_CLASS,
   CARD_ACTION_BUTTON_BASE_STYLE,
@@ -6003,50 +6007,11 @@ function getOdaraFamilyMappedChipTone(familyKey: string): OdaraChipTone {
 }
 
 function normalizeOdaraTermSlug(value: string | null | undefined) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[\/,+]/g, ' ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return normalizeScentIntelChipSlug(value);
 }
 
 function getCanonicalOdaraTermSlug(value: string | null | undefined) {
-  const normalized = normalizeOdaraTermSlug(value);
-  if (!normalized) return '';
-
-  if (['woody', 'wood', 'woods', 'woody-accord'].includes(normalized)) return 'woody';
-  if (['leather', 'leathery', 'dark-leather', 'suede', 'leather-accord'].includes(normalized)) return 'leather';
-  if (['oudh', 'oud'].includes(normalized)) return 'oud';
-  if (['olibanum', 'frankincense', 'frank-incense', 'boswellia', 'olibanum-resin', 'frankincense-resin'].includes(normalized)) return 'frankincense';
-  if (['myrrhe', 'myrrh'].includes(normalized)) return 'myrrh';
-  if (['smoke', 'smoky', 'smokey', 'smoke-accord', 'smoky-woods'].includes(normalized)) return 'smoke';
-  if (['marine', 'aquatic', 'marine-aquatic', 'fresh-aquatic', 'fresh-marine'].includes(normalized)) return 'aquatic';
-  if (['powder', 'powdery'].includes(normalized)) return 'powdery';
-  if (['aldehydes', 'aldehyde', 'aldehydic', 'aldehydic-notes', 'aldehydic-note'].includes(normalized)) return 'aldehydic';
-  if (['ambery', 'amber'].includes(normalized)) return 'amber';
-  if (['balsam', 'balsamic'].includes(normalized)) return 'balsamic';
-  if ([
-    'resin',
-    'resins',
-    'resinous',
-    'resin-material',
-    'resin-materials',
-    'resinous-material',
-    'resinous-materials',
-    'resin-note',
-    'resin-notes',
-    'resinous-note',
-    'resinous-notes',
-  ].includes(normalized)) return 'resins';
-  if (['roasted-coffee', 'coffee-roasted', 'coffee-accord', 'espresso'].includes(normalized)) return 'coffee';
-  if (['warm-spicy', 'spices', 'spice', 'spicy'].includes(normalized)) return 'spicy';
-  if (['musk-clean', 'clean-musk', 'white-musk', 'musk-clean-note'].includes(normalized)) return 'musk';
-  if (['green-notes', 'green-note', 'green-accord', 'green'].includes(normalized)) return 'green';
-  if (['fresh-spicy', 'spicy-fresh'].includes(normalized)) return 'spicy';
-
-  return normalized;
+  return resolveCanonicalScentIntelSlug(value);
 }
 
 function getCanonicalOdaraTermFamilyKey(
@@ -8041,15 +8006,11 @@ function formatTaxonomyReviewStatus(status: string | null | undefined): string |
 }
 
 function scentIntelSlugify(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return normalizeScentIntelChipSlug(String(value ?? ''));
 }
 
 function getScentIntelAliasSlug(value: string | null | undefined): string {
-  const normalized = scentIntelSlugify(value ?? '');
+  const normalized = normalizeScentIntelChipSlug(value);
   if (!normalized) return '';
 
   switch (normalized) {
@@ -8105,7 +8066,7 @@ function getScentIntelAliasSlug(value: string | null | undefined): string {
     case 'oudh':
       return 'oud';
     default:
-      return normalized;
+      return resolveCanonicalScentIntelSlug(normalized);
   }
 }
 
