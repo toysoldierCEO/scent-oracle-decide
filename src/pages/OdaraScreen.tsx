@@ -6019,6 +6019,9 @@ function getCanonicalOdaraTermSlug(value: string | null | undefined) {
   if (['woody', 'wood', 'woods', 'woody-accord'].includes(normalized)) return 'woody';
   if (['leather', 'leathery', 'dark-leather', 'suede', 'leather-accord'].includes(normalized)) return 'leather';
   if (['oudh', 'oud'].includes(normalized)) return 'oud';
+  if (['olibanum', 'frankincense', 'frank-incense', 'boswellia', 'olibanum-resin', 'frankincense-resin'].includes(normalized)) return 'frankincense';
+  if (['myrrhe', 'myrrh'].includes(normalized)) return 'myrrh';
+  if (['smoke', 'smoky', 'smokey', 'smoke-accord', 'smoky-woods'].includes(normalized)) return 'smoke';
   if (['marine', 'aquatic', 'marine-aquatic', 'fresh-aquatic', 'fresh-marine'].includes(normalized)) return 'aquatic';
   if (['powder', 'powdery'].includes(normalized)) return 'powdery';
   if (['aldehydes', 'aldehyde', 'aldehydic', 'aldehydic-notes', 'aldehydic-note'].includes(normalized)) return 'aldehydic';
@@ -6058,9 +6061,13 @@ function getCanonicalOdaraTermFamilyKey(
     case 'resins':
     case 'balsamic':
     case 'incense':
+    case 'frankincense':
+    case 'myrrh':
     case 'olibanum':
     case 'oud':
       return 'oud-amber';
+    case 'smoke':
+      return 'dark-leather';
     case 'leather':
       return 'dark-leather';
     case 'aquatic':
@@ -6147,7 +6154,8 @@ function getKnownOdaraAccordChipTone(normalized: string): OdaraChipTone | null {
   if (/\b(sweet|vanilla|gourmand|honey|caramel|tonka|praline|cocoa|chocolate)\b/.test(term)) return getOdaraFamilyMappedChipTone('sweet-gourmand');
   if (/\b(fruity|fruit|apple|pear|peach|plum|berry|berries|cassis|blackcurrant|cherry|fig)\b/.test(term)) return getOdaraMappedChipTone(SEMANTIC_TOKEN_COLORS.fruity);
   if (/\b(tea|black tea|mate)\b/.test(term)) return getOdaraFamilyMappedChipTone('aromatic-fougere');
-  if (/\b(amber|resin|resinous|labdanum|benzoin|myrrh|olibanum|incense)\b/.test(term)) return getOdaraFamilyMappedChipTone('oud-amber');
+  if (/\b(amber|resin|resinous|labdanum|benzoin|myrrh|olibanum|frankincense|incense)\b/.test(term)) return getOdaraFamilyMappedChipTone('oud-amber');
+  if (/\b(smoke|smoky|smokey|charred|burnt)\b/.test(term)) return getOdaraFamilyMappedChipTone('dark-leather');
   if (/\b(leather|suede)\b/.test(term)) return getOdaraFamilyMappedChipTone('dark-leather');
   if (/\b(musk|white musk|powdery|iris|orris)\b/.test(term)) return getOdaraFamilyMappedChipTone('floral-musk');
   return null;
@@ -6163,7 +6171,7 @@ function getAccordChipTone(label: string, familyKey?: string | null) {
 
   const tones = [
     {
-      match: ['oud', 'amber', 'balsamic', 'resin', 'resinous', 'incense', 'olibanum', 'labdanum', 'benzoin', 'myrrh', 'elemi'],
+      match: ['oud', 'amber', 'balsamic', 'resin', 'resinous', 'incense', 'olibanum', 'frankincense', 'labdanum', 'benzoin', 'myrrh', 'elemi'],
       border: 'rgba(230,178,96,0.42)',
       background: 'rgba(230,178,96,0.12)',
       color: 'rgba(247,221,165,0.96)',
@@ -8051,6 +8059,19 @@ function getScentIntelAliasSlug(value: string | null | undefined): string {
       return 'spice';
     case 'warm-spicy':
       return 'spicy-warm';
+    case 'olibanum':
+    case 'frank-incense':
+    case 'boswellia':
+    case 'olibanum-resin':
+    case 'frankincense-resin':
+      return 'frankincense';
+    case 'myrrhe':
+      return 'myrrh';
+    case 'smoky':
+    case 'smokey':
+    case 'smoke-accord':
+    case 'smoky-woods':
+      return 'smoke';
     case 'resin':
     case 'resins':
     case 'resinous':
@@ -8332,9 +8353,15 @@ function getScentIntelTintKeyOverride(value: string | null | undefined): string 
     case 'resins':
     case 'balsamic':
     case 'incense':
+    case 'frankincense':
+    case 'myrrh':
     case 'olibanum':
     case 'oud':
       return 'oud-amber';
+    case 'smoke':
+    case 'smoky':
+    case 'smokey':
+      return 'dark-leather';
     case 'coffee':
     case 'roasted-coffee':
     case 'espresso':
