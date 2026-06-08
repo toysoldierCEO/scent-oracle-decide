@@ -11,6 +11,7 @@ import { LAYER_MODE_ORDER, type LayerMood, type LayerModes, type InteractionType
 import { normalizeOracleHomePayload } from "@/lib/normalizeOracleHomePayload";
 import { odaraDebugLog } from "@/lib/odara-debug";
 import { haptic } from "@/lib/haptics";
+import { expandAndDeduplicateScentIntelDisplayTerms } from "@/lib/scentIntelChipTerms";
 import {
   CARD_ACTION_BUTTON_BASE_CLASS,
   CARD_ACTION_BUTTON_BASE_STYLE,
@@ -6022,7 +6023,20 @@ function getCanonicalOdaraTermSlug(value: string | null | undefined) {
   if (['powder', 'powdery'].includes(normalized)) return 'powdery';
   if (['aldehydes', 'aldehyde', 'aldehydic', 'aldehydic-notes', 'aldehydic-note'].includes(normalized)) return 'aldehydic';
   if (['ambery', 'amber'].includes(normalized)) return 'amber';
-  if (['balsam', 'balsamic', 'resinous', 'resin', 'amber-resin', 'resinous-amber', 'amber-resinous'].includes(normalized)) return 'resin';
+  if (['balsam', 'balsamic'].includes(normalized)) return 'balsamic';
+  if ([
+    'resin',
+    'resins',
+    'resinous',
+    'resin-material',
+    'resin-materials',
+    'resinous-material',
+    'resinous-materials',
+    'resin-note',
+    'resin-notes',
+    'resinous-note',
+    'resinous-notes',
+  ].includes(normalized)) return 'resins';
   if (['roasted-coffee', 'coffee-roasted', 'coffee-accord', 'espresso'].includes(normalized)) return 'coffee';
   if (['warm-spicy', 'spices', 'spice', 'spicy'].includes(normalized)) return 'spicy';
   if (['musk-clean', 'clean-musk', 'white-musk', 'musk-clean-note'].includes(normalized)) return 'musk';
@@ -6041,7 +6055,7 @@ function getCanonicalOdaraTermFamilyKey(
     case 'woody':
       return 'earthy-patchouli';
     case 'amber':
-    case 'resin':
+    case 'resins':
     case 'balsamic':
     case 'incense':
     case 'olibanum':
@@ -8037,6 +8051,18 @@ function getScentIntelAliasSlug(value: string | null | undefined): string {
       return 'spice';
     case 'warm-spicy':
       return 'spicy-warm';
+    case 'resin':
+    case 'resins':
+    case 'resinous':
+    case 'resin-material':
+    case 'resin-materials':
+    case 'resinous-material':
+    case 'resinous-materials':
+    case 'resin-note':
+    case 'resin-notes':
+    case 'resinous-note':
+    case 'resinous-notes':
+      return 'resins';
     case 'amber-resin-and-incense':
       return 'amber-resin-incense';
     case 'roasted-coffee':
@@ -8303,7 +8329,7 @@ function getScentIntelTintKeyOverride(value: string | null | undefined): string 
     case 'spicy-fresh':
       return 'spicy-warm';
     case 'amber':
-    case 'resin':
+    case 'resins':
     case 'balsamic':
     case 'incense':
     case 'olibanum':
@@ -8478,6 +8504,7 @@ function getScentIntelChipClass(extra = '') {
 
 const ScentIntelChipButton: React.FC<{
   label: string;
+  slug?: string | null;
   onOpen?: (input: ScentIntelInput) => void;
   fragranceId?: string | null;
   fragranceName?: string | null;
@@ -8486,7 +8513,7 @@ const ScentIntelChipButton: React.FC<{
   className?: string;
   style?: React.CSSProperties;
   ariaPrefix?: string;
-}> = ({ label, onOpen, fragranceId, fragranceName, fragranceBrand, position, className, style, ariaPrefix = 'Open scent intel for' }) => {
+}> = ({ label, slug, onOpen, fragranceId, fragranceName, fragranceBrand, position, className, style, ariaPrefix = 'Open scent intel for' }) => {
   const cleanLabel = String(label ?? '').trim();
   if (!cleanLabel) return null;
   return (
@@ -8498,7 +8525,7 @@ const ScentIntelChipButton: React.FC<{
         event.stopPropagation();
         onOpen?.({
           label: cleanLabel,
-          slug: scentIntelSlugify(cleanLabel),
+          slug: slug ?? scentIntelSlugify(cleanLabel),
           fragranceId: fragranceId ?? null,
           fragranceName: fragranceName ?? null,
           fragranceBrand: fragranceBrand ?? null,
@@ -8550,6 +8577,9 @@ const OdaraScentIntelSheet: React.FC<{
   const whatItDoes = getScentIntelWhatItDoes(term);
   const inPerfumeCopy = [usedFor, whatItDoes].map((value) => value.trim()).filter(Boolean).join(' ');
   const pairsWith = normalizeScentIntelStringList(term?.pairs_well_with, 8);
+  const pairChips = expandAndDeduplicateScentIntelDisplayTerms(
+    pairsWith.map((label) => ({ label, position: 'material' })),
+  );
   const intelTint = getScentIntelGlassTint(state.input, term, payload);
   const intelGlassVisual = getOdaraGlassCardVisualRecipe(intelTint, 'hero');
   const intelLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(intelTint, intelGlassVisual);
@@ -8682,16 +8712,18 @@ const OdaraScentIntelSheet: React.FC<{
             {pairsWith.length > 0 ? (
               <ScentIntelSection title="Pairs With">
                 <div className="flex flex-wrap gap-2">
-                  {pairsWith.map((pairLabel) => {
-                    const tone = getAccordChipTone(pairLabel, term?.family_key ?? null);
+                  {pairChips.map((pairChip) => {
+                    const tone = getAccordChipTone(pairChip.label, term?.family_key ?? null);
                     return (
                       <ScentIntelChipButton
-                        key={`pair-${pairLabel}`}
-                        label={pairLabel}
+                        key={`pair-${pairChip.position ?? 'material'}-${pairChip.slug ?? pairChip.label}`}
+                        label={pairChip.label}
+                        slug={pairChip.slug ?? null}
                         onOpen={onOpenTerm}
                         fragranceId={state.input.fragranceId ?? null}
                         fragranceName={state.input.fragranceName ?? null}
                         fragranceBrand={state.input.fragranceBrand ?? null}
+                        position={pairChip.position ?? null}
                         className={getScentIntelChipClass()}
                         style={{
                           color: tone.color,
@@ -8808,7 +8840,7 @@ const OdaraFragranceDetailSheet: React.FC<{
       ?? availableAccords[0]
       ?? null;
     pushChip(preferredAccord, 'accord');
-    return chips.slice(0, 2);
+    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 4);
   })();
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
@@ -8832,16 +8864,16 @@ const OdaraFragranceDetailSheet: React.FC<{
       for (const section of structuredSections) {
         for (const label of section.values) {
           pushNote(label, section.position);
-          if (notes.length >= 6) return notes;
+          if (notes.length >= 6) return expandAndDeduplicateScentIntelDisplayTerms(notes);
         }
       }
     } else {
       for (const label of flatNoteLabels) {
         pushNote(label, 'material');
-        if (notes.length >= 6) return notes;
+        if (notes.length >= 6) return expandAndDeduplicateScentIntelDisplayTerms(notes);
       }
     }
-    return notes;
+    return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
   const detailFactLine = `Released: ${detail.release_year ? String(detail.release_year) : 'Unknown'} • Perfumer: ${detail.perfumer ?? 'Unknown'}`;
 
@@ -8907,6 +8939,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                   <ScentIntelChipButton
                     key={`detail-top-identity-${chip.position}-${chip.label}-${index}`}
                     label={chip.label}
+                    slug={chip.slug ?? null}
                     onOpen={onOpenScentIntel}
                     fragranceId={detail.fragrance_id}
                     fragranceName={detail.name}
@@ -8966,17 +8999,20 @@ const OdaraFragranceDetailSheet: React.FC<{
             <section>
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
               <div className="flex flex-wrap gap-2">
-                {accordLabels.slice(0, 6).map((label, index) => {
-                  const tone = getAccordChipTone(label, detail.family_key);
+                {expandAndDeduplicateScentIntelDisplayTerms(
+                  accordLabels.slice(0, 6).map((label) => ({ label, position: 'accord' })),
+                ).map((chip, index) => {
+                  const tone = getAccordChipTone(chip.label, detail.family_key);
                   return (
                     <ScentIntelChipButton
-                      key={`detail-accord-${label}-${index}`}
-                      label={label}
+                      key={`detail-accord-${chip.position}-${chip.slug ?? chip.label}-${index}`}
+                      label={chip.label}
+                      slug={chip.slug ?? null}
                       onOpen={onOpenScentIntel}
                       fragranceId={detail.fragrance_id}
                       fragranceName={detail.name}
                       fragranceBrand={detail.brand}
-                      position="accord"
+                      position={chip.position ?? 'accord'}
                       className={getScentIntelChipClass()}
                       style={{
                         color: tone.color,
@@ -9001,6 +9037,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                     <ScentIntelChipButton
                       key={`detail-note-${note.position}-${note.label}-${index}`}
                       label={note.label}
+                      slug={note.slug ?? null}
                       onOpen={onOpenScentIntel}
                       fragranceId={detail.fragrance_id}
                       fragranceName={detail.name}
@@ -17516,7 +17553,7 @@ const OdaraScreen = ({
     if (!fragranceId) return null;
     return fragranceDetailCacheRef.current.get(fragranceId) ?? null;
   }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
-  const heroCardChips = useMemo<Array<{ label: string; position: string }>>(() => {
+  const heroCardChips = useMemo<Array<{ label: string; position: string | null; slug?: string | null }>>(() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
     const pushChip = (rawLabel: string | null | undefined, position: string) => {
@@ -17574,7 +17611,7 @@ const OdaraScreen = ({
     }
 
     if (chips.length > 0) {
-      return chips.slice(0, 6);
+      return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 6);
     }
 
     const fallbackTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
@@ -17590,7 +17627,7 @@ const OdaraScreen = ({
       pushChip(label, 'accord');
     }
 
-    return chips.slice(0, 2);
+    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 4);
   }, [
     fragranceDetailVersion,
     visibleHeroDetail?.accords,
@@ -18645,6 +18682,7 @@ const OdaraScreen = ({
                               <ScentIntelChipButton
                                 key={`hero-tok-${chip.position}-${chip.label}-${i}`}
                                 label={chip.label}
+                                slug={chip.slug ?? null}
                                 onOpen={isReadOnlyHistoryCard ? undefined : openScentIntelSheet}
                                 fragranceId={visibleResolvedCurrentCard?.fragrance_id ?? null}
                                 fragranceName={visibleResolvedCurrentCard?.name ?? null}
