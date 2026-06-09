@@ -2108,6 +2108,10 @@ function mergeQueuedHeroCardSources(
 function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard | null | undefined) {
   if (a === b) return true;
   if (!a || !b) return false;
+  const aNotes = sanitizeTokenSource(a.notes);
+  const bNotes = sanitizeTokenSource(b.notes);
+  const aAccords = sanitizeTokenSource(a.accords);
+  const bAccords = sanitizeTokenSource(b.accords);
   return (
     a.fragrance_id === b.fragrance_id &&
     a.name === b.name &&
@@ -2116,10 +2120,10 @@ function areSameDisplayCards(a: DisplayCard | null | undefined, b: DisplayCard |
     (a.image_url ?? null) === (b.image_url ?? null) &&
     a.reason_chip_label === b.reason_chip_label &&
     a.reason_chip_explanation === b.reason_chip_explanation &&
-    a.notes.length === b.notes.length &&
-    a.notes.every((note, idx) => note === b.notes[idx]) &&
-    a.accords.length === b.accords.length &&
-    a.accords.every((accord, idx) => accord === b.accords[idx])
+    aNotes.length === bNotes.length &&
+    aNotes.every((note, idx) => note === bNotes[idx]) &&
+    aAccords.length === bAccords.length &&
+    aAccords.every((accord, idx) => accord === bAccords[idx])
   );
 }
 
@@ -10511,8 +10515,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           family_key: signal.family_key,
           family_label: signal.family_label || buildFamilyLabel(signal.family_key),
           primary_season: resolvedItem.primary_season,
-          image_url: signal.image_url,
-          thumbnail_url: signal.thumbnail_url,
+          image_url: signal.image_url ?? resolvedItem.image_url,
+          thumbnail_url: signal.thumbnail_url ?? resolvedItem.thumbnail_url,
           item: resolvedItem,
           primary_status: primaryStatus,
           favorite: Boolean(collectionItem?.favorite ?? collectionItem?.wear_more),
@@ -12222,6 +12226,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
             {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
+              const tint = getEnhancedCollectionTint(card);
+              const familyLabel = readTrimmedLayerText(
+                card.family_label,
+                buildFamilyLabel(card.family_key),
+                card.family_key,
+              ) || 'Unclassified';
+              const previewTerms = normalizeNotes([
+                ...sanitizeTokenSource(card.item.accords),
+                ...sanitizeTokenSource(card.item.notes),
+              ], 3);
               return (
                 <button
                   type="button"
@@ -12243,12 +12257,26 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     brand={card.brand}
                     family_key={card.family_key}
                     family_label={card.family_label}
-                    image_url={card.image_url}
-                    thumbnail_url={card.thumbnail_url}
+                    image_url={card.image_url ?? card.item.image_url}
+                    thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
                     frameless
                     presentation="wardrobe_grid"
                     className="relative z-[1] aspect-[4/5] w-full"
                   />
+                  <div className="relative z-[1] mt-3 flex min-h-[25px] items-start justify-between gap-2">
+                    <span
+                      className="min-w-0 truncate rounded-full px-2.5 py-[5px] text-[8px] font-medium uppercase tracking-[0.14em]"
+                      style={{
+                        color: 'rgba(255,255,255,0.84)',
+                        border: `1px solid ${tint.frame}`,
+                        background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
+                        boxShadow: `0 0 18px ${tint.glowStrong}`,
+                      }}
+                    >
+                      {familyLabel}
+                    </span>
+                    <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                  </div>
                   <div
                     className="relative z-[1] mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
                     style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
@@ -12258,6 +12286,22 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   <div className="relative z-[1] mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
                     {getWardrobeBrandLabel(card.brand)}
                   </div>
+                  {previewTerms.length > 0 ? (
+                    <div className="relative z-[1] mt-3 flex flex-wrap gap-1.5">
+                      {previewTerms.map((term) => (
+                        <span
+                          key={term}
+                          className="max-w-full truncate rounded-full px-2 py-[4px] text-[8px] text-foreground/62"
+                          style={{
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'rgba(255,255,255,0.03)',
+                          }}
+                        >
+                          {term}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </button>
               );
             })}
@@ -14638,17 +14682,19 @@ const OdaraScreen = ({
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
 
-    // Keep exclusion scoped to this mood lane. Different modes can
-    // legitimately resolve to the same layer scent with different teaching.
+    // Keep exclusion scoped to this mood lane. The top-level oracle layer is
+    // the seeded balance candidate, so do not exclude it from balance itself.
     const excludeIds: string[] = [];
     for (const existing of readMoodLaneStack(moodKey)) {
       if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
         excludeIds.push(existing.layer_fragrance_id);
       }
     }
-    // Also include oracle.layer id if present
     const ol = activeOracle?.layer;
-    if (ol?.fragrance_id) excludeIds.push(ol.fragrance_id);
+    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? ol?.mode ?? ol?.interaction_type) ?? 'balance';
+    if (ol?.fragrance_id && oracleLayerMood !== mood && !excludeIds.includes(ol.fragrance_id)) {
+      excludeIds.push(ol.fragrance_id);
+    }
     for (const extraId of extraExcludeIds) {
       if (extraId && !excludeIds.includes(extraId)) excludeIds.push(extraId);
     }
@@ -15827,12 +15873,16 @@ const OdaraScreen = ({
     const manualLayerModes = manualLayerCard
       ? buildManualLayerModesFromDisplayCard(manualLayerCard)
       : null;
+    const defaultMoodForCarryover = resolveActiveSignedInDefaultMood();
+    const carryoverLayerMode = signedInResolvedDayDecisionSource === 'carryover-layer'
+      && betaSafeSignedInMood === defaultMoodForCarryover
+      && signedInForcedLayerCarryCard
+        ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, betaSafeSignedInMood)
+        : null;
     const forcedLayerMode = manualLayerCard
       ? manualLayerModes?.balance ?? null
       : forcedLockedLayerMode
-      ?? (signedInForcedLayerCarryCard
-        ? toLayerModeFromDisplayCard(signedInForcedLayerCarryCard, betaSafeSignedInMood)
-        : null);
+      ?? carryoverLayerMode;
     const layerSource = forcedLayerMode ?? visibleModeEntry;
     const visibleLayerDetail = layerSource?.id
       ? (fragranceDetailCacheRef.current.get(layerSource.id) ?? null)
@@ -16050,7 +16100,7 @@ const OdaraScreen = ({
       duplicateResolution,
       resolvedCurrentCard,
     };
-  }, [isGuestMode, visibleCard, queue, v6Payload, signedInResolvedOracle, betaSafeSignedInMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState]);
+  }, [isGuestMode, visibleCard, queue, v6Payload, signedInResolvedOracle, betaSafeSignedInMood, signedInLayerIdxByMood, visibleModeEntry, modeResults, lockState, moodCacheVersion, signedInVisibleAlternates, fragranceDetailVersion, signedInQueuedHeroVersion, signedInForcedLayerCarryCard, signedInResolvedDayDecisionSource, signedInResolvedLockTruth, signedInVerifiedPredecessorBaton, signedInDayState, resolveActiveSignedInDefaultMood]);
 
   useEffect(() => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard || !activeMainCardRender || !visibleCard) return;
