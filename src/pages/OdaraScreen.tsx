@@ -11832,8 +11832,18 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       <div className="flex flex-col gap-4">
         <div className="relative px-1">
           {!wardrobeSearchOpen ? (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <div className="flex items-center justify-center gap-2">
+            <div
+              className="rounded-[24px] border px-3 py-3"
+              style={{
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(17,19,25,0.62) 0%, rgba(9,11,16,0.44) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(14px)',
+                WebkitBackdropFilter: 'blur(14px)',
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:justify-start">
 
                 {/* Filter pill + anchored dropdown */}
                 <div className="relative">
@@ -12083,44 +12093,49 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     </div>
                   ) : null}
                 </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openSearch}
+                    className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
+                    style={{
+                      border: '1px solid rgba(218,188,124,0.28)',
+                      background: 'linear-gradient(180deg, rgba(218,188,124,0.16) 0%, rgba(169,132,57,0.12) 100%)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.16)',
+                    }}
+                  >
+                    + Add
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Search your collection"
+                    onClick={() => {
+                      setWardrobeMenu(null);
+                      setWardrobeSearchOpen(true);
+                    }}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/72 transition-colors hover:text-foreground/94"
+                    style={{
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.04)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m20 20-3.5-3.5" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={openSearch}
-                className="shrink-0 rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
-                style={{
-                  border: '1px solid rgba(218,188,124,0.28)',
-                  background: 'rgba(218,188,124,0.12)',
-                }}
-              >
-                + Add
-              </button>
-              <button
-                type="button"
-                aria-label="Search your collection"
-                onClick={() => {
-                  setWardrobeMenu(null);
-                  setWardrobeSearchOpen(true);
-                }}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/72 transition-colors hover:text-foreground/94"
-                style={{
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(255,255,255,0.04)',
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m20 20-3.5-3.5" />
-                </svg>
-              </button>
             </div>
           ) : (
             <div
-              className="flex items-center gap-2 rounded-[18px] px-3 py-2.5"
+              className="flex items-center gap-2 rounded-[20px] px-3.5 py-3"
               style={{
                 border: '1px solid rgba(255,255,255,0.08)',
-                background: 'linear-gradient(180deg, rgba(18,20,26,0.66) 0%, rgba(10,12,16,0.54) 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 28px rgba(0,0,0,0.18)',
+                background: 'linear-gradient(180deg, rgba(18,20,26,0.72) 0%, rgba(10,12,16,0.56) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 34px rgba(0,0,0,0.2)',
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-foreground/46" aria-hidden="true">
@@ -12170,46 +12185,69 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
 
         {wardrobeBrandOptions.length > 0 ? (
-          <div className="flex justify-center">
-          <div className="flex max-w-full gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-
-            <button
-              type="button"
-              onClick={() => setWardrobeBrandFilter(null)}
-              className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+          <div className="flex justify-center px-1">
+            <div
+              className="max-w-full rounded-[22px] border px-2 py-2"
               style={{
-                border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(17,19,25,0.54) 0%, rgba(10,11,16,0.36) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
               }}
             >
-              All
-            </button>
-            {wardrobeBrandOptions.map((brand) => {
-              const active = wardrobeBrandFilter === brand;
-              return (
+              <div className="flex max-w-full gap-2 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
-                  key={brand}
                   type="button"
-                  onClick={() => setWardrobeBrandFilter(brand)}
-                  className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                  onClick={() => setWardrobeBrandFilter(null)}
+                  className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
                   style={{
-                    border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                    background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                    color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                    border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                    background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                    color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                    boxShadow: wardrobeBrandFilter === null ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
                   }}
                 >
-                  {getWardrobeBrandLabel(brand)}
+                  All
                 </button>
-              );
-            })}
-          </div>
+                {wardrobeBrandOptions.map((brand) => {
+                  const active = wardrobeBrandFilter === brand;
+                  return (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => setWardrobeBrandFilter(brand)}
+                      className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                      style={{
+                        border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                        background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                        color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                        boxShadow: active ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
+                      }}
+                    >
+                      {getWardrobeBrandLabel(brand)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : null}
 
         {filteredWardrobeCards.length === 0 ? (
           <OdaraInsetGroup emphasis>
             <div className="px-5 py-10 text-center">
+              <div
+                className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+                style={{
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/58" aria-hidden="true">
+                  <rect x="3.5" y="6" width="17" height="13.5" rx="2.75" />
+                  <path d="M7 6V4.75a1.75 1.75 0 0 1 1.75-1.75h6.5A1.75 1.75 0 0 1 17 4.75V6" />
+                </svg>
+              </div>
               <div
                 className="text-[24px] leading-[1.04] text-foreground/94"
                 style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
@@ -12245,7 +12283,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             </div>
           </OdaraInsetGroup>
         ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-7 px-1 pb-5 pt-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5 px-1 pb-6 pt-1 sm:gap-x-5 sm:gap-y-6">
             {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               const tint = getEnhancedCollectionTint(card);
@@ -12262,11 +12300,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <button
                   type="button"
                   key={card.fragrance_id}
+                  data-collection-card
                   aria-label={`Open ${card.name} profile`}
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
-                  className="group relative w-full overflow-hidden rounded-[24px] p-3 text-left transition duration-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
+                  className="group relative w-full overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
                     ...cardVisual.surfaceStyle,
+                    boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
@@ -12274,56 +12314,93 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     className={cardVisual.atmosphereClassName}
                     style={cardVisual.atmosphereStyle}
                   />
-                  <OdaraWardrobeBottleArt
-                    name={card.name}
-                    brand={card.brand}
-                    family_key={card.family_key}
-                    family_label={card.family_label}
-                    image_url={card.image_url ?? card.item.image_url}
-                    thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
-                    frameless
-                    presentation="wardrobe_grid"
-                    className="relative z-[1] aspect-[4/5] w-full"
+                  <div
+                    className="absolute inset-[1px] rounded-[27px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
+                    }}
                   />
-                  <div className="relative z-[1] mt-3 flex min-h-[25px] items-start justify-between gap-2">
-                    <span
-                      className="min-w-0 truncate rounded-full px-2.5 py-[5px] text-[8px] font-medium uppercase tracking-[0.14em]"
+                  <div className="relative z-[1] flex h-full flex-col p-3.5">
+                    <div
+                      className="relative overflow-hidden rounded-[22px] border px-3 pb-2 pt-3"
                       style={{
-                        color: 'rgba(255,255,255,0.84)',
-                        border: `1px solid ${tint.frame}`,
-                        background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
-                        boxShadow: `0 0 18px ${tint.glowStrong}`,
+                        borderColor: 'rgba(255,255,255,0.06)',
+                        background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 34%, rgba(8,10,14,0.12) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                       }}
                     >
-                      {familyLabel}
-                    </span>
-                    <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
-                  </div>
-                  <div
-                    className="relative z-[1] mt-3 line-clamp-2 text-[18px] leading-[1.04] text-foreground/94"
-                    style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
-                  >
-                    {card.name}
-                  </div>
-                  <div className="relative z-[1] mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
-                    {getWardrobeBrandLabel(card.brand)}
-                  </div>
-                  {previewTerms.length > 0 ? (
-                    <div className="relative z-[1] mt-3 flex flex-wrap gap-1.5">
-                      {previewTerms.map((term) => (
+                      <div
+                        className="pointer-events-none absolute inset-x-8 top-3 h-10 rounded-full blur-2xl"
+                        style={{
+                          background: `radial-gradient(circle at 50% 0%, ${tint.inner} 0%, rgba(255,255,255,0) 74%)`,
+                          opacity: 0.9,
+                        }}
+                      />
+                      <OdaraWardrobeBottleArt
+                        name={card.name}
+                        brand={card.brand}
+                        family_key={card.family_key}
+                        family_label={card.family_label}
+                        image_url={card.image_url ?? card.item.image_url}
+                        thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
+                        frameless
+                        presentation="wardrobe_grid"
+                        className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[180px]"
+                      />
+                    </div>
+                    <div
+                      className="relative z-[1] mt-3 flex flex-1 flex-col rounded-[20px] border px-3.5 pb-3 pt-3.5"
+                      style={{
+                        borderColor: 'rgba(255,255,255,0.08)',
+                        background: 'linear-gradient(180deg, rgba(8,10,14,0.18) 0%, rgba(8,10,14,0.4) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                      }}
+                    >
+                      <div className="flex min-h-[25px] items-start justify-between gap-2">
                         <span
-                          key={term}
-                          className="max-w-full truncate rounded-full px-2 py-[4px] text-[8px] text-foreground/62"
+                          className="max-w-[76px] rounded-full px-2 py-[5px] text-center text-[7px] font-medium uppercase leading-[1.12] tracking-[0.1em]"
                           style={{
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            background: 'rgba(255,255,255,0.03)',
+                            color: 'rgba(255,255,255,0.84)',
+                            border: `1px solid ${tint.frame}`,
+                            background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
+                            boxShadow: `0 0 18px ${tint.glowStrong}`,
                           }}
                         >
-                          {term}
+                          {familyLabel}
                         </span>
-                      ))}
+                        <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                      </div>
+                      <div
+                        className="mt-3 line-clamp-2 text-[19px] leading-[1.02] text-foreground/94"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
+                      >
+                        {card.name}
+                      </div>
+                      <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
+                        {getWardrobeBrandLabel(card.brand)}
+                      </div>
+                      {previewTerms.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {previewTerms.map((term) => (
+                            <span
+                              key={term}
+                              className="max-w-full truncate rounded-full px-2.5 py-[5px] text-[8px] text-foreground/64"
+                              style={{
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                background: 'rgba(255,255,255,0.04)',
+                              }}
+                            >
+                              {term}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-[10px] uppercase tracking-[0.14em] text-foreground/34">
+                          Profile details inside
+                        </div>
+                      )}
                     </div>
-                  ) : null}
+                  </div>
                 </button>
               );
             })}
