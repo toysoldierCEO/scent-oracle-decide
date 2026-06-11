@@ -9938,6 +9938,7 @@ const OdaraWardrobeBottleArt: React.FC<{
 
 const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   onClose: () => void;
+  onOpenScentIntel?: (input: ScentIntelInput) => void;
   userId: string | null;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
@@ -9959,7 +9960,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       image_url?: string | null;
     } | null;
   }) => void;
-}> = ({ onClose, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
+}> = ({ onClose, onOpenScentIntel, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
   const {
     activeSessionUserId,
     sessionResolved,
@@ -11435,18 +11436,28 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <div className="w-full">
                   <div className="mb-2 text-[9px] uppercase tracking-[0.28em] text-foreground/38">Accords</div>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {accordPreview.map((accord, index) => (
-                      <span
-                        key={`accord-${accord}-${index}`}
-                        className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          background: 'rgba(255,255,255,0.024)',
-                        }}
-                      >
-                        {accord}
-                      </span>
-                    ))}
+                    {accordPreview.map((accord, index) => {
+                      const tone = getAccordChipTone(accord, selectedCatalogItem.family_key);
+                      return (
+                        <ScentIntelChipButton
+                          key={`accord-${accord}-${index}`}
+                          label={accord}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={selectedCatalogItem.fragrance_id}
+                          fragranceName={selectedCatalogItem.name}
+                          fragranceBrand={selectedCatalogItem.brand}
+                          position="accord"
+                          ariaPrefix="Open scent intel for accord"
+                          className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78 transition-colors hover:text-foreground/92"
+                          style={{
+                            color: tone.color,
+                            border: `1px solid ${tone.border}`,
+                            background: tone.background,
+                            boxShadow: `0 0 14px ${tone.glow}`,
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -11455,18 +11466,27 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <div className="w-full">
                   <div className="mb-2 text-[9px] uppercase tracking-[0.28em] text-foreground/38">Notes</div>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {notePreview.map((note, index) => (
-                      <span
-                        key={`note-${note}-${index}`}
-                        className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          background: 'rgba(255,255,255,0.024)',
-                        }}
-                      >
-                        {note}
-                      </span>
-                    ))}
+                    {notePreview.map((note, index) => {
+                      const tone = getAccordChipTone(note, selectedCatalogItem.family_key);
+                      return (
+                        <ScentIntelChipButton
+                          key={`note-${note}-${index}`}
+                          label={note}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={selectedCatalogItem.fragrance_id}
+                          fragranceName={selectedCatalogItem.name}
+                          fragranceBrand={selectedCatalogItem.brand}
+                          ariaPrefix="Open scent intel for note"
+                          className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78 transition-colors hover:text-foreground/92"
+                          style={{
+                            color: tone.color,
+                            border: `1px solid ${tone.border}`,
+                            background: tone.background,
+                            boxShadow: `0 0 14px ${tone.glow}`,
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -12313,10 +12333,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     );
   };
 
+  const isCollectionProfileDetail = surface === 'detail'
+    && detailReturnSurface === 'wardrobe'
+    && Boolean(selectedCollectionItem);
+
   const chromeTitle = surface === 'search'
     ? 'Add fragrance'
     : surface === 'detail'
-      ? 'Add fragrance'
+      ? (isCollectionProfileDetail ? 'Fragrance Profile' : 'Add fragrance')
       : surface === 'confirmation'
         ? ''
         : wardrobeCards.length > 0
@@ -12366,6 +12390,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 const OdaraCollectionPage: React.FC<{
   onClose: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
+  onOpenScentIntel?: (input: ScentIntelInput) => void;
   onCapturePreferenceMoment?: (payload: {
     preference_state: PersistedPreferenceMomentState;
     source: string;
@@ -12388,7 +12413,7 @@ const OdaraCollectionPage: React.FC<{
   isGuestMode: boolean;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
-}> = ({ onClose, onOpenFragranceDetail, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
+}> = ({ onClose, onOpenFragranceDetail, onOpenScentIntel, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
   if (isGuestMode) {
     return (
       <OdaraLegacyCollectionPage
@@ -12403,6 +12428,7 @@ const OdaraCollectionPage: React.FC<{
   return (
     <OdaraSignedInWardrobeOnboardingPage
       onClose={onClose}
+      onOpenScentIntel={onOpenScentIntel}
       userId={userId}
       selectedContext={selectedContext}
       entryPreset={entryPreset}
@@ -12418,6 +12444,7 @@ const OdaraMenuDestination: React.FC<{
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
   onSearch?: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
+  onOpenScentIntel?: (input: ScentIntelInput) => void;
   onCapturePreferenceMoment?: (payload: {
     preference_state: PersistedPreferenceMomentState;
     source: string;
@@ -12440,7 +12467,7 @@ const OdaraMenuDestination: React.FC<{
   isGuestMode: boolean;
   selectedContext: string;
   collectionPreset?: OdaraCollectionEntryPreset;
-}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
+}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, onOpenScentIntel, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
@@ -12458,6 +12485,7 @@ const OdaraMenuDestination: React.FC<{
       <OdaraCollectionPage
         onClose={onClose}
         onOpenFragranceDetail={onOpenFragranceDetail}
+        onOpenScentIntel={onOpenScentIntel}
         onCapturePreferenceMoment={onCapturePreferenceMoment}
         userId={userId}
         isGuestMode={isGuestMode}
@@ -17999,6 +18027,7 @@ const OdaraScreen = ({
             setSearchOpen(true);
           }}
           onOpenFragranceDetail={openFragranceDetailSheet}
+          onOpenScentIntel={openScentIntelSheet}
           userId={userId}
           isGuestMode={isGuestMode}
           selectedContext={selectedContext}
