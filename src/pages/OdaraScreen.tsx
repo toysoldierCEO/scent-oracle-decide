@@ -18599,14 +18599,10 @@ const OdaraScreen = ({
                 {getDateLabel(selectedDate)}
               </span>
 
-              {/* Right: fixed lock anchor with an independent under-lock back control.
-                  The lock never participates in the back button's layout flow. */}
+              {/* Right: preserve the row balance and keep the back control in its
+                  existing slot without showing a lock icon on the card. */}
               {(() => {
-                // Action rail consumes the normalized cardController state —
-                // single source of truth for both signed-in and guest.
                 const showBack = actionRailState.showBack;
-                const lockActive = actionRailState.locked;
-                const lockColor = lockActive ? '#22c55e' : 'currentColor';
 
                 return (
                 <div
@@ -18614,100 +18610,7 @@ const OdaraScreen = ({
                   data-action-stack
                   style={{ height: '32px' }}
                 >
-                {/* Lock button — interactive for both signed-in and guest.
-                    Guest writes only to local guestLocked boolean (no Supabase). */}
-                <button
-                  type="button"
-                  aria-label={lockActive ? 'Unlock card' : 'Lock card'}
-                  onClick={() => cardController.actions.toggleLock()}
-                  className="relative flex items-center justify-center w-8 h-8 touch-manipulation text-foreground/70"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                >
-                  <svg
-                    width="17" height="17" viewBox="0 0 24 24" fill="none"
-                    stroke={lockColor} strokeWidth="1.5"
-                    className={`transition-colors duration-300 relative z-[1]${
-                      lockPulseType === 'lock'
-                        ? ' lock-tick-strong'
-                        : lockPulseType === 'unlock'
-                          ? ' lock-tick-light'
-                          : ''
-                    }`}
-                    style={lockPulse ? { filter: `drop-shadow(0 0 6px ${lockColor})` } : undefined}
-                  >
-                    {lockActive ? (
-                      <>
-                        <rect x="3" y="11" width="18" height="11" rx="2" />
-                        <path d="M7 11V7a5 5 0 0110 0v4" />
-                      </>
-                    ) : (
-                      <>
-                        <rect x="3" y="11" width="18" height="11" rx="2" />
-                        <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                      </>
-                    )}
-                  </svg>
-
-                  {/* GREEN Tron lock-engagement animation (signed-in OR guest local) */}
-                  {(lockFlash || guestLockFlash) && (
-                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
-                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
-                        style={{
-                          width: '130%',
-                          background: 'linear-gradient(90deg, transparent 0%, #22c55e 30%, #4ade80 50%, #22c55e 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #22c55e, 0 0 12px #22c55e88',
-                          animation: 'tronTraceH 0.5s ease-out forwards',
-                        }}
-                      />
-                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
-                        style={{
-                          height: '130%',
-                          background: 'linear-gradient(180deg, transparent 0%, #22c55e 30%, #4ade80 50%, #22c55e 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #22c55e, 0 0 12px #22c55e88',
-                          animation: 'tronTraceV 0.5s ease-out forwards',
-                          animationDelay: '0.08s',
-                        }}
-                      />
-                      <span className="absolute inset-0 rounded-full"
-                        style={{
-                          background: 'radial-gradient(circle, rgba(34,197,94,0.4) 0%, transparent 70%)',
-                          animation: 'tronBurst 0.6s ease-out forwards',
-                        }}
-                      />
-                    </span>
-                  )}
-
-                  {/* YELLOW Tron unlock animation (signed-in OR guest local) */}
-                  {(unlockFlash || guestUnlockFlash) && (
-                    <span className="absolute inset-[-6px] pointer-events-none z-[2]" style={{ overflow: 'visible' }}>
-                      <span className="absolute top-1/2 left-[-4px] h-[2px] rounded-full"
-                        style={{
-                          width: '130%',
-                          background: 'linear-gradient(90deg, transparent 0%, #eab308 30%, #facc15 50%, #eab308 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #eab308, 0 0 12px #eab30888',
-                          animation: 'tronTraceH 0.5s ease-out forwards',
-                        }}
-                      />
-                      <span className="absolute left-1/2 top-[-4px] w-[2px] rounded-full"
-                        style={{
-                          height: '130%',
-                          background: 'linear-gradient(180deg, transparent 0%, #eab308 30%, #facc15 50%, #eab308 70%, transparent 100%)',
-                          boxShadow: '0 0 6px #eab308, 0 0 12px #eab30888',
-                          animation: 'tronTraceV 0.5s ease-out forwards',
-                          animationDelay: '0.08s',
-                        }}
-                      />
-                      <span className="absolute inset-0 rounded-full"
-                        style={{
-                          background: 'radial-gradient(circle, rgba(234,179,8,0.4) 0%, transparent 70%)',
-                          animation: 'tronBurst 0.6s ease-out forwards',
-                        }}
-                      />
-                    </span>
-                  )}
-                </button>
-                {/* Back arrow — detail-state first, then history fallback.
-                    Sits beneath the fixed lock icon without moving it. */}
+                {/* Back arrow — detail-state first, then history fallback. */}
                 {showBack && (
                   <button
                     type="button"
@@ -19273,7 +19176,7 @@ const OdaraScreen = ({
                     }}
                   >
                     <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
-                      fd.isSelected ? 'text-foreground font-semibold' : fd.isToday ? 'text-foreground/62' : 'text-muted-foreground/42'
+                      fd.isSelected ? 'text-foreground font-semibold' : 'text-muted-foreground/42'
                     }`}>
                       {fd.label}
                     </span>
@@ -19309,7 +19212,7 @@ const OdaraScreen = ({
                       <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} selected={fd.isSelected} />
                     </div>
                     <span className={`mt-2 text-[15px] leading-none transition-colors ${
-                      fd.isSelected ? 'font-medium text-foreground' : fd.isToday ? 'text-foreground/62' : 'text-muted-foreground/34'
+                      fd.isSelected ? 'font-medium text-foreground' : 'text-muted-foreground/34'
                     }`}>
                       {fd.day}
                     </span>
