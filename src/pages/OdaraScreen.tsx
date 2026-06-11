@@ -18083,8 +18083,11 @@ const OdaraScreen = ({
               Card / state remain untouched underneath. */}
           <div
             ref={searchBarRef}
-            className="flex items-center justify-end overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
-            style={{ width: searchOpen ? 'calc(100% - 56px)' : '40px' }}
+            className="flex items-center justify-end overflow-hidden transition-[width] duration-300"
+            style={{
+              width: searchOpen ? 'calc(100% - 56px)' : '40px',
+              transitionTimingFunction: 'cubic-bezier(0.2,0,0,1)',
+            }}
           >
             {!searchOpen ? (
               <button
