@@ -12,6 +12,7 @@ const CANONICAL_SCENT_INTEL_DISPLAY_LABELS: Record<string, string> = {
   incense: 'Incense',
   myrrh: 'Myrrh',
   resins: 'Resins',
+  'white-musk': 'White Musk',
 };
 
 const AMBER_RESIN_INCENSE_COMPOSITES = new Set([
@@ -115,10 +116,20 @@ export function resolveCanonicalScentIntelSlug(value: string | null | undefined)
     case 'spice':
     case 'spicy':
       return 'spicy';
-    case 'musk-clean':
-    case 'clean-musk':
     case 'white-musk':
+    case 'white-musks':
+    case 'white-musk-accord':
+    case 'white-musk-notes':
+    case 'clean-musk':
+    case 'clean-musks':
+    case 'clean-musk-accord':
+    case 'clean-musk-notes':
+    case 'musk-clean':
     case 'musk-clean-note':
+    case 'musk-clean-notes':
+      return 'white-musk';
+    case 'musk':
+    case 'musks':
       return 'musk';
     case 'green-notes':
     case 'green-note':

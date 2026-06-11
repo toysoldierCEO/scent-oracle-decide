@@ -6043,6 +6043,7 @@ function getCanonicalOdaraTermFamilyKey(
       return 'fresh-aquatic';
     case 'powdery':
     case 'musk':
+    case 'white-musk':
     case 'aldehydic':
     case 'iris':
     case 'orris':
@@ -8340,6 +8341,7 @@ function getScentIntelTintKeyOverride(value: string | null | undefined): string 
       return 'fresh-aquatic';
     case 'musk':
     case 'powdery':
+    case 'white-musk':
     case 'clean-musk':
     case 'musk-clean':
       return 'floral-musk';
