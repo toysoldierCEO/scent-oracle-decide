@@ -2262,8 +2262,6 @@ function areSameMoonMarkerState(
   );
 }
 
-const ODARA_DAY_TRACK_TICKS = Array.from({ length: 8 }, (_, index) => index);
-
 function getOdaraLunarPhaseForDate(dateStr: string) {
   const parsed = new Date(`${dateStr}T12:00:00`);
   const d = isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -12780,9 +12778,8 @@ const OdaraScreen = ({
     const strip = navigationStripRef.current;
     if (!strip || typeof ResizeObserver === 'undefined') return;
 
-    const gapPx = 4;
     const compute = () => {
-      const nextWidth = (strip.clientWidth - gapPx * 6) / 7;
+      const nextWidth = strip.clientWidth / 7;
       if (!Number.isFinite(nextWidth) || nextWidth <= 0) return;
       setNavigationDayCellWidth((current) => (
         current !== null && Math.abs(current - nextWidth) < 0.25
@@ -12804,7 +12801,7 @@ const OdaraScreen = ({
   const [moonMarker, setMoonMarker] = useState<{
     left: number;          // px, container-relative center of marker
     topY: number;          // px, vertical center aligned with indicator slot
-    weekNotches: number[]; // px positions for full-week subtle indicator notches
+    weekNotches: number[]; // px positions for one noon notch per visible day
     moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
@@ -12866,7 +12863,7 @@ const OdaraScreen = ({
       const indicatorCenterY = todayIndicatorRect
         ? (todayIndicatorRect.top + todayIndicatorRect.height / 2 - cRect.top)
         : (aRect.top + 26 - cRect.top);
-      // Full-week notches: a small tick at every indicator slot center.
+      // One noon notch per visible day, centered on the same slot as the moon.
       const weekNotches: number[] = [];
       for (let i = 0; i < navigationDays.length; i++) {
         const indicator = navigationDayIndicatorRefs.current[i];
@@ -19228,8 +19225,14 @@ const OdaraScreen = ({
         >
           <div
             ref={navigationStripRef}
-            className="hide-horizontal-scrollbar overflow-x-auto px-1 pb-0.5"
-            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+            className="hide-horizontal-scrollbar snap-x snap-mandatory overflow-x-auto pb-0.5"
+            style={{
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x',
+              scrollSnapType: 'x mandatory',
+            }}
           >
             <div
               ref={navigationContentRef}
@@ -19270,9 +19273,24 @@ const OdaraScreen = ({
                   top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
                   left: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
                   right: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
-                  background: 'linear-gradient(90deg, rgba(120,185,255,0.10), rgba(143,211,255,0.44) 42%, rgba(143,211,255,0.44) 58%, rgba(120,185,255,0.10))',
+                  background: 'linear-gradient(90deg, rgba(120,185,255,0.06), rgba(143,211,255,0.24) 42%, rgba(143,211,255,0.24) 58%, rgba(120,185,255,0.06))',
+                  boxShadow: '0 0 6px rgba(143,211,255,0.08)',
                 }}
               />
+              {orbGeom?.weekNotches.map((notchLeft, index) => (
+                <span
+                  key={`forecast-noon-notch-${navigationDays[index]?.dateStr ?? index}`}
+                  aria-hidden
+                  className="pointer-events-none absolute z-[1] w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: `${notchLeft}px`,
+                    top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
+                    height: '9px',
+                    background: 'linear-gradient(180deg, rgba(143,211,255,0), rgba(166,223,255,0.48), rgba(143,211,255,0))',
+                    boxShadow: '0 0 4px rgba(143,211,255,0.12)',
+                  }}
+                />
+              ))}
 
               {navigationDays.map((fd, i) => {
                 const lockedLane = isGuestMode
@@ -19285,36 +19303,21 @@ const OdaraScreen = ({
                     onClick={() => {
                       selectNavigationDay(fd.dateStr);
                     }}
-                    className="relative flex min-w-[44px] flex-none flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
+                    className="relative flex min-w-[44px] flex-none snap-start flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
                     style={{
                       width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      scrollSnapAlign: 'start',
                       zIndex: 2,
                     }}
                   >
                     <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
-                      fd.isSelected ? 'text-foreground font-semibold' : 'text-foreground/70'
+                      fd.isSelected ? 'text-foreground font-semibold' : 'text-foreground/52'
                     }`}>
                       {fd.label}
                     </span>
                     <div className="relative mt-3 h-[24px] w-full">
-                      {ODARA_DAY_TRACK_TICKS.map((tickIndex) => {
-                        const isNoonTick = tickIndex === 4;
-                        return (
-                          <span
-                            key={tickIndex}
-                            aria-hidden
-                            className="absolute top-1/2 w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
-                            style={{
-                              left: `${(tickIndex / 7) * 100}%`,
-                              height: isNoonTick ? '11px' : '5px',
-                              background: isNoonTick ? 'rgba(167,224,255,0.84)' : 'rgba(143,211,255,0.34)',
-                              boxShadow: isNoonTick ? '0 0 6px rgba(143,211,255,0.26)' : undefined,
-                            }}
-                          />
-                        );
-                      })}
                       <span
                         ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
                         aria-hidden
@@ -19323,7 +19326,7 @@ const OdaraScreen = ({
                       <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} />
                     </div>
                     <span className={`mt-2 text-[15px] leading-none transition-colors ${
-                      fd.isSelected ? 'font-medium text-foreground' : 'text-foreground/70'
+                      fd.isSelected ? 'font-medium text-foreground' : 'text-foreground/52'
                     }`}>
                       {fd.day}
                     </span>
