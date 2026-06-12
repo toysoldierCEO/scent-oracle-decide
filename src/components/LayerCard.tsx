@@ -596,6 +596,57 @@ const ROLE_PREVENTS: Record<string, string> = {
   musk: 'feeling harsh',
 };
 
+const THIN_EXPLANATION_PATTERNS = [
+  /\bstrong fit for (the )?current context\b/i,
+  /\bgood fit for (the )?current context\b/i,
+  /\bsolid fit for (the )?current context\b/i,
+  /\bworks (well )?for (the )?current context\b/i,
+  /\bfits (the )?current context\b/i,
+  /\bselected layer for this card\b/i,
+  /\badded from search for this card\b/i,
+];
+
+const EXPLANATION_DETAIL_SIGNAL_PATTERN = /\b(amber|bergamot|cardamom|cedar|citrus|coffee|floral|iris|jasmine|lavender|leather|marine|musk|neroli|oud|patchouli|pepper|powder|resin|rose|saffron|sandalwood|smoke|spice|spicy|tonka|vanilla|vetiver|violet|woody)\b/i;
+
+function isThinExplanation(value: string | null | undefined) {
+  const normalized = readTrimmedDisplayText(value)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return true;
+  if (THIN_EXPLANATION_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  if (/\b(layer|hero|main scent|recipe)\b/.test(normalized) && !EXPLANATION_DETAIL_SIGNAL_PATTERN.test(normalized)) {
+    return true;
+  }
+
+  return normalized.length < 52
+    && !/[,:;]/.test(normalized)
+    && !EXPLANATION_DETAIL_SIGNAL_PATTERN.test(normalized);
+}
+
+function buildExplanationNotePool(source: {
+  topNotes?: string[] | null | undefined;
+  middleNotes?: string[] | null | undefined;
+  baseNotes?: string[] | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+}) {
+  const top = normalizeNotes((source.topNotes ?? []).map((value) => `${value}`.trim()).filter(Boolean), 2);
+  const middle = normalizeNotes((source.middleNotes ?? []).map((value) => `${value}`.trim()).filter(Boolean), 2);
+  const base = normalizeNotes((source.baseNotes ?? []).map((value) => `${value}`.trim()).filter(Boolean), 2);
+  if (top.length > 0 || middle.length > 0 || base.length > 0) {
+    return [...top, ...middle, ...base];
+  }
+
+  const flatNotes = normalizeNotes((source.notes ?? []).map((value) => `${value}`.trim()).filter(Boolean), 6);
+  if (flatNotes.length > 0) {
+    return flatNotes;
+  }
+
+  return normalizeNotes((source.accords ?? []).map((value) => `${value}`.trim()).filter(Boolean), 4);
+}
+
 function buildWhyItWorks(
   mood: LayerMood,
   baseName: string,
@@ -682,6 +733,9 @@ interface LayerCardProps {
   mainName: string;
   mainBrand: string | null;
   mainNotes: string[] | null;
+  mainTopNotes?: string[] | null;
+  mainMiddleNotes?: string[] | null;
+  mainBaseNotes?: string[] | null;
   mainFamily: string | null;
   mainProjection: number | null;
   mainSprayCount?: number | null;
@@ -733,6 +787,9 @@ const LayerCard = ({
   mainName,
   mainBrand,
   mainNotes,
+  mainTopNotes = null,
+  mainMiddleNotes = null,
+  mainBaseNotes = null,
   mainFamily,
   mainProjection,
   mainSprayCount = null,
@@ -828,9 +885,32 @@ const LayerCard = ({
   const safeWhyFallback = activeModeEntry
     ? `Use ${getDisplayName(activeModeEntry.name, activeModeEntry.brand)} as the selected layer for this card.`
     : '';
-  const whyText = sameDnaPair && sanitizedWhyText
+  const generatedWhyText = activeModeEntry
+    ? buildWhyItWorks(
+        selectedMood,
+        mainName,
+        activeModeEntry.name,
+        buildExplanationNotePool({
+          topNotes: mainTopNotes,
+          middleNotes: mainMiddleNotes,
+          baseNotes: mainBaseNotes,
+          notes: mainNotes,
+        }),
+        buildExplanationNotePool({
+          topNotes: activeModeEntry.top_notes,
+          middleNotes: activeModeEntry.middle_notes,
+          baseNotes: activeModeEntry.base_notes,
+          notes: activeModeEntry.notes,
+          accords: activeModeEntry.accords,
+        }),
+        interactionType,
+      )
+    : '';
+  const whyText = sameDnaPair
     ? 'A same-DNA intensifier — this pairing deepens the original profile instead of acting like a contrasting support layer.'
-    : (sanitizedWhyText || (rawWhyText ? safeWhyFallback : ''));
+    : (!isThinExplanation(sanitizedWhyText)
+      ? sanitizedWhyText
+      : (generatedWhyText || safeWhyFallback));
   const placementText = activeModeEntry?.placement_hint?.trim() || '';
   const ratioText = activeModeEntry?.ratio_hint?.trim() || '';
   const sanitizedPlacementText = sanitizeLayerDetailCopy(

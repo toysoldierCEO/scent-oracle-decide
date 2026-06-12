@@ -2020,6 +2020,7 @@ function resolveDisplayCardWithDetails(
     return {
       ...card,
       image_url: card.image_url ?? null,
+      reason: resolveHydratedHeroReason(card, null),
       notes: cardNotes,
       accords: cardAccords,
     };
@@ -2036,6 +2037,7 @@ function resolveDisplayCardWithDetails(
     brand: card.brand || detail.brand || '',
     family: card.family || detail.family_key || '',
     image_url: card.image_url ?? detail.image_url ?? null,
+    reason: resolveHydratedHeroReason(card, detail),
     notes: preferredRail.notes,
     accords: preferredRail.accords,
   };
@@ -2053,6 +2055,7 @@ function resolveQueuedHeroDisplayWithDetails(
     return {
       ...card,
       image_url: card.image_url ?? null,
+      reason: resolveHydratedHeroReason(card, null),
       notes: previewNotes,
       accords: previewAccords,
     };
@@ -2069,6 +2072,7 @@ function resolveQueuedHeroDisplayWithDetails(
     brand: card.brand || detail.brand || '',
     family: detail.family_key || card.family || '',
     image_url: card.image_url ?? detail.image_url ?? null,
+    reason: resolveHydratedHeroReason(card, detail),
     notes: useDetailRail ? detailNotes : previewNotes,
     accords: useDetailRail ? detailAccords : previewAccords,
   };
@@ -2482,6 +2486,9 @@ function resolveLayerModeWithDetails(
       image_url: layer.image_url ?? null,
       notes: layerNotes,
       accords: layerAccords,
+      top_notes: layer.top_notes ?? null,
+      middle_notes: layer.middle_notes ?? null,
+      base_notes: layer.base_notes ?? null,
     };
   }
   const preferredRail = pickPreferredRailSource(
@@ -2498,6 +2505,9 @@ function resolveLayerModeWithDetails(
     image_url: layer.image_url ?? detail.image_url ?? null,
     notes: preferredRail.notes,
     accords: preferredRail.accords,
+    top_notes: sanitizeTokenSource(detail.top_notes),
+    middle_notes: sanitizeTokenSource(detail.middle_notes),
+    base_notes: sanitizeTokenSource(detail.base_notes),
   };
 }
 
@@ -5152,6 +5162,126 @@ function toSentenceCase(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+const THIN_EXPLANATION_PATTERNS = [
+  /\bstrong fit for (the )?current context\b/i,
+  /\bgood fit for (the )?current context\b/i,
+  /\bsolid fit for (the )?current context\b/i,
+  /\bworks (well )?for (the )?current context\b/i,
+  /\bfits (the )?current context\b/i,
+  /\bselected layer for this card\b/i,
+  /\badded from search for this card\b/i,
+];
+
+const EXPLANATION_DETAIL_SIGNAL_PATTERN = /\b(amber|bergamot|cardamom|cedar|citrus|coffee|floral|iris|jasmine|lavender|leather|marine|musk|neroli|oud|patchouli|pepper|powder|resin|rose|saffron|sandalwood|smoke|spice|spicy|tonka|vanilla|vetiver|violet|woody)\b/i;
+
+function isThinExplanation(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value)
+    ?.toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim() ?? '';
+
+  if (!normalized) return true;
+  if (THIN_EXPLANATION_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  if (/\b(layer|hero|main scent|recipe)\b/.test(normalized) && !EXPLANATION_DETAIL_SIGNAL_PATTERN.test(normalized)) {
+    return true;
+  }
+
+  return normalized.length < 52
+    && !/[,:;]/.test(normalized)
+    && !EXPLANATION_DETAIL_SIGNAL_PATTERN.test(normalized);
+}
+
+function buildExplanationFinishDescriptor(source: {
+  family_key?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  base_notes?: string[] | null | undefined;
+}) {
+  const joined = [
+    ...sanitizeTokenSource(source.base_notes),
+    ...sanitizeTokenSource(source.notes),
+    ...sanitizeTokenSource(source.accords),
+    readTrimmedLayerText(source.family_key),
+  ].join(' ').toLowerCase();
+
+  if (/(vanilla|tonka|amber|benzoin|sweet|kulfi|praline|caramel)/.test(joined)) {
+    return 'warm and polished';
+  }
+  if (/(oud|sandalwood|cedar|vetiver|patchouli|wood|guaiac)/.test(joined)) {
+    return 'dark, dry, and grounded';
+  }
+  if (/(musk|powder|iris|violet|lavender|orris)/.test(joined)) {
+    return 'soft and composed';
+  }
+  if (/(leather|smoke|incense|resin|labdanum|birch)/.test(joined)) {
+    return 'dark and textured';
+  }
+  if (/(bergamot|citrus|marine|aquatic|ozonic|sage|mint|fresh)/.test(joined)) {
+    return 'clean and lifted';
+  }
+  return 'smooth and composed';
+}
+
+function buildHydratedHeroExplanation(source: {
+  family_key?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  accords?: string[] | null | undefined;
+  top_notes?: string[] | null | undefined;
+  middle_notes?: string[] | null | undefined;
+  base_notes?: string[] | null | undefined;
+}) {
+  const top = normalizeNotes(sanitizeTokenSource(source.top_notes), 2);
+  const middle = normalizeNotes(sanitizeTokenSource(source.middle_notes), 2);
+  const base = normalizeNotes(sanitizeTokenSource(source.base_notes), 2);
+  const finish = buildExplanationFinishDescriptor(source);
+
+  if (top.length > 0 || middle.length > 0 || base.length > 0) {
+    const structuredPhrases = [
+      top.length > 0 ? `${joinFragrancePhrases(top)} up top` : null,
+      middle.length > 0 ? `${joinFragrancePhrases(middle)} through the middle` : null,
+      base.length > 0 ? `${joinFragrancePhrases(base)} in the base` : null,
+    ].filter(Boolean) as string[];
+
+    if (structuredPhrases.length > 0) {
+      return `${toSentenceCase(`Built around ${joinFragrancePhrases(structuredPhrases)}, it keeps the profile ${finish}`)}.`;
+    }
+  }
+
+  const flatNotes = normalizeNotes(sanitizeTokenSource(source.notes), 4);
+  if (flatNotes.length >= 4) {
+    return `${toSentenceCase(`${joinFragrancePhrases(flatNotes.slice(0, 2))} pair with ${joinFragrancePhrases(flatNotes.slice(2, 4))}, keeping it ${finish}`)}.`;
+  }
+  if (flatNotes.length >= 2) {
+    return `${toSentenceCase(`${joinFragrancePhrases(flatNotes.slice(0, 2))} keep it ${finish}`)}.`;
+  }
+
+  const highlights = buildFragranceDescriptionHighlights(source);
+  if (highlights.length >= 2) {
+    return `${toSentenceCase(`${joinFragrancePhrases(highlights.slice(0, 2))} keep it ${finish}`)}.`;
+  }
+
+  return null;
+}
+
+function resolveHydratedHeroReason(
+  card: DisplayCard,
+  detail: FragranceDetail | null | undefined,
+) {
+  const currentReason = readTrimmedLayerText(card.reason);
+  if (!isThinExplanation(currentReason)) return currentReason;
+
+  const fallback = buildHydratedHeroExplanation({
+    family_key: detail?.family_key ?? card.family,
+    notes: (detail?.notes?.length ?? 0) > 0 ? detail?.notes : card.notes,
+    accords: (detail?.accords?.length ?? 0) > 0 ? detail?.accords : card.accords,
+    top_notes: detail?.top_notes,
+    middle_notes: detail?.middle_notes,
+    base_notes: detail?.base_notes,
+  });
+
+  return fallback ?? currentReason;
 }
 
 function buildFragranceDescriptionHighlights(source: {
@@ -18894,6 +19024,9 @@ const OdaraScreen = ({
                   mainName={visibleResolvedCurrentCard?.name ?? ''}
                   mainBrand={visibleResolvedCurrentCard?.brand ?? null}
                   mainNotes={visibleResolvedCurrentCard?.notes ?? []}
+                  mainTopNotes={visibleHeroDetail?.top_notes ?? null}
+                  mainMiddleNotes={visibleHeroDetail?.middle_notes ?? null}
+                  mainBaseNotes={visibleHeroDetail?.base_notes ?? null}
                   mainFamily={visibleResolvedCurrentCard?.family ?? null}
                   mainProjection={isGuestMode
                     ? (typeof visibleGuestRender?.activeHero?.projection === 'number' ? visibleGuestRender.activeHero.projection : null)

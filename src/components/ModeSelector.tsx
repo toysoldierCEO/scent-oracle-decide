@@ -32,6 +32,9 @@ export interface LayerModeEntry {
   image_url?: string | null;
   notes: string[] | null;
   accords: string[] | null;
+  top_notes?: string[] | null;
+  middle_notes?: string[] | null;
+  base_notes?: string[] | null;
   interactionType: InteractionType;
   reason: string;
   why_it_works: string;
