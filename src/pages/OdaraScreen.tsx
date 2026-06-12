@@ -810,6 +810,13 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const CONTEXTS = ["daily", "work", "hangout", "date"] as const;
+const VESPER_WORDMARK_LETTERS = ['V', 'E', 'S', 'P', 'E', 'R'] as const;
+const FORECAST_RAIL_TRACK_TOP_PX = 38;
+
+function formatOccasionLabel(value: string) {
+  if (!value) return 'Daily';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 const ODARA_MENU_ITEMS = [
   { label: 'My Collection', guestRestricted: true },
@@ -2270,7 +2277,7 @@ function getOdaraLunarPhaseForDate(dateStr: string) {
   };
 }
 
-const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; selected?: boolean }> = ({ dateStr, selected = false }) => {
+const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string }> = ({ dateStr }) => {
   const { lit, waxing } = getOdaraLunarPhaseForDate(dateStr);
   const D = 13;
   const C = D / 2;
@@ -2280,8 +2287,6 @@ const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; selected?: boolean }> =
   const ellipseAdds = lit >= 0.5;
   const safeId = dateStr.replace(/[^a-zA-Z0-9_-]/g, '');
   const maskId = `odara-day-moon-${safeId}-${waxing ? 'wx' : 'wn'}-${ellipseAdds ? 'g' : 'c'}`;
-  const moonOpacity = selected ? 0.86 : 0.62;
-
   return (
     <svg
       aria-hidden
@@ -2290,10 +2295,8 @@ const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; selected?: boolean }> =
       viewBox={`0 0 ${D} ${D}`}
       className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
       style={{
-        opacity: moonOpacity,
-        filter: selected
-          ? 'drop-shadow(0 0 5px rgba(246,242,232,0.28))'
-          : 'drop-shadow(0 0 3px rgba(246,242,232,0.16))',
+        opacity: 0.7,
+        filter: 'drop-shadow(0 0 3px rgba(246,242,232,0.16))',
       }}
     >
       <defs>
@@ -12639,6 +12642,7 @@ const OdaraScreen = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPage, setMenuPage] = useState<OdaraMenuPage | null>(null);
   const [collectionPreset, setCollectionPreset] = useState<OdaraCollectionEntryPreset>('all');
+  const [occasionSelectorOpen, setOccasionSelectorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
@@ -12694,6 +12698,7 @@ const OdaraScreen = ({
   const navigationDayIndicatorRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const navigationStripRef = useRef<HTMLDivElement | null>(null);
   const navigationContentRef = useRef<HTMLDivElement | null>(null);
+  const occasionSelectorRef = useRef<HTMLDivElement | null>(null);
   const searchBarRef = useRef<HTMLDivElement | null>(null);
   const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const searchRpcAvailableRef = useRef<boolean | null>(null);
@@ -12713,6 +12718,10 @@ const OdaraScreen = ({
       setSearchQuery('');
     }
   }, []);
+  const normalizedSelectedContextKey = useMemo(
+    () => normalizePersistedContextKey(selectedContext),
+    [selectedContext],
+  );
   const selectNavigationDay = useCallback((dateStr: string | null | undefined) => {
     if (!dateStr || dateStr === selectedDate) return false;
     onDateChange(dateStr);
@@ -12741,6 +12750,32 @@ const OdaraScreen = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [closeSearchSurface, searchOpen]);
+  useEffect(() => {
+    if (!occasionSelectorOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (occasionSelectorRef.current?.contains(target)) return;
+      setOccasionSelectorOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOccasionSelectorOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [occasionSelectorOpen]);
+  useEffect(() => {
+    if (!searchOpen && !menuOpen) return;
+    setOccasionSelectorOpen(false);
+  }, [menuOpen, searchOpen]);
   useEffect(() => {
     const strip = navigationStripRef.current;
     if (!strip || typeof ResizeObserver === 'undefined') return;
@@ -18147,14 +18182,104 @@ const OdaraScreen = ({
             </svg>
           </button>
 
-          {/* Centered ODARA wordmark — hidden when search is expanded so the
-              expanding field has room without colliding with the title. */}
+          {/* Centered VESPER wordmark with the occasion selector hidden in the
+              small dot beneath the V. Hidden when search expands. */}
           {!searchOpen && (
             <div
-              className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-center text-[13px] font-semibold uppercase tracking-[0.42em] text-foreground/90"
-              style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+              ref={occasionSelectorRef}
+              className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
             >
-              VESPER
+              <div
+                className="relative inline-flex items-start justify-center text-[13px] font-semibold uppercase text-foreground/90"
+                style={{
+                  fontFamily: "'Geist Sans', system-ui, sans-serif",
+                  letterSpacing: '0.42em',
+                }}
+              >
+                {VESPER_WORDMARK_LETTERS.map((letter, index) => (
+                  <span
+                    key={`${letter}-${index}`}
+                    className="pointer-events-none"
+                    style={{ marginRight: index === VESPER_WORDMARK_LETTERS.length - 1 ? 0 : '0.42em' }}
+                  >
+                    {letter}
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  aria-label={`Select occasion: ${formatOccasionLabel(selectedContext)}`}
+                  aria-haspopup="menu"
+                  aria-expanded={occasionSelectorOpen}
+                  onClick={() => {
+                    closeSearchSurface();
+                    setMenuOpen(false);
+                    setOccasionSelectorOpen((current) => !current);
+                  }}
+                  className="absolute top-full flex h-5 w-5 -translate-x-1/2 items-center justify-center"
+                  style={{
+                    left: '0.34em',
+                    marginTop: '1px',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="relative block h-[6px] w-[6px] rounded-full bg-white"
+                    style={{
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.08), 0 1px 4px rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      className="absolute left-1/2 top-1/2 h-[2px] w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
+                    />
+                  </span>
+                </button>
+                {occasionSelectorOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-1/2 top-full mt-6 min-w-[128px] -translate-x-1/2 overflow-hidden rounded-[16px] border border-white/10 px-1.5 py-1.5"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(18,20,26,0.74) 0%, rgba(10,12,16,0.66) 100%)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 38px rgba(0,0,0,0.26)',
+                      backdropFilter: 'blur(24px)',
+                      WebkitBackdropFilter: 'blur(24px)',
+                    }}
+                  >
+                    {CONTEXTS.map((ctx) => {
+                      const active = selectedContext === ctx;
+                      return (
+                        <button
+                          key={ctx}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => {
+                            onContextChange(ctx);
+                            setOccasionSelectorOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                            active
+                              ? 'text-foreground'
+                              : 'text-foreground/55 hover:text-foreground/84'
+                          }`}
+                          style={{
+                            background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
+                            WebkitTapHighlightColor: 'transparent',
+                          }}
+                        >
+                          <span>{formatOccasionLabel(ctx)}</span>
+                          <span
+                            aria-hidden
+                            className="h-[5px] w-[5px] rounded-full"
+                            style={{ background: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.16)' }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -18389,23 +18514,6 @@ const OdaraScreen = ({
             )}
           </div>
         )}
-
-        {/* Context chips — centered under the top bar */}
-        <div className="flex gap-1.5 mb-3 justify-center">
-          {CONTEXTS.map(ctx => (
-            <button
-              key={ctx}
-              onClick={() => onContextChange(ctx)}
-              className={`text-[11px] uppercase tracking-[0.1em] px-3.5 py-1.5 rounded-full transition-all duration-200 ${
-                selectedContext === ctx
-                  ? 'bg-foreground/10 text-foreground border border-foreground/20'
-                  : 'text-muted-foreground/50 hover:text-foreground/70 border border-transparent'
-              }`}
-            >
-              {ctx}
-            </button>
-          ))}
-        </div>
 
         {/* Loading / Error */}
         {oracleLoading && (
@@ -19135,8 +19243,8 @@ const OdaraScreen = ({
                     left: `${orbGeom.left}px`,
                     top: `${orbGeom.topY}px`,
                     transform: 'translate(-50%, -50%)',
-                    width: '11px',
-                    height: '11px',
+                    width: '9px',
+                    height: '9px',
                     zIndex: 5,
                     transition: 'left 800ms ease',
                     borderRadius: '999px',
@@ -19145,17 +19253,31 @@ const OdaraScreen = ({
                   }}
                 >
                   <span
-                    className="absolute left-1/2 top-1/2 h-px w-[17px] -translate-x-1/2 -translate-y-1/2"
+                    className="absolute left-1/2 top-1/2 h-px w-[13px] -translate-x-1/2 -translate-y-1/2"
                     style={{ background: 'linear-gradient(90deg, rgba(255,191,75,0), rgba(255,211,121,0.55), rgba(255,191,75,0))' }}
                   />
                   <span
-                    className="absolute left-1/2 top-1/2 h-[17px] w-px -translate-x-1/2 -translate-y-1/2"
+                    className="absolute left-1/2 top-1/2 h-[13px] w-px -translate-x-1/2 -translate-y-1/2"
                     style={{ background: 'linear-gradient(180deg, rgba(255,191,75,0), rgba(255,211,121,0.44), rgba(255,191,75,0))' }}
                   />
                 </div>
               )}
 
+              <span
+                aria-hidden
+                className="pointer-events-none absolute z-0 h-px -translate-y-1/2"
+                style={{
+                  top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
+                  left: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
+                  right: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
+                  background: 'linear-gradient(90deg, rgba(182,132,54,0.06), rgba(217,159,68,0.32) 42%, rgba(217,159,68,0.32) 58%, rgba(182,132,54,0.06))',
+                }}
+              />
+
               {navigationDays.map((fd, i) => {
+                const lockedLane = isGuestMode
+                  ? (lockedSelections[`${fd.dateStr}:${selectedContext}`] ?? null)
+                  : (signedInLockedLaneByDate[fd.dateStr]?.[normalizedSelectedContextKey] ?? null);
                 return (
                   <button
                     key={fd.dateStr}
@@ -19168,11 +19290,7 @@ const OdaraScreen = ({
                       width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
                       maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
-                      ...(fd.isSelected ? {
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
-                        zIndex: 2,
-                      } : { zIndex: 2 }),
+                      zIndex: 2,
                     }}
                   >
                     <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
@@ -19181,13 +19299,6 @@ const OdaraScreen = ({
                       {fd.label}
                     </span>
                     <div className="relative mt-3 h-[24px] w-full">
-                      <span
-                        aria-hidden
-                        className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
-                        style={{
-                          background: 'linear-gradient(90deg, rgba(182,132,54,0.06), rgba(217,159,68,0.32) 42%, rgba(217,159,68,0.32) 58%, rgba(182,132,54,0.06))',
-                        }}
-                      />
                       {ODARA_DAY_TRACK_TICKS.map((tickIndex) => {
                         const isNoonTick = tickIndex === 4;
                         return (
@@ -19209,7 +19320,7 @@ const OdaraScreen = ({
                         aria-hidden
                         className="absolute left-1/2 top-1/2 block h-px w-px -translate-x-1/2 -translate-y-1/2 opacity-0"
                       />
-                      <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} selected={fd.isSelected} />
+                      <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} />
                     </div>
                     <span className={`mt-2 text-[15px] leading-none transition-colors ${
                       fd.isSelected ? 'font-medium text-foreground' : 'text-muted-foreground/34'
@@ -19220,7 +19331,7 @@ const OdaraScreen = ({
                       aria-hidden
                       className="mt-2 block h-[2px] w-5 rounded-full transition-opacity duration-200"
                       style={{
-                        opacity: fd.isSelected ? 1 : 0,
+                        opacity: lockedLane ? 1 : 0,
                         background: 'linear-gradient(90deg, rgba(194,93,255,0.70), rgba(211,107,255,0.98))',
                         boxShadow: '0 0 8px rgba(206,88,255,0.34)',
                       }}
