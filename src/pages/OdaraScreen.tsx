@@ -19270,7 +19270,7 @@ const OdaraScreen = ({
                   top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
                   left: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
                   right: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
-                  background: 'linear-gradient(90deg, rgba(182,132,54,0.06), rgba(217,159,68,0.32) 42%, rgba(217,159,68,0.32) 58%, rgba(182,132,54,0.06))',
+                  background: 'linear-gradient(90deg, rgba(120,185,255,0.10), rgba(143,211,255,0.44) 42%, rgba(143,211,255,0.44) 58%, rgba(120,185,255,0.10))',
                 }}
               />
 
@@ -19294,7 +19294,7 @@ const OdaraScreen = ({
                     }}
                   >
                     <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
-                      fd.isSelected ? 'text-foreground font-semibold' : 'text-muted-foreground/42'
+                      fd.isSelected ? 'text-foreground font-semibold' : 'text-foreground/70'
                     }`}>
                       {fd.label}
                     </span>
@@ -19308,9 +19308,9 @@ const OdaraScreen = ({
                             className="absolute top-1/2 w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
                             style={{
                               left: `${(tickIndex / 7) * 100}%`,
-                              height: isNoonTick ? '9px' : '5px',
-                              background: isNoonTick ? 'rgba(236,188,98,0.54)' : 'rgba(222,172,83,0.24)',
-                              boxShadow: isNoonTick ? '0 0 5px rgba(230,166,62,0.22)' : undefined,
+                              height: isNoonTick ? '11px' : '5px',
+                              background: isNoonTick ? 'rgba(167,224,255,0.84)' : 'rgba(143,211,255,0.34)',
+                              boxShadow: isNoonTick ? '0 0 6px rgba(143,211,255,0.26)' : undefined,
                             }}
                           />
                         );
@@ -19323,7 +19323,7 @@ const OdaraScreen = ({
                       <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} />
                     </div>
                     <span className={`mt-2 text-[15px] leading-none transition-colors ${
-                      fd.isSelected ? 'font-medium text-foreground' : 'text-muted-foreground/34'
+                      fd.isSelected ? 'font-medium text-foreground' : 'text-foreground/70'
                     }`}>
                       {fd.day}
                     </span>
