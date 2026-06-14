@@ -6689,6 +6689,52 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
   };
 }
 
+function buildFragranceDetailSurfaceStateFromSearchResult(result: OdaraSearchFragranceResult): OdaraFragranceDetailSurfaceState {
+  return {
+    fragrance_id: result.fragrance_id ?? null,
+    name: result.title ?? '',
+    brand: result.brand ?? null,
+    family_key: result.family_key ?? null,
+    family_label: result.family_key ? getFamilyLabelText(result.family_key) : null,
+    family_color_token: result.family_key ?? null,
+    wardrobe_role_key: null,
+    wardrobe_role_label: null,
+    role_confidence: null,
+    role_source: null,
+    release_year: null,
+    concentration: null,
+    perfumer: null,
+    short_description: null,
+    description_source: null,
+    description_generated_at: null,
+    image_url: result.image_url ?? null,
+    thumbnail_url: null,
+    image_source: null,
+    source_page_url: null,
+    image_license_status: null,
+    image_last_checked_at: null,
+    notes: sanitizeTokenSource(result.notes),
+    accords: sanitizeTokenSource(result.accords),
+    top_notes: [],
+    middle_notes: [],
+    base_notes: [],
+    why_it_fits_wardrobe: null,
+    source_confidence: null,
+    longevity_score: null,
+    projection_score: null,
+    odor_impact_score: null,
+    density_score: null,
+    transparency_score: null,
+    beast_mode_score: null,
+    retired: false,
+    collection_status: null,
+    rating: null,
+    source_label: 'Search result',
+    detail_loading: false,
+    detail_error: null,
+  };
+}
+
 function buildFragranceDetailSurfaceStateFromLayerEntry(
   entry: NonNullable<LayerModes[LayerMood]>,
   imageUrl?: string | null,
@@ -17709,6 +17755,10 @@ const OdaraScreen = ({
       visibleLayerBottleImageUrl,
     ));
   }, [openFragranceDetailSheet, visibleLayerBottleImageUrl, visibleResolvedLayer]);
+  const openSearchResultFragranceDetail = useCallback((result: OdaraSearchFragranceResult) => {
+    if (!result?.fragrance_id) return;
+    openFragranceDetailSheet(buildFragranceDetailSurfaceStateFromSearchResult(result));
+  }, [openFragranceDetailSheet]);
   const handleHeroTitlePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     heroTitlePressRef.current = {
       pointerId: event.pointerId,
@@ -18568,7 +18618,17 @@ const OdaraScreen = ({
                   return (
                     <div
                       key={`${result.source}-${result.fragrance_id}`}
-                      className="flex items-start justify-between gap-3 py-3 first:pt-1 last:pb-1"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openSearchResultFragranceDetail(result)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openSearchResultFragranceDetail(result);
+                        }
+                      }}
+                      className="flex cursor-pointer items-start justify-between gap-3 rounded-[14px] py-3 transition-colors first:pt-1 last:pb-1 hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/18"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13.5px] text-foreground/92">
@@ -18611,7 +18671,13 @@ const OdaraScreen = ({
                               : previewRole === 'layer'
                                 ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
                                 : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
-                          onClick={() => void handleAddSearchResultToSelectedDay(result)}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleAddSearchResultToSelectedDay(result);
+                          }}
                           className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-not-allowed disabled:opacity-60"
                           style={{
                             WebkitTapHighlightColor: 'transparent',
@@ -19055,8 +19121,13 @@ const OdaraScreen = ({
                         fragranceName={visibleResolvedCurrentCard?.name ?? null}
                         fragranceBrand={visibleResolvedCurrentCard?.brand ?? null}
                         position="family"
-                        className="mb-2 inline-flex bg-transparent p-0 text-left text-[12px] font-medium uppercase tracking-[0.15em]"
-                        style={{ color: visibleHeroFamilyColor }}
+                        className="mb-2 inline-flex flex-shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.12em]"
+                        style={{
+                          color: visibleHeroFamilyColor,
+                          border: `1px solid ${visibleHeroFamilyColor}36`,
+                          background: `${visibleHeroFamilyColor}10`,
+                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 12px ${visibleHeroFamilyColor}20`,
+                        }}
                       />
                     ) : null}
 
