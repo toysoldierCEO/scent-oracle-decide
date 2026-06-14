@@ -18650,12 +18650,7 @@ const OdaraScreen = ({
         )}
 
         {/* ── Weekly navigator + lane tracker ── */}
-        <div
-          className="mb-4 rounded-[18px] px-0 py-1.5"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0.004) 100%)',
-          }}
-        >
+        <div className="mb-2 px-0 py-0.5">
           <div
             ref={navigationStripRef}
             className="hide-horizontal-scrollbar snap-x snap-mandatory overflow-x-auto pb-0.5"
