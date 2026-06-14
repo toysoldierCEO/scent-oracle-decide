@@ -3,7 +3,6 @@ import type { User } from "@supabase/supabase-js";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
-import TemperatureReadout from "@/components/card-system/TemperatureReadout";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
 import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
@@ -2279,7 +2278,10 @@ function getOdaraLunarPhaseForDate(dateStr: string) {
   };
 }
 
-const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string }> = ({ dateStr }) => {
+const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; isActive?: boolean }> = ({
+  dateStr,
+  isActive = false,
+}) => {
   const { lit, waxing } = getOdaraLunarPhaseForDate(dateStr);
   const D = 13;
   const C = D / 2;
@@ -2297,8 +2299,10 @@ const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string }> = ({ dateStr }) => {
       viewBox={`0 0 ${D} ${D}`}
       className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
       style={{
-        opacity: 0.7,
-        filter: 'drop-shadow(0 0 3px rgba(246,242,232,0.16))',
+        opacity: isActive ? 0.7 : 0.4,
+        filter: isActive
+          ? 'drop-shadow(0 0 3px rgba(246,242,232,0.16))'
+          : 'drop-shadow(0 0 2px rgba(246,242,232,0.08))',
       }}
     >
       <defs>
@@ -12931,7 +12935,7 @@ const OdaraScreen = ({
   const [moonMarker, setMoonMarker] = useState<{
     left: number;          // px, container-relative center of marker
     topY: number;          // px, vertical center aligned with indicator slot
-    weekNotches: number[]; // px positions for one noon notch per visible day
+    weekNotches: number[]; // px midpoint positions between adjacent day anchors
     moonLitFrac: number;   // 0..1 illumination
     moonWaxing: boolean;
   } | null>(null);
@@ -12993,19 +12997,22 @@ const OdaraScreen = ({
       const indicatorCenterY = todayIndicatorRect
         ? (todayIndicatorRect.top + todayIndicatorRect.height / 2 - cRect.top)
         : (aRect.top + 26 - cRect.top);
-      // One noon notch per visible day, centered on the same slot as the moon.
-      const weekNotches: number[] = [];
+      const dayAnchorCenters: number[] = [];
       for (let i = 0; i < navigationDays.length; i++) {
         const indicator = navigationDayIndicatorRefs.current[i];
         if (indicator) {
           const r = indicator.getBoundingClientRect();
-          weekNotches.push(r.left + r.width / 2 - cRect.left);
+          dayAnchorCenters.push(r.left + r.width / 2 - cRect.left);
           continue;
         }
         const btn = navigationDayCellRefs.current[i];
         if (!btn) continue;
         const r = btn.getBoundingClientRect();
-        weekNotches.push(r.left + r.width / 2 - cRect.left);
+        dayAnchorCenters.push(r.left + r.width / 2 - cRect.left);
+      }
+      const weekNotches: number[] = [];
+      for (let i = 0; i < dayAnchorCenters.length - 1; i++) {
+        weekNotches.push((dayAnchorCenters[i] + dayAnchorCenters[i + 1]) / 2);
       }
       // Real lunar phase (synodic month). Reference new moon: 2000-01-06 18:14 UTC.
       const SYNODIC = 29.530588853;
@@ -18642,6 +18649,136 @@ const OdaraScreen = ({
           </div>
         )}
 
+        {/* ── Weekly navigator + lane tracker ── */}
+        <div
+          className="mb-4 rounded-[18px] px-0 py-1.5"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0.004) 100%)',
+          }}
+        >
+          <div
+            ref={navigationStripRef}
+            className="hide-horizontal-scrollbar snap-x snap-mandatory overflow-x-auto pb-0.5"
+            style={{
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x',
+              scrollSnapType: 'x mandatory',
+            }}
+          >
+            <div
+              ref={navigationContentRef}
+              className="relative flex w-max min-w-full gap-0"
+            >
+              {orbGeom && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${orbGeom.left}px`,
+                    top: `${orbGeom.topY}px`,
+                    transform: 'translate(-50%, -50%)',
+                    width: '9px',
+                    height: '9px',
+                    zIndex: 5,
+                    transition: 'left 800ms ease',
+                    borderRadius: '999px',
+                    background: 'radial-gradient(circle, rgba(255,245,206,0.98) 0%, rgba(255,183,72,0.88) 36%, rgba(244,126,24,0.20) 64%, rgba(244,126,24,0) 72%)',
+                    boxShadow: '0 0 7px rgba(255,177,56,0.55), 0 0 15px rgba(242,123,23,0.24)',
+                  }}
+                >
+                  <span
+                    className="absolute left-1/2 top-1/2 h-px w-[13px] -translate-x-1/2 -translate-y-1/2"
+                    style={{ background: 'linear-gradient(90deg, rgba(255,191,75,0), rgba(255,211,121,0.55), rgba(255,191,75,0))' }}
+                  />
+                  <span
+                    className="absolute left-1/2 top-1/2 h-[13px] w-px -translate-x-1/2 -translate-y-1/2"
+                    style={{ background: 'linear-gradient(180deg, rgba(255,191,75,0), rgba(255,211,121,0.44), rgba(255,191,75,0))' }}
+                  />
+                </div>
+              )}
+
+              <span
+                aria-hidden
+                className="pointer-events-none absolute z-0 h-px -translate-y-1/2"
+                style={{
+                  top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
+                  left: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
+                  right: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
+                  background: 'linear-gradient(90deg, rgba(120,185,255,0.06), rgba(143,211,255,0.24) 42%, rgba(143,211,255,0.24) 58%, rgba(120,185,255,0.06))',
+                  boxShadow: '0 0 6px rgba(143,211,255,0.08)',
+                }}
+              />
+              {orbGeom?.weekNotches.map((notchLeft, index) => (
+                <span
+                  key={`forecast-noon-notch-${navigationDays[index]?.dateStr ?? index}`}
+                  aria-hidden
+                  className="pointer-events-none absolute z-[1] w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: `${notchLeft}px`,
+                    top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
+                    height: '9px',
+                    background: 'linear-gradient(180deg, rgba(143,211,255,0), rgba(166,223,255,0.28), rgba(143,211,255,0))',
+                    boxShadow: '0 0 4px rgba(143,211,255,0.08)',
+                  }}
+                />
+              ))}
+
+              {navigationDays.map((fd, i) => {
+                const lockedLane = isGuestMode
+                  ? (lockedSelections[`${fd.dateStr}:${selectedContext}`] ?? null)
+                  : (signedInLockedLaneByDate[fd.dateStr]?.[normalizedSelectedContextKey] ?? null);
+                return (
+                  <button
+                    key={fd.dateStr}
+                    ref={(el) => { navigationDayCellRefs.current[i] = el; }}
+                    onClick={() => {
+                      selectNavigationDay(fd.dateStr);
+                    }}
+                    className="relative flex min-w-[44px] flex-none snap-start flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
+                    style={{
+                      width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
+                      scrollSnapAlign: 'start',
+                      zIndex: 2,
+                    }}
+                  >
+                    <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
+                      fd.isSelected ? 'text-foreground font-semibold' : 'text-muted-foreground/40'
+                    }`}>
+                      {fd.label}
+                    </span>
+                    <div className="relative mt-3 h-[24px] w-full">
+                      <span
+                        ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
+                        aria-hidden
+                        className="absolute left-1/2 top-1/2 block h-px w-px -translate-x-1/2 -translate-y-1/2 opacity-0"
+                      />
+                      <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} isActive={fd.isSelected} />
+                    </div>
+                    <span className={`mt-2 text-[15px] leading-none transition-colors ${
+                      fd.isSelected ? 'font-medium text-foreground' : 'text-muted-foreground/40'
+                    }`}>
+                      {fd.day}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="mt-2 block h-[2px] w-5 rounded-full transition-opacity duration-200"
+                      style={{
+                        opacity: lockedLane ? (fd.isSelected ? 1 : 0.4) : 0,
+                        background: 'linear-gradient(90deg, rgba(194,93,255,0.70), rgba(211,107,255,0.98))',
+                        boxShadow: fd.isSelected ? '0 0 8px rgba(206,88,255,0.34)' : '0 0 4px rgba(206,88,255,0.16)',
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         {/* Loading / Error */}
         {oracleLoading && (
           <div className="flex flex-col gap-3 items-center py-16">
@@ -18685,7 +18822,7 @@ const OdaraScreen = ({
 
         {/* ── Unified main card with gestures ── */}
         {!oracleLoading && !oracleError && visibleCard && (
-          <div className="relative mt-1 pb-8 overflow-visible" style={{ perspective: '1600px' }}>
+          <div className="relative mt-0 pb-8 overflow-visible" style={{ perspective: '1600px' }}>
             <div
               className="pointer-events-none absolute inset-x-[10%] -bottom-4 z-0 h-16 rounded-[999px]"
               style={{
@@ -18773,7 +18910,7 @@ const OdaraScreen = ({
               })()}
 
               <div
-                className={`rounded-[24px] px-[22px] pt-[14px] pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
+                className={`rounded-[24px] px-[22px] pt-3 pb-[18px] flex flex-col relative z-10 overflow-hidden transition-transform duration-150 ${skipAnimating ? '' : ''}`}
                 style={{
                   ...heroCardVisual.surfaceStyle,
                   // Allow native vertical scroll from the hero card. We only
@@ -18817,62 +18954,30 @@ const OdaraScreen = ({
                 }}
               />
             )}
-            {/* Top row: temp left · centered date · action stack right.
-                Temperature/date/lock form ONE quiet metadata row — same
-                opacity, mirrored horizontal inset, balanced visual weight. */}
-            <div
-              className="relative z-10 flex items-center justify-between px-0.5"
-              style={{ marginBottom: actionRailState.showBack ? '44px' : '6px' }}
-            >
-              {/* Left: temperature — instrument reading (digital, but quiet). */}
-              <div className="flex items-center min-w-[52px]">
-                <TemperatureReadout value={resolvedTemperature} />
-              </div>
-
-              {/* Center: date */}
-              <span className="text-[14px] tracking-[0.06em] font-medium text-foreground/70" style={{ fontFamily: "'Geist Mono', monospace" }}>
-                {getDateLabel(selectedDate)}
-              </span>
-
-              {/* Right: preserve the row balance and keep the back control in its
-                  existing slot without showing a lock icon on the card. */}
-              {(() => {
-                const showBack = actionRailState.showBack;
-
-                return (
-                <div
-                  className="relative flex min-w-[52px] items-center justify-center"
-                  data-action-stack
-                  style={{ height: '32px' }}
+            {actionRailState.showBack && (
+              <div className="relative z-10 mb-1.5 flex justify-end px-1.5">
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center text-foreground/50 transition-all duration-200 hover:text-foreground/72 active:scale-95"
+                  onClick={() => {
+                    if (handleLocalLayerBack()) {
+                      return;
+                    }
+                    cardController.actions.back();
+                  }}
+                  aria-label="Back"
                 >
-                {/* Back arrow — detail-state first, then history fallback. */}
-                {showBack && (
-                  <button
-                    type="button"
-                    className="absolute left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center text-foreground/50 transition-all duration-200 hover:text-foreground/72 active:scale-95"
-                    style={{ top: 'calc(100% + 14px)' }}
-                    onClick={() => {
-                      if (handleLocalLayerBack()) {
-                        return;
-                      }
-                      cardController.actions.back();
-                    }}
-                    aria-label="Back"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M19 12H5M12 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                )}
-                </div>
-                );
-              })()}
-            </div>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
             <div
               className={isGuestMode
-                ? "relative flex w-full flex-col px-3 pt-1 pb-1"
-                : "relative flex w-full flex-col px-3 pt-1 pb-1 transition-all duration-300"}
+                ? "relative flex w-full flex-col px-3 pt-0 pb-1"
+                : "relative flex w-full flex-col px-3 pt-0 pb-1 transition-all duration-300"}
               style={signedInHeroCarrySurfaceStyle}
             >
               {/* Source badge for queue cards */}
@@ -19349,135 +19454,6 @@ const OdaraScreen = ({
             </div>
           </div>
         )}
-        {/* ── Weekly navigator + lane tracker ── */}
-        <div
-          className="mt-6 rounded-[18px] px-0 py-1.5"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0.004) 100%)',
-          }}
-        >
-          <div
-            ref={navigationStripRef}
-            className="hide-horizontal-scrollbar snap-x snap-mandatory overflow-x-auto pb-0.5"
-            style={{
-              msOverflowStyle: 'none',
-              scrollbarWidth: 'none',
-              WebkitOverflowScrolling: 'touch',
-              touchAction: 'pan-x',
-              scrollSnapType: 'x mandatory',
-            }}
-          >
-            <div
-              ref={navigationContentRef}
-              className="relative flex w-max min-w-full gap-0"
-            >
-              {orbGeom && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute"
-                  style={{
-                    left: `${orbGeom.left}px`,
-                    top: `${orbGeom.topY}px`,
-                    transform: 'translate(-50%, -50%)',
-                    width: '9px',
-                    height: '9px',
-                    zIndex: 5,
-                    transition: 'left 800ms ease',
-                    borderRadius: '999px',
-                    background: 'radial-gradient(circle, rgba(255,245,206,0.98) 0%, rgba(255,183,72,0.88) 36%, rgba(244,126,24,0.20) 64%, rgba(244,126,24,0) 72%)',
-                    boxShadow: '0 0 7px rgba(255,177,56,0.55), 0 0 15px rgba(242,123,23,0.24)',
-                  }}
-                >
-                  <span
-                    className="absolute left-1/2 top-1/2 h-px w-[13px] -translate-x-1/2 -translate-y-1/2"
-                    style={{ background: 'linear-gradient(90deg, rgba(255,191,75,0), rgba(255,211,121,0.55), rgba(255,191,75,0))' }}
-                  />
-                  <span
-                    className="absolute left-1/2 top-1/2 h-[13px] w-px -translate-x-1/2 -translate-y-1/2"
-                    style={{ background: 'linear-gradient(180deg, rgba(255,191,75,0), rgba(255,211,121,0.44), rgba(255,191,75,0))' }}
-                  />
-                </div>
-              )}
-
-              <span
-                aria-hidden
-                className="pointer-events-none absolute z-0 h-px -translate-y-1/2"
-                style={{
-                  top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
-                  left: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
-                  right: navigationDayCellWidth ? `${navigationDayCellWidth / 2}px` : '22px',
-                  background: 'linear-gradient(90deg, rgba(120,185,255,0.06), rgba(143,211,255,0.24) 42%, rgba(143,211,255,0.24) 58%, rgba(120,185,255,0.06))',
-                  boxShadow: '0 0 6px rgba(143,211,255,0.08)',
-                }}
-              />
-              {orbGeom?.weekNotches.map((notchLeft, index) => (
-                <span
-                  key={`forecast-noon-notch-${navigationDays[index]?.dateStr ?? index}`}
-                  aria-hidden
-                  className="pointer-events-none absolute z-[1] w-px -translate-x-1/2 -translate-y-1/2 rounded-full"
-                  style={{
-                    left: `${notchLeft}px`,
-                    top: `${FORECAST_RAIL_TRACK_TOP_PX}px`,
-                    height: '9px',
-                    background: 'linear-gradient(180deg, rgba(143,211,255,0), rgba(166,223,255,0.48), rgba(143,211,255,0))',
-                    boxShadow: '0 0 4px rgba(143,211,255,0.12)',
-                  }}
-                />
-              ))}
-
-              {navigationDays.map((fd, i) => {
-                const lockedLane = isGuestMode
-                  ? (lockedSelections[`${fd.dateStr}:${selectedContext}`] ?? null)
-                  : (signedInLockedLaneByDate[fd.dateStr]?.[normalizedSelectedContextKey] ?? null);
-                return (
-                  <button
-                    key={fd.dateStr}
-                    ref={(el) => { navigationDayCellRefs.current[i] = el; }}
-                    onClick={() => {
-                      selectNavigationDay(fd.dateStr);
-                    }}
-                    className="relative flex min-w-[44px] flex-none snap-start flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
-                    style={{
-                      width: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
-                      minWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
-                      maxWidth: navigationDayCellWidth ? `${navigationDayCellWidth}px` : undefined,
-                      scrollSnapAlign: 'start',
-                      zIndex: 2,
-                    }}
-                  >
-                    <span className={`text-[10px] leading-none tracking-[0.08em] transition-colors ${
-                      fd.isSelected ? 'text-foreground font-semibold' : 'text-foreground/52'
-                    }`}>
-                      {fd.label}
-                    </span>
-                    <div className="relative mt-3 h-[24px] w-full">
-                      <span
-                        ref={(el) => { navigationDayIndicatorRefs.current[i] = el; }}
-                        aria-hidden
-                        className="absolute left-1/2 top-1/2 block h-px w-px -translate-x-1/2 -translate-y-1/2 opacity-0"
-                      />
-                      <OdaraDayMoonPhaseIcon dateStr={fd.dateStr} />
-                    </div>
-                    <span className={`mt-2 text-[15px] leading-none transition-colors ${
-                      fd.isSelected ? 'font-medium text-foreground' : 'text-foreground/52'
-                    }`}>
-                      {fd.day}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="mt-2 block h-[2px] w-5 rounded-full transition-opacity duration-200"
-                      style={{
-                        opacity: lockedLane ? 1 : 0,
-                        background: 'linear-gradient(90deg, rgba(194,93,255,0.70), rgba(211,107,255,0.98))',
-                        boxShadow: '0 0 8px rgba(206,88,255,0.34)',
-                      }}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
         {/* No data state */}
         {!oracleLoading && !oracleError && !oracle && (
           <div className="text-center py-12">
