@@ -18358,7 +18358,7 @@ const OdaraScreen = ({
                   }}
                   className="absolute flex h-5 w-5 -translate-x-1/2 items-center justify-center"
                   style={{
-                    top: 'calc(100% - 5px)',
+                    top: 'calc(100% - 6px)',
                     left: '0.34em',
                     WebkitTapHighlightColor: 'transparent',
                   }}
@@ -18956,39 +18956,12 @@ const OdaraScreen = ({
                 }}
               />
             )}
-            {actionRailState.showBack && (
-              <div className="relative z-10 mb-1.5 flex justify-end px-1.5">
-                <button
-                  type="button"
-                  className="flex h-6 w-6 items-center justify-center text-foreground/50 transition-all duration-200 hover:text-foreground/72 active:scale-95"
-                  onClick={() => {
-                    if (handleLocalLayerBack()) {
-                      return;
-                    }
-                    cardController.actions.back();
-                  }}
-                  aria-label="Back"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M19 12H5M12 19l-7-7 7-7" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
             <div
               className={isGuestMode
                 ? "relative flex w-full flex-col px-3 pt-0 pb-1"
                 : "relative flex w-full flex-col px-3 pt-0 pb-1 transition-all duration-300"}
               style={signedInHeroCarrySurfaceStyle}
             >
-              {/* Source badge for queue cards */}
-              {!isHeroStyle && (
-                <span className="mb-1 ml-3 text-left text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40">
-                  from queue
-                </span>
-              )}
-
               {/* Recipe header — Guest Recipe Mode only. Rendered above hero
                   title in quotes using backend-provided color_hex. Source:
                   option.recipe_header (attached to hero by guest-recipe.ts). */}
@@ -19012,9 +18985,31 @@ const OdaraScreen = ({
                 );
               })()}
 
-              <div className="w-full px-3 pb-1">
+              <div className="relative w-full px-3 pb-1">
+                {actionRailState.showBack && (
+                  <button
+                    type="button"
+                    className="absolute right-0 top-[8px] z-10 flex h-6 w-6 items-center justify-center text-foreground/50 transition-all duration-200 hover:text-foreground/72 active:scale-95"
+                    onClick={() => {
+                      if (handleLocalLayerBack()) {
+                        return;
+                      }
+                      cardController.actions.back();
+                    }}
+                    aria-label="Back"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                )}
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1 text-left">
+                  <div
+                    className="min-w-0 flex-1 text-left"
+                    style={{
+                      paddingRight: actionRailState.showBack && visibleHeroBottleImageCandidates.length === 0 ? '2rem' : undefined,
+                    }}
+                  >
                     {/* Fragrance name */}
                     <h2
                       className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-left text-[32px] font-normal leading-[1.1] text-foreground"
