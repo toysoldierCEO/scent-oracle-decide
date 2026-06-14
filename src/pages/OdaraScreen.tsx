@@ -2299,10 +2299,10 @@ const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; isActive?: boolean }> =
       viewBox={`0 0 ${D} ${D}`}
       className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
       style={{
-        opacity: isActive ? 0.7 : 0.4,
+        opacity: isActive ? 0.78 : 0.56,
         filter: isActive
-          ? 'drop-shadow(0 0 3px rgba(246,242,232,0.16))'
-          : 'drop-shadow(0 0 2px rgba(246,242,232,0.08))',
+          ? 'drop-shadow(0 0 3px rgba(246,242,232,0.20))'
+          : 'drop-shadow(0 0 2px rgba(246,242,232,0.12))',
       }}
     >
       <defs>
@@ -2320,7 +2320,14 @@ const OdaraDayMoonPhaseIcon: React.FC<{ dateStr: string; isActive?: boolean }> =
           <circle cx={C} cy={C} r={R} />
         </clipPath>
       </defs>
-      <circle cx={C} cy={C} r={R} fill="rgba(16,17,20,0.78)" stroke="rgba(255,255,255,0.16)" strokeWidth="0.45" />
+      <circle
+        cx={C}
+        cy={C}
+        r={R}
+        fill={isActive ? 'rgba(18,19,23,0.84)' : 'rgba(20,22,26,0.82)'}
+        stroke={isActive ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.18)'}
+        strokeWidth="0.45"
+      />
       <circle cx={C} cy={C} r={R} fill={`url(#${maskId}-surface)`} mask={`url(#${maskId})`} />
       <g clipPath={`url(#${maskId}-clip)`} opacity="0.18">
         <circle cx="4.4" cy="4.2" r="0.55" fill="rgba(66,68,72,0.75)" />
@@ -18349,10 +18356,10 @@ const OdaraScreen = ({
                     setMenuOpen(false);
                     setOccasionSelectorOpen((current) => !current);
                   }}
-                  className="absolute top-full flex h-5 w-5 -translate-x-1/2 items-center justify-center"
+                  className="absolute flex h-5 w-5 -translate-x-1/2 items-center justify-center"
                   style={{
+                    top: 'calc(100% - 5px)',
                     left: '0.34em',
-                    marginTop: '1px',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
