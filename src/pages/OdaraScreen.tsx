@@ -19047,12 +19047,17 @@ const OdaraScreen = ({
 
                     {/* Family label */}
                     {visibleHeroFamilyLabel ? (
-                      <span
-                        className="mb-2 inline-flex text-left text-[12px] font-medium uppercase tracking-[0.15em]"
+                      <ScentIntelChipButton
+                        label={visibleHeroFamilyLabel}
+                        slug={visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null}
+                        onOpen={isReadOnlyHistoryCard ? undefined : openScentIntelSheet}
+                        fragranceId={visibleResolvedCurrentCard?.fragrance_id ?? null}
+                        fragranceName={visibleResolvedCurrentCard?.name ?? null}
+                        fragranceBrand={visibleResolvedCurrentCard?.brand ?? null}
+                        position="family"
+                        className="mb-2 inline-flex bg-transparent p-0 text-left text-[12px] font-medium uppercase tracking-[0.15em]"
                         style={{ color: visibleHeroFamilyColor }}
-                      >
-                        {visibleHeroFamilyLabel}
-                      </span>
+                      />
                     ) : null}
 
                     {heroCardChips.length > 0 && (
