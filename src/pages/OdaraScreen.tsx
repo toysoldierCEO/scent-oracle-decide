@@ -10184,7 +10184,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeRetiredOnly, setWardrobeRetiredOnly] = useState(false);
   const [wardrobeFavoriteOnly, setWardrobeFavoriteOnly] = useState(false);
   const [wardrobeUnwornOnly, setWardrobeUnwornOnly] = useState(false);
-  const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>(null);
+  const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>('az');
   const [wardrobeSortDirection, setWardrobeSortDirection] = useState<OdaraWardrobeSortDirection>('asc');
   const [wardrobeMenu, setWardrobeMenu] = useState<'filter' | 'sort' | null>(null);
   const [wardrobeSearchOpen, setWardrobeSearchOpen] = useState(false);
@@ -10516,7 +10516,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeWishlistOnly(false);
     setWardrobeFavoriteOnly(false);
     setWardrobeUnwornOnly(false);
-    setWardrobeSortKey(null);
+    setWardrobeSortKey('az');
     setWardrobeSortDirection('asc');
   }, [activeSessionUserId]);
 
@@ -10795,6 +10795,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [wardrobeFamilyFilter, wardrobeFamilyOptions]);
 
   const activeWardrobeSortLabel = getWardrobeSortLabel(wardrobeSortKey, wardrobeSortDirection);
+  const hasNonDefaultWardrobeSort = wardrobeSortKey !== 'az' || wardrobeSortDirection !== 'asc';
 
   const visibleWardrobeCards = useMemo(() => {
     let cards = [...brandFilteredWardrobeCards];
@@ -11028,7 +11029,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, []);
 
   const clearWardrobeSort = useCallback(() => {
-    setWardrobeSortKey(null);
+    setWardrobeSortKey('az');
     setWardrobeSortDirection('asc');
   }, []);
 
@@ -12030,8 +12031,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 WebkitBackdropFilter: 'blur(14px)',
               }}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:justify-start">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
 
                 {/* Filter pill + anchored dropdown */}
                 <div className="relative">
@@ -12262,7 +12262,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           </button>
                         );
                       })}
-                      {wardrobeSortKey ? (
+                      {hasNonDefaultWardrobeSort ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -12275,47 +12275,50 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                             background: 'rgba(255,255,255,0.02)',
                           }}
                         >
-                          Clear sort
+                          Reset to A–Z
                         </button>
                       ) : null}
                     </div>
                   ) : null}
                 </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={openSearch}
-                    className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
-                    style={{
-                      border: '1px solid rgba(218,188,124,0.28)',
-                      background: 'linear-gradient(180deg, rgba(218,188,124,0.16) 0%, rgba(169,132,57,0.12) 100%)',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.16)',
-                    }}
-                  >
-                    + Add
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Search your collection"
-                    onClick={() => {
-                      setWardrobeMenu(null);
-                      setWardrobeSearchOpen(true);
-                    }}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/72 transition-colors hover:text-foreground/94"
-                    style={{
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      background: 'rgba(255,255,255,0.04)',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="11" cy="11" r="7" />
-                      <path d="m20 20-3.5-3.5" />
-                    </svg>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={openSearch}
+                  className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] text-[#f8e5b9]"
+                  style={{
+                    border: '1px solid rgba(218,188,124,0.28)',
+                    background: 'linear-gradient(180deg, rgba(218,188,124,0.16) 0%, rgba(169,132,57,0.12) 100%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.16)',
+                  }}
+                >
+                  + Add
+                </button>
+                <button
+                  type="button"
+                  aria-label="Search your collection"
+                  onClick={() => {
+                    setWardrobeMenu(null);
+                    setWardrobeSearchOpen(true);
+                  }}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/72 transition-colors hover:text-foreground/94"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.04)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
+                  </svg>
+                </button>
               </div>
+              <div
+                className="mt-3 h-px w-full"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.16) 18%, rgba(255,255,255,0.16) 82%, rgba(255,255,255,0))',
+                }}
+              />
             </div>
           ) : (
             <div
@@ -12508,15 +12511,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex min-h-[350px] flex-col p-3.5 sm:min-h-[370px]">
-                    <div
-                      className="relative overflow-hidden rounded-[22px] border px-3 pb-2 pt-3"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.06)',
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 34%, rgba(8,10,14,0.12) 100%)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                      }}
-                    >
+                  <div className="relative z-[1] flex min-h-[350px] flex-col px-3.5 pb-3.5 pt-4 sm:min-h-[370px]">
+                    <div className="relative px-1">
                       <div
                         className="pointer-events-none absolute inset-x-8 top-3 h-10 rounded-full blur-2xl"
                         style={{
@@ -12538,14 +12534,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         />
                       </div>
                     </div>
-                    <div
-                      className="relative z-[1] mt-3 flex min-h-[148px] flex-1 flex-col rounded-[20px] border px-3.5 pb-3 pt-3.5"
-                      style={{
-                        borderColor: 'rgba(255,255,255,0.08)',
-                        background: 'linear-gradient(180deg, rgba(8,10,14,0.18) 0%, rgba(8,10,14,0.4) 100%)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                      }}
-                    >
+                    <div className="relative z-[1] mt-4 flex min-h-[148px] flex-1 flex-col px-1 pb-1">
                       <div className="flex min-h-[25px] items-start justify-between gap-2">
                         <span
                           className="max-w-[76px] rounded-full px-2 py-[5px] text-center text-[7px] font-medium uppercase leading-[1.12] tracking-[0.1em]"
