@@ -12491,7 +12491,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   data-collection-card
                   aria-label={`Open ${card.name} profile`}
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
-                  className="group relative w-full overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
+                  className="group relative block min-h-[352px] w-full overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[372px]"
                   style={{
                     ...cardVisual.surfaceStyle,
                     boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
@@ -12508,7 +12508,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex h-full flex-col p-3.5">
+                  <div className="relative z-[1] flex min-h-[350px] flex-col p-3.5 sm:min-h-[370px]">
                     <div
                       className="relative overflow-hidden rounded-[22px] border px-3 pb-2 pt-3"
                       style={{
@@ -12524,20 +12524,22 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           opacity: 0.9,
                         }}
                       />
-                      <OdaraWardrobeBottleArt
-                        name={card.name}
-                        brand={card.brand}
-                        family_key={card.family_key}
-                        family_label={card.family_label}
-                        image_url={card.image_url ?? card.item.image_url}
-                        thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
-                        frameless
-                        presentation="wardrobe_grid"
-                        className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[180px]"
-                      />
+                      <div className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[180px]">
+                        <OdaraWardrobeBottleArt
+                          name={card.name}
+                          brand={card.brand}
+                          family_key={card.family_key}
+                          family_label={card.family_label}
+                          image_url={card.image_url ?? card.item.image_url}
+                          thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
+                          frameless
+                          presentation="wardrobe_grid"
+                          className="h-full w-full"
+                        />
+                      </div>
                     </div>
                     <div
-                      className="relative z-[1] mt-3 flex flex-1 flex-col rounded-[20px] border px-3.5 pb-3 pt-3.5"
+                      className="relative z-[1] mt-3 flex min-h-[148px] flex-1 flex-col rounded-[20px] border px-3.5 pb-3 pt-3.5"
                       style={{
                         borderColor: 'rgba(255,255,255,0.08)',
                         background: 'linear-gradient(180deg, rgba(8,10,14,0.18) 0%, rgba(8,10,14,0.4) 100%)',
