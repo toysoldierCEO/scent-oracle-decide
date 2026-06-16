@@ -9104,13 +9104,14 @@ const OdaraFragranceDetailSheet: React.FC<{
 
   if (!open || !detail) return null;
 
+  const resolvedDetail = detail;
   const tint = getEnhancedCollectionTint({
-    family_key: detail.family_key,
-    family_label: detail.family_label,
+    family_key: resolvedDetail.family_key,
+    family_label: resolvedDetail.family_label,
   });
   const detailBaseTint = getCollectionTileTint({
-    family_key: detail.family_key,
-    family_label: detail.family_label,
+    family_key: resolvedDetail.family_key,
+    family_label: resolvedDetail.family_label,
   });
   const detailGlassVisual = getOdaraGlassCardVisualRecipe(
     detailBaseTint,
@@ -9118,19 +9119,19 @@ const OdaraFragranceDetailSheet: React.FC<{
   );
   const detailLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(detailBaseTint, detailGlassVisual);
   const familyLabel = formatPlainFamilyStyleLabel(
-    detail.family_label ?? (detail.family_key ? getFamilyLabelText(detail.family_key) : null),
+    resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
   );
-  const accordLabels = normalizeNotes(detail.accords, 8);
-  const topLabels = normalizeNotes(detail.top_notes ?? [], 6);
-  const middleLabels = normalizeNotes(detail.middle_notes ?? [], 6);
-  const baseLabels = normalizeNotes(detail.base_notes ?? [], 6);
-  const flatNoteLabels = normalizeNotes(detail.notes, 8);
-  const roleLabel = detail.wardrobe_role_label?.trim() || null;
-  const detailDescription = buildVesperizedDetailDescription(detail);
-  const detailPerformanceBars = buildFragrancePerformanceBars(detail)
+  const accordLabels = normalizeNotes(resolvedDetail.accords, 8);
+  const topLabels = normalizeNotes(resolvedDetail.top_notes ?? [], 6);
+  const middleLabels = normalizeNotes(resolvedDetail.middle_notes ?? [], 6);
+  const baseLabels = normalizeNotes(resolvedDetail.base_notes ?? [], 6);
+  const flatNoteLabels = normalizeNotes(resolvedDetail.notes, 8);
+  const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
+  const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
+  const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const showTrailPendingNote = !detailPerformanceBars.some((metric) => metric.key === 'trail')
-    && ['projection_fallback', 'unknown'].includes(detail.trail_source ?? 'unknown');
+    && ['projection_fallback', 'unknown'].includes(resolvedDetail.trail_source ?? 'unknown');
   const topIdentityChips = (() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -9197,15 +9198,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     }
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
-  const detailFactLine = `Released: ${detail.release_year ? String(detail.release_year) : 'Unknown'} • Perfumer: ${detail.perfumer ?? 'Unknown'}`;
-  const hasVisibleFallbackProfile = Boolean(
-    detailDescription
-      || roleLabel
-      || topIdentityChips.length > 0
-      || detailPerformanceBars.length > 0
-      || accordLabels.length > 0
-      || orderedNoteChips.length > 0,
-  );
+  const detailFactLine = `Released: ${resolvedDetail.release_year ? String(resolvedDetail.release_year) : 'Unknown'} • Perfumer: ${resolvedDetail.perfumer ?? 'Unknown'}`;
 
   return (
     <OdaraBottomSheet
@@ -9232,10 +9225,10 @@ const OdaraFragranceDetailSheet: React.FC<{
               className="text-[30px] leading-[1.02] text-foreground/94"
               style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
             >
-              {getDisplayName(detail.name ?? '', detail.brand ?? null)}
+              {getDisplayName(resolvedDetail.name ?? '', resolvedDetail.brand ?? null)}
             </div>
-            {detail.brand ? (
-              <div className="mt-1.5 text-[13px] text-foreground/58">{detail.brand}</div>
+            {resolvedDetail.brand ? (
+              <div className="mt-1.5 text-[13px] text-foreground/58">{resolvedDetail.brand}</div>
             ) : null}
             {detailDescription ? (
               <div className="mt-3 max-w-[34ch] text-[15px] leading-[1.48] text-foreground/84">
@@ -9264,16 +9257,16 @@ const OdaraFragranceDetailSheet: React.FC<{
           {topIdentityChips.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {topIdentityChips.map((chip, index) => {
-                const tone = getAccordChipTone(chip.label, detail.family_key);
+                const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                 return (
                   <ScentIntelChipButton
                     key={`detail-top-identity-${chip.position}-${chip.label}-${index}`}
                     label={chip.label}
                     slug={chip.slug ?? null}
                     onOpen={onOpenScentIntel}
-                    fragranceId={detail.fragrance_id}
-                    fragranceName={detail.name}
-                    fragranceBrand={detail.brand}
+                    fragranceId={resolvedDetail.fragrance_id}
+                    fragranceName={resolvedDetail.name}
+                    fragranceBrand={resolvedDetail.brand}
                     position={chip.position}
                     className="inline-flex rounded-full px-3 py-[6px] text-[10px] uppercase tracking-[0.24em]"
                     style={{
@@ -9295,19 +9288,6 @@ const OdaraFragranceDetailSheet: React.FC<{
             </div>
           ) : null}
 
-          {detail.detail_loading && !hasVisibleFallbackProfile ? (
-            <div className="inline-flex items-center gap-2 text-[11px] leading-none text-foreground/42" aria-live="polite">
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{
-                  background: 'rgba(217,181,108,0.58)',
-                  boxShadow: '0 0 10px rgba(217,181,108,0.22)',
-                }}
-              />
-              <span>Fetching profile details</span>
-            </div>
-          ) : null}
-
           <section>
             <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
             {detailPerformanceBars.length > 0 ? (
@@ -9323,7 +9303,7 @@ const OdaraFragranceDetailSheet: React.FC<{
               </div>
             ) : (
               <div className="text-[12px] leading-[1.5] text-foreground/58">
-                Not enough performance data yet.
+                Performance details unavailable.
               </div>
             )}
           </section>
@@ -9335,16 +9315,16 @@ const OdaraFragranceDetailSheet: React.FC<{
                 {expandAndDeduplicateScentIntelDisplayTerms(
                   accordLabels.slice(0, 6).map((label) => ({ label, position: 'accord' })),
                 ).map((chip, index) => {
-                  const tone = getAccordChipTone(chip.label, detail.family_key);
+                  const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                   return (
                     <ScentIntelChipButton
                       key={`detail-accord-${chip.position}-${chip.slug ?? chip.label}-${index}`}
                       label={chip.label}
                       slug={chip.slug ?? null}
                       onOpen={onOpenScentIntel}
-                      fragranceId={detail.fragrance_id}
-                      fragranceName={detail.name}
-                      fragranceBrand={detail.brand}
+                      fragranceId={resolvedDetail.fragrance_id}
+                      fragranceName={resolvedDetail.name}
+                      fragranceBrand={resolvedDetail.brand}
                       position={chip.position ?? 'accord'}
                       className={getScentIntelChipClass()}
                       style={{
@@ -9365,16 +9345,16 @@ const OdaraFragranceDetailSheet: React.FC<{
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
               <div className="flex flex-wrap gap-2">
                 {orderedNoteChips.map((note, index) => {
-                  const tone = getAccordChipTone(note.label, detail.family_key);
+                  const tone = getAccordChipTone(note.label, resolvedDetail.family_key);
                   return (
                     <ScentIntelChipButton
                       key={`detail-note-${note.position}-${note.label}-${index}`}
                       label={note.label}
                       slug={note.slug ?? null}
                       onOpen={onOpenScentIntel}
-                      fragranceId={detail.fragrance_id}
-                      fragranceName={detail.name}
-                      fragranceBrand={detail.brand}
+                      fragranceId={resolvedDetail.fragrance_id}
+                      fragranceName={resolvedDetail.name}
+                      fragranceBrand={resolvedDetail.brand}
                       position={note.position}
                       className={getScentIntelChipClass()}
                       style={{
