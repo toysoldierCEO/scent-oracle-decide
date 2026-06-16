@@ -9872,7 +9872,7 @@ const OdaraLegacyCollectionPage: React.FC<{
                     data-collection-tile
                     data-collection-fragrance-id={item.fragrance_id ?? itemKey}
                     data-collection-fragrance-name={item.name ?? ''}
-                    aria-label={`Open details for ${item.name ?? 'this bottle'}`}
+                    ariaLabel={`Open details for ${item.name ?? 'this bottle'}`}
                     onOpen={() => {
                       const suppressedUntil = suppressTileClickRef.current[itemKey] ?? 0;
                       if (suppressedUntil > Date.now()) return;
@@ -12552,7 +12552,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <OdaraCollectionCardSurface
                   key={card.fragrance_id}
                   data-collection-card
-                  aria-label={`Open ${card.name} profile`}
+                  ariaLabel={`Open ${card.name} profile`}
                   onOpen={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative block w-full cursor-pointer overflow-hidden rounded-[30px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
@@ -13752,7 +13752,7 @@ const OdaraScreen = ({
     const cachedFragrance = input.fragranceId
       ? (cachedDetail
         ? {
-            id: cachedDetail.fragrance_id,
+            id: cachedDetail.id,
             name: cachedDetail.name,
             brand: cachedDetail.brand,
             familyKey: cachedDetail.family_key ?? null,
@@ -15139,7 +15139,7 @@ const OdaraScreen = ({
       }
     }
     const ol = activeOracle?.layer;
-    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? ol?.mode ?? ol?.interaction_type) ?? 'balance';
+    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? (ol as any)?.mode ?? (ol as any)?.interaction_type) ?? 'balance';
     if (ol?.fragrance_id && oracleLayerMood !== mood && !excludeIds.includes(ol.fragrance_id)) {
       excludeIds.push(ol.fragrance_id);
     }
