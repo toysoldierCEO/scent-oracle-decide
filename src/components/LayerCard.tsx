@@ -1094,7 +1094,7 @@ const LayerCard = ({
     onOpenScentIntel?.({
       label: cleanLabel,
       slug: slug ?? null,
-      fragranceId: activeModeEntry?.fragrance_id ?? null,
+      fragranceId: activeModeEntry?.id ?? null,
       fragranceName: activeModeEntry?.name ?? null,
       fragranceBrand: activeModeEntry?.brand ?? null,
       position: position ?? null,
