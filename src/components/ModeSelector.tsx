@@ -88,7 +88,7 @@ const ModeSelector = ({
   const sharedEditableMoodReason = (['balance', 'bold', 'smooth'] as const)
     .map((mood) => disabledMoodReasons?.[mood]?.trim())
     .find(Boolean) ?? null;
-  const disabledMoodNote = selectedDisabledReason || sharedEditableMoodReason;
+  const disabledMoodNote = sharedEditableMoodReason || selectedDisabledReason;
 
   return (
     <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
