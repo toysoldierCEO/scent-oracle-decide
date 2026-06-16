@@ -4404,6 +4404,26 @@ function getWardrobeSortLabel(
   return null;
 }
 
+function formatWardrobeLastWornLabel(lastWornAt: number | null | undefined) {
+  if (typeof lastWornAt !== 'number' || lastWornAt <= 0) return null;
+  const diffDays = Math.max(0, Math.floor((Date.now() - lastWornAt) / 86400000));
+  if (diffDays <= 0) return 'Worn today';
+  if (diffDays === 1) return 'Worn 1d ago';
+  if (diffDays < 30) return `Worn ${diffDays}d ago`;
+  if (diffDays < 90) return `Worn ${Math.max(1, Math.floor(diffDays / 7))}w ago`;
+  if (diffDays < 365) return `Worn ${Math.max(1, Math.floor(diffDays / 30))}mo ago`;
+  return `Worn ${Math.max(1, Math.floor(diffDays / 365))}y ago`;
+}
+
+function formatWardrobeSourceConfidenceLabel(sourceConfidence: string | null | undefined) {
+  const normalized = readTrimmedLayerText(sourceConfidence).toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'high') return 'High confidence';
+  if (normalized === 'medium') return 'Medium confidence';
+  if (normalized === 'low') return 'Low confidence';
+  return null;
+}
+
 function toggleWardrobeSortDirection(direction: OdaraWardrobeSortDirection): OdaraWardrobeSortDirection {
   return direction === 'asc' ? 'desc' : 'asc';
 }
@@ -5351,12 +5371,12 @@ function buildFragranceTexturePhrase(source: {
 
   if (/warm spicy|tobacco|vanilla|amber|resin|boozy/.test(joined) || ['amber-oriental', 'tobacco-boozy', 'dark-leather', 'sweet-gourmand'].includes(familyKey)) {
     if (projection >= 0.66 || density >= 0.62) return 'a dense cold-air trail';
-    if (longevity >= 0.62) return 'a warm, slow drydown';
+    if (longevity >= 0.62) return 'a warm, slow texture';
     return 'a cozy amber glow';
   }
   if (/citrus|bergamot|lemon|grapefruit|marine|aquatic|fresh/.test(joined) || ['fresh-aquatic', 'citrus-cologne', 'fresh-blue'].includes(familyKey)) {
     if (projection >= 0.6) return 'an easy bright lift';
-    return 'a clean open finish';
+    return 'a clean, open profile';
   }
   if (/tea|herbal|green|lavender|sage|basil|mint/.test(joined) || ['green-aromatic'].includes(familyKey)) {
     return 'a crisp aromatic edge';
@@ -5365,12 +5385,12 @@ function buildFragranceTexturePhrase(source: {
     return 'darker textured edges';
   }
   if (/musk|powdery|iris|violet/.test(joined)) {
-    return 'a softer skin-close finish';
+    return 'a softer skin-close profile';
   }
   if (/woody|cedar|sandalwood|vetiver|patchouli/.test(joined) || ['woody', 'woody-clean'].includes(familyKey)) {
-    return 'a dry woody drydown';
+    return 'a dry woody texture';
   }
-  return projection >= 0.64 ? 'a noticeable presence' : 'an easy-wearing finish';
+  return projection >= 0.64 ? 'a noticeable presence' : 'an easy-wearing profile';
 }
 
 const DERIVED_DESCRIPTION_SOURCES = new Set(['derived_client', 'fallback_generated']);
@@ -12475,6 +12495,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               const ratingDisplay = formatCompactCollectionRatingValue(
                 collectionItemById.get(card.fragrance_id)?.rating ?? null,
               );
+              const metadataLabels = [
+                formatWardrobeLastWornLabel(card.last_worn_at),
+                formatWardrobeSourceConfidenceLabel(card.item.source_confidence),
+              ].filter((value): value is string => Boolean(value));
               const railChips = expandAndDeduplicateScentIntelDisplayTerms([
                 ...sanitizeTokenSource(card.item.accords)
                   .slice(0, 6)
@@ -12498,7 +12522,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     event.preventDefault();
                     openDetail(card.fragrance_id, 'wardrobe');
                   }}
-                  className="group relative block min-h-[176px] w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[188px]"
+                  className="group relative block w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
                     ...cardVisual.surfaceStyle,
                     boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
@@ -12515,16 +12539,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex min-h-[174px] items-stretch gap-3 px-3.5 py-3.5 sm:min-h-[186px] sm:gap-4 sm:px-4 sm:py-4">
-                    <div className="relative flex w-[102px] shrink-0 items-end justify-center sm:w-[114px]">
+                  <div className="relative z-[1] flex items-stretch gap-3.5 px-3.5 py-3.5 sm:gap-4 sm:px-4 sm:py-4">
+                    <div className="relative flex min-h-[154px] w-[118px] shrink-0 items-end justify-center sm:min-h-[166px] sm:w-[130px]">
                       <div
-                        className="pointer-events-none absolute inset-x-1 bottom-2 h-12 rounded-full blur-2xl"
+                        className="pointer-events-none absolute inset-x-1 bottom-2 h-14 rounded-full blur-2xl"
                         style={{
                           background: `radial-gradient(circle at 50% 100%, ${tint.inner} 0%, rgba(255,255,255,0) 76%)`,
                           opacity: 0.92,
                         }}
                       />
-                      <div className="relative z-[1] h-full w-full max-w-[108px] self-end sm:max-w-[116px]">
+                      <div className="relative z-[1] h-full w-full max-w-[122px] self-end sm:max-w-[132px]">
                         <OdaraWardrobeBottleArt
                           name={card.name}
                           brand={card.brand}
@@ -12539,65 +12563,72 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         />
                       </div>
                     </div>
-                    <div className="relative z-[1] flex min-w-0 flex-1 flex-col justify-between overflow-hidden py-1">
-                      <div className="min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          {onOpenScentIntel ? (
-                            <ScentIntelChipButton
-                              label={familyChipLabel}
-                              slug={card.family_key ?? scentIntelSlugify(familyChipLabel)}
-                              onOpen={onOpenScentIntel}
-                              fragranceId={card.fragrance_id}
-                              fragranceName={card.name}
-                              fragranceBrand={card.brand}
-                              position="family"
-                              className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
-                              style={{
-                                color: familyChipTone.color,
-                                border: `1px solid ${familyChipTone.border}`,
-                                background: familyChipTone.background,
-                                boxShadow: `0 0 14px ${familyChipTone.glow}`,
-                              }}
-                            />
-                          ) : (
-                            <span
-                              className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
-                              style={{
-                                color: familyChipTone.color,
-                                border: `1px solid ${familyChipTone.border}`,
-                                background: familyChipTone.background,
-                                boxShadow: `0 0 14px ${familyChipTone.glow}`,
-                              }}
-                            >
-                              {familyChipLabel}
-                            </span>
-                          )}
-                          {ratingDisplay ? (
-                            <div
-                              className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
-                              style={{
-                                color: 'rgba(247,220,159,0.96)',
-                                border: '1px solid rgba(231,181,95,0.24)',
-                                background: 'rgba(19,16,11,0.54)',
-                                boxShadow: '0 0 14px rgba(231,181,95,0.12)',
-                              }}
-                            >
-                              {`★ ${ratingDisplay}`}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div
-                          className="mt-3 line-clamp-2 text-[20px] leading-[0.98] text-foreground/94 sm:text-[21px]"
-                          style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.016em' }}
-                        >
-                          {card.name}
-                        </div>
-                        <div className="mt-1.5 text-[11px] leading-[1.4] text-foreground/58">
-                          {getWardrobeBrandLabel(card.brand)}
-                        </div>
+                    <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden py-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        {onOpenScentIntel ? (
+                          <ScentIntelChipButton
+                            label={familyChipLabel}
+                            slug={card.family_key ?? scentIntelSlugify(familyChipLabel)}
+                            onOpen={onOpenScentIntel}
+                            fragranceId={card.fragrance_id}
+                            fragranceName={card.name}
+                            fragranceBrand={card.brand}
+                            position="family"
+                            className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            style={{
+                              color: familyChipTone.color,
+                              border: `1px solid ${familyChipTone.border}`,
+                              background: familyChipTone.background,
+                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            style={{
+                              color: familyChipTone.color,
+                              border: `1px solid ${familyChipTone.border}`,
+                              background: familyChipTone.background,
+                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                            }}
+                          >
+                            {familyChipLabel}
+                          </span>
+                        )}
+                        {ratingDisplay ? (
+                          <div
+                            className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
+                            style={{
+                              color: 'rgba(247,220,159,0.96)',
+                              border: '1px solid rgba(231,181,95,0.24)',
+                              background: 'rgba(19,16,11,0.54)',
+                              boxShadow: '0 0 14px rgba(231,181,95,0.12)',
+                            }}
+                          >
+                            {`★ ${ratingDisplay}`}
+                          </div>
+                        ) : null}
                       </div>
+                      <div
+                        className="mt-3 line-clamp-2 text-[21px] leading-[0.98] text-foreground/94 sm:text-[22px]"
+                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.016em' }}
+                      >
+                        {card.name}
+                      </div>
+                      <div className="mt-1.5 text-[11px] leading-[1.4] text-foreground/58">
+                        {getWardrobeBrandLabel(card.brand)}
+                      </div>
+                      {metadataLabels.length > 0 ? (
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.12em] text-foreground/46">
+                          {metadataLabels.map((label) => (
+                            <span key={`${card.fragrance_id}-${label}`} className="shrink-0 whitespace-nowrap">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {railChips.length > 0 ? (
-                        <div className="mt-3 min-w-0">
+                        <div className={`${metadataLabels.length > 0 ? 'mt-3' : 'mt-2.5'} min-w-0`}>
                           <div
                             data-no-card-swipe
                             className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-1"
