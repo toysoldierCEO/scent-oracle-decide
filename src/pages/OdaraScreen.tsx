@@ -9886,7 +9886,7 @@ const OdaraLegacyCollectionPage: React.FC<{
                     data-collection-tile
                     data-collection-fragrance-id={item.fragrance_id ?? itemKey}
                     data-collection-fragrance-name={item.name ?? ''}
-                    aria-label={`Open details for ${item.name ?? 'this bottle'}`}
+                    ariaLabel={`Open details for ${item.name ?? 'this bottle'}`}
                     onOpen={() => {
                       const suppressedUntil = suppressTileClickRef.current[itemKey] ?? 0;
                       if (suppressedUntil > Date.now()) return;
@@ -10351,6 +10351,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [actionLabelCount, setActionLabelCount] = useState(() => readStoredWardrobeActionLabelCount());
   const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(activeSessionUserId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
+  const [pendingRetiredById, setPendingRetiredById] = useState<Record<string, boolean>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [detailHydrationById, setDetailHydrationById] = useState<Record<string, {
     detail: FragranceDetail | null;
@@ -10749,6 +10750,44 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
     return next;
   }, [collectionItems]);
+
+  const handleRetiredToggle = useCallback(async (item: OdaraCollectionItem) => {
+    if (!item.fragrance_id) return;
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
+    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_retired_v1' as any, {
+      p_fragrance_id: item.fragrance_id,
+      p_retired: !item.retired,
+      p_source: 'collection',
+    } as any);
+    if (rpcError || !data) {
+      setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+      return;
+    }
+    const result = data as OdaraCollectionRetiredWriteResult;
+    setPayload((prev) => {
+      if (!prev) return prev;
+      return normalizeCollectionPayload({
+        ...prev,
+        items: (prev.items ?? []).map((entry) => (
+          entry.fragrance_id === result.fragrance_id
+            ? {
+                ...entry,
+                retired: result.retired,
+                favorite: result.favorite ?? result.wear_more ?? false,
+                wear_more: result.wear_more ?? result.favorite ?? false,
+              }
+            : entry
+        )),
+        summary: {
+          ...prev.summary,
+          wear_more_count: result.wear_more_count ?? result.favorite_count ?? prev.summary.wear_more_count,
+          favorite_count: result.favorite_count ?? result.wear_more_count ?? prev.summary.favorite_count,
+          retired_count: result.retired_count,
+        },
+      });
+    });
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+  }, []);
 
   const catalogById = useMemo(() => {
     const next = new Map<string, OdaraWardrobeCatalogItem>();
@@ -12566,7 +12605,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <OdaraCollectionCardSurface
                   key={card.fragrance_id}
                   data-collection-card
-                  aria-label={`Open ${card.name} profile`}
+                  ariaLabel={`Open ${card.name} profile`}
                   onOpen={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative block w-full cursor-pointer overflow-hidden rounded-[30px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
@@ -13766,7 +13805,7 @@ const OdaraScreen = ({
     const cachedFragrance = input.fragranceId
       ? (cachedDetail
         ? {
-            id: cachedDetail.fragrance_id,
+            id: cachedDetail.id,
             name: cachedDetail.name,
             brand: cachedDetail.brand,
             familyKey: cachedDetail.family_key ?? null,
@@ -15153,7 +15192,7 @@ const OdaraScreen = ({
       }
     }
     const ol = activeOracle?.layer;
-    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? ol?.mode ?? ol?.interaction_type) ?? 'balance';
+    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? (ol as any)?.mode ?? (ol as any)?.interaction_type) ?? 'balance';
     if (ol?.fragrance_id && oracleLayerMood !== mood && !excludeIds.includes(ol.fragrance_id)) {
       excludeIds.push(ol.fragrance_id);
     }
@@ -18057,7 +18096,7 @@ const OdaraScreen = ({
     if (!fragranceId) return null;
     return fragranceDetailCacheRef.current.get(fragranceId) ?? null;
   }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
-  const heroCardChips = useMemo<Array<{ label: string; position: string | null; slug?: string | null }>>(() => {
+  const heroCardChips = useMemo<Array<{ label: string; position: string; slug?: string }>>(() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
     const pushChip = (rawLabel: string | null | undefined, position: string) => {
@@ -18115,7 +18154,9 @@ const OdaraScreen = ({
     }
 
     if (chips.length > 0) {
-      return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 6);
+      return expandAndDeduplicateScentIntelDisplayTerms(chips)
+        .slice(0, 6)
+        .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
     }
 
     const fallbackTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
@@ -18131,7 +18172,9 @@ const OdaraScreen = ({
       pushChip(label, 'accord');
     }
 
-    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 4);
+    return expandAndDeduplicateScentIntelDisplayTerms(chips)
+      .slice(0, 4)
+      .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
   }, [
     fragranceDetailVersion,
     visibleHeroDetail?.accords,
