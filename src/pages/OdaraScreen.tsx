@@ -8746,6 +8746,40 @@ const ScentIntelChipButton: React.FC<{
   );
 };
 
+const OdaraCollectionCardSurface: React.FC<{
+  ariaLabel: string;
+  onOpen: () => void;
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, 'children' | 'className' | 'style' | 'onClick' | 'onKeyDown' | 'role' | 'tabIndex' | 'aria-label'>> = ({
+  ariaLabel,
+  onOpen,
+  children,
+  className,
+  style,
+  ...rest
+}) => (
+  // Deliberately not a native <button>: collection cards contain nested interactive
+  // chip/button controls, and nested buttons cause invalid DOM plus layout regressions.
+  <div
+    role="button"
+    tabIndex={0}
+    aria-label={ariaLabel}
+    onClick={onOpen}
+    onKeyDown={(event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      onOpen();
+    }}
+    className={className}
+    style={style}
+    {...rest}
+  >
+    {children}
+  </div>
+);
+
 const ScentIntelSection: React.FC<{
   title: string;
   children: React.ReactNode;
@@ -9739,26 +9773,19 @@ const OdaraLegacyCollectionPage: React.FC<{
                 const ratingPreview = activeRatingTile?.itemKey === itemKey ? activeRatingTile.previewRating : null;
                 const ratingMarker = normalizeCollectionRating(item.rating);
                 return (
-                  <div
+                  <OdaraCollectionCardSurface
                     key={itemKey}
                     data-collection-tile
                     data-collection-fragrance-id={item.fragrance_id ?? itemKey}
                     data-collection-fragrance-name={item.name ?? ''}
-                    role="button"
-                    tabIndex={0}
                     aria-label={`Open details for ${item.name ?? 'this bottle'}`}
-                    className="relative flex min-h-[286px] flex-col rounded-[28px] p-2.5 transition-transform duration-200 active:scale-[0.985]"
-                    onContextMenu={(event) => event.preventDefault()}
-                    onClick={() => {
+                    onOpen={() => {
                       const suppressedUntil = suppressTileClickRef.current[itemKey] ?? 0;
                       if (suppressedUntil > Date.now()) return;
                       onOpenFragranceDetail(buildFragranceDetailSurfaceStateFromCollectionItem(item));
                     }}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return;
-                      event.preventDefault();
-                      onOpenFragranceDetail(buildFragranceDetailSurfaceStateFromCollectionItem(item));
-                    }}
+                    className="relative flex min-h-[286px] flex-col rounded-[28px] p-2.5 transition-transform duration-200 active:scale-[0.985]"
+                    onContextMenu={(event) => event.preventDefault()}
                     onPointerDown={(event) => beginCollectionTilePress(item, itemKey, event)}
                     onPointerMove={updateCollectionTilePress}
                     onPointerUp={(event) => endCollectionTilePress(item, event)}
@@ -9925,7 +9952,7 @@ const OdaraLegacyCollectionPage: React.FC<{
                         </div>
                       ) : null}
                     </div>
-                  </div>
+                  </OdaraCollectionCardSurface>
                 );
               })}
             </div>
@@ -12510,18 +12537,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 .filter((chip) => normalizeOdaraSearchQuery(chip.label) !== normalizeOdaraSearchQuery(familyChipLabel))
                 .slice(0, 8);
               return (
-                <div
+                  <OdaraCollectionCardSurface
                   key={card.fragrance_id}
                   data-collection-card
-                  role="button"
-                  tabIndex={0}
                   aria-label={`Open ${card.name} profile`}
-                  onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
-                    event.preventDefault();
-                    openDetail(card.fragrance_id, 'wardrobe');
-                  }}
+                  onOpen={() => openDetail(card.fragrance_id, 'wardrobe')}
                   className="group relative block w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
                     ...cardVisual.surfaceStyle,
@@ -12674,9 +12694,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       ) : null}
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                  </OdaraCollectionCardSurface>
+                );
+              })}
           </div>
         )}
       </div>
