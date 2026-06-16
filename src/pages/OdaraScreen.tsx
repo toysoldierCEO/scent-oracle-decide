@@ -12789,15 +12789,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     );
   };
 
-  const isCollectionProfileDetail = surface === 'detail'
-    && detailReturnSurface === 'wardrobe'
-    && Boolean(selectedCollectionItem);
+  if (surface === 'detail') {
+    return renderDetailContent();
+  }
 
   const chromeTitle = surface === 'search'
     ? 'Add fragrance'
-    : surface === 'detail'
-      ? (isCollectionProfileDetail ? 'Fragrance Profile' : 'Add fragrance')
-      : surface === 'confirmation'
+    : surface === 'confirmation'
         ? ''
         : wardrobeCards.length > 0
           ? '' // top wordmark already reads VESPER — no duplicate serif title
@@ -12834,11 +12832,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     >
       {surface === 'search'
         ? renderSearchContent()
-        : surface === 'detail'
-          ? renderDetailContent()
-          : surface === 'confirmation'
-            ? renderConfirmationContent()
-            : renderWardrobeContent()}
+        : surface === 'confirmation'
+          ? renderConfirmationContent()
+          : renderWardrobeContent()}
     </OdaraDestinationChrome>
   );
 };
