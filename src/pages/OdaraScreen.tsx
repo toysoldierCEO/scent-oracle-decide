@@ -6447,6 +6447,14 @@ function formatCollectionRatingChip(rating: number | null | undefined) {
   return `Rated ${normalized}`;
 }
 
+function formatCompactCollectionRatingValue(rating: number | null | undefined) {
+  const numeric = normalizeDetailScore(rating);
+  if (numeric == null) return null;
+  return Number.isInteger(numeric)
+    ? String(numeric)
+    : numeric.toFixed(1).replace(/\.0$/, '');
+}
+
 function normalizeCollectionPayload(payload: OdaraCollectionPayload | null): OdaraCollectionPayload | null {
   if (!payload) return null;
   return {
@@ -12021,17 +12029,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       <div className="flex flex-col gap-4">
         <div className="relative px-1">
           {!wardrobeSearchOpen ? (
-            <div
-              className="rounded-[24px] border px-3 py-3"
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'linear-gradient(180deg, rgba(17,19,25,0.62) 0%, rgba(9,11,16,0.44) 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(0,0,0,0.18)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-              }}
-            >
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <div>
+              <div className="flex items-center gap-2 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
                 {/* Filter pill + anchored dropdown */}
                 <div className="relative">
@@ -12377,48 +12376,39 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
         {wardrobeBrandOptions.length > 0 ? (
           <div className="flex justify-center px-1">
-            <div
-              className="max-w-full rounded-[22px] border px-2 py-2"
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'linear-gradient(180deg, rgba(17,19,25,0.54) 0%, rgba(10,11,16,0.36) 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-              }}
-            >
-              <div className="flex max-w-full gap-2 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button
-                  type="button"
-                  onClick={() => setWardrobeBrandFilter(null)}
-                  className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                  style={{
-                    border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                    background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                    color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-                    boxShadow: wardrobeBrandFilter === null ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
-                  }}
-                >
-                  All
-                </button>
-                {wardrobeBrandOptions.map((brand) => {
-                  const active = wardrobeBrandFilter === brand;
-                  return (
-                    <button
-                      key={brand}
-                      type="button"
-                      onClick={() => setWardrobeBrandFilter(brand)}
-                      className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
-                      style={{
-                        border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
-                        background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
-                        color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
-                        boxShadow: active ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
-                      }}
-                    >
-                      {getWardrobeBrandLabel(brand)}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="flex max-w-full gap-2 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <button
+                type="button"
+                onClick={() => setWardrobeBrandFilter(null)}
+                className="shrink-0 rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                style={{
+                  border: `1px solid ${wardrobeBrandFilter === null ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                  background: wardrobeBrandFilter === null ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                  color: wardrobeBrandFilter === null ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                  boxShadow: wardrobeBrandFilter === null ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
+                }}
+              >
+                All
+              </button>
+              {wardrobeBrandOptions.map((brand) => {
+                const active = wardrobeBrandFilter === brand;
+                return (
+                  <button
+                    key={brand}
+                    type="button"
+                    onClick={() => setWardrobeBrandFilter(brand)}
+                    className="shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[10px] uppercase tracking-[0.22em] transition-colors"
+                    style={{
+                      border: `1px solid ${active ? 'rgba(218,188,124,0.34)' : 'rgba(255,255,255,0.08)'}`,
+                      background: active ? 'rgba(218,188,124,0.14)' : 'rgba(255,255,255,0.03)',
+                      color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.68)',
+                      boxShadow: active ? '0 8px 18px rgba(0,0,0,0.16)' : 'none',
+                    }}
+                  >
+                    {getWardrobeBrandLabel(brand)}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}
@@ -12474,7 +12464,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             </div>
           </OdaraInsetGroup>
         ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 px-1 pb-6 pt-1 sm:gap-x-5 sm:gap-y-6">
+          <div className="grid grid-cols-1 gap-y-5 px-1 pb-6 pt-1 md:grid-cols-2 md:gap-x-5 md:gap-y-6">
             {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               const tint = getEnhancedCollectionTint(card);
@@ -12483,18 +12473,39 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 buildFamilyLabel(card.family_key),
                 card.family_key,
               ) || 'Unclassified';
-              const previewTerms = normalizeNotes([
-                ...sanitizeTokenSource(card.item.accords),
-                ...sanitizeTokenSource(card.item.notes),
-              ], 3);
+              const familyChipLabel = card.family_key
+                ? (FAMILY_LABELS[card.family_key] ?? familyLabel.replace(/\s+/g, '-').toUpperCase())
+                : familyLabel.replace(/\s+/g, '-').toUpperCase();
+              const familyChipTone = card.family_key
+                ? getOdaraFamilyMappedChipTone(card.family_key)
+                : getAccordChipTone(familyChipLabel, card.family_key);
+              const ratingDisplay = formatCompactCollectionRatingValue(
+                collectionItemById.get(card.fragrance_id)?.rating ?? null,
+              );
+              const railChips = expandAndDeduplicateScentIntelDisplayTerms([
+                ...sanitizeTokenSource(card.item.accords)
+                  .slice(0, 6)
+                  .map((label) => ({ label, position: 'accord' })),
+                ...sanitizeTokenSource(card.item.notes)
+                  .slice(0, 6)
+                  .map((label) => ({ label, position: 'note' })),
+              ])
+                .filter((chip) => normalizeOdaraSearchQuery(chip.label) !== normalizeOdaraSearchQuery(familyChipLabel))
+                .slice(0, 8);
               return (
-                <button
-                  type="button"
+                <div
                   key={card.fragrance_id}
                   data-collection-card
+                  role="button"
+                  tabIndex={0}
                   aria-label={`Open ${card.name} profile`}
                   onClick={() => openDetail(card.fragrance_id, 'wardrobe')}
-                  className="group relative block min-h-[352px] w-full overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[372px]"
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    openDetail(card.fragrance_id, 'wardrobe');
+                  }}
+                  className="group relative block min-h-[352px] w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[372px]"
                   style={{
                     ...cardVisual.surfaceStyle,
                     boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
@@ -12511,8 +12522,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex min-h-[350px] flex-col px-3.5 pb-3.5 pt-4 sm:min-h-[370px]">
-                    <div className="relative px-1">
+                  <div className="relative z-[1] flex min-h-[350px] flex-col px-4 pb-4 pt-4 sm:min-h-[370px]">
+                    <div className="relative px-2">
                       <div
                         className="pointer-events-none absolute inset-x-8 top-3 h-10 rounded-full blur-2xl"
                         style={{
@@ -12520,7 +12531,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           opacity: 0.9,
                         }}
                       />
-                      <div className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[180px]">
+                      <div className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[188px]">
                         <OdaraWardrobeBottleArt
                           name={card.name}
                           brand={card.brand}
@@ -12534,20 +12545,51 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         />
                       </div>
                     </div>
-                    <div className="relative z-[1] mt-4 flex min-h-[148px] flex-1 flex-col px-1 pb-1">
-                      <div className="flex min-h-[25px] items-start justify-between gap-2">
-                        <span
-                          className="max-w-[76px] rounded-full px-2 py-[5px] text-center text-[7px] font-medium uppercase leading-[1.12] tracking-[0.1em]"
-                          style={{
-                            color: 'rgba(255,255,255,0.84)',
-                            border: `1px solid ${tint.frame}`,
-                            background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
-                            boxShadow: `0 0 18px ${tint.glowStrong}`,
-                          }}
-                        >
-                          {familyLabel}
-                        </span>
-                        <OdaraWardrobeStatusPill status={card.primary_status} localOnly={card.local_only} compact />
+                    <div className="relative z-[1] mt-4 flex min-h-[148px] flex-1 flex-col">
+                      <div className="flex min-h-[25px] items-start justify-between gap-3">
+                        {onOpenScentIntel ? (
+                          <ScentIntelChipButton
+                            label={familyChipLabel}
+                            slug={card.family_key ?? scentIntelSlugify(familyChipLabel)}
+                            onOpen={onOpenScentIntel}
+                            fragranceId={card.fragrance_id}
+                            fragranceName={card.name}
+                            fragranceBrand={card.brand}
+                            position="family"
+                            className="inline-flex max-w-full shrink-0 truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            style={{
+                              color: familyChipTone.color,
+                              border: `1px solid ${familyChipTone.border}`,
+                              background: familyChipTone.background,
+                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="inline-flex max-w-full shrink-0 truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            style={{
+                              color: familyChipTone.color,
+                              border: `1px solid ${familyChipTone.border}`,
+                              background: familyChipTone.background,
+                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                            }}
+                          >
+                            {familyChipLabel}
+                          </span>
+                        )}
+                        {ratingDisplay ? (
+                          <div
+                            className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
+                            style={{
+                              color: 'rgba(247,220,159,0.96)',
+                              border: '1px solid rgba(231,181,95,0.24)',
+                              background: 'rgba(19,16,11,0.54)',
+                              boxShadow: '0 0 14px rgba(231,181,95,0.12)',
+                            }}
+                          >
+                            {`★ ${ratingDisplay}`}
+                          </div>
+                        ) : null}
                       </div>
                       <div
                         className="mt-3 line-clamp-2 text-[19px] leading-[1.02] text-foreground/94"
@@ -12558,29 +12600,54 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
                         {getWardrobeBrandLabel(card.brand)}
                       </div>
-                      {previewTerms.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {previewTerms.map((term) => (
-                            <span
-                              key={term}
-                              className="max-w-full truncate rounded-full px-2.5 py-[5px] text-[8px] text-foreground/64"
-                              style={{
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                background: 'rgba(255,255,255,0.04)',
-                              }}
-                            >
-                              {term}
-                            </span>
-                          ))}
+                      {railChips.length > 0 ? (
+                        <div className="mt-3">
+                          <div
+                            data-no-card-swipe
+                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-2"
+                            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                          >
+                            {railChips.map((chip, index) => {
+                              const tone = getAccordChipTone(chip.label, card.family_key);
+                              return onOpenScentIntel ? (
+                                <ScentIntelChipButton
+                                  key={`wardrobe-card-chip-${card.fragrance_id}-${chip.position ?? 'accord'}-${chip.slug ?? chip.label}-${index}`}
+                                  label={chip.label}
+                                  slug={chip.slug ?? null}
+                                  onOpen={onOpenScentIntel}
+                                  fragranceId={card.fragrance_id}
+                                  fragranceName={card.name}
+                                  fragranceBrand={card.brand}
+                                  position={chip.position ?? 'accord'}
+                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.12em]"
+                                  style={{
+                                    color: tone.color,
+                                    border: `1px solid ${tone.border}`,
+                                    background: tone.background,
+                                    boxShadow: `0 0 12px ${tone.glow}`,
+                                  }}
+                                />
+                              ) : (
+                                <span
+                                  key={`wardrobe-card-chip-${card.fragrance_id}-${chip.position ?? 'accord'}-${chip.slug ?? chip.label}-${index}`}
+                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.12em]"
+                                  style={{
+                                    color: tone.color,
+                                    border: `1px solid ${tone.border}`,
+                                    background: tone.background,
+                                    boxShadow: `0 0 12px ${tone.glow}`,
+                                  }}
+                                >
+                                  {chip.label}
+                                </span>
+                              );
+                            })}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="mt-3 text-[10px] uppercase tracking-[0.14em] text-foreground/34">
-                          Profile details inside
-                        </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
