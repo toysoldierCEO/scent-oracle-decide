@@ -6861,6 +6861,90 @@ function mergeFragranceDetailSurfaceState(
   };
 }
 
+async function fetchOdaraFragranceDetailForSurface(
+  fragranceId: string,
+  userId: string | null,
+  isGuestMode: boolean,
+): Promise<FragranceDetail | null> {
+  if (!fragranceId) return null;
+
+  try {
+    const [
+      { data: profileData, error: profileError },
+      { data, error },
+      imageAssetMap,
+    ] = await Promise.all([
+      odaraSupabase.rpc('get_fragrance_profile_v1' as any, {
+        p_user: isGuestMode ? null : userId,
+        p_fragrance_id: fragranceId,
+      } as any),
+      odaraSupabase
+        .from('fragrances' as any)
+        .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
+        .eq('id', fragranceId)
+        .maybeSingle(),
+      fetchWardrobeImageAssetMap([fragranceId]),
+    ]);
+
+    const payload = (!profileError && profileData && (profileData as any)?.found)
+      ? (profileData as any)
+      : null;
+
+    if (!payload && (error || !(data as any)?.id)) {
+      return null;
+    }
+
+    const imageAsset = imageAssetMap.get(fragranceId) ?? null;
+    return finalizeFragranceDetail({
+      id: payload?.fragrance_id ?? (data as any)?.id ?? fragranceId,
+      name: payload?.name ?? (data as any)?.name ?? '',
+      brand: payload?.brand ?? (data as any)?.brand ?? null,
+      family_key: payload?.family_key ?? (data as any)?.family_key ?? null,
+      family_color_token: payload?.family_color_token ?? payload?.family_key ?? (data as any)?.family_key ?? null,
+      wardrobe_role_key: payload?.wardrobe_role_key ?? null,
+      wardrobe_role_label: payload?.wardrobe_role_label ?? null,
+      role_confidence: payload?.role_confidence ?? null,
+      role_source: payload?.role_source ?? null,
+      release_year: payload?.release_year ?? (typeof (data as any)?.release_year === 'number' ? (data as any).release_year : null),
+      concentration: payload?.concentration ?? (typeof (data as any)?.concentration === 'string' ? (data as any).concentration : null),
+      perfumer: payload?.perfumer ?? (typeof (data as any)?.perfumer === 'string' ? (data as any).perfumer : null),
+      short_description: payload?.short_description ?? null,
+      description_source: payload?.description_source ?? null,
+      description_generated_at: payload?.description_generated_at ?? null,
+      timeline_source: null,
+      notes: Array.isArray(payload?.notes) ? payload.notes : (Array.isArray((data as any)?.notes) ? (data as any).notes : []),
+      accords: Array.isArray(payload?.accords) ? payload.accords : (Array.isArray((data as any)?.accords) ? (data as any).accords : []),
+      top_notes: Array.isArray(payload?.top_notes) ? payload.top_notes : (Array.isArray((data as any)?.top_notes) ? (data as any).top_notes : []),
+      middle_notes: Array.isArray(payload?.middle_notes) ? payload.middle_notes : (Array.isArray((data as any)?.heart_notes) ? (data as any).heart_notes : []),
+      base_notes: Array.isArray(payload?.base_notes) ? payload.base_notes : (Array.isArray((data as any)?.base_notes) ? (data as any).base_notes : []),
+      longevity_score: normalizeDetailScore(payload?.longevity_score ?? (data as any)?.longevity_score),
+      longevity_source: null,
+      projection_score: normalizeDetailScore(payload?.projection_score ?? (data as any)?.projection_score),
+      projection_source: null,
+      odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence),
+      density_score: normalizeDetailScore(payload?.density_score),
+      transparency_score: normalizeDetailScore(payload?.transparency_score),
+      beast_mode_score: normalizeDetailScore(payload?.beast_mode_score),
+      trail_source: null,
+      why_it_fits_wardrobe: typeof payload?.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
+      source_confidence: typeof payload?.source_confidence === 'string'
+        ? payload.source_confidence
+        : (typeof (data as any)?.source_confidence === 'string' ? (data as any).source_confidence : null),
+      retired: Boolean(payload?.retired),
+      rating: normalizeCollectionRating(payload?.rating),
+      profile_loaded: true,
+      image_url: resolvePreferredWardrobeBottleImage(payload, imageAsset, data, payload?.image_url, payload?.thumbnail_url),
+      thumbnail_url: payload?.thumbnail_url ?? imageAsset?.thumbnail_url ?? null,
+      image_source: payload?.image_source ?? imageAsset?.image_source ?? null,
+      source_page_url: payload?.source_page_url ?? payload?.source_url ?? imageAsset?.source_url ?? (typeof (data as any)?.source_url === 'string' ? (data as any).source_url : null),
+      image_license_status: payload?.image_license_status ?? null,
+      image_last_checked_at: imageAsset?.updated_at ?? null,
+    });
+  } catch {
+    return null;
+  }
+}
+
 const OdaraProfilePage: React.FC<{
   onClose: () => void;
   onOpenCollection: (preset?: OdaraCollectionEntryPreset) => void;
@@ -9010,7 +9094,8 @@ const OdaraFragranceDetailSheet: React.FC<{
   open: boolean;
   onClose: () => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
-}> = ({ detail, open, onClose, onOpenScentIntel }) => {
+  footerActions?: React.ReactNode;
+}> = ({ detail, open, onClose, onOpenScentIntel, footerActions }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -9300,6 +9385,15 @@ const OdaraFragranceDetailSheet: React.FC<{
           >
             {detailFactLine}
           </div>
+
+          {footerActions ? (
+            <div
+              className="pt-4"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              {footerActions}
+            </div>
+          ) : null}
         </div>
       </div>
     </OdaraBottomSheet>
@@ -10244,6 +10338,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(activeSessionUserId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [detailHydrationById, setDetailHydrationById] = useState<Record<string, {
+    detail: FragranceDetail | null;
+    loading: boolean;
+    error: string | null;
+  }>>({});
 
   useEffect(() => {
     setWardrobeBrandFilter(null);
@@ -10567,6 +10666,43 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeSortKey('az');
     setWardrobeSortDirection('asc');
   }, [activeSessionUserId]);
+
+  useEffect(() => {
+    if (surface !== 'detail' || !selectedFragranceId || !activeSessionUserId) return;
+    const existing = detailHydrationById[selectedFragranceId];
+    if (existing?.detail || existing?.loading || existing?.error) return;
+
+    let cancelled = false;
+    setDetailHydrationById((current) => ({
+      ...current,
+      [selectedFragranceId]: {
+        detail: current[selectedFragranceId]?.detail ?? null,
+        loading: true,
+        error: null,
+      },
+    }));
+
+    (async () => {
+      const detail = await fetchOdaraFragranceDetailForSurface(
+        selectedFragranceId,
+        activeSessionUserId,
+        false,
+      );
+      if (cancelled) return;
+      setDetailHydrationById((current) => ({
+        ...current,
+        [selectedFragranceId]: {
+          detail,
+          loading: false,
+          error: detail ? null : 'Could not refresh the live fragrance profile.',
+        },
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionUserId, detailHydrationById, selectedFragranceId, surface]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -10996,7 +11132,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const selectedNegativeState = selectedSignal?.negative_state ?? 0;
   const selectedWishlist = Boolean(selectedSignal?.wishlist);
   const selectedOwned = Boolean(selectedSignal?.owned);
-  const compactActionLabels = actionLabelCount >= 5;
 
   const searchResults = useMemo(() => {
     const normalizedQuery = normalizeOdaraSearchQuery(deferredSearchQuery);
@@ -11590,307 +11725,174 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       );
     }
 
-    const visibleFamilyTokens = [
-      selectedCatalogItem.family_label,
-      ...sanitizeTokenSource(selectedCatalogItem.accords).slice(0, 4),
-    ].filter(Boolean);
-    const notePreview = sanitizeTokenSource(selectedCatalogItem.notes).slice(0, 6);
-    const accordPreview = sanitizeTokenSource(selectedCatalogItem.accords).slice(0, 6);
-    const structureSections = [
-      { label: 'Top', values: sanitizeTokenSource(selectedCatalogItem.top_notes).slice(0, 4) },
-      { label: 'Heart', values: sanitizeTokenSource(selectedCatalogItem.heart_notes).slice(0, 4) },
-      { label: 'Base', values: sanitizeTokenSource(selectedCatalogItem.base_notes).slice(0, 4) },
-    ].filter((section) => section.values.length > 0);
-
+    const detailHydration = selectedFragranceId ? detailHydrationById[selectedFragranceId] : null;
+    const baseDetail = buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(selectedCatalogItem);
+    const detailState = {
+      ...mergeFragranceDetailSurfaceState(baseDetail, detailHydration?.detail ?? null),
+      collection_status: selectedCollectionItem?.collection_status ?? baseDetail.collection_status ?? null,
+      retired: selectedCollectionItem?.retired ?? baseDetail.retired ?? false,
+      rating: selectedCollectionItem?.rating ?? baseDetail.rating ?? null,
+      detail_loading: Boolean(detailHydration?.loading),
+      detail_error: detailHydration?.error ?? null,
+    };
     const ownPending = pendingActionKey === `own:${selectedCatalogItem.fragrance_id}`;
     const wishlistPending = pendingActionKey === `wishlist:${selectedCatalogItem.fragrance_id}`;
     const heartPending = pendingActionKey === `heart:${selectedCatalogItem.fragrance_id}`;
     const negativePending = pendingActionKey === `negative:${selectedCatalogItem.fragrance_id}`;
-
-    const actionButtonBase = {
-      border: '1px solid rgba(255,255,255,0.08)',
-      background: 'rgba(255,255,255,0.028)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-    } as const;
+    const selectedIsOwnedCollectionItem = Boolean(selectedCollectionItem || selectedOwned);
+    const retirePending = selectedFragranceId ? Boolean(pendingRetiredById[selectedFragranceId]) : false;
+    const retireActive = Boolean(selectedCollectionItem?.retired);
+    const renderDetailActionButton = ({
+      ariaLabel,
+      active,
+      disabled,
+      onClick,
+      children,
+      activeStyle,
+    }: {
+      ariaLabel: string;
+      active?: boolean;
+      disabled?: boolean;
+      onClick: () => void;
+      children: React.ReactNode;
+      activeStyle?: React.CSSProperties;
+    }) => (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={onClick}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-45"
+        style={{
+          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'rgba(255,255,255,0.035)',
+          color: 'rgba(255,255,255,0.78)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+          ...(active ? activeStyle : null),
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        {children}
+      </button>
+    );
 
     return (
-      <div className="flex flex-col gap-4">
-        <button
-          type="button"
-          onClick={() => {
-            setActionError(null);
-            setSurface(detailReturnSurface);
-          }}
-          className="inline-flex items-center gap-2 px-2 text-[10px] uppercase tracking-[0.28em] text-foreground/42 transition-colors hover:text-foreground/74"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          {detailReturnSurface === 'wardrobe' ? 'Back to wardrobe' : 'Back to search'}
-        </button>
-
-        <OdaraInsetGroup emphasis>
-          <div className="px-4 pb-5 pt-4">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <OdaraWardrobeBottleArt
-                name={selectedCatalogItem.name}
-                brand={selectedCatalogItem.brand}
-                family_key={selectedCatalogItem.family_key}
-                family_label={selectedCatalogItem.family_label}
-                image_url={selectedCatalogItem.image_url}
-                thumbnail_url={selectedCatalogItem.thumbnail_url}
-                className="h-[240px] w-[180px]"
-              />
-
-              <div className="max-w-[280px]">
-                <div
-                  className="text-[30px] leading-[1.02] text-foreground/96"
-                  style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.014em' }}
-                >
-                  {selectedCatalogItem.name}
-                </div>
-                <div className="mt-2 text-[13px] text-foreground/58">
-                  {getWardrobeBrandLabel(selectedCatalogItem.brand)}
-                </div>
-              </div>
-
-              {visibleFamilyTokens.length > 0 ? (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {visibleFamilyTokens.map((token, index) => (
-                    <span
-                      key={`${token}-${index}`}
-                      className="rounded-full px-3 py-[6px] text-[9px] uppercase tracking-[0.22em] text-foreground/76"
-                      style={{
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.03)',
-                      }}
-                    >
-                      {token}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
-              {accordPreview.length > 0 ? (
-                <div className="w-full">
-                  <div className="mb-2 text-[9px] uppercase tracking-[0.28em] text-foreground/38">Accords</div>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {accordPreview.map((accord, index) => {
-                      const tone = getAccordChipTone(accord, selectedCatalogItem.family_key);
-                      return (
-                        <ScentIntelChipButton
-                          key={`accord-${accord}-${index}`}
-                          label={accord}
-                          onOpen={onOpenScentIntel}
-                          fragranceId={selectedCatalogItem.fragrance_id}
-                          fragranceName={selectedCatalogItem.name}
-                          fragranceBrand={selectedCatalogItem.brand}
-                          position="accord"
-                          ariaPrefix="Open scent intel for accord"
-                          className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78 transition-colors hover:text-foreground/92"
-                          style={{
-                            color: tone.color,
-                            border: `1px solid ${tone.border}`,
-                            background: tone.background,
-                            boxShadow: `0 0 14px ${tone.glow}`,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {notePreview.length > 0 ? (
-                <div className="w-full">
-                  <div className="mb-2 text-[9px] uppercase tracking-[0.28em] text-foreground/38">Notes</div>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {notePreview.map((note, index) => {
-                      const tone = getAccordChipTone(note, selectedCatalogItem.family_key);
-                      return (
-                        <ScentIntelChipButton
-                          key={`note-${note}-${index}`}
-                          label={note}
-                          onOpen={onOpenScentIntel}
-                          fragranceId={selectedCatalogItem.fragrance_id}
-                          fragranceName={selectedCatalogItem.name}
-                          fragranceBrand={selectedCatalogItem.brand}
-                          ariaPrefix="Open scent intel for note"
-                          className="rounded-full px-3 py-[6px] text-[11px] text-foreground/78 transition-colors hover:text-foreground/92"
-                          style={{
-                            color: tone.color,
-                            border: `1px solid ${tone.border}`,
-                            background: tone.background,
-                            boxShadow: `0 0 14px ${tone.glow}`,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {structureSections.length > 0 ? (
-                <div className="w-full space-y-2 pt-1">
-                  {structureSections.map((section) => (
-                    <div key={section.label}>
-                      <div className="mb-1.5 text-[9px] uppercase tracking-[0.24em] text-foreground/34">{section.label}</div>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {section.values.map((value, index) => (
-                          <span
-                            key={`${section.label}-${value}-${index}`}
-                            className="rounded-full px-3 py-[6px] text-[11px] text-foreground/74"
-                            style={{
-                              border: '1px solid rgba(255,255,255,0.05)',
-                              background: 'rgba(255,255,255,0.02)',
-                            }}
-                          >
-                            {value}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </OdaraInsetGroup>
-
-        <OdaraInsetGroup emphasis>
-          <div className="px-4 pb-5 pt-4">
-            <div
-              className="text-center text-[24px] leading-[1.05] text-foreground/94"
-              style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
-            >
-              Add to your wardrobe?
-            </div>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                aria-label={selectedOwned ? 'Already in owned wardrobe' : 'Add to owned wardrobe'}
-                aria-pressed={selectedOwned}
-                disabled={selectedOwned || ownPending}
-                onClick={() => {
+      <OdaraFragranceDetailSheet
+        detail={detailState}
+        open
+        onClose={() => {
+          setActionError(null);
+          setSurface(detailReturnSurface);
+        }}
+        onOpenScentIntel={onOpenScentIntel}
+        footerActions={(
+          <div className="space-y-3">
+            <div className="flex items-center justify-center gap-3">
+              {selectedIsOwnedCollectionItem ? renderDetailActionButton({
+                ariaLabel: retireActive ? 'Unretire bottle' : 'Retire bottle',
+                active: retireActive,
+                disabled: retirePending || !selectedCollectionItem,
+                onClick: () => {
+                  if (!selectedCollectionItem) return;
+                  void handleRetiredToggle(selectedCollectionItem);
+                },
+                activeStyle: {
+                  borderColor: 'rgba(226,87,87,0.34)',
+                  background: 'rgba(226,87,87,0.12)',
+                  color: 'rgba(255,218,218,0.96)',
+                },
+                children: (
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9.5 3.5h5" />
+                    <path d="M10 3.5v3.2" />
+                    <path d="M14 3.5v3.2" />
+                    <path d="M8.4 7.2h7.2" />
+                    <path d="M8 8.5c0-.7.6-1.3 1.3-1.3h5.4c.7 0 1.3.6 1.3 1.3v10.2c0 1-.8 1.8-1.8 1.8H9.8c-1 0-1.8-.8-1.8-1.8z" />
+                    <path d="M10.2 14.5h3.6" opacity="0.5" />
+                  </svg>
+                ),
+              }) : renderDetailActionButton({
+                ariaLabel: 'Add to owned wardrobe',
+                disabled: ownPending,
+                onClick: () => {
                   void handleOwn();
-                }}
-                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-70"
-                style={{
-                  ...actionButtonBase,
-                  borderColor: selectedOwned ? 'rgba(218,188,124,0.34)' : actionButtonBase.border.split(' ').pop() ?? 'rgba(255,255,255,0.08)',
-                  background: selectedOwned ? 'rgba(218,188,124,0.12)' : actionButtonBase.background,
-                  color: selectedOwned ? 'rgba(248,229,185,0.96)' : 'rgba(255,255,255,0.86)',
-                }}
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-current/20 bg-black/12">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                },
+                children: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
                     <path d="M12 5v14" />
                     <path d="M5 12h14" />
                   </svg>
-                </span>
-                <span className={`${compactActionLabels ? 'text-[9px] text-foreground/58' : 'text-[10px] text-foreground/78'} uppercase tracking-[0.18em]`}>
-                  {selectedOwned ? 'Owned' : 'Own'}
-                </span>
-              </button>
+                ),
+              })}
 
-              <button
-                type="button"
-                aria-label={selectedWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-                aria-pressed={selectedWishlist}
-                disabled={selectedOwned || wishlistPending}
-                onClick={() => {
+              {renderDetailActionButton({
+                ariaLabel: selectedWishlist ? 'Remove from wishlist' : 'Add to wishlist',
+                active: selectedWishlist,
+                disabled: wishlistPending,
+                onClick: () => {
                   void handleWishlist();
-                }}
-                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-70"
-                style={{
-                  ...actionButtonBase,
-                  borderColor: selectedWishlist ? 'rgba(125,161,255,0.3)' : 'rgba(255,255,255,0.08)',
-                  background: selectedWishlist ? 'rgba(125,161,255,0.12)' : 'rgba(255,255,255,0.028)',
-                  color: selectedWishlist ? 'rgba(208,221,255,0.96)' : 'rgba(255,255,255,0.86)',
-                }}
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-current/20 bg-black/12">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill={selectedWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                },
+                activeStyle: {
+                  borderColor: 'rgba(125,161,255,0.32)',
+                  background: 'rgba(125,161,255,0.12)',
+                  color: 'rgba(208,221,255,0.96)',
+                },
+                children: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill={selectedWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                   </svg>
-                </span>
-                <span className={`${compactActionLabels ? 'text-[9px] text-foreground/58' : 'text-[10px] text-foreground/78'} uppercase tracking-[0.18em]`}>
-                  {selectedWishlist ? 'Wishlisted' : 'Wishlist'}
-                </span>
-              </button>
+                ),
+              })}
 
-              <button
-                type="button"
-                aria-label={getWardrobeHeartActionAriaLabel(selectedHeartState)}
-                aria-pressed={selectedHeartState > 0}
-                disabled={heartPending}
-                onClick={() => {
+              {renderDetailActionButton({
+                ariaLabel: getWardrobeHeartActionAriaLabel(selectedHeartState),
+                active: selectedHeartState > 0,
+                disabled: heartPending,
+                onClick: () => {
                   void handleHeart();
-                }}
-                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-70"
-                style={{
-                  ...actionButtonBase,
-                  borderColor: selectedHeartState > 0 ? 'rgba(236,72,153,0.3)' : 'rgba(255,255,255,0.08)',
-                  background: selectedHeartState > 0
-                    ? (selectedHeartState === 2 ? 'rgba(239,68,68,0.12)' : 'rgba(236,72,153,0.12)')
-                    : 'rgba(255,255,255,0.028)',
-                  color: selectedHeartState > 0
-                    ? (selectedHeartState === 2 ? 'rgba(254,202,202,0.96)' : 'rgba(251,207,232,0.96)')
-                    : 'rgba(255,255,255,0.86)',
-                }}
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-current/20 bg-black/12">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill={selectedHeartState > 0 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                },
+                activeStyle: {
+                  borderColor: selectedHeartState === 2 ? 'rgba(239,68,68,0.32)' : 'rgba(236,72,153,0.32)',
+                  background: selectedHeartState === 2 ? 'rgba(239,68,68,0.12)' : 'rgba(236,72,153,0.12)',
+                  color: selectedHeartState === 2 ? 'rgba(254,202,202,0.96)' : 'rgba(251,207,232,0.96)',
+                },
+                children: (
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill={selectedHeartState > 0 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m12 21-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.18z" />
                   </svg>
-                </span>
-                <span className={`${compactActionLabels ? 'text-[9px] text-foreground/58' : 'text-[10px] text-foreground/78'} uppercase tracking-[0.18em]`}>
-                  {getWardrobeHeartActionLabel(selectedHeartState)}
-                </span>
-              </button>
+                ),
+              })}
 
-              <button
-                type="button"
-                aria-label={getWardrobeNegativeActionAriaLabel(selectedNegativeState)}
-                aria-pressed={selectedNegativeState > 0}
-                disabled={negativePending}
-                onClick={() => {
+              {renderDetailActionButton({
+                ariaLabel: getWardrobeNegativeActionAriaLabel(selectedNegativeState),
+                active: selectedNegativeState > 0,
+                disabled: negativePending,
+                onClick: () => {
                   void handleNegative();
-                }}
-                className="flex flex-col items-center gap-2 rounded-[18px] px-2 py-3 text-center transition-colors disabled:opacity-70"
-                style={{
-                  ...actionButtonBase,
-                  borderColor: selectedNegativeState > 0
-                    ? (selectedNegativeState === 2 ? 'rgba(251,113,133,0.3)' : 'rgba(245,158,11,0.3)')
-                    : 'rgba(255,255,255,0.08)',
-                  background: selectedNegativeState > 0
-                    ? (selectedNegativeState === 2 ? 'rgba(251,113,133,0.12)' : 'rgba(245,158,11,0.12)')
-                    : 'rgba(255,255,255,0.028)',
-                  color: selectedNegativeState > 0
-                    ? (selectedNegativeState === 2 ? 'rgba(255,228,230,0.96)' : 'rgba(254,240,200,0.96)')
-                    : 'rgba(255,255,255,0.86)',
-                }}
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-current/20 bg-black/12">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                },
+                activeStyle: {
+                  borderColor: selectedNegativeState === 2 ? 'rgba(251,113,133,0.32)' : 'rgba(245,158,11,0.32)',
+                  background: selectedNegativeState === 2 ? 'rgba(251,113,133,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: selectedNegativeState === 2 ? 'rgba(255,228,230,0.96)' : 'rgba(254,240,200,0.96)',
+                },
+                children: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true">
                     <path d="M18 6 6 18" />
                     <path d="m6 6 12 12" />
                   </svg>
-                </span>
-                <span className={`${compactActionLabels ? 'text-[9px] text-foreground/58' : 'text-[10px] text-foreground/78'} uppercase tracking-[0.18em]`}>
-                  {getWardrobeNegativeActionLabel(selectedNegativeState)}
-                </span>
-              </button>
+                ),
+              })}
             </div>
 
             {actionError ? (
-              <div className="mt-4 rounded-[16px] border px-3 py-3 text-[11px] leading-[1.55] text-rose-200/88" style={{ borderColor: 'rgba(226,87,87,0.24)', background: 'rgba(64,18,22,0.42)' }}>
+              <div className="text-center text-[11px] leading-[1.5] text-rose-200/88">
                 {actionError}
               </div>
             ) : null}
           </div>
-        </OdaraInsetGroup>
-      </div>
+        )}
+      />
     );
   };
 
@@ -12504,7 +12506,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             </div>
           </OdaraInsetGroup>
         ) : (
-          <div className="grid grid-cols-1 gap-y-5 px-1 pb-6 pt-1 md:grid-cols-2 md:gap-x-5 md:gap-y-6">
+          <div className="flex flex-col gap-4 px-1 pb-6 pt-1">
             {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               const tint = getEnhancedCollectionTint(card);
@@ -12526,23 +12528,32 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 formatWardrobeLastWornLabel(card.last_worn_at),
                 formatWardrobeSourceConfidenceLabel(card.item.source_confidence),
               ].filter((value): value is string => Boolean(value));
-              const railChips = expandAndDeduplicateScentIntelDisplayTerms([
-                ...sanitizeTokenSource(card.item.accords)
-                  .slice(0, 6)
-                  .map((label) => ({ label, position: 'accord' })),
-                ...sanitizeTokenSource(card.item.notes)
-                  .slice(0, 6)
-                  .map((label) => ({ label, position: 'note' })),
-              ])
-                .filter((chip) => normalizeOdaraSearchQuery(chip.label) !== normalizeOdaraSearchQuery(familyChipLabel))
-                .slice(0, 8);
+              const railChips = (() => {
+                const seenLabels = new Set<string>();
+                return expandAndDeduplicateScentIntelDisplayTerms([
+                  ...sanitizeTokenSource(card.item.accords)
+                    .slice(0, 6)
+                    .map((label) => ({ label, position: 'accord' })),
+                  ...sanitizeTokenSource(card.item.notes)
+                    .slice(0, 6)
+                    .map((label) => ({ label, position: 'note' })),
+                ])
+                  .filter((chip) => normalizeOdaraSearchQuery(chip.label) !== normalizeOdaraSearchQuery(familyChipLabel))
+                  .filter((chip) => {
+                    const normalizedLabel = normalizeOdaraSearchQuery(chip.label);
+                    if (!normalizedLabel || seenLabels.has(normalizedLabel)) return false;
+                    seenLabels.add(normalizedLabel);
+                    return true;
+                  })
+                  .slice(0, 3);
+              })();
               return (
-                  <OdaraCollectionCardSurface
+                <OdaraCollectionCardSurface
                   key={card.fragrance_id}
                   data-collection-card
                   aria-label={`Open ${card.name} profile`}
                   onOpen={() => openDetail(card.fragrance_id, 'wardrobe')}
-                  className="group relative block w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
+                  className="group relative block w-full cursor-pointer overflow-hidden rounded-[30px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
                     ...cardVisual.surfaceStyle,
                     boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
@@ -12559,8 +12570,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex items-stretch gap-3.5 px-3.5 py-3.5 sm:gap-4 sm:px-4 sm:py-4">
-                    <div className="relative flex min-h-[154px] w-[118px] shrink-0 items-end justify-center sm:min-h-[166px] sm:w-[130px]">
+                  <div className="relative z-[1] flex items-center gap-4 px-4 py-4 sm:gap-5 sm:px-5 sm:py-5">
+                    <div className="relative flex min-h-[162px] w-[132px] shrink-0 items-center justify-center sm:min-h-[174px] sm:w-[146px]">
                       <div
                         className="pointer-events-none absolute inset-x-1 bottom-2 h-14 rounded-full blur-2xl"
                         style={{
@@ -12568,7 +12579,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           opacity: 0.92,
                         }}
                       />
-                      <div className="relative z-[1] h-full w-full max-w-[122px] self-end sm:max-w-[132px]">
+                      <div className="relative z-[1] h-full w-full max-w-[138px] self-center sm:max-w-[150px]">
                         <OdaraWardrobeBottleArt
                           name={card.name}
                           brand={card.brand}
@@ -12576,14 +12587,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           family_label={card.family_label}
                           image_url={card.image_url ?? card.item.image_url}
                           thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
-                          compact
                           frameless
-                          presentation="wardrobe_grid"
                           className="h-full w-full"
                         />
                       </div>
                     </div>
-                    <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden py-1.5">
+                    <div className="relative z-[1] flex min-w-0 flex-1 flex-col justify-center py-1">
                       <div className="flex items-start justify-between gap-3">
                         {onOpenScentIntel ? (
                           <ScentIntelChipButton
@@ -12594,7 +12603,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                             fragranceName={card.name}
                             fragranceBrand={card.brand}
                             position="family"
-                            className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            className="inline-flex max-w-full min-w-0 shrink truncate rounded-full px-3.5 py-[7px] text-[9px] font-medium uppercase tracking-[0.16em]"
                             style={{
                               color: familyChipTone.color,
                               border: `1px solid ${familyChipTone.border}`,
@@ -12604,7 +12613,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           />
                         ) : (
                           <span
-                            className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                            className="inline-flex max-w-full min-w-0 shrink truncate rounded-full px-3.5 py-[7px] text-[9px] font-medium uppercase tracking-[0.16em]"
                             style={{
                               color: familyChipTone.color,
                               border: `1px solid ${familyChipTone.border}`,
@@ -12617,12 +12626,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         )}
                         {ratingDisplay ? (
                           <div
-                            className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
+                            className="shrink-0 whitespace-nowrap pl-2 pt-1 text-[12px] font-medium tracking-[0.02em]"
                             style={{
                               color: 'rgba(247,220,159,0.96)',
-                              border: '1px solid rgba(231,181,95,0.24)',
-                              background: 'rgba(19,16,11,0.54)',
-                              boxShadow: '0 0 14px rgba(231,181,95,0.12)',
                             }}
                           >
                             {`★ ${ratingDisplay}`}
@@ -12630,12 +12636,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         ) : null}
                       </div>
                       <div
-                        className="mt-3 line-clamp-2 text-[21px] leading-[0.98] text-foreground/94 sm:text-[22px]"
+                        className="mt-3 line-clamp-2 text-[28px] leading-[0.94] text-foreground/94 sm:text-[30px]"
                         style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.016em' }}
                       >
                         {card.name}
                       </div>
-                      <div className="mt-1.5 text-[11px] leading-[1.4] text-foreground/58">
+                      <div className="mt-1.5 text-[14px] leading-[1.38] text-foreground/58">
                         {getWardrobeBrandLabel(card.brand)}
                       </div>
                       {metadataLabels.length > 0 ? (
@@ -12648,10 +12654,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         </div>
                       ) : null}
                       {railChips.length > 0 ? (
-                        <div className={`${metadataLabels.length > 0 ? 'mt-3' : 'mt-2.5'} min-w-0`}>
+                        <div className={`${metadataLabels.length > 0 ? 'mt-3.5' : 'mt-3'} min-w-0 pb-1`}>
                           <div
                             data-no-card-swipe
-                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-1"
+                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-3"
                             style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                           >
                             {railChips.map((chip, index) => {
@@ -12666,7 +12672,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                                   fragranceName={card.name}
                                   fragranceBrand={card.brand}
                                   position={chip.position ?? 'accord'}
-                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.12em]"
+                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
                                   style={{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
@@ -12677,7 +12683,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                               ) : (
                                 <span
                                   key={`wardrobe-card-chip-${card.fragrance_id}-${chip.position ?? 'accord'}-${chip.slug ?? chip.label}-${index}`}
-                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.12em]"
+                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
                                   style={{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
