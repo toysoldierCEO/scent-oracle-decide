@@ -18157,7 +18157,9 @@ const OdaraScreen = ({
       pushChip(label, 'accord');
     }
 
-    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 4);
+    return expandAndDeduplicateScentIntelDisplayTerms(chips)
+      .slice(0, 4)
+      .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
   }, [
     fragranceDetailVersion,
     visibleHeroDetail?.accords,
