@@ -5651,21 +5651,14 @@ function buildVesperizedDetailDescription(source: {
   const sourceDescription = normalizeDetailText(source.short_description);
   const sourceType = normalizeDetailText(source.description_source);
   const sourceBackedTimeline = buildTimelineDescriptionFromStructuredNotes(source);
-  const inferredTimeline = (() => {
-    const sections = inferTimelineSectionsFromFlatNotes(source);
-    return sections ? buildTimelineDescriptionFromSections(sections, source.accords) : null;
-  })();
-
   if (sourceDescription && sourceType && !isDerivedDescriptionSource(sourceType)) {
     return sourceBackedTimeline
       ?? rewriteSourceBackedDescription(sourceDescription)
-      ?? inferredTimeline
       ?? buildCompactFragranceSummary(source)
       ?? buildGeneratedFragranceDescription(source);
   }
 
   if (sourceBackedTimeline) return sourceBackedTimeline;
-  if (inferredTimeline) return inferredTimeline;
   return buildCompactFragranceSummary(source) ?? buildGeneratedFragranceDescription(source);
 }
 
@@ -12505,7 +12498,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     event.preventDefault();
                     openDetail(card.fragrance_id, 'wardrobe');
                   }}
-                  className="group relative block min-h-[352px] w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[372px]"
+                  className="group relative block min-h-[176px] w-full cursor-pointer overflow-hidden rounded-[28px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24 sm:min-h-[188px]"
                   style={{
                     ...cardVisual.surfaceStyle,
                     boxShadow: '0 18px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.04)',
@@ -12522,16 +12515,16 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 22%, rgba(0,0,0,0.08) 100%)',
                     }}
                   />
-                  <div className="relative z-[1] flex min-h-[350px] flex-col px-4 pb-4 pt-4 sm:min-h-[370px]">
-                    <div className="relative px-2">
+                  <div className="relative z-[1] flex min-h-[174px] items-stretch gap-3 px-3.5 py-3.5 sm:min-h-[186px] sm:gap-4 sm:px-4 sm:py-4">
+                    <div className="relative flex w-[102px] shrink-0 items-end justify-center sm:w-[114px]">
                       <div
-                        className="pointer-events-none absolute inset-x-8 top-3 h-10 rounded-full blur-2xl"
+                        className="pointer-events-none absolute inset-x-1 bottom-2 h-12 rounded-full blur-2xl"
                         style={{
-                          background: `radial-gradient(circle at 50% 0%, ${tint.inner} 0%, rgba(255,255,255,0) 74%)`,
-                          opacity: 0.9,
+                          background: `radial-gradient(circle at 50% 100%, ${tint.inner} 0%, rgba(255,255,255,0) 76%)`,
+                          opacity: 0.92,
                         }}
                       />
-                      <div className="relative z-[1] mx-auto aspect-[4/5] w-full max-w-[188px]">
+                      <div className="relative z-[1] h-full w-full max-w-[108px] self-end sm:max-w-[116px]">
                         <OdaraWardrobeBottleArt
                           name={card.name}
                           brand={card.brand}
@@ -12539,72 +12532,75 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                           family_label={card.family_label}
                           image_url={card.image_url ?? card.item.image_url}
                           thumbnail_url={card.thumbnail_url ?? card.item.thumbnail_url}
+                          compact
                           frameless
                           presentation="wardrobe_grid"
                           className="h-full w-full"
                         />
                       </div>
                     </div>
-                    <div className="relative z-[1] mt-4 flex min-h-[148px] flex-1 flex-col">
-                      <div className="flex min-h-[25px] items-start justify-between gap-3">
-                        {onOpenScentIntel ? (
-                          <ScentIntelChipButton
-                            label={familyChipLabel}
-                            slug={card.family_key ?? scentIntelSlugify(familyChipLabel)}
-                            onOpen={onOpenScentIntel}
-                            fragranceId={card.fragrance_id}
-                            fragranceName={card.name}
-                            fragranceBrand={card.brand}
-                            position="family"
-                            className="inline-flex max-w-full shrink-0 truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
-                            style={{
-                              color: familyChipTone.color,
-                              border: `1px solid ${familyChipTone.border}`,
-                              background: familyChipTone.background,
-                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
-                            }}
-                          />
-                        ) : (
-                          <span
-                            className="inline-flex max-w-full shrink-0 truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
-                            style={{
-                              color: familyChipTone.color,
-                              border: `1px solid ${familyChipTone.border}`,
-                              background: familyChipTone.background,
-                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
-                            }}
-                          >
-                            {familyChipLabel}
-                          </span>
-                        )}
-                        {ratingDisplay ? (
-                          <div
-                            className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
-                            style={{
-                              color: 'rgba(247,220,159,0.96)',
-                              border: '1px solid rgba(231,181,95,0.24)',
-                              background: 'rgba(19,16,11,0.54)',
-                              boxShadow: '0 0 14px rgba(231,181,95,0.12)',
-                            }}
-                          >
-                            {`★ ${ratingDisplay}`}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div
-                        className="mt-3 line-clamp-2 text-[19px] leading-[1.02] text-foreground/94"
-                        style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.012em' }}
-                      >
-                        {card.name}
-                      </div>
-                      <div className="mt-1.5 text-[11px] leading-[1.45] text-foreground/56">
-                        {getWardrobeBrandLabel(card.brand)}
+                    <div className="relative z-[1] flex min-w-0 flex-1 flex-col justify-between overflow-hidden py-1">
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          {onOpenScentIntel ? (
+                            <ScentIntelChipButton
+                              label={familyChipLabel}
+                              slug={card.family_key ?? scentIntelSlugify(familyChipLabel)}
+                              onOpen={onOpenScentIntel}
+                              fragranceId={card.fragrance_id}
+                              fragranceName={card.name}
+                              fragranceBrand={card.brand}
+                              position="family"
+                              className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                              style={{
+                                color: familyChipTone.color,
+                                border: `1px solid ${familyChipTone.border}`,
+                                background: familyChipTone.background,
+                                boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                              }}
+                            />
+                          ) : (
+                            <span
+                              className="inline-flex max-w-[calc(100%-3.5rem)] shrink truncate rounded-full px-3 py-[6px] text-[8px] font-medium uppercase tracking-[0.18em]"
+                              style={{
+                                color: familyChipTone.color,
+                                border: `1px solid ${familyChipTone.border}`,
+                                background: familyChipTone.background,
+                                boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                              }}
+                            >
+                              {familyChipLabel}
+                            </span>
+                          )}
+                          {ratingDisplay ? (
+                            <div
+                              className="shrink-0 rounded-full px-2.5 py-[6px] text-[10px] font-medium tracking-[0.08em]"
+                              style={{
+                                color: 'rgba(247,220,159,0.96)',
+                                border: '1px solid rgba(231,181,95,0.24)',
+                                background: 'rgba(19,16,11,0.54)',
+                                boxShadow: '0 0 14px rgba(231,181,95,0.12)',
+                              }}
+                            >
+                              {`★ ${ratingDisplay}`}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div
+                          className="mt-3 line-clamp-2 text-[20px] leading-[0.98] text-foreground/94 sm:text-[21px]"
+                          style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.016em' }}
+                        >
+                          {card.name}
+                        </div>
+                        <div className="mt-1.5 text-[11px] leading-[1.4] text-foreground/58">
+                          {getWardrobeBrandLabel(card.brand)}
+                        </div>
                       </div>
                       {railChips.length > 0 ? (
-                        <div className="mt-3">
+                        <div className="mt-3 min-w-0">
                           <div
                             data-no-card-swipe
-                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-2"
+                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-1"
                             style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                           >
                             {railChips.map((chip, index) => {
@@ -14390,11 +14386,18 @@ const OdaraScreen = ({
     const signedInModeReadOnlyReason = signedInSelectedDayIsPast
       ? 'Past days are read-only'
       : null;
+    const signedInModeLockedReason = signedInSearchPreviewLocked
+      ? 'Unlock to adjust'
+      : null;
 
     if (signedInModeReadOnlyReason) {
       reasons.balance = signedInModeReadOnlyReason;
       reasons.bold = signedInModeReadOnlyReason;
       reasons.smooth = signedInModeReadOnlyReason;
+    } else if (signedInModeLockedReason) {
+      reasons.balance = signedInModeLockedReason;
+      reasons.bold = signedInModeLockedReason;
+      reasons.smooth = signedInModeLockedReason;
     }
 
     return reasons;
