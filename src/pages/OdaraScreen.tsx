@@ -10337,6 +10337,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [actionLabelCount, setActionLabelCount] = useState(() => readStoredWardrobeActionLabelCount());
   const [onboardingSeen, setOnboardingSeen] = useState(() => readStoredWardrobeOnboardingSeen(activeSessionUserId));
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
+  const [pendingRetiredById, setPendingRetiredById] = useState<Record<string, boolean>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [detailHydrationById, setDetailHydrationById] = useState<Record<string, {
     detail: FragranceDetail | null;
