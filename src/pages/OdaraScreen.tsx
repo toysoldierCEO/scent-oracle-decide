@@ -9198,6 +9198,14 @@ const OdaraFragranceDetailSheet: React.FC<{
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
   const detailFactLine = `Released: ${detail.release_year ? String(detail.release_year) : 'Unknown'} • Perfumer: ${detail.perfumer ?? 'Unknown'}`;
+  const hasVisibleFallbackProfile = Boolean(
+    detailDescription
+      || roleLabel
+      || topIdentityChips.length > 0
+      || detailPerformanceBars.length > 0
+      || accordLabels.length > 0
+      || orderedNoteChips.length > 0,
+  );
 
   return (
     <OdaraBottomSheet
@@ -9239,7 +9247,7 @@ const OdaraFragranceDetailSheet: React.FC<{
             type="button"
             aria-label="Close fragrance detail"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d9b56c]/45"
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
               background: 'rgba(255,255,255,0.03)',
@@ -9287,13 +9295,16 @@ const OdaraFragranceDetailSheet: React.FC<{
             </div>
           ) : null}
 
-          {detail.detail_loading ? (
-            <div className="text-[10px] uppercase tracking-[0.2em] text-foreground/42">
-              Loading live fragrance profile…
-            </div>
-          ) : detail.detail_error ? (
-            <div className="text-[10px] leading-[1.45] text-rose-300/78">
-              {detail.detail_error}
+          {detail.detail_loading && !hasVisibleFallbackProfile ? (
+            <div className="inline-flex items-center gap-2 text-[11px] leading-none text-foreground/42" aria-live="polite">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: 'rgba(217,181,108,0.58)',
+                  boxShadow: '0 0 10px rgba(217,181,108,0.22)',
+                }}
+              />
+              <span>Fetching profile details</span>
             </div>
           ) : null}
 
@@ -9388,8 +9399,11 @@ const OdaraFragranceDetailSheet: React.FC<{
 
           {footerActions ? (
             <div
-              className="pt-4"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+              className="mt-1 pb-1 pt-5"
+              style={{
+                borderTop: '1px solid rgba(217,181,108,0.1)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+              }}
             >
               {footerActions}
             </div>
@@ -11763,12 +11777,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         aria-pressed={active}
         disabled={disabled}
         onClick={onClick}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-45"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors disabled:opacity-45 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d9b56c]/40"
         style={{
-          border: '1px solid rgba(255,255,255,0.1)',
-          background: 'rgba(255,255,255,0.035)',
+          border: '1px solid rgba(217,181,108,0.13)',
+          background: 'rgba(255,255,255,0.032)',
           color: 'rgba(255,255,255,0.78)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 26px rgba(0,0,0,0.12)',
           ...(active ? activeStyle : null),
           WebkitTapHighlightColor: 'transparent',
         }}
@@ -11787,8 +11801,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         }}
         onOpenScentIntel={onOpenScentIntel}
         footerActions={(
-          <div className="space-y-3">
-            <div className="flex items-center justify-center gap-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-[14px] py-1">
               {selectedIsOwnedCollectionItem ? renderDetailActionButton({
                 ariaLabel: retireActive ? 'Unretire bottle' : 'Retire bottle',
                 active: retireActive,
@@ -11803,13 +11817,14 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   color: 'rgba(255,218,218,0.96)',
                 },
                 children: (
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M9.5 3.5h5" />
-                    <path d="M10 3.5v3.2" />
-                    <path d="M14 3.5v3.2" />
-                    <path d="M8.4 7.2h7.2" />
-                    <path d="M8 8.5c0-.7.6-1.3 1.3-1.3h5.4c.7 0 1.3.6 1.3 1.3v10.2c0 1-.8 1.8-1.8 1.8H9.8c-1 0-1.8-.8-1.8-1.8z" />
-                    <path d="M10.2 14.5h3.6" opacity="0.5" />
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9.4 3.4h5.2" />
+                    <path d="M10 3.4v3.1" />
+                    <path d="M14 3.4v3.1" />
+                    <path d="M8.2 7.1h7.6" />
+                    <path d="M7.9 8.7c0-.9.7-1.6 1.6-1.6h5c.9 0 1.6.7 1.6 1.6v10c0 1.1-.9 2-2 2H9.9c-1.1 0-2-.9-2-2z" />
+                    <path d="M10 12h4" opacity="0.46" />
+                    <path d="M10 16.2h4" opacity="0.28" />
                   </svg>
                 ),
               }) : renderDetailActionButton({
