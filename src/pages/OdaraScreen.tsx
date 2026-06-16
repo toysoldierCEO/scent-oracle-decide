@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue, type FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { odaraSupabase } from "@/lib/odara-client";
@@ -1300,6 +1300,8 @@ interface FragranceDetail {
   longevity_source?: FragrancePerformanceSource | null;
   projection_score?: number | null;
   projection_source?: FragrancePerformanceSource | null;
+  trail_score?: number | null;
+  trail_label?: string | null;
   odor_impact_score?: number | null;
   density_score?: number | null;
   transparency_score?: number | null;
@@ -4203,6 +4205,22 @@ type OdaraCollectionSort = 'role' | 'rating' | 'family' | 'name' | 'brand';
 
 type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
+type MissingFragranceDesiredStatus = 'owned' | 'wishlist' | 'tried' | 'liked';
+
+const MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS: Array<{ value: MissingFragranceDesiredStatus; label: string }> = [
+  { value: 'wishlist', label: 'Wishlist' },
+  { value: 'owned', label: 'Owned' },
+  { value: 'tried', label: 'Tried' },
+  { value: 'liked', label: 'Liked' },
+];
+
+const buildEmptyMissingFragranceForm = () => ({
+  name: '',
+  brand: '',
+  concentration: '',
+  sourceUrl: '',
+  desiredStatus: 'wishlist' as MissingFragranceDesiredStatus,
+});
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired' | 'wishlist';
@@ -4242,6 +4260,21 @@ type OdaraWardrobeCatalogItem = {
   base_notes: string[];
   source_url: string | null;
   source_confidence: string | null;
+  wardrobe_role_key?: string | null;
+  wardrobe_role_label?: string | null;
+  role_confidence?: string | null;
+  role_source?: string | null;
+  longevity_score?: number | null;
+  longevity_source?: FragrancePerformanceSource | null;
+  projection_score?: number | null;
+  projection_source?: FragrancePerformanceSource | null;
+  trail_score?: number | null;
+  trail_label?: string | null;
+  trail_source?: FragrancePerformanceSource | null;
+  odor_impact_score?: number | null;
+  density_score?: number | null;
+  transparency_score?: number | null;
+  beast_mode_score?: number | null;
   primary_season: OdaraWardrobeSeasonKey | null;
   image_url: string | null;
   thumbnail_url: string | null;
@@ -4262,6 +4295,21 @@ type OdaraWardrobeSessionSignal = {
   base_notes: string[];
   source_url: string | null;
   source_confidence: string | null;
+  wardrobe_role_key?: string | null;
+  wardrobe_role_label?: string | null;
+  role_confidence?: string | null;
+  role_source?: string | null;
+  longevity_score?: number | null;
+  longevity_source?: FragrancePerformanceSource | null;
+  projection_score?: number | null;
+  projection_source?: FragrancePerformanceSource | null;
+  trail_score?: number | null;
+  trail_label?: string | null;
+  trail_source?: FragrancePerformanceSource | null;
+  odor_impact_score?: number | null;
+  density_score?: number | null;
+  transparency_score?: number | null;
+  beast_mode_score?: number | null;
   primary_season: OdaraWardrobeSeasonKey | null;
   image_url: string | null;
   thumbnail_url: string | null;
@@ -4644,6 +4692,8 @@ function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset
     imageAsset?.image_url ?? row?.image_url ?? readBottleImageUrlFromObject(row),
     imageAsset?.thumbnail_url ?? row?.thumbnail_url ?? null,
   );
+  const roleFields = resolveDetailRoleFields(row);
+  const performanceFields = resolveDetailPerformanceFields(row);
   return {
     fragrance_id: fragranceId,
     name,
@@ -4659,6 +4709,21 @@ function normalizeWardrobeCatalogItem(row: any, imageAsset?: FragranceImageAsset
     base_notes: sanitizeTokenSource(row?.base_notes),
     source_url: readTrimmedLayerText(row?.source_url),
     source_confidence: readTrimmedLayerText(row?.source_confidence),
+    wardrobe_role_key: roleFields.wardrobe_role_key,
+    wardrobe_role_label: roleFields.wardrobe_role_label,
+    role_confidence: roleFields.role_confidence,
+    role_source: roleFields.role_source,
+    longevity_score: performanceFields.longevity_score,
+    longevity_source: performanceFields.longevity_source,
+    projection_score: performanceFields.projection_score,
+    projection_source: performanceFields.projection_source,
+    trail_score: performanceFields.trail_score,
+    trail_label: performanceFields.trail_label,
+    trail_source: performanceFields.trail_source,
+    odor_impact_score: performanceFields.odor_impact_score,
+    density_score: performanceFields.density_score,
+    transparency_score: performanceFields.transparency_score,
+    beast_mode_score: performanceFields.beast_mode_score,
     primary_season: normalizeWardrobeSeasonKey(row?.primary_season),
     image_url: resolvedImageUrl,
     thumbnail_url: readTrimmedImageUrl(imageAsset?.thumbnail_url ?? row?.thumbnail_url),
@@ -4713,7 +4778,7 @@ async function fetchOdaraWardrobeCatalogByIds(fragranceIds: string[]) {
 
   const { data: fragranceRows, error: fragranceError } = await odaraSupabase
     .from('fragrances' as any)
-    .select('id, name, brand, family_key, primary_season, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, source_url, source_confidence')
+    .select('*')
     .in('id', ids)
     .order('brand', { ascending: true })
     .order('name', { ascending: true });
@@ -4730,7 +4795,7 @@ async function fetchOdaraWardrobeCatalogByIds(fragranceIds: string[]) {
 async function fetchOdaraWardrobeCatalog() {
   const { data: fragranceRows, error: fragranceError } = await odaraSupabase
     .from('fragrances' as any)
-    .select('id, name, brand, family_key, primary_season, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, source_url, source_confidence')
+    .select('*')
     .order('brand', { ascending: true })
     .order('name', { ascending: true })
     .range(0, 999);
@@ -4765,6 +4830,21 @@ function createWardrobeSessionSignalFromItem(
     base_notes: sanitizeTokenSource(item.base_notes),
     source_url: item.source_url,
     source_confidence: item.source_confidence,
+    wardrobe_role_key: item.wardrobe_role_key ?? null,
+    wardrobe_role_label: item.wardrobe_role_label ?? null,
+    role_confidence: item.role_confidence ?? null,
+    role_source: item.role_source ?? null,
+    longevity_score: item.longevity_score ?? null,
+    longevity_source: item.longevity_source ?? null,
+    projection_score: item.projection_score ?? null,
+    projection_source: item.projection_source ?? null,
+    trail_score: item.trail_score ?? null,
+    trail_label: item.trail_label ?? null,
+    trail_source: item.trail_source ?? null,
+    odor_impact_score: item.odor_impact_score ?? null,
+    density_score: item.density_score ?? null,
+    transparency_score: item.transparency_score ?? null,
+    beast_mode_score: item.beast_mode_score ?? null,
     primary_season: item.primary_season,
     image_url: item.image_url,
     thumbnail_url: item.thumbnail_url,
@@ -4785,6 +4865,8 @@ function normalizeStoredWardrobeSessionSignal(raw: any): OdaraWardrobeSessionSig
   const fragranceId = typeof raw?.fragrance_id === 'string' ? raw.fragrance_id.trim() : '';
   const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
   if (!fragranceId || !name) return null;
+  const roleFields = resolveDetailRoleFields(raw);
+  const performanceFields = resolveDetailPerformanceFields(raw);
   return {
     fragrance_id: fragranceId,
     name,
@@ -4800,6 +4882,21 @@ function normalizeStoredWardrobeSessionSignal(raw: any): OdaraWardrobeSessionSig
     base_notes: sanitizeTokenSource(raw?.base_notes),
     source_url: readTrimmedLayerText(raw?.source_url),
     source_confidence: readTrimmedLayerText(raw?.source_confidence),
+    wardrobe_role_key: roleFields.wardrobe_role_key,
+    wardrobe_role_label: roleFields.wardrobe_role_label,
+    role_confidence: roleFields.role_confidence,
+    role_source: roleFields.role_source,
+    longevity_score: performanceFields.longevity_score,
+    longevity_source: performanceFields.longevity_source,
+    projection_score: performanceFields.projection_score,
+    projection_source: performanceFields.projection_source,
+    trail_score: performanceFields.trail_score,
+    trail_label: performanceFields.trail_label,
+    trail_source: performanceFields.trail_source,
+    odor_impact_score: performanceFields.odor_impact_score,
+    density_score: performanceFields.density_score,
+    transparency_score: performanceFields.transparency_score,
+    beast_mode_score: performanceFields.beast_mode_score,
     primary_season: normalizeWardrobeSeasonKey(raw?.primary_season),
     image_url: readTrimmedImageUrl(raw?.image_url),
     thumbnail_url: readTrimmedImageUrl(raw?.thumbnail_url),
@@ -5016,6 +5113,8 @@ function buildWardrobeCatalogItemFromCollectionItem(item: OdaraCollectionItem): 
   const name = typeof item.name === 'string' ? item.name.trim() : '';
   if (!fragranceId || !name) return null;
   const familyKey = normalizeSearchFamilyKey(readTrimmedLayerText(item.family_key));
+  const roleFields = resolveDetailRoleFields(item);
+  const performanceFields = resolveDetailPerformanceFields(item);
   return {
     fragrance_id: fragranceId,
     name,
@@ -5031,6 +5130,21 @@ function buildWardrobeCatalogItemFromCollectionItem(item: OdaraCollectionItem): 
     base_notes: [],
     source_url: null,
     source_confidence: null,
+    wardrobe_role_key: roleFields.wardrobe_role_key,
+    wardrobe_role_label: roleFields.wardrobe_role_label,
+    role_confidence: roleFields.role_confidence,
+    role_source: roleFields.role_source,
+    longevity_score: performanceFields.longevity_score,
+    longevity_source: performanceFields.longevity_source,
+    projection_score: performanceFields.projection_score,
+    projection_source: performanceFields.projection_source,
+    trail_score: performanceFields.trail_score,
+    trail_label: performanceFields.trail_label,
+    trail_source: performanceFields.trail_source,
+    odor_impact_score: performanceFields.odor_impact_score,
+    density_score: performanceFields.density_score,
+    transparency_score: performanceFields.transparency_score,
+    beast_mode_score: performanceFields.beast_mode_score,
     primary_season: normalizeWardrobeSeasonKey(item.primary_season),
     image_url: resolvePreferredWardrobeBottleImage(item, item.image_url, item.thumbnail_url),
     thumbnail_url: readTrimmedImageUrl(item.thumbnail_url),
@@ -5053,6 +5167,21 @@ function buildWardrobeCatalogItemFromSignal(signal: OdaraWardrobeSessionSignal):
     base_notes: sanitizeTokenSource(signal.base_notes),
     source_url: signal.source_url,
     source_confidence: signal.source_confidence,
+    wardrobe_role_key: signal.wardrobe_role_key ?? null,
+    wardrobe_role_label: signal.wardrobe_role_label ?? null,
+    role_confidence: signal.role_confidence ?? null,
+    role_source: signal.role_source ?? null,
+    longevity_score: signal.longevity_score ?? null,
+    longevity_source: signal.longevity_source ?? null,
+    projection_score: signal.projection_score ?? null,
+    projection_source: signal.projection_source ?? null,
+    trail_score: signal.trail_score ?? null,
+    trail_label: signal.trail_label ?? null,
+    trail_source: signal.trail_source ?? null,
+    odor_impact_score: signal.odor_impact_score ?? null,
+    density_score: signal.density_score ?? null,
+    transparency_score: signal.transparency_score ?? null,
+    beast_mode_score: signal.beast_mode_score ?? null,
     primary_season: signal.primary_season,
     image_url: resolvePreferredWardrobeBottleImage(signal, signal.image_url, signal.thumbnail_url),
     thumbnail_url: readTrimmedImageUrl(signal.thumbnail_url),
@@ -5142,6 +5271,8 @@ type OdaraFragranceDetailSurfaceState = {
   longevity_source?: FragrancePerformanceSource | null;
   projection_score?: number | null;
   projection_source?: FragrancePerformanceSource | null;
+  trail_score?: number | null;
+  trail_label?: string | null;
   odor_impact_score?: number | null;
   density_score?: number | null;
   transparency_score?: number | null;
@@ -5180,6 +5311,251 @@ function normalizeUnitIntervalDetailScore(value: unknown): number | null {
       ? numeric / 10
       : numeric;
   return Math.max(0, Math.min(1, normalized));
+}
+
+type OdaraResolvedDetailPerformanceFields = Pick<
+  OdaraFragranceDetailSurfaceState,
+  | 'longevity_score'
+  | 'longevity_source'
+  | 'projection_score'
+  | 'projection_source'
+  | 'trail_score'
+  | 'trail_label'
+  | 'trail_source'
+  | 'odor_impact_score'
+  | 'density_score'
+  | 'transparency_score'
+  | 'beast_mode_score'
+>;
+
+type OdaraResolvedDetailRoleFields = Pick<
+  OdaraFragranceDetailSurfaceState,
+  'wardrobe_role_key' | 'wardrobe_role_label' | 'role_confidence' | 'role_source'
+>;
+
+const ODARA_DETAIL_ROLE_KEYS = new Set([
+  'anchor',
+  'layer_tool',
+  'layer-tool',
+  'brightener',
+  'softener',
+  'bridge',
+  'accent',
+  'soloist',
+]);
+
+function readObjectPathValue(source: unknown, path: string[]): unknown {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function pickFirstObjectPathValue(sources: unknown[], paths: string[][]): unknown {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const path of paths) {
+      const value = readObjectPathValue(source, path);
+      if (typeof value === 'string' && value.trim().length === 0) continue;
+      if (value != null) return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeDetailRoleKey(value: unknown): string | null {
+  const normalized = normalizeDetailText(value)
+    ?.toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .trim() ?? null;
+  if (!normalized) return null;
+  return ODARA_DETAIL_ROLE_KEYS.has(normalized) ? normalized : null;
+}
+
+function formatDetailRoleLabelFromKey(value: string | null | undefined) {
+  if (!value) return null;
+  return value
+    .replace(/[-_]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function resolveDetailRoleFields(...sources: unknown[]): OdaraResolvedDetailRoleFields {
+  const rawKey = pickFirstObjectPathValue(sources, [
+    ['wardrobe_role_key'],
+    ['best_worn_key'],
+    ['bestWornKey'],
+    ['role_key'],
+    ['roleKey'],
+    ['context_position'],
+  ]);
+  const rawLabel = pickFirstObjectPathValue(sources, [
+    ['wardrobe_role_label'],
+    ['best_worn_label'],
+    ['bestWornLabel'],
+    ['best_worn'],
+    ['bestWorn'],
+    ['context'],
+    ['role_label'],
+    ['roleLabel'],
+    ['wardrobe_role'],
+    ['context_label'],
+    ['contextLabel'],
+  ]);
+  const rawConfidence = pickFirstObjectPathValue(sources, [
+    ['role_confidence'],
+    ['wardrobe_role_confidence'],
+    ['best_worn_confidence'],
+  ]);
+  const rawSource = pickFirstObjectPathValue(sources, [
+    ['role_source'],
+    ['wardrobe_role_source'],
+    ['best_worn_source'],
+  ]);
+
+  const key = normalizeDetailRoleKey(rawKey)
+    ?? normalizeDetailRoleKey(rawLabel);
+  const label = normalizeDetailText(rawLabel)
+    ?? formatDetailRoleLabelFromKey(key);
+
+  return {
+    wardrobe_role_key: key,
+    wardrobe_role_label: label,
+    role_confidence: normalizeDetailText(rawConfidence),
+    role_source: normalizeDetailText(rawSource),
+  };
+}
+
+function normalizeTrailLabel(value: unknown): { label: string | null; score: number | null } {
+  const text = normalizeDetailText(value);
+  if (!text) return { label: null, score: null };
+  const normalized = text.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/(skin close|close|soft|intimate|quiet|low)/.test(normalized)) {
+    return { label: 'Soft', score: 0.25 };
+  }
+  if (/(moderate|medium|balanced)/.test(normalized)) {
+    return { label: 'Moderate', score: 0.5 };
+  }
+  if (/(very strong|powerful|heavy|beast)/.test(normalized)) {
+    return { label: 'Very strong', score: 0.86 };
+  }
+  if (/(strong|noticeable|projecting)/.test(normalized)) {
+    return { label: 'Strong', score: 0.7 };
+  }
+  return { label: toSentenceCase(normalized), score: null };
+}
+
+function resolveDetailPerformanceFields(...sources: unknown[]): OdaraResolvedDetailPerformanceFields {
+  const longevity = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['longevity_score'],
+    ['longevityScore'],
+    ['longevity'],
+    ['longevity_value'],
+    ['longevityValue'],
+    ['performance_longevity'],
+    ['performance', 'longevity_score'],
+    ['performance', 'longevityScore'],
+    ['performance', 'longevity'],
+    ['performance', 'longevity', 'score'],
+    ['performance', 'longevity', 'value'],
+    ['performance', 'longevity_value'],
+    ['performance', 'longevityValue'],
+  ]));
+  const projection = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['projection_score'],
+    ['projectionScore'],
+    ['projection'],
+    ['projection_value'],
+    ['projectionValue'],
+    ['performance_projection'],
+    ['performance', 'projection_score'],
+    ['performance', 'projectionScore'],
+    ['performance', 'projection'],
+    ['performance', 'projection', 'score'],
+    ['performance', 'projection', 'value'],
+    ['performance', 'projection_value'],
+    ['performance', 'projectionValue'],
+  ]));
+  const rawTrailScore = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['trail_score'],
+    ['trailScore'],
+    ['sillage_score'],
+    ['sillageScore'],
+    ['performance_trail_score'],
+    ['performance', 'trail_score'],
+    ['performance', 'trailScore'],
+    ['performance', 'trail', 'score'],
+    ['performance', 'trail', 'value'],
+    ['performance', 'trail_value'],
+    ['performance', 'trailValue'],
+    ['performance', 'sillage', 'score'],
+    ['performance', 'sillage', 'value'],
+    ['performance', 'sillage_score'],
+    ['performance', 'sillageScore'],
+  ]));
+  const trailLabel = normalizeTrailLabel(pickFirstObjectPathValue(sources, [
+    ['trail_label'],
+    ['trailLabel'],
+    ['trail'],
+    ['sillage'],
+    ['performance_trail'],
+    ['performance', 'trail_label'],
+    ['performance', 'trailLabel'],
+    ['performance', 'trail'],
+    ['performance', 'sillage'],
+  ]));
+  const odorImpact = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['odor_impact_score'],
+    ['odorImpactScore'],
+    ['odor_impact'],
+    ['odorImpact'],
+    ['sillage_score'],
+    ['sillageScore'],
+    ['performance', 'odor_impact_score'],
+    ['performance', 'odorImpactScore'],
+  ]));
+  const density = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['density_score'],
+    ['densityScore'],
+    ['density'],
+    ['performance_density'],
+    ['performance', 'density_score'],
+    ['performance', 'densityScore'],
+    ['performance', 'density'],
+  ]));
+  const transparency = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['transparency_score'],
+    ['transparencyScore'],
+    ['transparency'],
+    ['performance', 'transparency_score'],
+    ['performance', 'transparencyScore'],
+  ]));
+  const beastMode = normalizeDetailScore(pickFirstObjectPathValue(sources, [
+    ['beast_mode_score'],
+    ['beastModeScore'],
+    ['beast_mode'],
+    ['beastMode'],
+    ['performance', 'beast_mode_score'],
+    ['performance', 'beastModeScore'],
+  ]));
+
+  return {
+    longevity_score: longevity,
+    longevity_source: longevity != null ? 'direct' : null,
+    projection_score: projection,
+    projection_source: projection != null ? 'direct' : null,
+    trail_score: rawTrailScore ?? trailLabel.score,
+    trail_label: trailLabel.label,
+    trail_source: rawTrailScore != null || trailLabel.label ? 'direct' : null,
+    odor_impact_score: odorImpact,
+    density_score: density,
+    transparency_score: transparency,
+    beast_mode_score: beastMode,
+  };
 }
 
 function joinFragrancePhrases(parts: string[]): string {
@@ -5710,48 +6086,28 @@ function resolveTimelineSource(detail: Pick<FragranceDetail, 'description_source
 function resolveTrailMetric(detail: {
   projection_score?: number | null | undefined;
   longevity_score?: number | null | undefined;
+  trail_score?: number | null | undefined;
+  trail_label?: string | null | undefined;
   odor_impact_score?: number | null | undefined;
   density_score?: number | null | undefined;
   beast_mode_score?: number | null | undefined;
-}): { score: number | null; source: FragrancePerformanceSource } {
-  const projection = normalizeUnitIntervalDetailScore(detail.projection_score);
-  const longevity = normalizeUnitIntervalDetailScore(detail.longevity_score);
-  const odorImpact = normalizeUnitIntervalDetailScore(detail.odor_impact_score);
-  const density = normalizeUnitIntervalDetailScore(detail.density_score);
-  const beastMode = normalizeUnitIntervalDetailScore(detail.beast_mode_score);
+}): { score: number | null; source: FragrancePerformanceSource; valueLabel?: string | null } {
+  const explicitTrail = normalizeUnitIntervalDetailScore(detail.trail_score);
+  const trailLabel = normalizeTrailLabel(detail.trail_label);
 
-  if (odorImpact != null) {
-    return { score: odorImpact, source: 'direct' };
+  if (explicitTrail != null) {
+    return { score: explicitTrail, source: 'direct', valueLabel: trailLabel.label };
   }
 
-  const contributors = [
-    beastMode != null ? { score: beastMode, weight: 0.35 } : null,
-    density != null ? { score: density, weight: 0.2 } : null,
-    longevity != null ? { score: longevity, weight: 0.2 } : null,
-    projection != null ? { score: projection, weight: 0.25 } : null,
-  ].filter((value): value is { score: number; weight: number } => !!value);
-
-  if (contributors.length >= 2 && projection != null) {
-    const weighted = contributors.reduce((sum, contributor) => sum + (contributor.score * contributor.weight), 0);
-    const totalWeight = contributors.reduce((sum, contributor) => sum + contributor.weight, 0);
-    const conservative = Math.max(0, Math.min(1, (weighted / totalWeight) - 0.06));
-    return { score: conservative, source: 'derived' };
-  }
-
-  if (contributors.length >= 2) {
-    const weighted = contributors.reduce((sum, contributor) => sum + (contributor.score * contributor.weight), 0);
-    const totalWeight = contributors.reduce((sum, contributor) => sum + contributor.weight, 0);
-    return { score: Math.max(0, Math.min(1, (weighted / totalWeight) - 0.04)), source: 'estimated' };
-  }
-
-  if (projection != null) {
-    return { score: null, source: 'projection_fallback' };
+  if (trailLabel.score != null) {
+    return { score: trailLabel.score, source: 'direct', valueLabel: trailLabel.label };
   }
 
   return { score: null, source: 'unknown' };
 }
 
 function finalizeFragranceDetail(detail: FragranceDetail): FragranceDetail {
+  const performanceFields = resolveDetailPerformanceFields(detail);
   const normalized: FragranceDetail = {
     ...detail,
     release_year: normalizeDetailReleaseYear(detail.release_year),
@@ -5761,13 +6117,17 @@ function finalizeFragranceDetail(detail: FragranceDetail): FragranceDetail {
     description_source: normalizeDetailText(detail.description_source),
     description_generated_at: normalizeDetailText(detail.description_generated_at),
     timeline_source: detail.timeline_source ?? null,
-    odor_impact_score: normalizeUnitIntervalDetailScore(detail.odor_impact_score),
-    density_score: normalizeUnitIntervalDetailScore(detail.density_score),
-    transparency_score: normalizeUnitIntervalDetailScore(detail.transparency_score),
-    beast_mode_score: normalizeUnitIntervalDetailScore(detail.beast_mode_score),
-    longevity_source: normalizeDetailText(detail.longevity_source) as FragrancePerformanceSource | null,
-    projection_source: normalizeDetailText(detail.projection_source) as FragrancePerformanceSource | null,
-    trail_source: normalizeDetailText(detail.trail_source) as FragrancePerformanceSource | null,
+    longevity_score: normalizeUnitIntervalDetailScore(performanceFields.longevity_score),
+    longevity_source: (normalizeDetailText(detail.longevity_source) ?? performanceFields.longevity_source) as FragrancePerformanceSource | null,
+    projection_score: normalizeUnitIntervalDetailScore(performanceFields.projection_score),
+    projection_source: (normalizeDetailText(detail.projection_source) ?? performanceFields.projection_source) as FragrancePerformanceSource | null,
+    trail_score: normalizeUnitIntervalDetailScore(performanceFields.trail_score),
+    trail_label: performanceFields.trail_label,
+    trail_source: (normalizeDetailText(detail.trail_source) ?? performanceFields.trail_source) as FragrancePerformanceSource | null,
+    odor_impact_score: normalizeUnitIntervalDetailScore(performanceFields.odor_impact_score),
+    density_score: normalizeUnitIntervalDetailScore(performanceFields.density_score),
+    transparency_score: normalizeUnitIntervalDetailScore(performanceFields.transparency_score),
+    beast_mode_score: normalizeUnitIntervalDetailScore(performanceFields.beast_mode_score),
     image_source: normalizeDetailText(detail.image_source),
     source_page_url: normalizeDetailText(detail.source_page_url),
     image_license_status: normalizeDetailText(detail.image_license_status),
@@ -5814,6 +6174,8 @@ function formatFragrancePerformanceScale(score: number) {
 function buildFragrancePerformanceBars(detail: {
   projection_score?: number | null | undefined;
   longevity_score?: number | null | undefined;
+  trail_score?: number | null | undefined;
+  trail_label?: string | null | undefined;
   odor_impact_score?: number | null | undefined;
   density_score?: number | null | undefined;
   beast_mode_score?: number | null | undefined;
@@ -5852,7 +6214,7 @@ function buildFragrancePerformanceBars(detail: {
       key: 'trail',
       label: 'Trail',
       score: trail.score,
-      valueLabel: formatFragrancePerformanceStrength(trail.score),
+      valueLabel: trail.valueLabel ?? formatFragrancePerformanceStrength(trail.score),
       source: detail.trail_source ?? trail.source,
     });
   }
@@ -6475,7 +6837,14 @@ function normalizeCollectionRating(value: unknown) {
 function normalizeDetailScore(value: unknown) {
   if (value == null) return null;
   if (typeof value === 'string' && value.trim().length === 0) return null;
-  const numeric = typeof value === 'number' ? value : Number(value);
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (typeof raw === 'string') {
+    const scaleMatch = raw.match(/^(\d+(?:\.\d+)?)\s*\/\s*10$/);
+    if (scaleMatch) {
+      return Number(scaleMatch[1]);
+    }
+  }
+  const numeric = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
@@ -6611,6 +6980,8 @@ function resolveCollectionRatingFromClientX(clientX: number, rect: DOMRect) {
 }
 
 function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectionItem): OdaraFragranceDetailSurfaceState {
+  const roleFields = resolveDetailRoleFields(item);
+  const performanceFields = resolveDetailPerformanceFields(item);
   return {
     fragrance_id: item.fragrance_id ?? null,
     name: item.name ?? '',
@@ -6618,10 +6989,10 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
     family_key: item.family_key ?? null,
     family_label: item.family_label ?? (item.family_key ? getFamilyLabelText(item.family_key) : null),
     family_color_token: item.family_color_token ?? item.family_key ?? null,
-    wardrobe_role_key: item.wardrobe_role_key ?? null,
-    wardrobe_role_label: item.wardrobe_role_label ?? null,
-    role_confidence: item.role_confidence ?? null,
-    role_source: item.role_source ?? null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? item.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? item.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? item.role_confidence ?? null,
+    role_source: roleFields.role_source ?? item.role_source ?? null,
     release_year: null,
     concentration: null,
     perfumer: null,
@@ -6641,12 +7012,17 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
     base_notes: [],
     why_it_fits_wardrobe: null,
     source_confidence: null,
-    longevity_score: null,
-    projection_score: null,
-    odor_impact_score: null,
-    density_score: null,
-    transparency_score: null,
-    beast_mode_score: null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     retired: Boolean(item.retired),
     collection_status: item.collection_status ?? null,
     rating: normalizeCollectionRating(item.rating),
@@ -6657,6 +7033,8 @@ function buildFragranceDetailSurfaceStateFromCollectionItem(item: OdaraCollectio
 }
 
 function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWardrobeCatalogItem): OdaraFragranceDetailSurfaceState {
+  const roleFields = resolveDetailRoleFields(item);
+  const performanceFields = resolveDetailPerformanceFields(item);
   return {
     fragrance_id: item.fragrance_id,
     name: item.name,
@@ -6664,10 +7042,10 @@ function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWard
     family_key: item.family_key ?? null,
     family_label: item.family_label ?? (item.family_key ? getFamilyLabelText(item.family_key) : null),
     family_color_token: item.family_key ?? null,
-    wardrobe_role_key: null,
-    wardrobe_role_label: null,
-    role_confidence: null,
-    role_source: null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
     release_year: item.release_year ?? null,
     concentration: item.concentration ?? null,
     perfumer: null,
@@ -6687,12 +7065,17 @@ function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWard
     base_notes: sanitizeTokenSource(item.base_notes),
     why_it_fits_wardrobe: null,
     source_confidence: item.source_confidence ?? null,
-    longevity_score: null,
-    projection_score: null,
-    odor_impact_score: null,
-    density_score: null,
-    transparency_score: null,
-    beast_mode_score: null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     retired: false,
     collection_status: null,
     rating: null,
@@ -6703,6 +7086,8 @@ function buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(item: OdaraWard
 }
 
 function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): OdaraFragranceDetailSurfaceState {
+  const roleFields = resolveDetailRoleFields(card);
+  const performanceFields = resolveDetailPerformanceFields(card);
   return {
     fragrance_id: card.fragrance_id ?? null,
     name: card.name ?? '',
@@ -6710,10 +7095,10 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
     family_key: card.family ?? null,
     family_label: card.family ? getFamilyLabelText(card.family) : null,
     family_color_token: card.family ?? null,
-    wardrobe_role_key: null,
-    wardrobe_role_label: null,
-    role_confidence: null,
-    role_source: null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
     release_year: null,
     concentration: null,
     perfumer: null,
@@ -6733,12 +7118,17 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
     base_notes: [],
     why_it_fits_wardrobe: null,
     source_confidence: null,
-    longevity_score: null,
-    projection_score: null,
-    odor_impact_score: null,
-    density_score: null,
-    transparency_score: null,
-    beast_mode_score: null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     retired: false,
     collection_status: card.isHero ? 'today_pick' : 'queue',
     rating: null,
@@ -6747,6 +7137,8 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
 }
 
 function buildFragranceDetailSurfaceStateFromSearchResult(result: OdaraSearchFragranceResult): OdaraFragranceDetailSurfaceState {
+  const roleFields = resolveDetailRoleFields(result);
+  const performanceFields = resolveDetailPerformanceFields(result);
   return {
     fragrance_id: result.fragrance_id ?? null,
     name: result.title ?? '',
@@ -6754,10 +7146,10 @@ function buildFragranceDetailSurfaceStateFromSearchResult(result: OdaraSearchFra
     family_key: result.family_key ?? null,
     family_label: result.family_key ? getFamilyLabelText(result.family_key) : null,
     family_color_token: result.family_key ?? null,
-    wardrobe_role_key: null,
-    wardrobe_role_label: null,
-    role_confidence: null,
-    role_source: null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
     release_year: null,
     concentration: null,
     perfumer: null,
@@ -6777,12 +7169,17 @@ function buildFragranceDetailSurfaceStateFromSearchResult(result: OdaraSearchFra
     base_notes: [],
     why_it_fits_wardrobe: null,
     source_confidence: null,
-    longevity_score: null,
-    projection_score: null,
-    odor_impact_score: null,
-    density_score: null,
-    transparency_score: null,
-    beast_mode_score: null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     retired: false,
     collection_status: null,
     rating: null,
@@ -6796,6 +7193,8 @@ function buildFragranceDetailSurfaceStateFromLayerEntry(
   entry: NonNullable<LayerModes[LayerMood]>,
   imageUrl?: string | null,
 ): OdaraFragranceDetailSurfaceState {
+  const roleFields = resolveDetailRoleFields(entry);
+  const performanceFields = resolveDetailPerformanceFields(entry);
   return {
     fragrance_id: entry.id ?? null,
     name: entry.name ?? '',
@@ -6803,10 +7202,10 @@ function buildFragranceDetailSurfaceStateFromLayerEntry(
     family_key: entry.family_key ?? null,
     family_label: entry.family_key ? getFamilyLabelText(entry.family_key) : null,
     family_color_token: entry.family_key ?? null,
-    wardrobe_role_key: null,
-    wardrobe_role_label: null,
-    role_confidence: null,
-    role_source: null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
     release_year: null,
     concentration: null,
     perfumer: null,
@@ -6826,12 +7225,17 @@ function buildFragranceDetailSurfaceStateFromLayerEntry(
     base_notes: [],
     why_it_fits_wardrobe: null,
     source_confidence: null,
-    longevity_score: null,
-    projection_score: null,
-    odor_impact_score: null,
-    density_score: null,
-    transparency_score: null,
-    beast_mode_score: null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     retired: false,
     collection_status: 'layer',
     rating: null,
@@ -6846,6 +7250,8 @@ function mergeFragranceDetailSurfaceState(
   detail: FragranceDetail | null | undefined,
 ): OdaraFragranceDetailSurfaceState {
   if (!detail) return current;
+  const roleFields = resolveDetailRoleFields(detail, current);
+  const performanceFields = resolveDetailPerformanceFields(detail, current);
   return {
     ...current,
     fragrance_id: current.fragrance_id ?? detail.id,
@@ -6857,10 +7263,10 @@ function mergeFragranceDetailSurfaceState(
       || (current.family_key ? getFamilyLabelText(current.family_key) : null)
       || (detail.family_key ? getFamilyLabelText(detail.family_key) : null),
     family_color_token: current.family_color_token ?? detail.family_color_token ?? detail.family_key ?? null,
-    wardrobe_role_key: current.wardrobe_role_key ?? detail.wardrobe_role_key ?? null,
-    wardrobe_role_label: current.wardrobe_role_label ?? detail.wardrobe_role_label ?? null,
-    role_confidence: current.role_confidence ?? detail.role_confidence ?? null,
-    role_source: current.role_source ?? detail.role_source ?? null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
     release_year: current.release_year ?? detail.release_year ?? null,
     concentration: current.concentration ?? detail.concentration ?? null,
     perfumer: current.perfumer ?? detail.perfumer ?? null,
@@ -6879,21 +7285,89 @@ function mergeFragranceDetailSurfaceState(
     top_notes: (current.top_notes?.length ?? 0) > 0 ? current.top_notes : sanitizeTokenSource(detail.top_notes),
     middle_notes: (current.middle_notes?.length ?? 0) > 0 ? current.middle_notes : sanitizeTokenSource(detail.middle_notes),
     base_notes: (current.base_notes?.length ?? 0) > 0 ? current.base_notes : sanitizeTokenSource(detail.base_notes),
-    longevity_score: current.longevity_score ?? detail.longevity_score ?? null,
-    longevity_source: current.longevity_source ?? detail.longevity_source ?? null,
-    projection_score: current.projection_score ?? detail.projection_score ?? null,
-    projection_source: current.projection_source ?? detail.projection_source ?? null,
-    odor_impact_score: current.odor_impact_score ?? detail.odor_impact_score ?? null,
-    density_score: current.density_score ?? detail.density_score ?? null,
-    transparency_score: current.transparency_score ?? detail.transparency_score ?? null,
-    beast_mode_score: current.beast_mode_score ?? detail.beast_mode_score ?? null,
-    trail_source: current.trail_source ?? detail.trail_source ?? null,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
     why_it_fits_wardrobe: current.why_it_fits_wardrobe ?? detail.why_it_fits_wardrobe ?? null,
     source_confidence: current.source_confidence ?? detail.source_confidence ?? null,
     retired: current.retired ?? detail.retired ?? false,
     rating: current.rating ?? normalizeCollectionRating(detail.rating),
     detail_loading: false,
     detail_error: null,
+  };
+}
+
+function mergeFragranceDetailSurfaceSeed(
+  primary: OdaraFragranceDetailSurfaceState,
+  fallback: OdaraFragranceDetailSurfaceState | null | undefined,
+): OdaraFragranceDetailSurfaceState {
+  if (!fallback) return primary;
+
+  const roleFields = resolveDetailRoleFields(primary, fallback);
+  const performanceFields = resolveDetailPerformanceFields(primary, fallback);
+
+  return {
+    ...fallback,
+    ...primary,
+    fragrance_id: primary.fragrance_id ?? fallback.fragrance_id,
+    name: primary.name || fallback.name || '',
+    brand: primary.brand ?? fallback.brand ?? null,
+    family_key: primary.family_key ?? fallback.family_key ?? null,
+    family_label:
+      primary.family_label
+      ?? (primary.family_key ? getFamilyLabelText(primary.family_key) : null)
+      ?? fallback.family_label
+      ?? (fallback.family_key ? getFamilyLabelText(fallback.family_key) : null),
+    family_color_token: primary.family_color_token ?? fallback.family_color_token ?? fallback.family_key ?? null,
+    wardrobe_role_key: roleFields.wardrobe_role_key ?? null,
+    wardrobe_role_label: roleFields.wardrobe_role_label ?? null,
+    role_confidence: roleFields.role_confidence ?? null,
+    role_source: roleFields.role_source ?? null,
+    release_year: primary.release_year ?? fallback.release_year ?? null,
+    concentration: primary.concentration ?? fallback.concentration ?? null,
+    perfumer: primary.perfumer ?? fallback.perfumer ?? null,
+    short_description: primary.short_description ?? fallback.short_description ?? null,
+    description_source: primary.description_source ?? fallback.description_source ?? null,
+    description_generated_at: primary.description_generated_at ?? fallback.description_generated_at ?? null,
+    timeline_source: primary.timeline_source ?? fallback.timeline_source ?? null,
+    image_url: primary.image_url ?? fallback.image_url ?? null,
+    thumbnail_url: primary.thumbnail_url ?? fallback.thumbnail_url ?? null,
+    image_source: primary.image_source ?? fallback.image_source ?? null,
+    source_page_url: primary.source_page_url ?? fallback.source_page_url ?? null,
+    image_license_status: primary.image_license_status ?? fallback.image_license_status ?? null,
+    image_last_checked_at: primary.image_last_checked_at ?? fallback.image_last_checked_at ?? null,
+    notes: primary.notes.length > 0 ? primary.notes : fallback.notes,
+    accords: primary.accords.length > 0 ? primary.accords : fallback.accords,
+    top_notes: (primary.top_notes?.length ?? 0) > 0 ? primary.top_notes : fallback.top_notes,
+    middle_notes: (primary.middle_notes?.length ?? 0) > 0 ? primary.middle_notes : fallback.middle_notes,
+    base_notes: (primary.base_notes?.length ?? 0) > 0 ? primary.base_notes : fallback.base_notes,
+    longevity_score: performanceFields.longevity_score ?? null,
+    longevity_source: performanceFields.longevity_source ?? null,
+    projection_score: performanceFields.projection_score ?? null,
+    projection_source: performanceFields.projection_source ?? null,
+    trail_score: performanceFields.trail_score ?? null,
+    trail_label: performanceFields.trail_label ?? null,
+    trail_source: performanceFields.trail_source ?? null,
+    odor_impact_score: performanceFields.odor_impact_score ?? null,
+    density_score: performanceFields.density_score ?? null,
+    transparency_score: performanceFields.transparency_score ?? null,
+    beast_mode_score: performanceFields.beast_mode_score ?? null,
+    why_it_fits_wardrobe: primary.why_it_fits_wardrobe ?? fallback.why_it_fits_wardrobe ?? null,
+    source_confidence: primary.source_confidence ?? fallback.source_confidence ?? null,
+    retired: primary.retired ?? fallback.retired ?? false,
+    collection_status: primary.collection_status ?? fallback.collection_status ?? null,
+    rating: primary.rating ?? fallback.rating ?? null,
+    source_label: primary.source_label ?? fallback.source_label ?? null,
+    detail_loading: primary.detail_loading ?? fallback.detail_loading ?? false,
+    detail_error: primary.detail_error ?? fallback.detail_error ?? null,
   };
 }
 
@@ -6916,7 +7390,7 @@ async function fetchOdaraFragranceDetailForSurface(
       } as any),
       odaraSupabase
         .from('fragrances' as any)
-        .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
+        .select('*')
         .eq('id', fragranceId)
         .maybeSingle(),
       fetchWardrobeImageAssetMap([fragranceId]),
@@ -6931,16 +7405,18 @@ async function fetchOdaraFragranceDetailForSurface(
     }
 
     const imageAsset = imageAssetMap.get(fragranceId) ?? null;
+    const roleFields = resolveDetailRoleFields(payload, data);
+    const performanceFields = resolveDetailPerformanceFields(payload, data);
     return finalizeFragranceDetail({
       id: payload?.fragrance_id ?? (data as any)?.id ?? fragranceId,
       name: payload?.name ?? (data as any)?.name ?? '',
       brand: payload?.brand ?? (data as any)?.brand ?? null,
       family_key: payload?.family_key ?? (data as any)?.family_key ?? null,
       family_color_token: payload?.family_color_token ?? payload?.family_key ?? (data as any)?.family_key ?? null,
-      wardrobe_role_key: payload?.wardrobe_role_key ?? null,
-      wardrobe_role_label: payload?.wardrobe_role_label ?? null,
-      role_confidence: payload?.role_confidence ?? null,
-      role_source: payload?.role_source ?? null,
+      wardrobe_role_key: roleFields.wardrobe_role_key,
+      wardrobe_role_label: roleFields.wardrobe_role_label,
+      role_confidence: roleFields.role_confidence,
+      role_source: roleFields.role_source,
       release_year: payload?.release_year ?? (typeof (data as any)?.release_year === 'number' ? (data as any).release_year : null),
       concentration: payload?.concentration ?? (typeof (data as any)?.concentration === 'string' ? (data as any).concentration : null),
       perfumer: payload?.perfumer ?? (typeof (data as any)?.perfumer === 'string' ? (data as any).perfumer : null),
@@ -6953,15 +7429,17 @@ async function fetchOdaraFragranceDetailForSurface(
       top_notes: Array.isArray(payload?.top_notes) ? payload.top_notes : (Array.isArray((data as any)?.top_notes) ? (data as any).top_notes : []),
       middle_notes: Array.isArray(payload?.middle_notes) ? payload.middle_notes : (Array.isArray((data as any)?.heart_notes) ? (data as any).heart_notes : []),
       base_notes: Array.isArray(payload?.base_notes) ? payload.base_notes : (Array.isArray((data as any)?.base_notes) ? (data as any).base_notes : []),
-      longevity_score: normalizeDetailScore(payload?.longevity_score ?? (data as any)?.longevity_score),
-      longevity_source: null,
-      projection_score: normalizeDetailScore(payload?.projection_score ?? (data as any)?.projection_score),
-      projection_source: null,
-      odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence),
-      density_score: normalizeDetailScore(payload?.density_score),
-      transparency_score: normalizeDetailScore(payload?.transparency_score),
-      beast_mode_score: normalizeDetailScore(payload?.beast_mode_score),
-      trail_source: null,
+      longevity_score: performanceFields.longevity_score,
+      longevity_source: performanceFields.longevity_source,
+      projection_score: performanceFields.projection_score,
+      projection_source: performanceFields.projection_source,
+      trail_score: performanceFields.trail_score,
+      trail_label: performanceFields.trail_label,
+      trail_source: performanceFields.trail_source,
+      odor_impact_score: performanceFields.odor_impact_score,
+      density_score: performanceFields.density_score,
+      transparency_score: performanceFields.transparency_score,
+      beast_mode_score: performanceFields.beast_mode_score,
       why_it_fits_wardrobe: typeof payload?.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
       source_confidence: typeof payload?.source_confidence === 'string'
         ? payload.source_confidence
@@ -11803,7 +12281,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
 
     const detailHydration = selectedFragranceId ? detailHydrationById[selectedFragranceId] : null;
-    const baseDetail = buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(selectedCatalogItem);
+    const catalogBaseDetail = buildFragranceDetailSurfaceStateFromWardrobeCatalogItem(selectedCatalogItem);
+    const collectionBaseDetail = selectedCollectionItem
+      ? buildFragranceDetailSurfaceStateFromCollectionItem(selectedCollectionItem)
+      : null;
+    const baseDetail = collectionBaseDetail
+      ? mergeFragranceDetailSurfaceSeed(collectionBaseDetail, catalogBaseDetail)
+      : catalogBaseDetail;
     const detailState = {
       ...mergeFragranceDetailSurfaceState(baseDetail, detailHydration?.detail ?? null),
       collection_status: selectedCollectionItem?.collection_status ?? baseDetail.collection_status ?? null,
@@ -13018,8 +13502,14 @@ const OdaraScreen = ({
   const [searchResults, setSearchResults] = useState<OdaraSearchFragranceResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [lastCompletedSearchQuery, setLastCompletedSearchQuery] = useState('');
   const [searchAddPendingFragranceId, setSearchAddPendingFragranceId] = useState<string | null>(null);
   const [searchAddFeedback, setSearchAddFeedback] = useState<{ fragranceId: string; text: string } | null>(null);
+  const [missingIntakeOpen, setMissingIntakeOpen] = useState(false);
+  const [missingIntakeForm, setMissingIntakeForm] = useState(buildEmptyMissingFragranceForm);
+  const [missingIntakeSubmitting, setMissingIntakeSubmitting] = useState(false);
+  const [missingIntakeError, setMissingIntakeError] = useState<string | null>(null);
+  const [missingIntakeSuccess, setMissingIntakeSuccess] = useState<string | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
@@ -13087,6 +13577,11 @@ const OdaraScreen = ({
     if (clearQuery) {
       setSearchQuery('');
     }
+    setMissingIntakeOpen(false);
+    setMissingIntakeForm(buildEmptyMissingFragranceForm());
+    setMissingIntakeSubmitting(false);
+    setMissingIntakeError(null);
+    setMissingIntakeSuccess(null);
   }, []);
   const normalizedSelectedContextKey = useMemo(
     () => normalizePersistedContextKey(selectedContext),
@@ -13515,7 +14010,7 @@ const OdaraScreen = ({
       const [{ data, error }, imageAssets] = await Promise.all([
         odaraSupabase
           .from('fragrances')
-          .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
+          .select('*')
           .in('id', missingIds),
         fetchFragranceImageAssets(missingIds),
       ]);
@@ -13528,16 +14023,18 @@ const OdaraScreen = ({
       for (const row of Array.isArray(data) ? data : []) {
         if (!row?.id) continue;
         const imageAsset = imageAssets.get(row.id) ?? null;
+        const roleFields = resolveDetailRoleFields(row);
+        const performanceFields = resolveDetailPerformanceFields(row);
         const detail = finalizeFragranceDetail({
           id: row.id,
           name: row.name ?? '',
           brand: row.brand ?? null,
           family_key: row.family_key ?? null,
           family_color_token: row.family_key ?? null,
-          wardrobe_role_key: null,
-          wardrobe_role_label: null,
-          role_confidence: null,
-          role_source: null,
+          wardrobe_role_key: roleFields.wardrobe_role_key,
+          wardrobe_role_label: roleFields.wardrobe_role_label,
+          role_confidence: roleFields.role_confidence,
+          role_source: roleFields.role_source,
           release_year: typeof (row as any).release_year === 'number' ? (row as any).release_year : null,
           concentration: typeof (row as any).concentration === 'string' ? (row as any).concentration : null,
           perfumer: typeof (row as any).perfumer === 'string' ? (row as any).perfumer : null,
@@ -13550,15 +14047,17 @@ const OdaraScreen = ({
           top_notes: Array.isArray((row as any).top_notes) ? (row as any).top_notes : [],
           middle_notes: Array.isArray((row as any).heart_notes) ? (row as any).heart_notes : [],
           base_notes: Array.isArray((row as any).base_notes) ? (row as any).base_notes : [],
-          longevity_score: normalizeDetailScore((row as any).longevity_score),
-          longevity_source: null,
-          projection_score: normalizeDetailScore((row as any).projection_score),
-          projection_source: null,
-          odor_impact_score: null,
-          density_score: null,
-          transparency_score: null,
-          beast_mode_score: null,
-          trail_source: null,
+          longevity_score: performanceFields.longevity_score,
+          longevity_source: performanceFields.longevity_source,
+          projection_score: performanceFields.projection_score,
+          projection_source: performanceFields.projection_source,
+          trail_score: performanceFields.trail_score,
+          trail_label: performanceFields.trail_label,
+          trail_source: performanceFields.trail_source,
+          odor_impact_score: performanceFields.odor_impact_score,
+          density_score: performanceFields.density_score,
+          transparency_score: performanceFields.transparency_score,
+          beast_mode_score: performanceFields.beast_mode_score,
           why_it_fits_wardrobe: null,
           source_confidence: typeof (row as any).source_confidence === 'string' ? (row as any).source_confidence : null,
           retired: false,
@@ -13687,7 +14186,7 @@ const OdaraScreen = ({
           } as any),
           odaraSupabase
             .from('fragrances')
-            .select('id, name, brand, family_key, notes, accords, top_notes, heart_notes, base_notes, release_year, concentration, perfumer, longevity_score, projection_score, source_confidence, source_url')
+            .select('*')
             .eq('id', fragranceId)
             .maybeSingle(),
           fetchFragranceImageAssets([fragranceId]),
@@ -13702,16 +14201,18 @@ const OdaraScreen = ({
         }
 
         const imageAsset = imageAssets.get(fragranceId) ?? null;
+        const roleFields = resolveDetailRoleFields(payload, data);
+        const performanceFields = resolveDetailPerformanceFields(payload, data);
         const detail = finalizeFragranceDetail({
           id: payload?.fragrance_id ?? data?.id ?? fragranceId,
           name: payload?.name ?? data?.name ?? '',
           brand: payload?.brand ?? data?.brand ?? null,
           family_key: payload?.family_key ?? data?.family_key ?? null,
           family_color_token: payload?.family_color_token ?? payload?.family_key ?? data?.family_key ?? null,
-          wardrobe_role_key: payload?.wardrobe_role_key ?? null,
-          wardrobe_role_label: payload?.wardrobe_role_label ?? null,
-          role_confidence: payload?.role_confidence ?? null,
-          role_source: payload?.role_source ?? null,
+          wardrobe_role_key: roleFields.wardrobe_role_key,
+          wardrobe_role_label: roleFields.wardrobe_role_label,
+          role_confidence: roleFields.role_confidence,
+          role_source: roleFields.role_source,
           release_year: payload?.release_year ?? (typeof (data as any)?.release_year === 'number' ? (data as any).release_year : null),
           concentration: payload?.concentration ?? (typeof (data as any)?.concentration === 'string' ? (data as any).concentration : null),
           perfumer: payload?.perfumer ?? (typeof (data as any)?.perfumer === 'string' ? (data as any).perfumer : null),
@@ -13724,15 +14225,17 @@ const OdaraScreen = ({
           top_notes: Array.isArray(payload?.top_notes) ? payload.top_notes : (Array.isArray((data as any)?.top_notes) ? (data as any).top_notes : []),
           middle_notes: Array.isArray(payload?.middle_notes) ? payload.middle_notes : (Array.isArray((data as any)?.heart_notes) ? (data as any).heart_notes : []),
           base_notes: Array.isArray(payload?.base_notes) ? payload.base_notes : (Array.isArray((data as any)?.base_notes) ? (data as any).base_notes : []),
-          longevity_score: normalizeDetailScore(payload?.longevity_score ?? (data as any)?.longevity_score),
-          longevity_source: null,
-          projection_score: normalizeDetailScore(payload?.projection_score ?? (data as any)?.projection_score),
-          projection_source: null,
-          odor_impact_score: normalizeDetailScore(payload?.odor_impact_score ?? payload?.odor_impact_confidence),
-          density_score: normalizeDetailScore(payload?.density_score),
-          transparency_score: normalizeDetailScore(payload?.transparency_score),
-          beast_mode_score: normalizeDetailScore(payload?.beast_mode_score),
-          trail_source: null,
+          longevity_score: performanceFields.longevity_score,
+          longevity_source: performanceFields.longevity_source,
+          projection_score: performanceFields.projection_score,
+          projection_source: performanceFields.projection_source,
+          trail_score: performanceFields.trail_score,
+          trail_label: performanceFields.trail_label,
+          trail_source: performanceFields.trail_source,
+          odor_impact_score: performanceFields.odor_impact_score,
+          density_score: performanceFields.density_score,
+          transparency_score: performanceFields.transparency_score,
+          beast_mode_score: performanceFields.beast_mode_score,
           why_it_fits_wardrobe: typeof payload?.why_it_fits_wardrobe === 'string' ? payload.why_it_fits_wardrobe : null,
           source_confidence: typeof payload?.source_confidence === 'string'
             ? payload.source_confidence
@@ -14054,6 +14557,7 @@ const OdaraScreen = ({
       setSearchResults([]);
       setSearchLoading(false);
       setSearchError(null);
+      setLastCompletedSearchQuery('');
       return;
     }
 
@@ -14062,6 +14566,10 @@ const OdaraScreen = ({
       setSearchResults([]);
       setSearchLoading(false);
       setSearchError(null);
+      setLastCompletedSearchQuery('');
+      setMissingIntakeOpen(false);
+      setMissingIntakeError(null);
+      setMissingIntakeSuccess(null);
       return;
     }
 
@@ -14073,11 +14581,13 @@ const OdaraScreen = ({
         .then((results) => {
           if (cancelled) return;
           setSearchResults(results);
+          setLastCompletedSearchQuery(normalizedQuery);
         })
         .catch(() => {
           if (cancelled) return;
           setSearchResults([]);
           setSearchError('Search is unavailable right now.');
+          setLastCompletedSearchQuery(normalizedQuery);
         })
         .finally(() => {
           if (!cancelled) {
@@ -18428,6 +18938,92 @@ const OdaraScreen = ({
     updateSignedInDayState,
   ]);
   const searchHasQuery = searchQuery.trim().length > 0;
+  const normalizedActiveSearchQuery = useMemo(
+    () => normalizeOdaraSearchQuery(searchQuery),
+    [searchQuery],
+  );
+  const searchResultsReflectCurrentQuery = lastCompletedSearchQuery === normalizedActiveSearchQuery;
+  const searchHasExactFragranceMatch = useMemo(() => {
+    if (!normalizedActiveSearchQuery) return false;
+    return searchResults.some((result) => {
+      const normalizedTitle = normalizeOdaraSearchQuery(result.title);
+      const normalizedNameBrand = normalizeOdaraSearchQuery([result.title, result.brand].filter(Boolean).join(' '));
+      const normalizedBrandName = normalizeOdaraSearchQuery([result.brand, result.title].filter(Boolean).join(' '));
+      return normalizedTitle === normalizedActiveSearchQuery
+        || normalizedNameBrand === normalizedActiveSearchQuery
+        || normalizedBrandName === normalizedActiveSearchQuery;
+    });
+  }, [normalizedActiveSearchQuery, searchResults]);
+  const showMissingFragranceIntakeCta = searchOpen
+    && searchHasQuery
+    && searchResultsReflectCurrentQuery
+    && !searchLoading
+    && !searchError
+    && !searchHasExactFragranceMatch;
+
+  useEffect(() => {
+    if (missingIntakeOpen || !searchHasQuery) return;
+    setMissingIntakeForm((current) => ({
+      ...current,
+      name: searchQuery.trim(),
+    }));
+  }, [missingIntakeOpen, searchHasQuery, searchQuery]);
+
+  const openMissingFragranceIntake = useCallback(() => {
+    setMissingIntakeForm((current) => ({
+      ...current,
+      name: current.name.trim() || searchQuery.trim(),
+    }));
+    setMissingIntakeOpen(true);
+    setMissingIntakeError(null);
+    setMissingIntakeSuccess(null);
+    haptic('selection');
+  }, [searchQuery]);
+
+  const submitMissingFragranceIntake = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const submittedName = missingIntakeForm.name.trim();
+    const submittedBrand = missingIntakeForm.brand.trim();
+    const submittedConcentration = missingIntakeForm.concentration.trim();
+    const submittedSourceUrl = missingIntakeForm.sourceUrl.trim();
+
+    if (!submittedName) {
+      setMissingIntakeError('Add the fragrance name first.');
+      return;
+    }
+
+    if (isGuestMode || !userId) {
+      setMissingIntakeError('Sign in to ask Vesper to find it.');
+      return;
+    }
+
+    setMissingIntakeSubmitting(true);
+    setMissingIntakeError(null);
+    setMissingIntakeSuccess(null);
+
+    try {
+      const { data, error } = await odaraSupabase.rpc('create_fragrance_intake_request_v1' as any, {
+        p_submitted_name: submittedName,
+        p_submitted_brand: submittedBrand || null,
+        p_submitted_concentration: submittedConcentration || null,
+        p_desired_status: missingIntakeForm.desiredStatus,
+        p_submitted_source_url: submittedSourceUrl || null,
+      });
+
+      if (error) throw error;
+
+      const duplicateActiveRequest = Boolean((data as any)?.duplicate_active_request);
+      setMissingIntakeSuccess(duplicateActiveRequest
+        ? 'Vesper already has this request queued. Verified scent data stays pending.'
+        : 'Vesper will look for verified scent data.');
+      setMissingIntakeError(null);
+      haptic('success');
+    } catch (error: any) {
+      setMissingIntakeError(error?.message ?? "Couldn't send this request yet.");
+    } finally {
+      setMissingIntakeSubmitting(false);
+    }
+  }, [isGuestMode, missingIntakeForm, userId]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -18757,9 +19353,11 @@ const OdaraScreen = ({
               <p className="text-[12.5px] text-foreground/52">
                 {searchError}
               </p>
-            ) : searchResults.length > 0 ? (
-              <div className="flex flex-col divide-y divide-white/6">
-                {searchResults.map((result) => {
+            ) : (
+              <>
+                {searchResults.length > 0 ? (
+                  <div className="flex flex-col divide-y divide-white/6">
+                    {searchResults.map((result) => {
                   const familyColor = result.family_key
                     ? (FAMILY_COLORS[result.family_key] ?? '#888')
                     : '#888';
@@ -18811,109 +19409,289 @@ const OdaraScreen = ({
                         ? familyColor
                         : 'rgba(255,255,255,0.52)';
 
-                  return (
-                    <div
-                      key={`${result.source}-${result.fragrance_id}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openSearchResultFragranceDetail(result)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          openSearchResultFragranceDetail(result);
-                        }
-                      }}
-                      className="flex cursor-pointer items-start justify-between gap-3 rounded-[14px] py-3 transition-colors first:pt-1 last:pb-1 hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/18"
-                      style={{ WebkitTapHighlightColor: 'transparent' }}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13.5px] text-foreground/92">
-                          {result.title}
-                        </div>
-                        <div className="mt-0.5 truncate text-[11.5px] text-foreground/52">
-                          {result.subtitle || result.brand || 'Fragrance'}
-                        </div>
-                        {(familyLabel || result.supporting_text) && (
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            {familyLabel ? (
+                      return (
+                        <div
+                          key={`${result.source}-${result.fragrance_id}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openSearchResultFragranceDetail(result)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openSearchResultFragranceDetail(result);
+                            }
+                          }}
+                          className="flex cursor-pointer items-start justify-between gap-3 rounded-[14px] py-3 transition-colors first:pt-1 last:pb-1 hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/18"
+                          style={{ WebkitTapHighlightColor: 'transparent' }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13.5px] text-foreground/92">
+                              {result.title}
+                            </div>
+                            <div className="mt-0.5 truncate text-[11.5px] text-foreground/52">
+                              {result.subtitle || result.brand || 'Fragrance'}
+                            </div>
+                            {(familyLabel || result.supporting_text) && (
+                              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                {familyLabel ? (
+                                  <span
+                                    className="rounded-full border px-2 py-0.5 text-[9.5px] uppercase tracking-[0.12em]"
+                                    style={{
+                                      color: familyColor,
+                                      borderColor: `${familyColor}36`,
+                                      background: `${familyColor}10`,
+                                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                                    }}
+                                  >
+                                    {familyLabel}
+                                  </span>
+                                ) : null}
+                                {result.supporting_text ? (
+                                  <span className="truncate text-[10.5px] text-foreground/44">
+                                    {result.supporting_text}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <button
+                              type="button"
+                              aria-label={addDisabledReason
+                                ? `${addDisabledReason}: ${result.title}`
+                                : previewRole === 'top'
+                                  ? `Add ${result.title} as layer for ${getDateLabel(currentDateKey)}`
+                                  : previewRole === 'layer'
+                                    ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
+                                    : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
+                              onPointerDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleAddSearchResultToSelectedDay(result);
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{
+                                WebkitTapHighlightColor: 'transparent',
+                                ...buttonTone,
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                              }}
+                              title={addDisabledReason ?? undefined}
+                              disabled={isAdding || isSignedInAddDisabled}
+                            >
+                              {isAdding ? (
+                                <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
+                              ) : previewRole === 'layer' ? (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                                  <path d="M6 6l12 12" />
+                                  <path d="M18 6L6 18" />
+                                </svg>
+                              ) : (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                                  <path d="M12 5v14" />
+                                  <path d="M5 12h14" />
+                                </svg>
+                              )}
+                            </button>
+                            {statusText ? (
                               <span
-                                className="rounded-full border px-2 py-0.5 text-[9.5px] uppercase tracking-[0.12em]"
-                                style={{
-                                  color: familyColor,
-                                  borderColor: `${familyColor}36`,
-                                  background: `${familyColor}10`,
-                                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-                                }}
+                                className="text-[10px] uppercase tracking-[0.12em]"
+                                style={{ color: statusTone }}
                               >
-                                {familyLabel}
-                              </span>
-                            ) : null}
-                            {result.supporting_text ? (
-                              <span className="truncate text-[10.5px] text-foreground/44">
-                                {result.supporting_text}
+                                {statusText}
                               </span>
                             ) : null}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[12.5px] text-foreground/52">
+                    Nothing found yet. Try the exact fragrance name or ask Vesper to find it.
+                  </p>
+                )}
 
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <button
-                          type="button"
-                          aria-label={addDisabledReason
-                            ? `${addDisabledReason}: ${result.title}`
-                            : previewRole === 'top'
-                              ? `Add ${result.title} as layer for ${getDateLabel(currentDateKey)}`
-                              : previewRole === 'layer'
-                                ? `Remove ${result.title} from ${getDateLabel(currentDateKey)}`
-                                : `Add ${result.title} to ${getDateLabel(currentDateKey)}`}
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleAddSearchResultToSelectedDay(result);
-                          }}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors hover:text-foreground/96 disabled:cursor-not-allowed disabled:opacity-60"
+                {showMissingFragranceIntakeCta ? (
+                  <div
+                    className={searchResults.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-3'}
+                  >
+                    {!missingIntakeOpen ? (
+                      <button
+                        type="button"
+                        onClick={openMissingFragranceIntake}
+                        className="flex w-full items-center justify-between gap-3 rounded-[16px] border px-3.5 py-3 text-left transition-colors hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/55"
+                        style={{
+                          borderColor: 'rgba(218,188,124,0.22)',
+                          background: 'linear-gradient(180deg, rgba(218,188,124,0.09), rgba(255,255,255,0.025))',
+                          WebkitTapHighlightColor: 'transparent',
+                        }}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[13px] text-foreground/88">
+                            Ask Vesper to find it
+                          </span>
+                          <span className="mt-0.5 block text-[11.5px] leading-snug text-foreground/48">
+                            Create a pending limited-intel request. No fake notes or rankings.
+                          </span>
+                        </span>
+                        <span
+                          aria-hidden
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[18px]"
                           style={{
-                            WebkitTapHighlightColor: 'transparent',
-                            ...buttonTone,
-                            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                            color: 'rgba(248,229,185,0.92)',
+                            borderColor: 'rgba(218,188,124,0.26)',
+                            background: 'rgba(218,188,124,0.10)',
                           }}
-                          title={addDisabledReason ?? undefined}
-                          disabled={isAdding || isSignedInAddDisabled}
                         >
-                          {isAdding ? (
-                            <span className="h-3.5 w-3.5 rounded-full border border-current border-t-transparent animate-spin" />
-                          ) : previewRole === 'layer' ? (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          +
+                        </span>
+                      </button>
+                    ) : (
+                      <form
+                        onSubmit={submitMissingFragranceIntake}
+                        className="rounded-[16px] border px-3.5 py-3"
+                        style={{
+                          borderColor: 'rgba(218,188,124,0.20)',
+                          background: 'linear-gradient(180deg, rgba(18,20,26,0.72), rgba(11,13,18,0.62))',
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-[13px] text-foreground/90">
+                              Ask Vesper to find it
+                            </div>
+                            <p className="mt-1 text-[11.5px] leading-snug text-foreground/48">
+                              Pending requests stay limited-intel until verified scent data is found.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Close missing fragrance request"
+                            onClick={() => {
+                              setMissingIntakeOpen(false);
+                              setMissingIntakeError(null);
+                              setMissingIntakeSuccess(null);
+                            }}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-foreground/55 transition-colors hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/50"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                               <path d="M6 6l12 12" />
                               <path d="M18 6L6 18" />
                             </svg>
-                          ) : (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                              <path d="M12 5v14" />
-                              <path d="M5 12h14" />
-                            </svg>
-                          )}
-                        </button>
-                        {statusText ? (
-                          <span
-                            className="text-[10px] uppercase tracking-[0.12em]"
-                            style={{ color: statusTone }}
-                          >
-                            {statusText}
-                          </span>
+                          </button>
+                        </div>
+
+                        <div className="mt-3 grid gap-2.5">
+                          <label className="grid gap-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Fragrance name</span>
+                            <input
+                              type="text"
+                              value={missingIntakeForm.name}
+                              onChange={(event) => setMissingIntakeForm((current) => ({ ...current, name: event.target.value }))}
+                              className="h-9 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 text-[13px] text-foreground outline-none placeholder:text-foreground/30 focus:border-[#dabc7c]/45"
+                              placeholder="Fragrance name"
+                              maxLength={160}
+                              required
+                            />
+                          </label>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <label className="grid gap-1.5">
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Brand</span>
+                              <input
+                                type="text"
+                                value={missingIntakeForm.brand}
+                                onChange={(event) => setMissingIntakeForm((current) => ({ ...current, brand: event.target.value }))}
+                                className="h-9 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 text-[13px] text-foreground outline-none placeholder:text-foreground/30 focus:border-[#dabc7c]/45"
+                                placeholder="Optional"
+                                maxLength={160}
+                              />
+                            </label>
+                            <label className="grid gap-1.5">
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Concentration</span>
+                              <input
+                                type="text"
+                                value={missingIntakeForm.concentration}
+                                onChange={(event) => setMissingIntakeForm((current) => ({ ...current, concentration: event.target.value }))}
+                                className="h-9 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 text-[13px] text-foreground outline-none placeholder:text-foreground/30 focus:border-[#dabc7c]/45"
+                                placeholder="Optional"
+                                maxLength={80}
+                              />
+                            </label>
+                          </div>
+                          <label className="grid gap-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Source URL</span>
+                            <input
+                              type="url"
+                              value={missingIntakeForm.sourceUrl}
+                              onChange={(event) => setMissingIntakeForm((current) => ({ ...current, sourceUrl: event.target.value }))}
+                              className="h-9 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 text-[13px] text-foreground outline-none placeholder:text-foreground/30 focus:border-[#dabc7c]/45"
+                              placeholder="Optional official page"
+                              maxLength={1000}
+                            />
+                          </label>
+
+                          <div className="grid gap-1.5">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Desired status intent</span>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS.map((option) => {
+                                const active = missingIntakeForm.desiredStatus === option.value;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setMissingIntakeForm((current) => ({ ...current, desiredStatus: option.value }))}
+                                    className="h-8 rounded-full border text-[10px] uppercase tracking-[0.10em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/50"
+                                    style={{
+                                      borderColor: active ? 'rgba(218,188,124,0.46)' : 'rgba(255,255,255,0.10)',
+                                      background: active ? 'rgba(218,188,124,0.13)' : 'rgba(255,255,255,0.025)',
+                                      color: active ? 'rgba(248,229,185,0.94)' : 'rgba(255,255,255,0.58)',
+                                    }}
+                                  >
+                                    {option.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {missingIntakeError ? (
+                          <p className="mt-3 text-[11.5px] leading-snug text-red-200/80">
+                            {missingIntakeError}
+                          </p>
                         ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[12.5px] text-foreground/52">
-                Nothing found yet. Try a fragrance, brand, note, accord, or family.
-              </p>
+                        {missingIntakeSuccess ? (
+                          <p className="mt-3 text-[11.5px] leading-snug text-[#f8e5b9]/88">
+                            {missingIntakeSuccess}
+                          </p>
+                        ) : null}
+
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <p className="min-w-0 text-[10.5px] leading-snug text-foreground/42">
+                            This will not create catalog, collection, ranking, note, accord, pyramid, perfumer, or performance data.
+                          </p>
+                          <button
+                            type="submit"
+                            disabled={missingIntakeSubmitting || !missingIntakeForm.name.trim()}
+                            className="flex h-9 shrink-0 items-center justify-center rounded-full border px-3 text-[11px] uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/55"
+                            style={{
+                              borderColor: 'rgba(218,188,124,0.34)',
+                              background: 'rgba(218,188,124,0.12)',
+                              color: 'rgba(248,229,185,0.94)',
+                            }}
+                          >
+                            {missingIntakeSubmitting ? 'Sending' : 'Submit'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         )}
