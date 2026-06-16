@@ -5794,6 +5794,12 @@ type FragrancePerformanceBarDescriptor = {
   source: FragrancePerformanceSource;
 };
 
+const ODARA_DETAIL_PERFORMANCE_ROWS = [
+  { key: 'longevity', label: 'Longevity' },
+  { key: 'projection', label: 'Projection' },
+  { key: 'trail', label: 'Trail' },
+] as const;
+
 function formatFragrancePerformanceStrength(score: number) {
   if (score <= 0.3) return 'Soft';
   if (score <= 0.55) return 'Moderate';
@@ -5901,6 +5907,36 @@ const OdaraPerformanceLifeBar: React.FC<{
     </div>
   );
 };
+
+const OdaraPerformanceEmptyLifeBar: React.FC<{
+  label: string;
+  tint: { frame: string; glowStrong: string };
+}> = ({ label, tint }) => (
+  <div>
+    <div className="flex items-center justify-between gap-3 text-[12px] text-foreground/70">
+      <span>{label}</span>
+      <span className="text-foreground/42">—</span>
+    </div>
+    <div
+      className="relative mt-2 h-[14px] overflow-hidden rounded-full border"
+      aria-label={`${label} unavailable`}
+      role="img"
+      style={{
+        borderColor: 'rgba(255,255,255,0.08)',
+        background: 'linear-gradient(180deg, rgba(7,10,16,0.78) 0%, rgba(2,6,12,0.88) 100%)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -8px 18px rgba(0,0,0,0.22)',
+      }}
+    >
+      <span
+        className="pointer-events-none absolute inset-x-[8%] top-[2px] h-[3px] rounded-full"
+        style={{
+          background: `linear-gradient(90deg, rgba(80,248,245,0.08) 0%, ${tint.frame} 54%, rgba(91,168,255,0.08) 100%)`,
+          boxShadow: `0 0 8px ${tint.glowStrong}`,
+        }}
+      />
+    </div>
+  </div>
+);
 
 function deriveProfileMonogram(value: string | null | undefined): string {
   const label = String(value ?? '').trim();
@@ -9099,7 +9135,17 @@ const OdaraFragranceDetailSheet: React.FC<{
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (!open || !scrollRef.current) return undefined;
+    const scrollNode = scrollRef.current;
+    const resetScroll = () => {
+      scrollNode.scrollTop = 0;
+      if (typeof scrollNode.scrollTo === 'function') {
+        scrollNode.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    };
+    resetScroll();
+    const frameId = window.requestAnimationFrame(resetScroll);
+    return () => window.cancelAnimationFrame(frameId);
   }, [open, detail?.fragrance_id]);
 
   if (!open || !detail) return null;
@@ -9130,8 +9176,11 @@ const OdaraFragranceDetailSheet: React.FC<{
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
-  const showTrailPendingNote = !detailPerformanceBars.some((metric) => metric.key === 'trail')
-    && ['projection_fallback', 'unknown'].includes(resolvedDetail.trail_source ?? 'unknown');
+  const detailPerformanceByKey = new Map(detailPerformanceBars.map((metric) => [metric.key, metric]));
+  const detailPerformanceRows = ODARA_DETAIL_PERFORMANCE_ROWS.map((row) => ({
+    ...row,
+    metric: detailPerformanceByKey.get(row.key) ?? null,
+  }));
   const topIdentityChips = (() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -9240,10 +9289,12 @@ const OdaraFragranceDetailSheet: React.FC<{
             type="button"
             aria-label="Close fragrance detail"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d9b56c]/45"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground/62 transition-colors hover:text-foreground/88 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d9b56c]/50 focus-visible:ring-offset-0"
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
               background: 'rgba(255,255,255,0.03)',
+              outline: 'none',
+              WebkitTapHighlightColor: 'transparent',
             }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -9290,22 +9341,15 @@ const OdaraFragranceDetailSheet: React.FC<{
 
           <section>
             <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
-            {detailPerformanceBars.length > 0 ? (
-              <div className="space-y-4">
-                {detailPerformanceBars.map((metric) => (
-                  <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
-                ))}
-                {showTrailPendingNote ? (
-                  <div className="text-[11px] leading-[1.45] text-foreground/54">
-                    Trail data is still filling in.
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="text-[12px] leading-[1.5] text-foreground/58">
-                Performance details unavailable.
-              </div>
-            )}
+            <div className="space-y-4">
+              {detailPerformanceRows.map((row) => (
+                row.metric ? (
+                  <OdaraPerformanceLifeBar key={row.key} metric={row.metric} tint={tint} />
+                ) : (
+                  <OdaraPerformanceEmptyLifeBar key={row.key} label={row.label} tint={tint} />
+                )
+              ))}
+            </div>
           </section>
 
           {accordLabels.length > 0 ? (
