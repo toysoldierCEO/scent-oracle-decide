@@ -10737,6 +10737,44 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return next;
   }, [collectionItems]);
 
+  const handleRetiredToggle = useCallback(async (item: OdaraCollectionItem) => {
+    if (!item.fragrance_id) return;
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: true }));
+    const { data, error: rpcError } = await odaraSupabase.rpc('set_user_fragrance_retired_v1' as any, {
+      p_fragrance_id: item.fragrance_id,
+      p_retired: !item.retired,
+      p_source: 'collection',
+    } as any);
+    if (rpcError || !data) {
+      setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+      return;
+    }
+    const result = data as OdaraCollectionRetiredWriteResult;
+    setPayload((prev) => {
+      if (!prev) return prev;
+      return normalizeCollectionPayload({
+        ...prev,
+        items: (prev.items ?? []).map((entry) => (
+          entry.fragrance_id === result.fragrance_id
+            ? {
+                ...entry,
+                retired: result.retired,
+                favorite: result.favorite ?? result.wear_more ?? false,
+                wear_more: result.wear_more ?? result.favorite ?? false,
+              }
+            : entry
+        )),
+        summary: {
+          ...prev.summary,
+          wear_more_count: result.wear_more_count ?? result.favorite_count ?? prev.summary.wear_more_count,
+          favorite_count: result.favorite_count ?? result.wear_more_count ?? prev.summary.favorite_count,
+          retired_count: result.retired_count,
+        },
+      });
+    });
+    setPendingRetiredById((prev) => ({ ...prev, [item.fragrance_id as string]: false }));
+  }, []);
+
   const catalogById = useMemo(() => {
     const next = new Map<string, OdaraWardrobeCatalogItem>();
     for (const item of catalog) {
@@ -18043,7 +18081,7 @@ const OdaraScreen = ({
     if (!fragranceId) return null;
     return fragranceDetailCacheRef.current.get(fragranceId) ?? null;
   }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
-  const heroCardChips = useMemo<Array<{ label: string; position: string | null; slug?: string | null }>>(() => {
+  const heroCardChips = useMemo<Array<{ label: string; position: string; slug?: string }>>(() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
     const pushChip = (rawLabel: string | null | undefined, position: string) => {
@@ -18101,7 +18139,9 @@ const OdaraScreen = ({
     }
 
     if (chips.length > 0) {
-      return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 6);
+      return expandAndDeduplicateScentIntelDisplayTerms(chips)
+        .slice(0, 6)
+        .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
     }
 
     const fallbackTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
