@@ -15718,10 +15718,68 @@ const OdaraScreen = ({
     }
     const slotPrefix = `${selectedDate}|${selectedContext}`;
     const moodKey = buildMoodLaneKey(slotPrefix, fragranceId, mood);
+
+    // Keep exclusion scoped to this mood lane. The top-level oracle layer is
+    // the seeded balance candidate, so do not exclude it from balance itself.
+    // Cross-mode diversity is scoped to this card identity (slot + anchor
+    // fragrance) instead of the global active oracle layer so queued/promoted
+    // cards exclude their own already-loaded companions.
+    const waitForPriorMoodRequests = async () => {
+      const targetMoodIndex = LAYER_MODE_ORDER.indexOf(mood);
+      if (targetMoodIndex <= 0) return;
+
+      const waits: Promise<unknown>[] = [];
+      for (const priorMood of LAYER_MODE_ORDER.slice(0, targetMoodIndex)) {
+        const priorMoodKey = buildMoodLaneKey(slotPrefix, fragranceId, priorMood);
+        const priorMoodFetch = moodInFlightRef.current.get(priorMoodKey);
+        const priorLaneFetch = moodLaneInFlightRef.current.get(priorMoodKey);
+        if (priorMoodFetch) waits.push(priorMoodFetch.catch(() => null));
+        if (priorLaneFetch) waits.push(priorLaneFetch.catch(() => []));
+      }
+      if (waits.length > 0) await Promise.all(waits);
+    };
+
+    const collectExcludeIds = () => {
+      const excludeIds = collectPriorMoodCompanionExclusionIds(
+        slotPrefix,
+        fragranceId,
+        mood,
+        readMoodLaneStack,
+      );
+      for (const existing of readMoodLaneStack(moodKey)) {
+        if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
+          excludeIds.push(existing.layer_fragrance_id);
+        }
+      }
+      for (const extraId of extraExcludeIds) {
+        if (extraId && !excludeIds.includes(extraId)) excludeIds.push(extraId);
+      }
+      return excludeIds;
+    };
+
+    await waitForPriorMoodRequests();
+    const excludeIds = collectExcludeIds();
+
     const cached = moodCacheRef.current.get(moodKey);
     if (cached !== undefined && !isRetry) {
-      odaraDebugLog('[Odara] mood cache hit', moodKey);
-      return cached;
+      if (!cached.layer_fragrance_id || !excludeIds.includes(cached.layer_fragrance_id)) {
+        odaraDebugLog('[Odara] mood cache hit', moodKey);
+        return cached;
+      }
+
+      const prunedStack = readMoodLaneStack(moodKey)
+        .filter((entry) => entry?.layer_fragrance_id && !excludeIds.includes(entry.layer_fragrance_id));
+      if (prunedStack.length > 0) {
+        moodLaneStackRef.current.set(moodKey, prunedStack);
+        moodCacheRef.current.set(moodKey, prunedStack[0]);
+        setMoodCacheVersion((version) => version + 1);
+        odaraDebugLog('[Odara] mood cache hit pruned excluded companion', moodKey, cached.layer_name);
+        return prunedStack[0];
+      }
+
+      moodLaneStackRef.current.delete(moodKey);
+      moodCacheRef.current.delete(moodKey);
+      odaraDebugLog('[Odara] mood cache invalidated excluded companion', moodKey, cached.layer_name);
     }
 
     // In-flight dedupe: reuse pending promise for same key
@@ -15735,26 +15793,6 @@ const OdaraScreen = ({
 
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
-
-    // Keep exclusion scoped to this mood lane. The top-level oracle layer is
-    // the seeded balance candidate, so do not exclude it from balance itself.
-    // Cross-mode diversity is scoped to this card identity (slot + anchor
-    // fragrance) instead of the global active oracle layer so queued/promoted
-    // cards exclude their own already-loaded companions.
-    const excludeIds = collectPriorMoodCompanionExclusionIds(
-      slotPrefix,
-      fragranceId,
-      mood,
-      readMoodLaneStack,
-    );
-    for (const existing of readMoodLaneStack(moodKey)) {
-      if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
-        excludeIds.push(existing.layer_fragrance_id);
-      }
-    }
-    for (const extraId of extraExcludeIds) {
-      if (extraId && !excludeIds.includes(extraId)) excludeIds.push(extraId);
-    }
 
     const fetchPromise = (async (): Promise<BackendModeEntry | null> => {
       try {
