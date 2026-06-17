@@ -323,14 +323,16 @@ const REQUIRED_SOURCE_TIERS = [
   "official_notes_only",
   "official_prose_only",
   "retailer_pyramid_evidence",
+  "retailer_structured_notes",
   "professional_provider_pyramid",
   "community_provider_consensus",
   "missing_official_source",
   "ambiguous",
 ];
 
-const NON_OFFICIAL_DISCOVERY_LIMIT = 6;
-const NON_OFFICIAL_FETCH_TIMEOUT_MS = 3500;
+const NON_OFFICIAL_DISCOVERY_LIMIT = 30;
+const NON_OFFICIAL_CANDIDATE_FETCH_LIMIT = 4;
+const NON_OFFICIAL_FETCH_TIMEOUT_MS = 5000;
 const NON_OFFICIAL_DISCOVERY_DOMAINS = [
   { domain: "sephora.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Sephora" },
   { domain: "nordstrom.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Nordstrom" },
@@ -376,12 +378,49 @@ const NON_OFFICIAL_DISCOVERY_BRANDS = new Set([
   "montblanc",
 ]);
 
-const NON_OFFICIAL_DISCOVERY_SEARCH_DOMAINS = new Set([
-  "sephora.com",
-  "nordstrom.com",
-  "luckyscent.com",
-  "wikiparfum.com",
+const NON_OFFICIAL_DISCOVERY_SEARCH_DOMAINS = new Set(
+  NON_OFFICIAL_DISCOVERY_DOMAINS.map((entry) => entry.domain),
+);
+
+const NON_OFFICIAL_URL_BLOCKLIST_PATTERNS = [
+  /\b(samples?|sample[- ]sets?|travel[- ]sprays?|travel[- ]sizes?)\b/i,
+  /\b(decant|decants|rollerball|travel[- ]atomizer|travel[- ]set|travel[- ]sets|mini|gift[- ]sets?|discovery[- ]sets?)\b/i,
+  /\b(body[- ]lotion|body[- ]cream|body[- ]oil|body[- ]spray|shower[- ]gel|deodorant|soap|candle|diffuser|hair[- ]mist|laundry[- ]detergent|laundry detergent|detergent|refill)\b/i,
+  /\bforum|forums|thread|threads|discussion|community\/forums\b/i,
+  /[?&](?:variant|size|quantity|sku)=/i,
+];
+
+const NON_OFFICIAL_PRODUCT_HINT_PATTERNS = [
+  /\/(?:perfume|perfumes|fragrance|fragrances|product|products)\//i,
+  /\/en\/fragrances?\//i,
+];
+
+const STRONG_FLANKER_TOKENS = new Set([
+  "absolu",
+  "absolue",
+  "elixir",
+  "extreme",
+  "intense",
+  "intenso",
+  "legere",
+  "le parfum",
+  "noir",
+  "reserve",
+  "sport",
 ]);
+
+const CONCENTRATION_MARKER_PATTERNS = [
+  ["extrait_intense", /\bextrait intense\b/],
+  ["extrait", /\bextrait(?: de parfum)?\b/],
+  ["edp", /\b(?:eau de parfum|edp)\b/],
+  ["edt", /\b(?:eau de toilette|edt)\b/],
+  ["cologne", /\b(?:eau de cologne|cologne)\b/],
+  ["elixir", /\belixir\b/],
+  ["intense", /\bintense\b/],
+  ["absolu", /\babsolu(?:e)?\b/],
+  ["extreme", /\bextreme\b/],
+  ["parfum", /\bparfum\b/],
+];
 
 const FORBIDDEN_SQL_TOKENS = [
   "insert",
@@ -1038,7 +1077,7 @@ async function inspectNonOfficialSource(target, officialFinding, discoveryAttemp
   }
 
   const attempted = [];
-  for (const sourceUrl of discovery.urls.slice(0, 2)) {
+  for (const sourceUrl of discovery.urls.slice(0, NON_OFFICIAL_CANDIDATE_FETCH_LIMIT)) {
     const adapter = nonOfficialAdapterFor(sourceUrl);
     if (!adapter) continue;
     attempted.push(sourceUrl);
@@ -1068,49 +1107,42 @@ async function inspectNonOfficialSource(target, officialFinding, discoveryAttemp
 
 function shouldDiscoverNonOfficialSource(target, officialFinding, discoveryAttemptsUsed) {
   if (discoveryAttemptsUsed >= NON_OFFICIAL_DISCOVERY_LIMIT) return false;
-  if (safeUrl(target.source_url)) return false;
-  if (officialFinding?.source_evidence_type !== "missing_official_source") return false;
   if (CLONE_HOUSE_BRANDS.has(normText(target.brand))) return false;
-  return NON_OFFICIAL_DISCOVERY_BRANDS.has(normText(target.brand));
+  if (!NON_OFFICIAL_DISCOVERY_BRANDS.has(normText(target.brand))) return false;
+  const currentUrl = safeUrl(target.source_url);
+  if (currentUrl && nonOfficialAdapterFor(currentUrl)) return false;
+  const officialEvidenceType = officialFinding?.source_evidence_type;
+  if (!officialEvidenceType) return true;
+  return !["identity_mismatch", "duplicate_or_flanker_risk"].includes(officialEvidenceType);
 }
 
 async function discoverNonOfficialCandidateUrls(target) {
-  const queries = NON_OFFICIAL_DISCOVERY_DOMAINS
-    .filter((entry) => NON_OFFICIAL_DISCOVERY_SEARCH_DOMAINS.has(entry.domain))
-    .map((entry) => ({
-      domain: entry.domain,
-      query: `"${target.name}" "${target.brand}" fragrance notes site:${entry.domain}`,
-    }));
-  const urls = [];
-  const attemptedQueries = [];
-  for (const item of queries) {
-    attemptedQueries.push(item.query);
-    try {
-      const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(item.query)}`;
-      const response = await fetch(url, {
-        headers: {
-          "user-agent": `${VERSION}/1.0 non-official-source-discovery`,
-          accept: "text/html,application/xhtml+xml",
-        },
-        signal: AbortSignal.timeout(NON_OFFICIAL_FETCH_TIMEOUT_MS),
+  const domainSpecificUrls = [];
+  for (const entry of NON_OFFICIAL_DISCOVERY_DOMAINS) {
+    const candidates = await discoverDomainSpecificNonOfficialCandidates(target, entry);
+    for (const sourceUrl of candidates) {
+      domainSpecificUrls.push({
+        sourceUrl,
+        score: scoreDiscoveredNonOfficialUrl(target, sourceUrl, entry) + 10,
       });
-      if (!response.ok) continue;
-      const html = await response.text();
-      urls.push(
-        ...extractSearchResultUrls(html)
-          .filter((sourceUrl) => nonOfficialAdapterFor(sourceUrl)?.domain === item.domain)
-          .filter(uniqueByNorm)
-          .slice(0, 2),
-      );
-      if (urls.length >= 8) break;
-    } catch {
-      // Search discovery is best-effort; failed domains remain non-evidence.
     }
   }
+
   return {
-    query: attemptedQueries.join(" | "),
-    urls: urls.filter(uniqueByNorm).slice(0, 8),
+    query: "domain_specific_candidate_discovery",
+    urls: domainSpecificUrls
+      .sort((a, b) => b.score - a.score || a.sourceUrl.localeCompare(b.sourceUrl))
+      .map((entry) => entry.sourceUrl)
+      .filter(uniqueByNorm)
+      .slice(0, 12),
   };
+}
+
+async function discoverDomainSpecificNonOfficialCandidates(target, adapter) {
+  if (adapter.domain === "luckyscent.com") {
+    return discoverLuckyscentCandidates(target);
+  }
+  return [];
 }
 
 function extractSearchResultUrls(html) {
@@ -1157,14 +1189,16 @@ async function fetchAndClassifyNonOfficialSource(target, sourceUrl, adapter, dis
 
     const html = await response.text();
     const text = htmlToText(html);
-    const identityStatus = directIdentityStatus(target, text, sourceUrl);
+    const pageTitle = extractTitle(html);
+    const identityStatus = directIdentityStatus(target, text, sourceUrl, pageTitle);
     const extraction = extractOfficialEvidenceFromHtml(html, sourceUrl, target);
     const usable = nonOfficialExtractionIsUsable(adapter, extraction, identityStatus);
+    const sourceTier = usable ? nonOfficialSourceTierFor(adapter, extraction) : "ambiguous";
     return buildNonOfficialIntelligenceRow({
       target,
       adapter,
       sourceUrl,
-      sourceTier: usable ? adapter.tier : "ambiguous",
+      sourceTier,
       status: usable ? "usable_non_official_intelligence" : "not_structured_or_identity_safe",
       extraction,
       identityStatus,
@@ -1195,13 +1229,24 @@ async function fetchAndClassifyNonOfficialSource(target, sourceUrl, adapter, dis
 function nonOfficialExtractionIsUsable(adapter, extraction, identityStatus) {
   if (identityStatus !== "exact") return false;
   if (extraction.quality !== "high" || Number(extraction.confidence ?? 0) < 0.86) return false;
+  if (!arr(extraction.source_locations).length) return false;
   const hasCompletePyramid = extraction.top.length && extraction.heart.length && extraction.base.length;
-  if (adapter.sourceType === "retailer") return Boolean(hasCompletePyramid);
-  if (adapter.sourceType === "professional_provider") return Boolean(hasCompletePyramid);
+  const hasStructuredNotes = extraction.notes.length >= 4;
+  if (adapter.sourceType === "retailer") return Boolean(hasCompletePyramid || hasStructuredNotes);
+  if (adapter.sourceType === "professional_provider") return Boolean(hasCompletePyramid || hasStructuredNotes);
   if (adapter.sourceType === "community_provider") {
-    return Boolean(hasCompletePyramid || extraction.notes.length);
+    return Boolean(hasCompletePyramid || hasStructuredNotes);
   }
   return false;
+}
+
+function nonOfficialSourceTierFor(adapter, extraction) {
+  const hasCompletePyramid = extraction.top.length && extraction.heart.length && extraction.base.length;
+  const hasStructuredNotes = extraction.notes.length >= 4;
+  if (adapter?.sourceType === "retailer") {
+    return hasCompletePyramid ? "retailer_pyramid_evidence" : hasStructuredNotes ? "retailer_structured_notes" : adapter.tier;
+  }
+  return adapter?.tier ?? "ambiguous";
 }
 
 function buildNonOfficialIntelligenceRow({
@@ -1287,8 +1332,8 @@ function nonOfficialAdapterFor(sourceUrl) {
 
 function classifyOfficialPage(target, sourceUrl, html) {
   const text = htmlToText(html);
-  const identityStatus = directIdentityStatus(target, text, sourceUrl);
   const pageTitle = extractTitle(html);
+  const identityStatus = directIdentityStatus(target, text, sourceUrl, pageTitle);
   const cloneRisk = cloneRiskFor(target, sourceUrl, html, text, pageTitle);
   const extraction = extractOfficialEvidenceFromHtml(html, sourceUrl, target);
   const mergedWarnings = [...extraction.warnings, ...cloneRisk.warnings];
@@ -1654,23 +1699,254 @@ function identityStatusFor(target, finding, duplicateRisk, concentrationAmbiguit
   return "not_checked";
 }
 
-function directIdentityStatus(target, pageText, sourceUrl) {
-  const text = normText(pageText);
-  const nameTokens = meaningfulTokens(target.name);
-  const brandTokens = meaningfulTokens(target.brand);
-  const matchedNameTokens = nameTokens.filter((token) => text.includes(token));
-  const matchedBrandTokens = brandTokens.filter((token) => text.includes(token));
-  const urlText = normText(sourceUrl);
-  const urlNameMatches = nameTokens.filter((token) => urlText.includes(token));
+function directIdentityStatus(target, pageText, sourceUrl, pageTitle = null) {
+  const identity = buildIdentityProfile(target);
+  const rawSurfaceText = `${sourceUrl ?? ""} ${pageTitle ?? ""}`;
+  const surfaceText = normText(rawSurfaceText);
+  const fullText = normText(`${rawSurfaceText} ${pageText ?? ""}`);
+
+  if (isDisallowedNonOfficialUrl(sourceUrl) || hasProductCategoryMismatch(rawSurfaceText)) {
+    return "wrong_product_category";
+  }
+
+  const targetGender = detectGenderSignal(`${target.name ?? ""} ${target.concentration ?? ""}`);
+  const pageGender = detectGenderSignal(rawSurfaceText);
+  if (
+    targetGender &&
+    pageGender &&
+    targetGender !== "unisex" &&
+    pageGender !== "unisex" &&
+    targetGender !== pageGender
+  ) {
+    return "wrong_gender";
+  }
+
+  const targetConcentration = detectConcentrationSignals(`${target.name ?? ""} ${target.concentration ?? ""}`);
+  const pageConcentration = detectConcentrationSignals(rawSurfaceText);
+  if (
+    targetConcentration.length &&
+    pageConcentration.length &&
+    !targetConcentration.some((signal) => pageConcentration.includes(signal))
+  ) {
+    return "wrong_concentration";
+  }
+
+  if (
+    identity.requiredFlankerTokens.length &&
+    identity.requiredFlankerTokens.some((token) => !fullText.includes(token))
+  ) {
+    return "wrong_flanker";
+  }
+
+  const unexpectedFlankers = detectStrongFlankerTokens(rawSurfaceText)
+    .filter((token) => !identity.requiredFlankerTokens.includes(token));
+  if (unexpectedFlankers.length) {
+    return "wrong_flanker";
+  }
+
+  const matchedNameTokens = identity.nameTokens.filter((token) => fullText.includes(token));
+  const matchedSurfaceNameTokens = identity.nameTokens.filter((token) => surfaceText.includes(token));
+  const matchedBrandTokens = identity.brandTokens.filter((token) => fullText.includes(token));
+  const phraseMatch = Boolean(
+    identity.normalizedName && (surfaceText.includes(identity.normalizedName) || fullText.includes(identity.normalizedName)),
+  );
   const nameOk =
-    nameTokens.length === 0 ||
-    matchedNameTokens.length >= Math.min(nameTokens.length, 2) ||
-    urlNameMatches.length >= Math.min(nameTokens.length, 2);
-  const brandOk = brandTokens.length === 0 || matchedBrandTokens.length > 0 || domainMatchesOfficial(target.brand, sourceUrl);
+    identity.nameTokens.length === 0 ||
+    phraseMatch ||
+    matchedSurfaceNameTokens.length >= Math.min(identity.nameTokens.length, 2) ||
+    matchedNameTokens.length === identity.nameTokens.length;
+  const brandOk =
+    identity.brandTokens.length === 0 ||
+    matchedBrandTokens.length > 0 ||
+    domainMatchesOfficial(target.brand, sourceUrl);
   if (nameOk && brandOk) return "exact";
   if (brandOk) return "brand_only_match";
   if (nameOk) return "name_only_match";
   return "mismatch";
+}
+
+function buildIdentityProfile(target) {
+  const identityText = `${target.name ?? ""} ${target.concentration ?? ""}`;
+  return {
+    normalizedName: normText(target.name),
+    nameTokens: meaningfulTokens(target.name),
+    brandTokens: meaningfulTokens(target.brand),
+    requiredFlankerTokens: detectStrongFlankerTokens(identityText),
+  };
+}
+
+function detectStrongFlankerTokens(value) {
+  const normalized = normText(value);
+  return [...STRONG_FLANKER_TOKENS].filter((token) => normalized.includes(token));
+}
+
+function detectConcentrationSignals(value) {
+  const normalized = normText(value);
+  const signals = [];
+  let consumed = normalized;
+  for (const [signal, pattern] of CONCENTRATION_MARKER_PATTERNS) {
+    if (pattern.test(consumed)) {
+      signals.push(signal);
+      const globalPattern = new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`);
+      consumed = consumed.replace(globalPattern, " ");
+    }
+  }
+  return signals.filter(uniqueByNorm);
+}
+
+function concentrationSignalsAreCompatible(targetSignals, candidateSignals) {
+  if (targetSignals.length > 0 && candidateSignals.length === 0) return false;
+  if (targetSignals.length === 0 && candidateSignals.length > 0) return false;
+  if (targetSignals.length === 0 && candidateSignals.length === 0) return true;
+  const targetSet = new Set(targetSignals);
+  const candidateSet = new Set(candidateSignals);
+  if (targetSignals.some((signal) => !candidateSet.has(signal))) return false;
+  if (candidateSignals.some((signal) => !targetSet.has(signal))) return false;
+  return true;
+}
+
+function detectGenderSignal(value) {
+  const normalized = normText(value);
+  const masculine = /\b(homme|men|man|male|for him)\b/.test(normalized);
+  const feminine = /\b(femme|women|woman|female|for her)\b/.test(normalized);
+  if (masculine && feminine) return "unisex";
+  if (masculine) return "masculine";
+  if (feminine) return "feminine";
+  if (/\bunisex\b/.test(normalized)) return "unisex";
+  return null;
+}
+
+function hasProductCategoryMismatch(value) {
+  const raw = String(value ?? "").toLowerCase();
+  const normalized = normText(value);
+  return NON_OFFICIAL_URL_BLOCKLIST_PATTERNS.some((pattern) => pattern.test(raw) || pattern.test(normalized));
+}
+
+function isDisallowedNonOfficialUrl(sourceUrl) {
+  if (!sourceUrl) return false;
+  return NON_OFFICIAL_URL_BLOCKLIST_PATTERNS.some((pattern) => pattern.test(sourceUrl));
+}
+
+function scoreDiscoveredNonOfficialUrl(target, sourceUrl, adapter) {
+  if (!sourceUrl || !adapter) return -100;
+  if (isDisallowedNonOfficialUrl(sourceUrl)) return -100;
+  const urlText = normText(sourceUrl);
+  const identity = buildIdentityProfile(target);
+  let score = 0;
+  if (identity.normalizedName && urlText.includes(identity.normalizedName)) score += 12;
+  score += identity.nameTokens.filter((token) => urlText.includes(token)).length * 3;
+  score += identity.brandTokens.filter((token) => urlText.includes(token)).length * 2;
+  if (identity.requiredFlankerTokens.length) {
+    score += identity.requiredFlankerTokens.filter((token) => urlText.includes(token)).length * 2;
+  }
+  if (NON_OFFICIAL_PRODUCT_HINT_PATTERNS.some((pattern) => pattern.test(sourceUrl))) score += 3;
+  if (adapter.sourceType === "professional_provider") score += 2;
+  if (adapter.sourceType === "retailer") score += 1;
+  return score;
+}
+
+function discoveryQueryFor(target, adapter) {
+  const parts = [`"${target.name}"`, `"${target.brand}"`];
+  if (target.concentration) parts.push(`"${target.concentration}"`);
+  parts.push("perfume notes");
+  parts.push(`site:${adapter.domain}`);
+  return parts.join(" ");
+}
+
+async function discoverLuckyscentCandidates(target) {
+  const searchUrl = `https://www.luckyscent.com/search?term=${encodeURIComponent(target.name)}`;
+  try {
+    const response = await fetch(searchUrl, {
+      headers: {
+        "user-agent": `${VERSION}/1.0 luckyscent-discovery`,
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(NON_OFFICIAL_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) return [];
+    const html = await response.text();
+    return parseLuckyscentSearchResults(html, target)
+      .map((item) => absoluteUrl("https://www.luckyscent.com", item.href))
+      .filter(Boolean)
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+function parseLuckyscentSearchResults(html, target) {
+  const parts = String(html ?? "").split('<a class="product-item');
+  const items = [];
+  for (const part of parts.slice(1, 41)) {
+    const href = part.match(/href="([^"]+)"/i)?.[1];
+    const alt = part.match(/alt="([^"]+)"/i)?.[1];
+    const brand = part.match(/<p class="mb-1 text-xs">([\s\S]{0,160}?)<\/p>/i)?.[1];
+    const title = part.match(/<h4[^>]*>([\s\S]{0,220}?)<\/h4>/i)?.[1];
+    const candidate = {
+      href,
+      alt: htmlToText(alt),
+      brand: htmlToText(brand),
+      title: htmlToText(title),
+    };
+    if (!candidate.href || !candidate.brand || !candidate.title) continue;
+    if (!luckyscentCandidateMatchesTarget(candidate, target)) continue;
+    items.push(candidate);
+  }
+  return items;
+}
+
+function luckyscentCandidateMatchesTarget(candidate, target) {
+  const identity = buildIdentityProfile(target);
+  const candidateText = `${candidate.title} ${candidate.brand} ${candidate.alt} ${candidate.href}`;
+  if (hasProductCategoryMismatch(candidateText)) return false;
+
+  const brandText = normText(`${candidate.brand} ${candidate.alt}`);
+  const nameText = normText(`${candidate.title} ${candidate.alt}`);
+  const normalizedTargetTitle = normalizeDiscoveryIdentityTitle(target.name);
+  const normalizedCandidateTitle = normalizeDiscoveryIdentityTitle(candidate.title);
+  const candidateConcentration = detectConcentrationSignals(candidateText);
+  const targetConcentration = detectConcentrationSignals(`${target.name ?? ""} ${target.concentration ?? ""}`);
+  const candidateFlankers = detectStrongFlankerTokens(candidateText);
+
+  const brandOk =
+    identity.brandTokens.length === 0 ||
+    identity.brandTokens.some((token) => brandText.includes(token));
+  const nameOk =
+    Boolean(identity.normalizedName && nameText.includes(identity.normalizedName)) ||
+    identity.nameTokens.every((token) => nameText.includes(token));
+  if (!brandOk || !nameOk) return false;
+  if (normalizedTargetTitle && normalizedCandidateTitle && normalizedTargetTitle !== normalizedCandidateTitle) {
+    return false;
+  }
+  if (!concentrationSignalsAreCompatible(targetConcentration, candidateConcentration)) return false;
+  if (
+    candidateFlankers.length &&
+    candidateFlankers.some((token) => !identity.requiredFlankerTokens.includes(token))
+  ) {
+    return false;
+  }
+  if (
+    identity.requiredFlankerTokens.length &&
+    identity.requiredFlankerTokens.some((token) => !candidateFlankers.includes(token))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function normalizeDiscoveryIdentityTitle(value) {
+  return normText(value)
+    .replace(/\b(eau de parfum|eau de toilette|extrait de parfum|extrait|parfum|elixir|cologne)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function absoluteUrl(origin, href) {
+  try {
+    return new URL(href, origin).toString();
+  } catch {
+    return null;
+  }
 }
 
 function cloneRiskFor(target, sourceUrl, html, pageText, pageTitle) {
@@ -2255,11 +2531,43 @@ function collectBoundedHtmlEvidence(html, buckets, rejected, sourceLabel) {
     addNotesToBucket("notes", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
 
+  for (const pair of extractStructuredHtmlPairs(html)) {
+    const bucket = noteBucketFromLabel(pair.label) ?? noteBucketFromStructuredKey(pair.label);
+    if (!bucket) continue;
+    const pairItems = extractDiscreteHtmlItems(pair.value);
+    addNotesToBucket(
+      bucket,
+      pairItems.length ? pairItems : htmlToText(pair.value),
+      buckets,
+      rejected,
+      `${sourceLabel}:structured_pair:${pair.label}`,
+    );
+  }
+
   for (const segment of extractNoteContainers(html)) {
     const items = extractDiscreteHtmlItems(segment);
     collectTieredPlainTextEvidence(segment, buckets, rejected, `${sourceLabel}:tiered_container`);
     if (items.length >= 2) addNotesToBucket("notes", items, buckets, rejected, `${sourceLabel}:note_container`);
   }
+}
+
+function extractStructuredHtmlPairs(html) {
+  const pairs = [];
+  const dtDdPattern = /<dt[^>]*>([\s\S]{0,240}?)<\/dt>\s*<dd[^>]*>([\s\S]{0,1800}?)<\/dd>/gi;
+  for (const match of html.matchAll(dtDdPattern)) {
+    pairs.push({
+      label: htmlToText(match[1]),
+      value: match[2],
+    });
+  }
+  const tablePattern = /<(?:th|td)[^>]*>([\s\S]{0,240}?)<\/(?:th|td)>\s*<(?:td)[^>]*>([\s\S]{0,1800}?)<\/td>/gi;
+  for (const match of html.matchAll(tablePattern)) {
+    pairs.push({
+      label: htmlToText(match[1]),
+      value: match[2],
+    });
+  }
+  return pairs.slice(0, 24);
 }
 
 function extractListAfterLabel(html, label) {
@@ -2514,6 +2822,7 @@ function finalizeExtraction(method, buckets, rejected) {
   const rejectedCandidates = uniqueNotes(rejected);
   const hasPyramid = top.length || heart.length || base.length;
   const hasNotes = notes.length;
+  const acceptedCount = notes.length + top.length + heart.length + base.length;
   const warnings = [];
   warnings.push(...arr(buckets.extractionWarnings));
   if (rejectedCandidates.length) {
@@ -2526,14 +2835,26 @@ function finalizeExtraction(method, buckets, rejected) {
     warnings.push("positional_structure_incomplete");
   }
   const completePyramid = hasPyramid && top.length && heart.length && base.length;
-  const notesOnly = !hasPyramid && hasNotes;
+  const notesOnly = !hasPyramid && hasNotes >= 4;
+  const structuredSourceSeen = arr(buckets.sourceLocations).length > 0;
+  const moderateNoise =
+    rejectedCandidates.length > 0 &&
+    rejectedCandidates.length <= 2 &&
+    rejectedCandidates.length <= Math.max(1, Math.floor(acceptedCount / 3));
   const quality =
-    (completePyramid || notesOnly) && rejectedCandidates.length === 0
+    structuredSourceSeen && (completePyramid || notesOnly) && (rejectedCandidates.length === 0 || moderateNoise)
       ? "high"
       : rejectedCandidates.length || hasPyramid || hasNotes
         ? "medium"
         : "low";
-  const confidence = quality === "high" ? 0.9 : quality === "medium" ? 0.45 : 0.15;
+  const confidence =
+    quality === "high"
+      ? completePyramid
+        ? 0.9
+        : 0.88
+      : quality === "medium"
+        ? 0.45
+        : 0.15;
   return {
     notes,
     top,

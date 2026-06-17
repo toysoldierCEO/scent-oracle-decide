@@ -58,6 +58,7 @@ const OFFICIAL_REGISTRY_SOURCE_TIERS = new Set([
 
 const NON_OFFICIAL_SOURCE_TIERS = new Set([
   "retailer_pyramid_evidence",
+  "retailer_structured_notes",
   "professional_provider_pyramid",
   "community_provider_consensus",
   "missing_official_source",
@@ -229,10 +230,22 @@ function validateDryRunOutput(report) {
   exactCheck(report, "dry-run", "dry_run_true", dryRunResult.dry_run, true);
   exactCheck(report, "dry-run", "requested_count", dryRunResult.requested_count, expectedCount);
   exactCheck(report, "dry-run", "valid_count", dryRunResult.valid_count, expectedCount);
-  exactCheck(report, "dry-run", "rejected_count", dryRunResult.rejected_count, 0);
+  exactCheck(report, "dry-run", "rejected_count", expectedCount === 0 ? (dryRunResult.rejected_count ?? 0) : dryRunResult.rejected_count, 0);
   exactCheck(report, "dry-run", "would_insert_count", dryRunResult.would_insert_count, expectedCount);
-  exactCheck(report, "dry-run", "would_skip_duplicate_count", dryRunResult.would_skip_duplicate_count, 0);
-  exactCheck(report, "dry-run", "would_supersede_count", dryRunResult.would_supersede_count, 0);
+  exactCheck(
+    report,
+    "dry-run",
+    "would_skip_duplicate_count",
+    expectedCount === 0 ? (dryRunResult.would_skip_duplicate_count ?? 0) : dryRunResult.would_skip_duplicate_count,
+    0,
+  );
+  exactCheck(
+    report,
+    "dry-run",
+    "would_supersede_count",
+    expectedCount === 0 ? (dryRunResult.would_supersede_count ?? 0) : dryRunResult.would_supersede_count,
+    0,
+  );
 
   const results = Array.isArray(dryRunResult.results) ? dryRunResult.results : [];
   exactCheck(report, "dry-run", "result_count", results.length, expectedCount);
@@ -328,6 +341,11 @@ function validateRegistryPacket(report, packet) {
       fail(report, "registry", "helper_payload", `${rowLabel}: missing helper_payload`);
     } else {
       pass(report, "registry", "helper_payload", `${rowLabel}: helper_payload present`);
+      if (row?.official_registry_eligible === false || row?.trust_lane === "non_official_source_intelligence") {
+        fail(report, "registry", "non_official_row_in_registry_packet", `${rowLabel}: non-official row leaked into registry packet`);
+      } else {
+        pass(report, "registry", "non_official_row_in_registry_packet", `${rowLabel}: registry row is not marked non-official`);
+      }
       if (row.helper_payload.source_type !== "official_brand") {
         fail(report, "registry", "official_only_helper", `${rowLabel}: helper_payload source_type must be official_brand`);
       } else {
