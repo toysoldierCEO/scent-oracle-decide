@@ -561,6 +561,15 @@ function buildFinalReport(state) {
   ];
   const evidenceCounts = countBy(allRows, (row) => row?.official_source?.source_evidence_type ?? "unknown");
   const bucketCounts = countBy(allRows, (row) => row?.review_envelope?.safety_bucket ?? "unknown");
+  const providerRows = arrayRows(provider);
+  const providerTrustLaneCounts = countBy(providerRows, (row) => row?.trust_lane ?? "unknown");
+  const nonOfficialTierCounts = countBy(
+    providerRows.filter((row) => row?.trust_lane === "non_official_source_intelligence"),
+    (row) => row?.source_tier ?? "unknown",
+  );
+  const usableNonOfficialCount = providerRows.filter(
+    (row) => row?.evidence_status === "usable_non_official_intelligence",
+  ).length;
   const failures = state.failures.length ? state.failures : ["none"];
   const verdict = state.failures.length === 0 ? "PASS" : "FAIL";
   const safeNextAction = safeNextActionFor(state, verdict);
@@ -581,7 +590,8 @@ Generated: ${state.finishedAt}
 ## Counts
 
 - Registry payload count: ${registryRows.length}
-- Provider-only count: ${arrayRows(provider).length}
+- Provider/intelligence count: ${providerRows.length}
+- Usable non-official intelligence count: ${usableNonOfficialCount}
 - Needs-review count: ${arrayRows(needsReview).length}
 - Blocked count: ${arrayRows(blocked).length}
 
@@ -592,6 +602,14 @@ ${markdownCountTable(evidenceCounts)}
 ## Safety Bucket Counts
 
 ${markdownCountTable(bucketCounts)}
+
+## Provider / Intelligence Trust Lane Counts
+
+${markdownCountTable(providerTrustLaneCounts)}
+
+## Non-Official Source Tier Counts
+
+${markdownCountTable(nonOfficialTierCounts)}
 
 ## Validation Checks
 

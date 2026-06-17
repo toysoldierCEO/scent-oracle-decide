@@ -49,6 +49,21 @@ const CLONE_HOUSE_BRANDS = [
   "maison alhambra",
 ];
 
+const OFFICIAL_REGISTRY_SOURCE_TIERS = new Set([
+  "official_pyramid",
+  "official_key_notes",
+  "official_notes_only",
+  "official_prose_only",
+]);
+
+const NON_OFFICIAL_SOURCE_TIERS = new Set([
+  "retailer_pyramid_evidence",
+  "professional_provider_pyramid",
+  "community_provider_consensus",
+  "missing_official_source",
+  "ambiguous",
+]);
+
 const DIRTY_NOTE_PATTERNS = [
   { label: "tier_label_contamination", pattern: /\b(?:Top|Heart|Middle|Mid|Base)\s*:/i },
   { label: "marketing_clause_take_over", pattern: /\btake over\b/i },
@@ -99,6 +114,25 @@ const PROSE_VERBS = new Set([
   "were",
   "will",
   "would",
+]);
+
+const CATEGORY_OR_ACCORD_NOTE_VALUES = new Set([
+  "aromatic",
+  "aquatic accord",
+  "aquatic accords",
+  "citrus",
+  "floral",
+  "fresh",
+  "fresh spicy",
+  "fruity",
+  "herbal",
+  "musky",
+  "powdery",
+  "smoky",
+  "soft spicy",
+  "spicy",
+  "warm spicy",
+  "woody",
 ]);
 
 const args = parseArgs(process.argv.slice(2));
@@ -294,6 +328,21 @@ function validateRegistryPacket(report, packet) {
       fail(report, "registry", "helper_payload", `${rowLabel}: missing helper_payload`);
     } else {
       pass(report, "registry", "helper_payload", `${rowLabel}: helper_payload present`);
+      if (row.helper_payload.source_type !== "official_brand") {
+        fail(report, "registry", "official_only_helper", `${rowLabel}: helper_payload source_type must be official_brand`);
+      } else {
+        pass(report, "registry", "official_only_helper", `${rowLabel}: helper_payload source_type official_brand`);
+      }
+      if (!OFFICIAL_REGISTRY_SOURCE_TIERS.has(row.helper_payload.source_evidence_type)) {
+        fail(
+          report,
+          "registry",
+          "official_only_source_tier",
+          `${rowLabel}: helper_payload source_evidence_type is not an official registry tier`,
+        );
+      } else {
+        pass(report, "registry", "official_only_source_tier", `${rowLabel}: helper_payload source tier is official`);
+      }
     }
   });
 }
@@ -303,16 +352,21 @@ function validateProviderPacket(report, packet) {
   const rows = arrayRows(packet);
   rows.forEach((row, index) => {
     const rowLabel = row?.name ? `${row.name} / ${row.brand ?? "unknown brand"}` : `provider[${index}]`;
-    if (!/fragella/i.test(String(row?.provider ?? ""))) {
-      fail(report, "provider", "fragella_provider", `${rowLabel}: provider is not Fragella`);
+    const provider = String(row?.provider ?? "");
+    const isFragella = /fragella/i.test(provider);
+    const isVesperSourceTier = /^Vesper /i.test(provider);
+    if (!isFragella && !isVesperSourceTier) {
+      fail(report, "provider", "provider_identity", `${rowLabel}: provider must be Fragella or Vesper source-tier research`);
     } else {
-      pass(report, "provider", "fragella_provider", `${rowLabel}: provider is Fragella`);
+      pass(report, "provider", "provider_identity", `${rowLabel}: provider identity allowed`);
     }
 
-    if (row?.trust_lane !== "provider_only_enrichment") {
-      fail(report, "provider", "trust_lane", `${rowLabel}: trust_lane must be provider_only_enrichment`);
-    } else {
+    if (isFragella && row?.trust_lane === "provider_only_enrichment") {
       pass(report, "provider", "trust_lane", `${rowLabel}: provider-only trust lane`);
+    } else if (isVesperSourceTier && row?.trust_lane === "non_official_source_intelligence") {
+      pass(report, "provider", "trust_lane", `${rowLabel}: non-official source intelligence trust lane`);
+    } else {
+      fail(report, "provider", "trust_lane", `${rowLabel}: unexpected trust_lane ${row?.trust_lane}`);
     }
 
     if (row?.source_type === "official_brand" || row?.source_evidence_type || row?.official_notes || row?.official_top_notes) {
@@ -321,10 +375,30 @@ function validateProviderPacket(report, packet) {
       pass(report, "provider", "official_contamination", `${rowLabel}: no official-source fields`);
     }
 
-    if (row?.source_url || row?.official_source_url) {
-      fail(report, "provider", "official_url_contamination", `${rowLabel}: provider row contains source_url/official_source_url`);
+    if (row?.official_source_url) {
+      fail(report, "provider", "official_url_contamination", `${rowLabel}: provider row contains official_source_url`);
+    } else if (isFragella && row?.source_url) {
+      fail(report, "provider", "provider_url_contamination", `${rowLabel}: Fragella status row contains source_url`);
     } else {
       pass(report, "provider", "official_url_contamination", `${rowLabel}: no official source URL`);
+    }
+
+    if (isVesperSourceTier) {
+      if (!NON_OFFICIAL_SOURCE_TIERS.has(row?.source_tier)) {
+        fail(report, "provider", "non_official_source_tier", `${rowLabel}: unsupported non-official source_tier ${row?.source_tier}`);
+      } else {
+        pass(report, "provider", "non_official_source_tier", `${rowLabel}: non-official source tier allowed`);
+      }
+      if (row?.official_registry_eligible !== false) {
+        fail(report, "provider", "registry_exclusion", `${rowLabel}: non-official row must set official_registry_eligible=false`);
+      } else {
+        pass(report, "provider", "registry_exclusion", `${rowLabel}: excluded from official registry`);
+      }
+      if (row?.patch_safe_now === true) {
+        fail(report, "provider", "patch_safe_now", `${rowLabel}: non-official intelligence cannot be patch_safe_now`);
+      } else {
+        pass(report, "provider", "patch_safe_now", `${rowLabel}: not patch-safe`);
+      }
     }
   });
 }
@@ -549,6 +623,9 @@ function noteCleanlinessProblem(value) {
     if (dirty.pattern.test(note)) {
       return { code: dirty.label, reason: `matched ${dirty.label}` };
     }
+  }
+  if (CATEGORY_OR_ACCORD_NOTE_VALUES.has(note.toLowerCase())) {
+    return { code: "category_or_accord_tag", reason: "category/accord label is not a discrete note material" };
   }
   const words = note.split(/\s+/).filter(Boolean);
   if (words.length > 5 || note.length > 48) {

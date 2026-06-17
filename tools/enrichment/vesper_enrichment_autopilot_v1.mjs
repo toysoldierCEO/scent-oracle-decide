@@ -231,34 +231,50 @@ const NON_NOTE_SHOPIFY_TAGS = new Set([
   "55ml",
   "60ml",
   "100ml",
+  "aromatic",
+  "aquatic accord",
+  "aquatic accords",
   "best seller",
   "best sellers",
   "bestseller",
   "black friday",
   "clearance",
   "cologne",
+  "citrus",
   "eau de parfum",
   "eau de toilette",
   "edp",
   "edt",
   "extrait",
+  "floral",
   "fragrance",
   "fragrances",
+  "fresh",
+  "fresh spicy",
+  "fruity",
   "gift card",
+  "herbal",
   "men",
   "mens",
+  "musky",
   "new",
   "parfum",
   "perfume",
+  "powdery",
   "sale",
   "sample",
+  "smoky",
+  "soft spicy",
+  "spicy",
   "travel",
   "travel spray",
   "pinch of royalty",
   "tygar",
   "unisex",
+  "warm spicy",
   "women",
   "womens",
+  "woody",
 ]);
 
 const INSPIRATION_BRAND_TAGS = new Set([
@@ -299,6 +315,72 @@ const CLONE_HOUSE_BRANDS = new Set([
   "dua",
   "the dua brand",
   "maison alhambra",
+]);
+
+const REQUIRED_SOURCE_TIERS = [
+  "official_pyramid",
+  "official_key_notes",
+  "official_notes_only",
+  "official_prose_only",
+  "retailer_pyramid_evidence",
+  "professional_provider_pyramid",
+  "community_provider_consensus",
+  "missing_official_source",
+  "ambiguous",
+];
+
+const NON_OFFICIAL_DISCOVERY_LIMIT = 6;
+const NON_OFFICIAL_FETCH_TIMEOUT_MS = 3500;
+const NON_OFFICIAL_DISCOVERY_DOMAINS = [
+  { domain: "sephora.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Sephora" },
+  { domain: "nordstrom.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Nordstrom" },
+  { domain: "macys.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Macy's" },
+  { domain: "bloomingdales.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Bloomingdale's" },
+  { domain: "harrods.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Harrods" },
+  { domain: "selfridges.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Selfridges" },
+  { domain: "luckyscent.com", tier: "retailer_pyramid_evidence", sourceType: "retailer", label: "Luckyscent" },
+  { domain: "wikiparfum.com", tier: "professional_provider_pyramid", sourceType: "professional_provider", label: "WikiParfum" },
+  {
+    domain: "fragrancesoftheworld.com",
+    tier: "professional_provider_pyramid",
+    sourceType: "professional_provider",
+    label: "Fragrances of the World",
+  },
+  { domain: "parfumo.com", tier: "community_provider_consensus", sourceType: "community_provider", label: "Parfumo" },
+  { domain: "fragrantica.com", tier: "community_provider_consensus", sourceType: "community_provider", label: "Fragrantica" },
+  { domain: "basenotes.com", tier: "community_provider_consensus", sourceType: "community_provider", label: "Basenotes" },
+];
+
+const NON_OFFICIAL_DISCOVERY_BRANDS = new Set([
+  "chanel",
+  "dior",
+  "tom ford",
+  "maison francis kurkdjian",
+  "prada",
+  "louis vuitton",
+  "le labo",
+  "guerlain",
+  "yves saint laurent",
+  "jean paul gaultier",
+  "parfums de marly",
+  "xerjoff",
+  "mugler",
+  "versace",
+  "creed",
+  "roja",
+  "valentino",
+  "giorgio armani",
+  "dolce & gabbana",
+  "carolina herrera",
+  "azzaro",
+  "montblanc",
+]);
+
+const NON_OFFICIAL_DISCOVERY_SEARCH_DOMAINS = new Set([
+  "sephora.com",
+  "nordstrom.com",
+  "luckyscent.com",
+  "wikiparfum.com",
 ]);
 
 const FORBIDDEN_SQL_TOKENS = [
@@ -346,12 +428,18 @@ async function main() {
   const providerRows = [];
   const needsReviewRows = [];
   const blockedRows = [];
+  let nonOfficialDiscoveryAttempts = 0;
 
   for (const target of selectedTargets) {
     const officialFinding = await inspectOfficialSource(target);
     const providerFinding = await inspectProviderSource(target, providerConfigured);
     if (providerFinding) {
       providerRows.push(providerFinding);
+    }
+    const nonOfficialFinding = await inspectNonOfficialSource(target, officialFinding, nonOfficialDiscoveryAttempts);
+    if (nonOfficialFinding) {
+      providerRows.push(nonOfficialFinding);
+      if (nonOfficialFinding.discovery_attempted) nonOfficialDiscoveryAttempts += 1;
     }
 
     const reviewRow = buildReviewRow(target, officialFinding, providerFinding, generatedAt);
@@ -391,9 +479,10 @@ async function main() {
     generated_at: generatedAt,
     provider_mode: providerMode,
     provider_configured: providerConfigured,
-    trust_lane: "provider_only_enrichment",
+    trust_lane: "provider_and_non_official_source_intelligence",
+    source_tiers: REQUIRED_SOURCE_TIERS,
     warning:
-      "Fragella provider data is provider-derived intelligence only and is not treated as official source truth.",
+      "Provider, retailer, professional, and community evidence is non-official intelligence only and is not treated as official source truth.",
     rows: providerRows,
   };
 
@@ -911,6 +1000,291 @@ async function inspectProviderSource(target, providerConfigured) {
   };
 }
 
+async function inspectNonOfficialSource(target, officialFinding, discoveryAttemptsUsed) {
+  if (!allowOfficialFetch || providerMode === "off") return null;
+
+  const currentUrl = safeUrl(target.source_url);
+  const currentAdapter = currentUrl && !domainMatchesOfficial(target.brand, currentUrl)
+    ? nonOfficialAdapterFor(currentUrl)
+    : null;
+  if (currentAdapter) {
+    return fetchAndClassifyNonOfficialSource(target, currentUrl, currentAdapter, {
+      discoveryAttempted: false,
+      discoveryQuery: null,
+      discoveryCandidates: [currentUrl],
+    });
+  }
+
+  if (!shouldDiscoverNonOfficialSource(target, officialFinding, discoveryAttemptsUsed)) {
+    return null;
+  }
+
+  const discovery = await discoverNonOfficialCandidateUrls(target);
+  if (!discovery.urls.length) {
+    return buildNonOfficialIntelligenceRow({
+      target,
+      adapter: null,
+      sourceUrl: null,
+      sourceTier: "missing_official_source",
+      status: "no_non_official_candidate_discovered",
+      extraction: emptyNonOfficialExtraction("non_official_source_discovery"),
+      identityStatus: "not_checked",
+      discoveryAttempted: true,
+      discoveryQuery: discovery.query,
+      discoveryCandidates: [],
+      reason:
+        "No trusted retailer, professional, or community source candidate was discovered for scratch intelligence review.",
+    });
+  }
+
+  const attempted = [];
+  for (const sourceUrl of discovery.urls.slice(0, 2)) {
+    const adapter = nonOfficialAdapterFor(sourceUrl);
+    if (!adapter) continue;
+    attempted.push(sourceUrl);
+    const row = await fetchAndClassifyNonOfficialSource(target, sourceUrl, adapter, {
+      discoveryAttempted: true,
+      discoveryQuery: discovery.query,
+      discoveryCandidates: discovery.urls,
+    });
+    if (row?.evidence_status === "usable_non_official_intelligence") return row;
+  }
+
+  return buildNonOfficialIntelligenceRow({
+    target,
+    adapter: null,
+    sourceUrl: attempted[0] ?? discovery.urls[0] ?? null,
+    sourceTier: "ambiguous",
+    status: attempted.length ? "non_official_candidates_not_usable" : "no_supported_non_official_candidate",
+    extraction: emptyNonOfficialExtraction("non_official_source_discovery"),
+    identityStatus: attempted.length ? "not_verified_as_structured_evidence" : "not_checked",
+    discoveryAttempted: true,
+    discoveryQuery: discovery.query,
+    discoveryCandidates: discovery.urls,
+    reason:
+      "Trusted non-official candidates were discovered, but no fetched page produced exact-identity structured evidence safe for intelligence capture.",
+  });
+}
+
+function shouldDiscoverNonOfficialSource(target, officialFinding, discoveryAttemptsUsed) {
+  if (discoveryAttemptsUsed >= NON_OFFICIAL_DISCOVERY_LIMIT) return false;
+  if (safeUrl(target.source_url)) return false;
+  if (officialFinding?.source_evidence_type !== "missing_official_source") return false;
+  if (CLONE_HOUSE_BRANDS.has(normText(target.brand))) return false;
+  return NON_OFFICIAL_DISCOVERY_BRANDS.has(normText(target.brand));
+}
+
+async function discoverNonOfficialCandidateUrls(target) {
+  const queries = NON_OFFICIAL_DISCOVERY_DOMAINS
+    .filter((entry) => NON_OFFICIAL_DISCOVERY_SEARCH_DOMAINS.has(entry.domain))
+    .map((entry) => ({
+      domain: entry.domain,
+      query: `"${target.name}" "${target.brand}" fragrance notes site:${entry.domain}`,
+    }));
+  const urls = [];
+  const attemptedQueries = [];
+  for (const item of queries) {
+    attemptedQueries.push(item.query);
+    try {
+      const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(item.query)}`;
+      const response = await fetch(url, {
+        headers: {
+          "user-agent": `${VERSION}/1.0 non-official-source-discovery`,
+          accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(NON_OFFICIAL_FETCH_TIMEOUT_MS),
+      });
+      if (!response.ok) continue;
+      const html = await response.text();
+      urls.push(
+        ...extractSearchResultUrls(html)
+          .filter((sourceUrl) => nonOfficialAdapterFor(sourceUrl)?.domain === item.domain)
+          .filter(uniqueByNorm)
+          .slice(0, 2),
+      );
+      if (urls.length >= 8) break;
+    } catch {
+      // Search discovery is best-effort; failed domains remain non-evidence.
+    }
+  }
+  return {
+    query: attemptedQueries.join(" | "),
+    urls: urls.filter(uniqueByNorm).slice(0, 8),
+  };
+}
+
+function extractSearchResultUrls(html) {
+  const urls = [];
+  for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
+    const href = decodeHtmlEntities(match[1]);
+    let candidate = href;
+    try {
+      const url = new URL(href, "https://duckduckgo.com");
+      const uddg = url.searchParams.get("uddg");
+      if (uddg) candidate = decodeURIComponent(uddg);
+    } catch {
+      // Keep the raw href; safeUrl below will discard unsupported values.
+    }
+    const clean = safeUrl(candidate);
+    if (clean) urls.push(normalizeUrl(clean));
+  }
+  return urls;
+}
+
+async function fetchAndClassifyNonOfficialSource(target, sourceUrl, adapter, discovery) {
+  try {
+    const response = await fetch(sourceUrl, {
+      headers: {
+        "user-agent": `${VERSION}/1.0 non-official-source-tier-review`,
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(NON_OFFICIAL_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return buildNonOfficialIntelligenceRow({
+        target,
+        adapter,
+        sourceUrl,
+        sourceTier: "ambiguous",
+        status: `http_${response.status}`,
+        extraction: emptyNonOfficialExtraction("non_official_fetch_http_error"),
+        identityStatus: "not_checked",
+        ...discovery,
+        reason:
+          "Trusted non-official candidate could not be fetched successfully, so it was not used as evidence.",
+      });
+    }
+
+    const html = await response.text();
+    const text = htmlToText(html);
+    const identityStatus = directIdentityStatus(target, text, sourceUrl);
+    const extraction = extractOfficialEvidenceFromHtml(html, sourceUrl, target);
+    const usable = nonOfficialExtractionIsUsable(adapter, extraction, identityStatus);
+    return buildNonOfficialIntelligenceRow({
+      target,
+      adapter,
+      sourceUrl,
+      sourceTier: usable ? adapter.tier : "ambiguous",
+      status: usable ? "usable_non_official_intelligence" : "not_structured_or_identity_safe",
+      extraction,
+      identityStatus,
+      ...discovery,
+      reason: usable
+        ? "Non-official structured evidence is useful Vesper intelligence only and is excluded from official registry payloads."
+        : "Fetched non-official page did not prove exact identity with structured evidence required for this source tier.",
+    });
+  } catch (error) {
+    return buildNonOfficialIntelligenceRow({
+      target,
+      adapter,
+      sourceUrl,
+      sourceTier: "ambiguous",
+      status: "fetch_error",
+      extraction: {
+        ...emptyNonOfficialExtraction("non_official_fetch_error"),
+        warnings: [`fetch_error:${error.name ?? "unknown"}`],
+      },
+      identityStatus: "not_checked",
+      ...discovery,
+      reason:
+        "Trusted non-official candidate fetch failed, so it was not used as evidence.",
+    });
+  }
+}
+
+function nonOfficialExtractionIsUsable(adapter, extraction, identityStatus) {
+  if (identityStatus !== "exact") return false;
+  if (extraction.quality !== "high" || Number(extraction.confidence ?? 0) < 0.86) return false;
+  const hasCompletePyramid = extraction.top.length && extraction.heart.length && extraction.base.length;
+  if (adapter.sourceType === "retailer") return Boolean(hasCompletePyramid);
+  if (adapter.sourceType === "professional_provider") return Boolean(hasCompletePyramid);
+  if (adapter.sourceType === "community_provider") {
+    return Boolean(hasCompletePyramid || extraction.notes.length);
+  }
+  return false;
+}
+
+function buildNonOfficialIntelligenceRow({
+  target,
+  adapter,
+  sourceUrl,
+  sourceTier,
+  status,
+  extraction,
+  identityStatus,
+  discoveryAttempted,
+  discoveryQuery,
+  discoveryCandidates,
+  reason,
+}) {
+  return {
+    fragrance_id: target.id,
+    name: target.name,
+    brand: target.brand,
+    provider: adapter ? `Vesper ${adapter.label} adapter` : "Vesper source-tier discovery",
+    status,
+    evidence_status:
+      status === "usable_non_official_intelligence"
+        ? "usable_non_official_intelligence"
+        : "not_usable_as_non_official_evidence",
+    trust_lane: "non_official_source_intelligence",
+    source_type: adapter?.sourceType ?? "non_official_discovery",
+    source_tier: sourceTier,
+    source_url: sourceUrl,
+    source_confidence: status === "usable_non_official_intelligence" ? 0.72 : null,
+    direct_source_verification_status: identityStatus,
+    extraction_method: extraction.method,
+    extraction_quality: extraction.quality,
+    extraction_confidence: extraction.confidence,
+    extraction_warnings: extraction.warnings,
+    evidence_notes: extraction.notes,
+    evidence_top_notes: extraction.top,
+    evidence_heart_notes: extraction.heart,
+    evidence_base_notes: extraction.base,
+    evidence_payload: {
+      extraction_source_locations: extraction.source_locations,
+      rejected_note_candidates: extraction.rejected_candidates,
+      source_label: adapter?.label ?? null,
+      source_domain: adapter?.domain ?? null,
+      discovery_attempted: Boolean(discoveryAttempted),
+      discovery_query: discoveryQuery,
+      discovery_candidates: arr(discoveryCandidates).slice(0, 8),
+    },
+    discovery_attempted: Boolean(discoveryAttempted),
+    official_registry_eligible: false,
+    patch_safe_now: false,
+    reason,
+  };
+}
+
+function emptyNonOfficialExtraction(method) {
+  return {
+    notes: [],
+    top: [],
+    heart: [],
+    base: [],
+    isKeyNotes: false,
+    method,
+    quality: "low",
+    confidence: 0,
+    warnings: [],
+    rejected_candidates: [],
+    source_locations: [],
+  };
+}
+
+function nonOfficialAdapterFor(sourceUrl) {
+  if (!sourceUrl) return null;
+  let host;
+  try {
+    host = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+  const match = NON_OFFICIAL_DISCOVERY_DOMAINS.find((entry) => host === entry.domain || host.endsWith(`.${entry.domain}`));
+  return match ?? null;
+}
+
 function classifyOfficialPage(target, sourceUrl, html) {
   const text = htmlToText(html);
   const identityStatus = directIdentityStatus(target, text, sourceUrl);
@@ -1418,34 +1792,68 @@ function extractDomainAdapterEvidence(html, sourceUrl, target) {
   const adapter = domainAdapterFor(sourceUrl);
   if (!adapter) return null;
 
+  const candidates = [];
+  if (adapter.domain === "alexandriafragrances.com") {
+    const shopifyBuckets = emptyEvidenceBuckets();
+    const shopifyRejected = [];
+    shopifyBuckets.extractionWarnings.push(`${adapter.name}_used`);
+    collectAlexandriaShopifyTagEvidence(
+      html,
+      target,
+      shopifyBuckets,
+      shopifyRejected,
+      `${adapter.name}:shopify_product_tags`,
+    );
+    candidates.push(finalizeExtraction(adapter.name, shopifyBuckets, shopifyRejected));
+  }
+
   const buckets = emptyEvidenceBuckets();
   const rejected = [];
   buckets.extractionWarnings.push(`${adapter.name}_used`);
 
-  if (adapter.domain === "alexandriafragrances.com") {
-    collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, `${adapter.name}:shopify_product_tags`);
-  }
   collectMetaNoteEvidence(html, buckets, rejected, `${adapter.name}:meta`);
   collectStructuredJsonEvidence(html, buckets, rejected, `${adapter.name}:embedded_json`);
   collectBoundedHtmlEvidence(html, buckets, rejected, `${adapter.name}:bounded_html`);
 
-  const result = finalizeExtraction(adapter.name, buckets, rejected);
+  candidates.push(finalizeExtraction(adapter.name, buckets, rejected));
+
+  const result = bestExtractionCandidate(candidates);
   if (result.quality === "low") {
     result.warnings.push(`${adapter.name}_found_no_trusted_note_container`);
   }
   return result;
 }
 
+function bestExtractionCandidate(candidates) {
+  const usable = candidates.filter(Boolean);
+  const high = usable
+    .filter((candidate) => candidate.quality === "high")
+    .sort(extractionSort)[0];
+  if (high) return high;
+
+  const medium = usable
+    .filter((candidate) => candidate.quality === "medium")
+    .sort(extractionSort)[0];
+  if (medium) return medium;
+
+  return usable.sort(extractionSort)[0] ?? finalizeExtraction("no_extraction_candidate", emptyEvidenceBuckets(), []);
+}
+
 function collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, sourceLabel) {
   const blocks = extractStructuredJsonBlocks(html);
   const accepted = [];
   const skipped = [];
+  let ignoredNonCurrentProducts = 0;
   for (const block of blocks) {
     for (const product of findShopifyProductObjects(block.value)) {
       const vendor = normText(product.vendor);
       const type = normText(product.type);
       if (!vendor.includes("alexandria") && !domainMatchesOfficial(target.brand, target.source_url)) continue;
       if (type && type !== "fragrance") continue;
+      if (!shopifyProductMatchesTarget(product, target)) {
+        ignoredNonCurrentProducts += 1;
+        continue;
+      }
       const tags = Array.isArray(product.tags) ? product.tags : [];
       for (const tag of tags) {
         const tagDecision = classifyAlexandriaProductTag(tag);
@@ -1462,6 +1870,10 @@ function collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, so
   if (cleanAccepted.length >= 3) {
     addNotesToBucket("key", cleanAccepted, buckets, rejected, sourceLabel);
     buckets.extractionWarnings.push("alexandria_shopify_product_tags_used_as_key_note_metadata");
+    buckets.extractionWarnings.push("shopify_current_product_identity_guard_applied");
+    if (ignoredNonCurrentProducts > 0) {
+      buckets.extractionWarnings.push("non_current_shopify_product_metadata_ignored");
+    }
     if (skipped.some((item) => item.includes("inspiration_brand_tag"))) {
       buckets.extractionWarnings.push("inspiration_brand_tags_filtered_from_product_metadata");
     }
@@ -1469,6 +1881,69 @@ function collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, so
     buckets.extractionWarnings.push("alexandria_shopify_product_tags_insufficient_for_registry_capture");
     rejected.push(...accepted, ...skipped.slice(0, 8));
   }
+}
+
+function shopifyProductMatchesTarget(product, target) {
+  if (!product || typeof product !== "object") return false;
+  const sourceHandle = productHandleFromUrl(target.source_url);
+  const candidateHandles = [
+    product.handle,
+    product.url,
+    product.href,
+    product.onlineStoreUrl,
+    product.productUrl,
+  ]
+    .flatMap(productHandleCandidates)
+    .filter(Boolean);
+  if (sourceHandle && candidateHandles.includes(sourceHandle)) return true;
+
+  const targetName = normText(target.name);
+  const titleCandidates = [
+    product.title,
+    product.name,
+    product.product_title,
+    product.productTitle,
+  ]
+    .map(normText)
+    .filter(Boolean);
+  return Boolean(targetName && titleCandidates.some((title) => title === targetName));
+}
+
+function productHandleCandidates(value) {
+  if (!value || typeof value !== "string") return [];
+  const direct = slugHandle(value);
+  const fromUrl = productHandleFromUrl(value);
+  return [direct, fromUrl].filter(Boolean);
+}
+
+function productHandleFromUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  const text = value.trim();
+  const match = text.match(/\/products\/([^/?#]+)/i);
+  if (match) return slugHandle(match[1]);
+  try {
+    const url = new URL(text);
+    const pathMatch = url.pathname.match(/\/products\/([^/?#]+)/i);
+    return pathMatch ? slugHandle(pathMatch[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function slugHandle(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/%[0-9a-f]{2}/gi, (match) => {
+      try {
+        return decodeURIComponent(match);
+      } catch {
+        return match;
+      }
+    })
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function findShopifyProductObjects(value, depth = 0) {
@@ -2014,6 +2489,7 @@ function isValidNoteCandidate(value) {
   if (/\b(top|heart|middle|mid|base)\s*:/i.test(value)) return false;
   const normalized = normText(value);
   if (!normalized) return false;
+  if (NON_NOTE_SHOPIFY_TAGS.has(normalized)) return false;
   if (value.length > 36) return false;
   if (/[.!?]/.test(value)) return false;
   if (/\d/.test(value)) return false;
@@ -2358,6 +2834,17 @@ function buildReviewReport(data) {
     [...registryRows, ...needsReviewRows, ...blockedRows],
     (row) => row.review_envelope?.extraction_quality ?? "unknown",
   );
+  const providerTrustLaneCounts = countBy(
+    providerRows,
+    (row) => row.trust_lane ?? "unknown",
+  );
+  const nonOfficialTierCounts = countBy(
+    providerRows.filter((row) => row.trust_lane === "non_official_source_intelligence"),
+    (row) => row.source_tier ?? "unknown",
+  );
+  const usableNonOfficialRows = providerRows.filter(
+    (row) => row.evidence_status === "usable_non_official_intelligence",
+  );
 
   return `# Vesper Enrichment Autopilot V1 Review Packet
 
@@ -2379,6 +2866,7 @@ Generated: ${generatedAt}
 - Existing code contains a Fragella provider lane in \`supabase/functions/enrich-fragrances/index.ts\`.
 - Existing code contains a Fragella image lane in \`supabase/functions/enrich-fragrance-images/index.ts\`.
 - Provider data remains provider-derived intelligence only. It is not official source truth and is not included in official-source registry helper payloads.
+- Retailer, professional, and community source-tier rows are scratch intelligence only. They are explicitly excluded from official-source registry helper payloads.
 - Provider API key presence: ${providerConfigured ? "configured by environment name only; value not printed" : "not configured or not exposed to this process"}.
 
 ## Generated Files
@@ -2408,11 +2896,22 @@ ${markdownCountTable(laneCounts)}
 
 ${markdownCountTable(extractionQualityCounts)}
 
+### Provider / Intelligence Trust Lanes
+
+${markdownCountTable(providerTrustLaneCounts)}
+
+### Non-Official Source Tiers
+
+${markdownCountTable(nonOfficialTierCounts)}
+
+- Usable non-official intelligence rows: ${usableNonOfficialRows.length}
+
 ## Dry-Run SQL Safety
 
 - The generated SQL is a dry-run review artifact only.
 - It uses \`begin\` / \`rollback\`.
 - It passes \`p_dry_run = true\` when registry payloads exist.
+- It only embeds official-source helper payloads; retailer, professional, and community rows remain in provider/intelligence scratch output.
 - It never calls patch helpers, performance refresh helpers, queue refresh helpers, or migration commands.
 - If no registry-safe official evidence payloads are generated, the SQL returns a dry-run summary object instead of calling the registry helper with an invalid empty payload array.
 
