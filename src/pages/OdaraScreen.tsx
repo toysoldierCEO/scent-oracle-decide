@@ -1571,6 +1571,29 @@ function buildMoodLaneKey(
   return `${slotPrefix}|${fragranceId}|${mood}`;
 }
 
+function collectPriorMoodCompanionExclusionIds(
+  slotPrefix: string,
+  fragranceId: string,
+  targetMood: LayerMood,
+  readMoodLaneStack: (moodKey: string) => BackendModeEntry[],
+) {
+  const targetMoodIndex = LAYER_MODE_ORDER.indexOf(targetMood);
+  if (targetMoodIndex <= 0) return [];
+
+  const excludeIds: string[] = [];
+  for (const priorMood of LAYER_MODE_ORDER.slice(0, targetMoodIndex)) {
+    const priorMoodKey = buildMoodLaneKey(slotPrefix, fragranceId, priorMood);
+    for (const entry of readMoodLaneStack(priorMoodKey)) {
+      const layerFragranceId = entry?.layer_fragrance_id;
+      if (layerFragranceId && !excludeIds.includes(layerFragranceId)) {
+        excludeIds.push(layerFragranceId);
+      }
+    }
+  }
+
+  return excludeIds;
+}
+
 function modeValueToBackendModeEntry(
   value: any,
   mood: LayerMood,
@@ -15715,16 +15738,19 @@ const OdaraScreen = ({
 
     // Keep exclusion scoped to this mood lane. The top-level oracle layer is
     // the seeded balance candidate, so do not exclude it from balance itself.
-    const excludeIds: string[] = [];
+    // Cross-mode diversity is scoped to this card identity (slot + anchor
+    // fragrance) instead of the global active oracle layer so queued/promoted
+    // cards exclude their own already-loaded companions.
+    const excludeIds = collectPriorMoodCompanionExclusionIds(
+      slotPrefix,
+      fragranceId,
+      mood,
+      readMoodLaneStack,
+    );
     for (const existing of readMoodLaneStack(moodKey)) {
       if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
         excludeIds.push(existing.layer_fragrance_id);
       }
-    }
-    const ol = activeOracle?.layer;
-    const oracleLayerMood = normalizeLayerMoodKey(ol?.layer_mode ?? (ol as any)?.mode ?? (ol as any)?.interaction_type) ?? 'balance';
-    if (ol?.fragrance_id && oracleLayerMood !== mood && !excludeIds.includes(ol.fragrance_id)) {
-      excludeIds.push(ol.fragrance_id);
     }
     for (const extraId of extraExcludeIds) {
       if (extraId && !excludeIds.includes(extraId)) excludeIds.push(extraId);
