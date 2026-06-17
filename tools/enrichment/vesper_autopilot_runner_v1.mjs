@@ -185,21 +185,127 @@ function runDryRunSql(state) {
     { maxBuffer: 1024 * 1024 * 20 },
   );
   const parsed = parseJsonFromPossiblyNoisyText(result.stdout);
-  if (parsed.ok) {
+  if (result.status === 0 && parsed.ok) {
     writeJson(paths.dryRunOutput, parsed.value);
     state.dryRunSummary = summarizeDryRunResult(extractDryRunResult(parsed.value));
-  } else {
-    writeJson(paths.dryRunOutput, {
-      parse_error: parsed.reason,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      status: result.status,
-    });
-    state.failures.push(`Dry-run output JSON parse failed: ${parsed.reason}`);
+    return;
   }
+
+  const fallback = runDryRunRpcFallback(state, result, parsed.reason);
+  if (fallback.ok) {
+    writeJson(paths.dryRunOutput, fallback.output);
+    state.dryRunSummary = summarizeDryRunResult(extractDryRunResult(fallback.output));
+    return;
+  }
+
+  writeJson(paths.dryRunOutput, {
+    parse_error: parsed.reason,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status,
+    fallback_error: fallback.reason,
+  });
+  state.failures.push(`Dry-run output JSON parse failed: ${parsed.reason}`);
   if (result.status !== 0) {
     state.failures.push("Dry-run SQL command exited non-zero.");
   }
+  state.failures.push(`Dry-run RPC fallback failed: ${fallback.reason}`);
+}
+
+function runDryRunRpcFallback(state, failedSqlResult, parseReason) {
+  const projectRef = readProjectRef();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!projectRef || !serviceRoleKey) {
+    return {
+      ok: false,
+      reason: "SUPABASE_SERVICE_ROLE_KEY or local project ref unavailable for read-only dry-run RPC fallback",
+    };
+  }
+
+  let registryPacket;
+  let helperPayloads;
+  let actorLabel;
+  try {
+    registryPacket = readJson(paths.registryPayloads);
+    helperPayloads = helperPayloadsFromPacket(registryPacket);
+    actorLabel = extractActorLabelFromDryRunSql(readFileSync(paths.dryRunSql, "utf8"));
+  } catch (error) {
+    return { ok: false, reason: `could not prepare dry-run RPC payload: ${error.message}` };
+  }
+  if (!helperPayloads.length) {
+    return { ok: false, reason: "no helper payloads available for dry-run RPC fallback" };
+  }
+  if (!actorLabel) {
+    return { ok: false, reason: "could not extract actor label from approved dry-run SQL" };
+  }
+
+  const script = `
+    import { readFileSync } from 'node:fs';
+    const input = JSON.parse(readFileSync(0, 'utf8'));
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const response = await fetch(input.url, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: 'Bearer ' + key,
+        accept: 'application/json',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        p_evidence_payloads: input.payloads,
+        p_actor_label: input.actorLabel,
+        p_dry_run: true
+      })
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      console.error('PostgREST dry-run RPC failed: HTTP ' + response.status);
+      console.error(text.slice(0, 500));
+      process.exit(1);
+    }
+    process.stdout.write(text);
+  `;
+  const url = `https://${projectRef}.supabase.co/rest/v1/rpc/record_fragrance_official_source_evidence_v1`;
+  const result = spawnSync("node", ["--input-type=module", "-e", script], {
+    encoding: "utf8",
+    input: JSON.stringify({
+      url,
+      payloads: helperPayloads,
+      actorLabel,
+    }),
+    env: {
+      ...process.env,
+      SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+    },
+    maxBuffer: 1024 * 1024 * 20,
+  });
+  state.commands.push({
+    label: "run registry dry-run RPC fallback",
+    command: "node",
+    args: ["--input-type=module", "-e", "[dry-run RPC fallback script redacted]", "< approved payload stdin"],
+    status: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  });
+
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      reason: result.stderr || `dry-run RPC fallback exited ${result.status}`,
+    };
+  }
+  const parsed = parseJsonFromPossiblyNoisyText(result.stdout);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      reason: `dry-run RPC fallback returned non-JSON output after SQL transport failed (${parseReason}): ${parsed.reason}`,
+    };
+  }
+  return {
+    ok: true,
+    output: { dry_run_result: parsed.value },
+    prior_sql_status: failedSqlResult.status,
+  };
 }
 
 function runDryRunValidation(state) {
@@ -626,6 +732,16 @@ function runGitStatus() {
     maxBuffer: 1024 * 1024,
   });
   return `${result.stdout ?? ""}${result.stderr ?? ""}`.trimEnd();
+}
+
+function readProjectRef() {
+  const path = "supabase/.temp/project-ref";
+  return existsSync(path) ? readFileSync(path, "utf8").trim() : null;
+}
+
+function extractActorLabelFromDryRunSql(sql) {
+  return sql.match(/record_fragrance_official_source_evidence_v1\([\s\S]*?\$vesper_payload\$::jsonb,\s*'([^']+)'/i)?.[1]
+    ?.replace(/''/g, "'") ?? null;
 }
 
 function parseArgs(argv) {

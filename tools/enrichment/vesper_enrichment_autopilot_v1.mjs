@@ -73,6 +73,30 @@ const OFFICIAL_DOMAINS_BY_BRAND = new Map([
   ["yves saint laurent", ["yslbeautyus.com", "yslbeauty.com"]],
 ]);
 
+const DOMAIN_ADAPTERS = [
+  ["alexandriafragrances.com", "alexandria_fragrances_domain_adapter"],
+  ["tomfordbeauty.com", "tom_ford_beauty_domain_adapter"],
+  ["dior.com", "dior_domain_adapter"],
+  ["chanel.com", "chanel_domain_adapter"],
+  ["parfums-de-marly.com", "parfums_de_marly_domain_adapter"],
+  ["guerlain.com", "guerlain_domain_adapter"],
+  ["yslbeautyus.com", "ysl_beauty_domain_adapter"],
+  ["yslbeauty.com", "ysl_beauty_domain_adapter"],
+  ["lelabofragrances.com", "le_labo_domain_adapter"],
+  ["xerjoff.com", "xerjoff_domain_adapter"],
+  ["jeanpaulgaultier.com", "jean_paul_gaultier_domain_adapter"],
+  ["prada-beauty.com", "prada_beauty_domain_adapter"],
+  ["prada.com", "prada_domain_adapter"],
+  ["franciskurkdjian.com", "maison_francis_kurkdjian_domain_adapter"],
+  ["louisvuitton.com", "louis_vuitton_domain_adapter"],
+  ["versace.com", "versace_domain_adapter"],
+  ["mugler.com", "mugler_domain_adapter"],
+  ["rojaparfums.com", "roja_domain_adapter"],
+  ["afnan.com", "afnan_domain_adapter"],
+  ["creedfragrances.com", "creed_domain_adapter"],
+  ["creedboutique.com", "creed_domain_adapter"],
+];
+
 const ACCEPTED_REGISTRY_EVIDENCE_TYPES = new Set([
   "official_pyramid",
   "official_notes_only",
@@ -155,6 +179,118 @@ const PROSE_VERBS = new Set([
   "were",
   "will",
   "would",
+]);
+
+const STRUCTURED_NOTE_KEY_PATTERNS = [
+  [/^(top|head|opening)(note|notes)?$/, "top"],
+  [/^(top|head|opening)(note|notes)$/, "top"],
+  [/^(top|head|opening)\s+(note|notes)$/, "top"],
+  [/^(heart|middle|mid)(note|notes)?$/, "heart"],
+  [/^(heart|middle|mid)(note|notes)$/, "heart"],
+  [/^(heart|middle|mid)\s+(note|notes)$/, "heart"],
+  [/^(base|drydown)(note|notes)?$/, "base"],
+  [/^(base|drydown)(note|notes)$/, "base"],
+  [/^(base|drydown)\s+(note|notes)$/, "base"],
+  [/^(key|main)(note|notes)$/, "key"],
+  [/^(key|main)\s+(note|notes)$/, "key"],
+  [/^(fragrance|scent|olfactive)(note|notes)$/, "notes"],
+  [/^(fragrance|scent|olfactive)\s+(note|notes)$/, "notes"],
+  [/^(note|notes)$/, "notes"],
+];
+
+const STRUCTURED_NOTE_CONTAINER_KEYS = new Set([
+  "accordsnotes",
+  "fragrancefamily",
+  "fragrancenotes",
+  "noteitems",
+  "noteslist",
+  "olfactivenotes",
+  "olfactorynotes",
+  "scentnotes",
+]);
+
+const STRUCTURED_VALUE_KEYS = new Set([
+  "displayname",
+  "label",
+  "name",
+  "note",
+  "text",
+  "title",
+  "value",
+]);
+
+const STRUCTURED_CONTAINER_VALUE_KEYS = new Set([
+  "items",
+  "list",
+  "notes",
+  "values",
+]);
+
+const NON_NOTE_SHOPIFY_TAGS = new Set([
+  "50ml",
+  "55ml",
+  "60ml",
+  "100ml",
+  "best seller",
+  "best sellers",
+  "bestseller",
+  "black friday",
+  "clearance",
+  "cologne",
+  "eau de parfum",
+  "eau de toilette",
+  "edp",
+  "edt",
+  "extrait",
+  "fragrance",
+  "fragrances",
+  "gift card",
+  "men",
+  "mens",
+  "new",
+  "parfum",
+  "perfume",
+  "sale",
+  "sample",
+  "travel",
+  "travel spray",
+  "pinch of royalty",
+  "tygar",
+  "unisex",
+  "women",
+  "womens",
+]);
+
+const INSPIRATION_BRAND_TAGS = new Set([
+  "amouage",
+  "bdk",
+  "bond no 9",
+  "byredo",
+  "chanel",
+  "clive christian",
+  "creed",
+  "dior",
+  "diptyque",
+  "frederic malle",
+  "giorgio armani",
+  "gucci",
+  "initio",
+  "jean paul gaultier",
+  "kilian",
+  "le labo",
+  "louis vuitton",
+  "maison francis kurkdjian",
+  "memo",
+  "memo paris",
+  "nishane",
+  "parfums de marly",
+  "pdm",
+  "roja",
+  "tom ford",
+  "tiziana terenzi",
+  "xerjoff",
+  "ysl",
+  "yves saint laurent",
 ]);
 
 const CLONE_HOUSE_BRANDS = new Set([
@@ -357,6 +493,16 @@ function readLinkedProjectRef() {
 }
 
 function queryCatalogRows() {
+  try {
+    return queryCatalogRowsViaSupabaseCli();
+  } catch (error) {
+    const fallbackRows = queryCatalogRowsViaPostgrestFallback(error);
+    if (fallbackRows) return fallbackRows;
+    throw error;
+  }
+}
+
+function queryCatalogRowsViaSupabaseCli() {
   const sql = `
     with base as (
       select
@@ -421,6 +567,115 @@ function queryCatalogRows() {
     return parsed.rows;
   }
   return [];
+}
+
+function queryCatalogRowsViaPostgrestFallback(priorError) {
+  const projectRef = readProjectRef();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!projectRef || !serviceRoleKey) return null;
+
+  const fragrances = fetchPostgrestRows({
+    projectRef,
+    serviceRoleKey,
+    relation: "fragrances",
+    params: {
+      select:
+        "id,name,brand,concentration,family_key,notes,top_notes,heart_notes,base_notes,accords,source_url,source_confidence,longevity_score,projection_score",
+      limit: "2000",
+      order: "brand.asc,name.asc",
+    },
+  });
+  const queueRows = fetchPostgrestRows({
+    projectRef,
+    serviceRoleKey,
+    relation: "taxonomy_operationalization_queue_current_v1",
+    params: {
+      select: "fragrance_id,queue_state,queue_lane",
+      limit: "2000",
+    },
+  });
+  const activeRegistryRows = fetchPostgrestRows({
+    projectRef,
+    serviceRoleKey,
+    relation: "fragrance_official_source_registry_candidate_view_v1",
+    params: {
+      select: "fragrance_id",
+      active_capture_guard: "is.true",
+      limit: "2000",
+    },
+  });
+
+  const queueById = new Map(queueRows.map((row) => [row.fragrance_id, row]));
+  const activeRegistryIds = new Set(activeRegistryRows.map((row) => row.fragrance_id));
+  const exactCounts = new Map();
+  for (const row of fragrances) {
+    const key = `${normText(row.name)}|${normText(row.brand)}`;
+    exactCounts.set(key, (exactCounts.get(key) ?? 0) + 1);
+  }
+
+  console.warn(
+    `[${VERSION}] linked SQL catalog query failed; using read-only PostgREST fallback (${priorError.message.split("\n")[0]})`,
+  );
+
+  return fragrances.map((row) => {
+    const queue = queueById.get(row.id) ?? {};
+    const key = `${normText(row.name)}|${normText(row.brand)}`;
+    return {
+      ...row,
+      notes: arr(row.notes),
+      top_notes: arr(row.top_notes),
+      heart_notes: arr(row.heart_notes),
+      base_notes: arr(row.base_notes),
+      accords: arr(row.accords),
+      queue_state: queue.queue_state ?? null,
+      queue_lane: queue.queue_lane ?? null,
+      active_registry_evidence: activeRegistryIds.has(row.id),
+      exact_name_brand_count: exactCounts.get(key) ?? 0,
+    };
+  });
+}
+
+function fetchPostgrestRows({ projectRef, serviceRoleKey, relation, params }) {
+  const url = new URL(`https://${projectRef}.supabase.co/rest/v1/${relation}`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  const result = spawnSync(
+    "node",
+    [
+      "--input-type=module",
+      "-e",
+      `
+        const url = process.argv[1];
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const response = await fetch(url, {
+          headers: {
+            apikey: key,
+            authorization: 'Bearer ' + key,
+            accept: 'application/json'
+          }
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          console.error('PostgREST read failed for ' + url + ': HTTP ' + response.status);
+          console.error(text.slice(0, 500));
+          process.exit(1);
+        }
+        process.stdout.write(text);
+      `,
+      url.toString(),
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+      },
+      maxBuffer: 1024 * 1024 * 20,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `PostgREST read failed for ${relation}`);
+  }
+  return JSON.parse(result.stdout);
 }
 
 function parseCliJson(output) {
@@ -661,7 +916,7 @@ function classifyOfficialPage(target, sourceUrl, html) {
   const identityStatus = directIdentityStatus(target, text, sourceUrl);
   const pageTitle = extractTitle(html);
   const cloneRisk = cloneRiskFor(target, sourceUrl, html, text, pageTitle);
-  const extraction = extractOfficialEvidenceFromHtml(html);
+  const extraction = extractOfficialEvidenceFromHtml(html, sourceUrl, target);
   const mergedWarnings = [...extraction.warnings, ...cloneRisk.warnings];
 
   if (identityStatus !== "exact") {
@@ -713,6 +968,7 @@ function classifyOfficialPage(target, sourceUrl, html) {
         extraction_quality: extraction.quality,
         extraction_confidence: extraction.confidence,
         extraction_warnings: mergedWarnings,
+        extraction_source_locations: extraction.source_locations,
         clone_vs_inspiration_risk: cloneRisk,
       },
       source_confidence: 0.95,
@@ -743,6 +999,7 @@ function classifyOfficialPage(target, sourceUrl, html) {
         extraction_quality: extraction.quality,
         extraction_confidence: extraction.confidence,
         extraction_warnings: mergedWarnings,
+        extraction_source_locations: extraction.source_locations,
         clone_vs_inspiration_risk: cloneRisk,
       },
       source_confidence: 0.92,
@@ -773,6 +1030,7 @@ function classifyOfficialPage(target, sourceUrl, html) {
       extraction_confidence: extraction.confidence,
       extraction_warnings: mergedWarnings,
       rejected_note_candidates: extraction.rejected_candidates,
+      extraction_source_locations: extraction.source_locations,
       clone_vs_inspiration_risk: cloneRisk,
     },
     source_confidence: extraction.quality === "medium" ? 0.7 : 0.82,
@@ -1081,20 +1339,54 @@ function cloneRiskFor(target, sourceUrl, html, pageText, pageTitle) {
   };
 }
 
-function extractOfficialEvidenceFromHtml(html) {
-  const jsonLd = extractJsonLdEvidence(html);
-  if (jsonLd.quality === "high") return jsonLd;
+function extractOfficialEvidenceFromHtml(html, sourceUrl, target) {
+  const candidates = [
+    extractDomainAdapterEvidence(html, sourceUrl, target),
+    extractEmbeddedProductJsonEvidence(html),
+    extractJsonLdEvidence(html),
+    extractBoundedHtmlEvidence(html),
+  ].filter(Boolean);
 
-  const bounded = extractBoundedHtmlEvidence(html);
-  if (bounded.quality === "high") return bounded;
+  const highQuality = candidates
+    .filter((candidate) => candidate.quality === "high")
+    .sort(extractionSort)[0];
+  if (highQuality) return highQuality;
 
-  const rejected = [...jsonLd.rejected_candidates, ...bounded.rejected_candidates]
+  const mediumQuality = candidates
+    .filter((candidate) => candidate.quality === "medium")
+    .sort(extractionSort)[0];
+
+  const rejected = candidates
+    .flatMap((candidate) => candidate.rejected_candidates ?? [])
     .filter(uniqueByNorm)
     .slice(0, 30);
-  const warnings = [...jsonLd.warnings, ...bounded.warnings].filter(uniqueByNorm);
-  if (bounded.quality === "medium") {
-    warnings.push("bounded_note_container_not_trusted");
+  const warnings = candidates
+    .flatMap((candidate) => candidate.warnings ?? [])
+    .filter(uniqueByNorm);
+  const sourceLocations = candidates
+    .flatMap((candidate) => candidate.source_locations ?? [])
+    .filter(uniqueByNorm)
+    .slice(0, 12);
+
+  if (mediumQuality) {
+    return {
+      notes: [],
+      top: [],
+      heart: [],
+      base: [],
+      isKeyNotes: false,
+      method: mediumQuality.method,
+      quality: "medium",
+      confidence: Math.min(0.5, mediumQuality.confidence ?? 0.45),
+      warnings: [
+        ...warnings,
+        "structured_candidates_present_but_not_registry_safe",
+      ].filter(uniqueByNorm),
+      rejected_candidates: rejected,
+      source_locations: sourceLocations,
+    };
   }
+
   return {
     notes: [],
     top: [],
@@ -1106,9 +1398,140 @@ function extractOfficialEvidenceFromHtml(html) {
     confidence: rejected.length ? 0.45 : 0.15,
     warnings: warnings.length
       ? warnings
-      : ["no JSON-LD or bounded official note list was found"],
+      : ["no JSON-LD, embedded product JSON, domain adapter, or bounded official note list was found"],
     rejected_candidates: rejected,
+    source_locations: sourceLocations,
   };
+}
+
+function extractionSort(a, b) {
+  const score = (item) => {
+    const completePyramid = item.top?.length && item.heart?.length && item.base?.length ? 8 : 0;
+    const notes = item.notes?.length ? 4 : 0;
+    const location = item.source_locations?.length ? 2 : 0;
+    return completePyramid + notes + Number(item.confidence ?? 0) + location;
+  };
+  return score(b) - score(a);
+}
+
+function extractDomainAdapterEvidence(html, sourceUrl, target) {
+  const adapter = domainAdapterFor(sourceUrl);
+  if (!adapter) return null;
+
+  const buckets = emptyEvidenceBuckets();
+  const rejected = [];
+  buckets.extractionWarnings.push(`${adapter.name}_used`);
+
+  if (adapter.domain === "alexandriafragrances.com") {
+    collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, `${adapter.name}:shopify_product_tags`);
+  }
+  collectMetaNoteEvidence(html, buckets, rejected, `${adapter.name}:meta`);
+  collectStructuredJsonEvidence(html, buckets, rejected, `${adapter.name}:embedded_json`);
+  collectBoundedHtmlEvidence(html, buckets, rejected, `${adapter.name}:bounded_html`);
+
+  const result = finalizeExtraction(adapter.name, buckets, rejected);
+  if (result.quality === "low") {
+    result.warnings.push(`${adapter.name}_found_no_trusted_note_container`);
+  }
+  return result;
+}
+
+function collectAlexandriaShopifyTagEvidence(html, target, buckets, rejected, sourceLabel) {
+  const blocks = extractStructuredJsonBlocks(html);
+  const accepted = [];
+  const skipped = [];
+  for (const block of blocks) {
+    for (const product of findShopifyProductObjects(block.value)) {
+      const vendor = normText(product.vendor);
+      const type = normText(product.type);
+      if (!vendor.includes("alexandria") && !domainMatchesOfficial(target.brand, target.source_url)) continue;
+      if (type && type !== "fragrance") continue;
+      const tags = Array.isArray(product.tags) ? product.tags : [];
+      for (const tag of tags) {
+        const tagDecision = classifyAlexandriaProductTag(tag);
+        if (tagDecision.accept) {
+          accepted.push(tagDecision.value);
+        } else if (tagDecision.reason) {
+          skipped.push(`${tag}:${tagDecision.reason}`);
+        }
+      }
+    }
+  }
+
+  const cleanAccepted = accepted.filter(uniqueByNorm);
+  if (cleanAccepted.length >= 3) {
+    addNotesToBucket("key", cleanAccepted, buckets, rejected, sourceLabel);
+    buckets.extractionWarnings.push("alexandria_shopify_product_tags_used_as_key_note_metadata");
+    if (skipped.some((item) => item.includes("inspiration_brand_tag"))) {
+      buckets.extractionWarnings.push("inspiration_brand_tags_filtered_from_product_metadata");
+    }
+  } else if (accepted.length > 0 || skipped.length > 0) {
+    buckets.extractionWarnings.push("alexandria_shopify_product_tags_insufficient_for_registry_capture");
+    rejected.push(...accepted, ...skipped.slice(0, 8));
+  }
+}
+
+function findShopifyProductObjects(value, depth = 0) {
+  if (depth > 8 || !value) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => findShopifyProductObjects(item, depth + 1));
+  if (typeof value !== "object") return [];
+
+  const rows = [];
+  if (
+    Array.isArray(value.tags) &&
+    (value.vendor || value.type || value.handle || value.title) &&
+    value.tags.some((tag) => typeof tag === "string")
+  ) {
+    rows.push(value);
+  }
+
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") {
+      rows.push(...findShopifyProductObjects(child, depth + 1));
+    }
+  }
+  return rows;
+}
+
+function classifyAlexandriaProductTag(tag) {
+  const raw = String(tag ?? "").trim();
+  if (!raw) return { accept: false, reason: "empty_tag" };
+  const normalized = normText(raw);
+  if (!normalized) return { accept: false, reason: "empty_normalized_tag" };
+  if (NON_NOTE_SHOPIFY_TAGS.has(normalized)) {
+    return { accept: false, reason: "category_or_merchandising_tag" };
+  }
+  if (INSPIRATION_BRAND_TAGS.has(normalized)) {
+    return { accept: false, reason: "inspiration_brand_tag" };
+  }
+  if (/\b(inspired|type|dupe|clone|alternative)\b/i.test(raw)) {
+    return { accept: false, reason: "inspiration_context_tag" };
+  }
+  const cleaned = cleanNoteCandidate(raw);
+  if (!cleaned.value || !isValidNoteCandidate(cleaned.value)) {
+    return { accept: false, reason: "not_clean_note_material" };
+  }
+  return { accept: true, value: titleCaseNote(cleaned.value) };
+}
+
+function domainAdapterFor(sourceUrl) {
+  if (!sourceUrl) return null;
+  let host;
+  try {
+    host = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+  const match = DOMAIN_ADAPTERS.find(([domain]) => host === domain || host.endsWith(`.${domain}`));
+  if (!match) return null;
+  return { domain: match[0], name: match[1] };
+}
+
+function extractEmbeddedProductJsonEvidence(html) {
+  const buckets = emptyEvidenceBuckets();
+  const rejected = [];
+  collectStructuredJsonEvidence(html, buckets, rejected, "embedded_product_json");
+  return finalizeExtraction("embedded_product_json_note_fields", buckets, rejected);
 }
 
 function extractJsonLdEvidence(html) {
@@ -1128,6 +1551,187 @@ function extractJsonLdEvidence(html) {
     }
   }
   return finalizeExtraction("json_ld_structured_note_fields", buckets, rejected);
+}
+
+function collectMetaNoteEvidence(html, buckets, rejected, sourceLabel) {
+  const metaPattern =
+    /<meta[^>]+(?:name|property|itemprop)=["']([^"']*(?:note|notes|pyramid|olfactive|scent)[^"']*)["'][^>]+content=["']([^"']{1,500})["'][^>]*>/gi;
+  for (const match of html.matchAll(metaPattern)) {
+    const bucket = noteBucketFromStructuredKey(match[1]) ?? "notes";
+    addNotesToBucket(bucket, match[2], buckets, rejected, `${sourceLabel}:${match[1]}`);
+  }
+}
+
+function collectStructuredJsonEvidence(html, buckets, rejected, sourceLabel) {
+  const blocks = extractStructuredJsonBlocks(html);
+  for (const block of blocks) {
+    collectStructuredJsonNotes(block.value, buckets, rejected, [block.label], sourceLabel, 0);
+  }
+}
+
+function extractStructuredJsonBlocks(html) {
+  const blocks = [];
+  const scriptPattern = /<script([^>]*)>([\s\S]*?)<\/script>/gi;
+  for (const match of html.matchAll(scriptPattern)) {
+    const attrs = match[1] ?? "";
+    const body = decodeHtmlEntities(match[2]).trim();
+    if (!body || body.length > 2_000_000) continue;
+    const type = attrs.match(/\btype=["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? "";
+    const id = attrs.match(/\bid=["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? "";
+    const isJsonScript =
+      type.includes("json") ||
+      id === "__next_data__" ||
+      id.includes("product-json") ||
+      /data-product-json|product-json|productdata/i.test(attrs);
+
+    if (isJsonScript) {
+      const parsed = tryParseJsonBlock(body);
+      if (parsed.ok) {
+        blocks.push({ label: id || type || "json_script", value: parsed.value });
+      }
+      continue;
+    }
+
+    if (!/(?:__NEXT_DATA__|__NUXT__|__APOLLO_STATE__|preloaded|initial|product|pdp)/i.test(body.slice(0, 4000))) {
+      continue;
+    }
+    const assignment = extractFirstJsonAssignment(body);
+    if (assignment.ok) {
+      blocks.push({ label: "inline_product_state", value: assignment.value });
+    }
+  }
+  return blocks.slice(0, 20);
+}
+
+function tryParseJsonBlock(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: false };
+  try {
+    return { ok: true, value: JSON.parse(trimmed) };
+  } catch {
+    const objectStart = trimmed.indexOf("{");
+    const arrayStart = trimmed.indexOf("[");
+    const start =
+      objectStart === -1 ? arrayStart : arrayStart === -1 ? objectStart : Math.min(objectStart, arrayStart);
+    if (start < 0) return { ok: false };
+    const balanced = extractBalancedJson(trimmed, start);
+    if (!balanced) return { ok: false };
+    try {
+      return { ok: true, value: JSON.parse(balanced) };
+    } catch {
+      return { ok: false };
+    }
+  }
+}
+
+function extractFirstJsonAssignment(scriptText) {
+  const equals = scriptText.indexOf("=");
+  if (equals === -1) return { ok: false };
+  const objectStart = scriptText.indexOf("{", equals);
+  const arrayStart = scriptText.indexOf("[", equals);
+  const start =
+    objectStart === -1 ? arrayStart : arrayStart === -1 ? objectStart : Math.min(objectStart, arrayStart);
+  if (start < 0) return { ok: false };
+  const balanced = extractBalancedJson(scriptText, start);
+  if (!balanced) return { ok: false };
+  try {
+    return { ok: true, value: JSON.parse(balanced) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function extractBalancedJson(text, start) {
+  const opener = text[start];
+  const closer = opener === "{" ? "}" : opener === "[" ? "]" : null;
+  if (!closer) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === opener) depth += 1;
+    if (char === closer) depth -= 1;
+    if (depth === 0) return text.slice(start, i + 1);
+  }
+  return null;
+}
+
+function collectStructuredJsonNotes(value, buckets, rejected, path, sourceLabel, depth) {
+  if (depth > 10 || value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      collectStructuredJsonNotes(item, buckets, rejected, [...path, String(index)], sourceLabel, depth + 1);
+    });
+    return;
+  }
+  if (typeof value !== "object") return;
+
+  const objectBucket = noteBucketFromStructuredObject(value);
+  if (objectBucket) {
+    const values = candidateStringsFromStructuredValue(value);
+    addNotesToBucket(objectBucket, values, buckets, rejected, `${sourceLabel}:${path.join(".") || "object"}`);
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const bucket = noteBucketFromStructuredKey(key);
+    const nextPath = [...path, key];
+    if (bucket) {
+      addNotesToBucket(bucket, child, buckets, rejected, `${sourceLabel}:${nextPath.join(".")}`);
+      continue;
+    }
+    const normalizedKey = normText(key).replace(/\s+/g, "");
+    if (
+      STRUCTURED_NOTE_CONTAINER_KEYS.has(normalizedKey) ||
+      /(?:note|notes|pyramid|olfactive|olfactory|scent)/i.test(key) ||
+      depth < 5
+    ) {
+      collectStructuredJsonNotes(child, buckets, rejected, nextPath, sourceLabel, depth + 1);
+    }
+  }
+}
+
+function noteBucketFromStructuredObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const label = value.label ?? value.name ?? value.title ?? value.type ?? value.category ?? value.displayName;
+  const bucket = noteBucketFromLabel(label) ?? noteBucketFromStructuredKey(label);
+  if (!bucket) return null;
+  const hasValues = ["notes", "items", "values", "list", "value", "text"].some((key) => value[key] !== undefined);
+  return hasValues ? bucket : null;
+}
+
+function candidateStringsFromStructuredValue(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(candidateStringsFromStructuredValue);
+  if (!value || typeof value !== "object") return [];
+
+  const values = [];
+  for (const [key, child] of Object.entries(value)) {
+    const normalizedKey = normText(key).replace(/\s+/g, "");
+    if (STRUCTURED_VALUE_KEYS.has(normalizedKey)) {
+      if (typeof child === "string") values.push(child);
+      if (Array.isArray(child)) values.push(...child.flatMap(candidateStringsFromStructuredValue));
+      continue;
+    }
+    if (STRUCTURED_CONTAINER_VALUE_KEYS.has(normalizedKey)) {
+      values.push(...candidateStringsFromStructuredValue(child));
+    }
+  }
+  return values;
 }
 
 function collectJsonLdNotes(value, buckets, rejected) {
@@ -1155,29 +1759,32 @@ function collectJsonLdNotes(value, buckets, rejected) {
 function extractBoundedHtmlEvidence(html) {
   const buckets = emptyEvidenceBuckets();
   const rejected = [];
+  collectBoundedHtmlEvidence(html, buckets, rejected, "bounded_html");
+  return finalizeExtraction("bounded_html_note_list", buckets, rejected);
+}
 
+function collectBoundedHtmlEvidence(html, buckets, rejected, sourceLabel) {
   for (const label of ["top notes", "top note", "head notes", "opening notes"]) {
-    addNotesToBucket("top", extractListAfterLabel(html, label), buckets, rejected);
+    addNotesToBucket("top", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
   for (const label of ["heart notes", "heart note", "middle notes", "middle note"]) {
-    addNotesToBucket("heart", extractListAfterLabel(html, label), buckets, rejected);
+    addNotesToBucket("heart", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
   for (const label of ["base notes", "base note", "drydown notes"]) {
-    addNotesToBucket("base", extractListAfterLabel(html, label), buckets, rejected);
+    addNotesToBucket("base", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
   for (const label of ["key notes", "main notes"]) {
-    addNotesToBucket("key", extractListAfterLabel(html, label), buckets, rejected);
+    addNotesToBucket("key", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
   for (const label of ["fragrance notes", "notes"]) {
-    addNotesToBucket("notes", extractListAfterLabel(html, label), buckets, rejected);
+    addNotesToBucket("notes", extractListAfterLabel(html, label), buckets, rejected, `${sourceLabel}:${label}`);
   }
 
   for (const segment of extractNoteContainers(html)) {
     const items = extractDiscreteHtmlItems(segment);
-    if (items.length >= 2) addNotesToBucket("notes", items, buckets, rejected);
+    collectTieredPlainTextEvidence(segment, buckets, rejected, `${sourceLabel}:tiered_container`);
+    if (items.length >= 2) addNotesToBucket("notes", items, buckets, rejected, `${sourceLabel}:note_container`);
   }
-
-  return finalizeExtraction("bounded_html_note_list", buckets, rejected);
 }
 
 function extractListAfterLabel(html, label) {
@@ -1193,7 +1800,7 @@ function extractListAfterLabel(html, label) {
 function extractNoteContainers(html) {
   const segments = [];
   const containerPattern =
-    /<(section|div|ul|ol)[^>]*(?:class|id|data-[a-z0-9_-]+)=["'][^"']*(?:note|notes|pyramid|olfactive)[^"']*["'][^>]*>([\s\S]{0,2500}?)<\/\1>/gi;
+    /<(section|div|ul|ol|dl)[^>]*(?:class|id|data-[a-z0-9_-]+)=["'][^"']*(?:note|notes|pyramid|olfactive|olfactory|scent)[^"']*["'][^>]*>([\s\S]{0,3500}?)<\/\1>/gi;
   for (const match of html.matchAll(containerPattern)) {
     segments.push(match[2]);
   }
@@ -1204,7 +1811,7 @@ function extractDiscreteHtmlItems(htmlSegment) {
   const items = [];
   const itemPatterns = [
     /<li[^>]*>([\s\S]*?)<\/li>/gi,
-    /<(?:span|button|a|p|div)[^>]*(?:class|data-[a-z0-9_-]+)=["'][^"']*(?:note|ingredient|material|accord|chip)[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|button|a|p|div)>/gi,
+    /<(?:span|button|a|p|div|dd)[^>]*(?:class|data-[a-z0-9_-]+)=["'][^"']*(?:note|ingredient|material|chip)[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|button|a|p|div|dd)>/gi,
   ];
   for (const pattern of itemPatterns) {
     for (const match of htmlSegment.matchAll(pattern)) {
@@ -1212,6 +1819,27 @@ function extractDiscreteHtmlItems(htmlSegment) {
     }
   }
   return items;
+}
+
+function collectTieredPlainTextEvidence(htmlSegment, buckets, rejected, sourceLabel) {
+  const text = htmlToText(htmlSegment);
+  if (!text) return;
+  const labelPattern = /\b(top|head|opening|heart|middle|mid|base|drydown)(?:\s+notes?)?\s*[:\-–—]/gi;
+  const labels = [...text.matchAll(labelPattern)].map((match) => ({
+    raw: match[1],
+    index: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+    tier: normalizeTierLabel(match[1]),
+  })).filter((label) => label.tier);
+  if (labels.length < 2) return;
+
+  for (let i = 0; i < labels.length; i += 1) {
+    const label = labels[i];
+    const nextIndex = labels[i + 1]?.index ?? text.length;
+    const value = text.slice(label.end, nextIndex).trim();
+    addNotesToBucket(label.tier, value, buckets, rejected, `${sourceLabel}:${label.tier}`);
+  }
+  buckets.tierLabelSeen = true;
 }
 
 function flattenJsonLd(value) {
@@ -1231,6 +1859,19 @@ function noteBucketFromLabel(label) {
   return null;
 }
 
+function noteBucketFromStructuredKey(key) {
+  const normalized = normText(key).replace(/\s+/g, "");
+  for (const [pattern, bucket] of STRUCTURED_NOTE_KEY_PATTERNS) {
+    if (pattern.test(normalized)) return bucket;
+  }
+  if (/(top|head|opening).*(note|notes)$/.test(normalized)) return "top";
+  if (/(heart|middle|mid).*(note|notes)$/.test(normalized)) return "heart";
+  if (/(base|drydown).*(note|notes)$/.test(normalized)) return "base";
+  if (/(key|main).*(note|notes)$/.test(normalized)) return "key";
+  if (/(fragrance|scent|olfactive|olfactory).*(note|notes)$/.test(normalized)) return "notes";
+  return null;
+}
+
 function emptyEvidenceBuckets() {
   return {
     notes: [],
@@ -1239,6 +1880,7 @@ function emptyEvidenceBuckets() {
     base: [],
     key: [],
     extractionWarnings: [],
+    sourceLocations: [],
     tierLabelSeen: false,
   };
 }
@@ -1251,7 +1893,7 @@ function normalizeTierLabel(label) {
   return null;
 }
 
-function addNotesToBucket(bucket, rawValue, buckets, rejected) {
+function addNotesToBucket(bucket, rawValue, buckets, rejected, sourceLocation = null) {
   const { accepted, acceptedByTier, rejected: bad, warnings } = parseNoteCandidates(rawValue, bucket);
   if (!accepted.length && !bad.length && !Object.values(acceptedByTier).some((values) => values.length)) return;
   const targetBucket = bucket === "key" ? "notes" : bucket;
@@ -1261,6 +1903,11 @@ function addNotesToBucket(bucket, rawValue, buckets, rejected) {
   }
   rejected.push(...bad);
   buckets.extractionWarnings.push(...warnings);
+  const acceptedCount =
+    accepted.length + Object.values(acceptedByTier).reduce((sum, values) => sum + values.length, 0);
+  if (acceptedCount > 0 && sourceLocation) {
+    buckets.sourceLocations.push(sourceLocation);
+  }
   if (Object.values(acceptedByTier).some((values) => values.length)) {
     buckets.tierLabelSeen = true;
   }
@@ -1422,6 +2069,7 @@ function finalizeExtraction(method, buckets, rejected) {
     confidence,
     warnings,
     rejected_candidates: rejectedCandidates,
+    source_locations: arr(buckets.sourceLocations).filter(uniqueByNorm).slice(0, 12),
   };
 }
 
