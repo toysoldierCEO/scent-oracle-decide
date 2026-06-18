@@ -9,6 +9,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:8080",
   "http://localhost:5173",
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:5173",
   "https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app",
   "https://20427402-64b7-4dc9-80aa-727b1e4a3e69.lovableproject.com",
   "https://scent-oracle-decide.lovable.app",

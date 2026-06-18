@@ -5405,6 +5405,13 @@ function isLimitedVesperIntelligence(intelligence: VesperFragranceIntelligence |
   return intelligence?.intelligence_status === 'limited_intel';
 }
 
+function isProviderVesperIntelligence(intelligence: VesperFragranceIntelligence | null | undefined) {
+  if (!intelligence?.usable_for_vesper_intelligence || isLimitedVesperIntelligence(intelligence)) return false;
+  if (intelligence.intelligence_status === 'approved_provider_structured_notes') return true;
+  if (intelligence.intelligence_source_tier === 'retailer_structured_notes') return true;
+  return ['retailer', 'professional', 'community'].includes(intelligence.intelligence_source_type ?? '');
+}
+
 function applyVesperIntelligenceToDetail(
   detail: FragranceDetail,
   intelligence: VesperFragranceIntelligence | null | undefined,
@@ -5438,6 +5445,33 @@ function applyVesperIntelligenceToDetail(
   }
 
   return next;
+}
+
+function getProviderNoteSourceLabel(intelligence: VesperFragranceIntelligence | null | undefined) {
+  if (!isProviderVesperIntelligence(intelligence)) return null;
+  if (sanitizeTokenSource(intelligence?.primary_notes).length === 0) return null;
+
+  if (intelligence?.intelligence_source_type === 'retailer' || intelligence?.intelligence_source_tier === 'retailer_structured_notes') {
+    return {
+      label: 'Source-backed notes',
+      subcopy: 'Structured retailer data · brand confirmation pending',
+      helper: 'These notes come from structured retailer data, not the brand’s official page.',
+    };
+  }
+
+  if (intelligence?.intelligence_source_type === 'professional') {
+    return {
+      label: 'Source-backed notes',
+      subcopy: 'Structured professional data · brand confirmation pending',
+      helper: 'These notes come from structured professional-provider data, not the brand’s official page.',
+    };
+  }
+
+  return {
+    label: 'Source-backed notes',
+    subcopy: 'Structured provider data · brand confirmation pending',
+    helper: 'These notes come from approved structured provider data, not the brand’s official page.',
+  };
 }
 
 function isVesperResolverDetailComplete(detail: FragranceDetail | null | undefined, resolverDisabled: boolean) {
@@ -6266,10 +6300,7 @@ function getVesperDetailIntelligenceNotice(detail: Pick<
     return intelligence.limited_intel_reason
       ?? 'Limited scent intelligence available; Vesper will keep guidance general.';
   }
-  if (intelligence.intelligence_source_type && intelligence.intelligence_source_type !== 'official_brand') {
-    return intelligence.source_disclaimer
-      ?? 'Structured provider intelligence - useful for Vesper guidance, not official brand confirmation.';
-  }
+  if (isProviderVesperIntelligence(intelligence)) return null;
   if (intelligence.intelligence_source_type === 'official_brand') {
     if (intelligence.intelligence_source_tier === 'official_pyramid') {
       return 'Official source-backed note pyramid. Not a patch authorization.';
@@ -9883,9 +9914,11 @@ const OdaraFragranceDetailSheet: React.FC<{
   const middleLabels = normalizeNotes(resolvedDetail.middle_notes ?? [], 6);
   const baseLabels = normalizeNotes(resolvedDetail.base_notes ?? [], 6);
   const flatNoteLabels = normalizeNotes(resolvedDetail.notes, 8);
+  const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
+  const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const detailPerformanceByKey = new Map(detailPerformanceBars.map((metric) => [metric.key, metric]));
@@ -9943,8 +9976,7 @@ const OdaraFragranceDetailSheet: React.FC<{
       { position: 'heart', values: middleLabels },
       { position: 'base', values: baseLabels },
     ];
-    const hasStructuredNotes = structuredSections.some((section) => section.values.length > 0);
-    if (hasStructuredNotes) {
+    if (hasStructuredNoteSections) {
       for (const section of structuredSections) {
         for (const label of section.values) {
           pushNote(label, section.position);
@@ -10103,7 +10135,18 @@ const OdaraFragranceDetailSheet: React.FC<{
 
           {orderedNoteChips.length > 0 ? (
             <section>
-              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
+              <div className="mb-3">
+                <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
+                {providerNoteSourceLabel && !hasStructuredNoteSections ? (
+                  <div
+                    className="mt-2 text-[11px] leading-[1.45]"
+                    title={providerNoteSourceLabel.helper}
+                  >
+                    <div className="font-medium text-foreground/72">{providerNoteSourceLabel.label}</div>
+                    <div className="text-foreground/48">{providerNoteSourceLabel.subcopy}</div>
+                  </div>
+                ) : null}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {orderedNoteChips.map((note, index) => {
                   const tone = getAccordChipTone(note.label, resolvedDetail.family_key);
