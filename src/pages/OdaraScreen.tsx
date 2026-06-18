@@ -9991,7 +9991,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     }
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
-  const detailFactLine = `Released: ${resolvedDetail.release_year ? String(resolvedDetail.release_year) : 'Unknown'} • Perfumer: ${resolvedDetail.perfumer ?? 'Unknown'}`;
+  const detailFactLine = `Released: ${resolvedDetail.release_year ? String(resolvedDetail.release_year) : 'Unknown'} · Perfumer: ${resolvedDetail.perfumer ?? 'Unknown'}`;
 
   return (
     <OdaraBottomSheet
@@ -10135,18 +10135,7 @@ const OdaraFragranceDetailSheet: React.FC<{
 
           {orderedNoteChips.length > 0 ? (
             <section>
-              <div className="mb-3">
-                <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
-                {providerNoteSourceLabel && !hasStructuredNoteSections ? (
-                  <div
-                    className="mt-2 text-[11px] leading-[1.45]"
-                    title={providerNoteSourceLabel.helper}
-                  >
-                    <div className="font-medium text-foreground/72">{providerNoteSourceLabel.label}</div>
-                    <div className="text-foreground/48">{providerNoteSourceLabel.subcopy}</div>
-                  </div>
-                ) : null}
-              </div>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
               <div className="flex flex-wrap gap-2">
                 {orderedNoteChips.map((note, index) => {
                   const tone = getAccordChipTone(note.label, resolvedDetail.family_key);
@@ -10179,6 +10168,15 @@ const OdaraFragranceDetailSheet: React.FC<{
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
             {detailFactLine}
+            {providerNoteSourceLabel && !hasStructuredNoteSections ? (
+              <div
+                className="mt-2 text-[11px] leading-[1.45]"
+                title={providerNoteSourceLabel.helper}
+              >
+                <div className="font-medium text-foreground/72">{providerNoteSourceLabel.label}</div>
+                <div className="text-foreground/48">{providerNoteSourceLabel.subcopy}</div>
+              </div>
+            ) : null}
           </div>
 
           {footerActions ? (
