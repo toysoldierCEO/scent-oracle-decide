@@ -1274,6 +1274,33 @@ interface QueueCard {
 type FragranceTimelineSource = 'official_note_pyramid' | 'source_description' | 'inferred_from_notes' | 'none';
 type FragrancePerformanceSource = 'direct' | 'derived' | 'estimated' | 'projection_fallback' | 'unknown';
 
+type VesperPrimaryPyramid = {
+  top: string[];
+  heart: string[];
+  base: string[];
+};
+
+type VesperFragranceIntelligence = {
+  fragrance_id: string;
+  fragrance_name: string | null;
+  brand: string | null;
+  intelligence_status: string | null;
+  primary_notes: string[];
+  primary_pyramid: VesperPrimaryPyramid;
+  primary_accords: string[];
+  intelligence_source_tier: string | null;
+  intelligence_source_type: string | null;
+  intelligence_source_name: string | null;
+  intelligence_confidence: number | null;
+  intelligence_warnings: string[];
+  source_disclaimer: string | null;
+  official_registry_eligible: boolean;
+  patch_safe_now: boolean;
+  usable_for_vesper_intelligence: boolean;
+  limited_intel_reason: string | null;
+  updated_at: string | null;
+};
+
 interface FragranceDetail {
   id: string;
   name: string;
@@ -1318,6 +1345,7 @@ interface FragranceDetail {
   source_page_url?: string | null;
   image_license_status?: string | null;
   image_last_checked_at?: string | null;
+  vesper_intelligence?: VesperFragranceIntelligence | null;
 }
 
 /** Normalized card for display — shared between hero and queue */
@@ -5309,12 +5337,156 @@ type OdaraFragranceDetailSurfaceState = {
   source_label?: string | null;
   detail_loading?: boolean;
   detail_error?: string | null;
+  vesper_intelligence?: VesperFragranceIntelligence | null;
 };
 
 function normalizeDetailText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeDetailBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function normalizeVesperDetailNumber(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function normalizeVesperPrimaryPyramid(value: unknown): VesperPrimaryPyramid {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { top: [], heart: [], base: [] };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    top: sanitizeTokenSource(record.top),
+    heart: sanitizeTokenSource(record.heart),
+    base: sanitizeTokenSource(record.base),
+  };
+}
+
+function normalizeVesperFragranceIntelligence(row: unknown): VesperFragranceIntelligence | null {
+  if (!row || typeof row !== 'object') return null;
+  const record = row as Record<string, unknown>;
+  const fragranceId = normalizeDetailText(record.fragrance_id);
+  if (!fragranceId) return null;
+
+  return {
+    fragrance_id: fragranceId,
+    fragrance_name: normalizeDetailText(record.fragrance_name),
+    brand: normalizeDetailText(record.brand),
+    intelligence_status: normalizeDetailText(record.intelligence_status),
+    primary_notes: sanitizeTokenSource(record.primary_notes),
+    primary_pyramid: normalizeVesperPrimaryPyramid(record.primary_pyramid),
+    primary_accords: sanitizeTokenSource(record.primary_accords),
+    intelligence_source_tier: normalizeDetailText(record.intelligence_source_tier),
+    intelligence_source_type: normalizeDetailText(record.intelligence_source_type),
+    intelligence_source_name: normalizeDetailText(record.intelligence_source_name),
+    intelligence_confidence: normalizeVesperDetailNumber(record.intelligence_confidence),
+    intelligence_warnings: sanitizeTokenSource(record.intelligence_warnings),
+    source_disclaimer: normalizeDetailText(record.source_disclaimer),
+    official_registry_eligible: normalizeDetailBoolean(record.official_registry_eligible),
+    patch_safe_now: normalizeDetailBoolean(record.patch_safe_now),
+    usable_for_vesper_intelligence: normalizeDetailBoolean(record.usable_for_vesper_intelligence),
+    limited_intel_reason: normalizeDetailText(record.limited_intel_reason),
+    updated_at: normalizeDetailText(record.updated_at),
+  };
+}
+
+function isOfficialPyramidVesperIntelligence(intelligence: VesperFragranceIntelligence | null | undefined) {
+  return intelligence?.intelligence_source_type === 'official_brand'
+    && intelligence.intelligence_source_tier === 'official_pyramid';
+}
+
+function isLimitedVesperIntelligence(intelligence: VesperFragranceIntelligence | null | undefined) {
+  return intelligence?.intelligence_status === 'limited_intel';
+}
+
+function applyVesperIntelligenceToDetail(
+  detail: FragranceDetail,
+  intelligence: VesperFragranceIntelligence | null | undefined,
+): FragranceDetail {
+  if (!intelligence?.usable_for_vesper_intelligence) {
+    return { ...detail, vesper_intelligence: intelligence ?? null };
+  }
+
+  if (isLimitedVesperIntelligence(intelligence)) {
+    return { ...detail, vesper_intelligence: intelligence };
+  }
+
+  const next: FragranceDetail = {
+    ...detail,
+    notes: intelligence.primary_notes.length > 0 ? intelligence.primary_notes : detail.notes,
+    accords: intelligence.primary_accords.length > 0 ? intelligence.primary_accords : detail.accords,
+    vesper_intelligence: intelligence,
+  };
+
+  if (intelligence.intelligence_status?.startsWith('approved_provider_')
+    || intelligence.intelligence_status === 'approved_official_evidence_available') {
+    next.short_description = null;
+    next.description_source = null;
+    next.timeline_source = null;
+  }
+
+  if (isOfficialPyramidVesperIntelligence(intelligence)) {
+    next.top_notes = intelligence.primary_pyramid.top;
+    next.middle_notes = intelligence.primary_pyramid.heart;
+    next.base_notes = intelligence.primary_pyramid.base;
+  }
+
+  return next;
+}
+
+function isVesperResolverDetailComplete(detail: FragranceDetail | null | undefined, resolverDisabled: boolean) {
+  return resolverDisabled || !!detail && Object.prototype.hasOwnProperty.call(detail, 'vesper_intelligence');
+}
+
+async function fetchVesperFragranceIntelligence(
+  fragranceIds: string[],
+  disabled = false,
+): Promise<Map<string, VesperFragranceIntelligence>> {
+  const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean))).slice(0, 50);
+  const results = new Map<string, VesperFragranceIntelligence>();
+  if (disabled || uniqueIds.length === 0) return results;
+
+  try {
+    const { data, error } = await odaraSupabase.functions.invoke('get-vesper-intelligence', {
+      body: {
+        fragrance_ids: uniqueIds,
+        limit: uniqueIds.length,
+      },
+    });
+
+    if (error) {
+      odaraDebugLog('[Odara] Vesper intelligence fetch skipped', error.message);
+      return results;
+    }
+
+    const responseData = data as unknown;
+    const rows = Array.isArray(responseData)
+      ? responseData
+      : (
+        responseData
+        && typeof responseData === 'object'
+        && Array.isArray((responseData as { rows?: unknown[] }).rows)
+          ? (responseData as { rows?: unknown[] }).rows
+          : []
+      );
+
+    for (const row of rows) {
+      const normalized = normalizeVesperFragranceIntelligence(row);
+      if (!normalized) continue;
+      results.set(normalized.fragrance_id, normalized);
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    odaraDebugLog('[Odara] Vesper intelligence fetch skipped', message);
+  }
+
+  return results;
 }
 
 function normalizeDetailReleaseYear(value: unknown): number | null {
@@ -6079,6 +6251,35 @@ function buildVesperizedDetailDescription(source: {
 
   if (sourceBackedTimeline) return sourceBackedTimeline;
   return buildCompactFragranceSummary(source) ?? buildGeneratedFragranceDescription(source);
+}
+
+function getVesperDetailIntelligenceNotice(detail: Pick<
+  OdaraFragranceDetailSurfaceState,
+  'detail_loading' | 'vesper_intelligence'
+>): string | null {
+  const intelligence = detail.vesper_intelligence ?? null;
+  if (detail.detail_loading && !intelligence) {
+    return 'Vesperizing scent intelligence...';
+  }
+  if (!intelligence?.usable_for_vesper_intelligence) return null;
+  if (isLimitedVesperIntelligence(intelligence)) {
+    return intelligence.limited_intel_reason
+      ?? 'Limited scent intelligence available; Vesper will keep guidance general.';
+  }
+  if (intelligence.intelligence_source_type && intelligence.intelligence_source_type !== 'official_brand') {
+    return intelligence.source_disclaimer
+      ?? 'Structured provider intelligence - useful for Vesper guidance, not official brand confirmation.';
+  }
+  if (intelligence.intelligence_source_type === 'official_brand') {
+    if (intelligence.intelligence_source_tier === 'official_pyramid') {
+      return 'Official source-backed note pyramid. Not a patch authorization.';
+    }
+    if (intelligence.intelligence_source_tier === 'official_key_notes' || intelligence.intelligence_source_tier === 'official_notes_only') {
+      return 'Official source-backed key notes. Not a full pyramid or patch authorization.';
+    }
+    return intelligence.source_disclaimer ?? 'Official source-backed scent intelligence. Not a patch authorization.';
+  }
+  return intelligence.source_disclaimer;
 }
 
 function formatPlainFamilyStyleLabel(value: string | null | undefined) {
@@ -7325,6 +7526,7 @@ function mergeFragranceDetailSurfaceState(
     rating: current.rating ?? normalizeCollectionRating(detail.rating),
     detail_loading: false,
     detail_error: null,
+    vesper_intelligence: current.vesper_intelligence ?? detail.vesper_intelligence ?? null,
   };
 }
 
@@ -7391,6 +7593,7 @@ function mergeFragranceDetailSurfaceSeed(
     source_label: primary.source_label ?? fallback.source_label ?? null,
     detail_loading: primary.detail_loading ?? fallback.detail_loading ?? false,
     detail_error: primary.detail_error ?? fallback.detail_error ?? null,
+    vesper_intelligence: primary.vesper_intelligence ?? fallback.vesper_intelligence ?? null,
   };
 }
 
@@ -7406,6 +7609,7 @@ async function fetchOdaraFragranceDetailForSurface(
       { data: profileData, error: profileError },
       { data, error },
       imageAssetMap,
+      vesperIntelligenceMap,
     ] = await Promise.all([
       odaraSupabase.rpc('get_fragrance_profile_v1' as any, {
         p_user: isGuestMode ? null : userId,
@@ -7417,6 +7621,7 @@ async function fetchOdaraFragranceDetailForSurface(
         .eq('id', fragranceId)
         .maybeSingle(),
       fetchWardrobeImageAssetMap([fragranceId]),
+      fetchVesperFragranceIntelligence([fragranceId], isGuestMode || !userId),
     ]);
 
     const payload = (!profileError && profileData && (profileData as any)?.found)
@@ -7430,7 +7635,7 @@ async function fetchOdaraFragranceDetailForSurface(
     const imageAsset = imageAssetMap.get(fragranceId) ?? null;
     const roleFields = resolveDetailRoleFields(payload, data);
     const performanceFields = resolveDetailPerformanceFields(payload, data);
-    return finalizeFragranceDetail({
+    const baseDetail: FragranceDetail = {
       id: payload?.fragrance_id ?? (data as any)?.id ?? fragranceId,
       name: payload?.name ?? (data as any)?.name ?? '',
       brand: payload?.brand ?? (data as any)?.brand ?? null,
@@ -7476,7 +7681,12 @@ async function fetchOdaraFragranceDetailForSurface(
       source_page_url: payload?.source_page_url ?? payload?.source_url ?? imageAsset?.source_url ?? (typeof (data as any)?.source_url === 'string' ? (data as any).source_url : null),
       image_license_status: payload?.image_license_status ?? null,
       image_last_checked_at: imageAsset?.updated_at ?? null,
-    });
+    };
+
+    return finalizeFragranceDetail(applyVesperIntelligenceToDetail(
+      baseDetail,
+      vesperIntelligenceMap.get(baseDetail.id) ?? vesperIntelligenceMap.get(fragranceId) ?? null,
+    ));
   } catch {
     return null;
   }
@@ -9675,6 +9885,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   const flatNoteLabels = normalizeNotes(resolvedDetail.notes, 8);
   const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
+  const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const detailPerformanceByKey = new Map(detailPerformanceBars.map((metric) => [metric.key, metric]));
@@ -9783,6 +9994,11 @@ const OdaraFragranceDetailSheet: React.FC<{
             {detailDescription ? (
               <div className="mt-3 max-w-[34ch] text-[15px] leading-[1.48] text-foreground/84">
                 {detailDescription}
+              </div>
+            ) : null}
+            {vesperDetailNotice ? (
+              <div className="mt-2 max-w-[38ch] text-[11px] leading-[1.45] text-foreground/50">
+                {vesperDetailNotice}
               </div>
             ) : null}
           </div>
@@ -14015,10 +14231,11 @@ const OdaraScreen = ({
     const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean)));
     const details = new Map<string, FragranceDetail>();
     const missingIds: string[] = [];
+    const resolverDisabled = isGuestMode || !userId;
 
     for (const fragranceId of uniqueIds) {
       const cached = fragranceDetailCacheRef.current.get(fragranceId);
-      if (cached) {
+      if (cached && isVesperResolverDetailComplete(cached, resolverDisabled)) {
         details.set(fragranceId, cached);
       } else {
         missingIds.push(fragranceId);
@@ -14030,12 +14247,13 @@ const OdaraScreen = ({
     }
 
     try {
-      const [{ data, error }, imageAssets] = await Promise.all([
+      const [{ data, error }, imageAssets, vesperIntelligenceMap] = await Promise.all([
         odaraSupabase
           .from('fragrances')
           .select('*')
           .in('id', missingIds),
         fetchFragranceImageAssets(missingIds),
+        fetchVesperFragranceIntelligence(missingIds, resolverDisabled),
       ]);
 
       if (error) {
@@ -14048,7 +14266,7 @@ const OdaraScreen = ({
         const imageAsset = imageAssets.get(row.id) ?? null;
         const roleFields = resolveDetailRoleFields(row);
         const performanceFields = resolveDetailPerformanceFields(row);
-        const detail = finalizeFragranceDetail({
+        const baseDetail: FragranceDetail = {
           id: row.id,
           name: row.name ?? '',
           brand: row.brand ?? null,
@@ -14092,7 +14310,11 @@ const OdaraScreen = ({
           source_page_url: imageAsset?.source_url ?? (typeof (row as any).source_url === 'string' ? (row as any).source_url : null),
           image_license_status: null,
           image_last_checked_at: imageAsset?.updated_at ?? null,
-        });
+        };
+        const detail = finalizeFragranceDetail(applyVesperIntelligenceToDetail(
+          baseDetail,
+          vesperIntelligenceMap.get(row.id) ?? null,
+        ));
         fragranceDetailCacheRef.current.set(row.id, detail);
         details.set(row.id, detail);
         cacheUpdated = true;
@@ -14106,7 +14328,7 @@ const OdaraScreen = ({
     }
 
     return details;
-  }, []);
+  }, [fetchFragranceImageAssets, isGuestMode, userId]);
 
   const queueRowsToDisplay = useCallback((rowsInput: any[], excludeId?: string) => {
     const normalizedRows = (Array.isArray(rowsInput) ? rowsInput : [])
@@ -14189,7 +14411,8 @@ const OdaraScreen = ({
   const fetchFragranceDetail = useCallback(async (fragranceId: string) => {
     if (!fragranceId) return null;
     const cached = fragranceDetailCacheRef.current.get(fragranceId);
-    if (cached?.profile_loaded) {
+    const resolverDisabled = isGuestMode || !userId;
+    if (cached?.profile_loaded && isVesperResolverDetailComplete(cached, resolverDisabled)) {
       return cached;
     }
 
@@ -14202,6 +14425,7 @@ const OdaraScreen = ({
           { data: profileData, error: profileError },
           { data, error },
           imageAssets,
+          vesperIntelligenceMap,
         ] = await Promise.all([
           odaraSupabase.rpc('get_fragrance_profile_v1' as any, {
             p_user: isGuestMode ? null : userId,
@@ -14213,6 +14437,7 @@ const OdaraScreen = ({
             .eq('id', fragranceId)
             .maybeSingle(),
           fetchFragranceImageAssets([fragranceId]),
+          fetchVesperFragranceIntelligence([fragranceId], resolverDisabled),
         ]);
 
         const payload = (!profileError && profileData && (profileData as any)?.found)
@@ -14226,7 +14451,7 @@ const OdaraScreen = ({
         const imageAsset = imageAssets.get(fragranceId) ?? null;
         const roleFields = resolveDetailRoleFields(payload, data);
         const performanceFields = resolveDetailPerformanceFields(payload, data);
-        const detail = finalizeFragranceDetail({
+        const baseDetail: FragranceDetail = {
           id: payload?.fragrance_id ?? data?.id ?? fragranceId,
           name: payload?.name ?? data?.name ?? '',
           brand: payload?.brand ?? data?.brand ?? null,
@@ -14272,7 +14497,11 @@ const OdaraScreen = ({
           source_page_url: payload?.source_page_url ?? payload?.source_url ?? imageAsset?.source_url ?? (typeof (data as any)?.source_url === 'string' ? (data as any).source_url : null),
           image_license_status: payload?.image_license_status ?? null,
           image_last_checked_at: payload?.image_last_checked_at ?? imageAsset?.updated_at ?? null,
-        });
+        };
+        const detail = finalizeFragranceDetail(applyVesperIntelligenceToDetail(
+          baseDetail,
+          vesperIntelligenceMap.get(baseDetail.id) ?? vesperIntelligenceMap.get(fragranceId) ?? null,
+        ));
 
         fragranceDetailCacheRef.current.set(fragranceId, detail);
         setFragranceDetailVersion((version) => version + 1);
@@ -14293,6 +14522,10 @@ const OdaraScreen = ({
     const cachedDetail = seed.fragrance_id
       ? (fragranceDetailCacheRef.current.get(seed.fragrance_id) ?? null)
       : null;
+    const resolverDisabled = isGuestMode || !userId;
+    const cachedDetailComplete = Boolean(
+      cachedDetail?.profile_loaded && isVesperResolverDetailComplete(cachedDetail, resolverDisabled),
+    );
     const initialState = seed.fragrance_id
       ? mergeFragranceDetailSurfaceState(
           seed,
@@ -14301,7 +14534,7 @@ const OdaraScreen = ({
       : seed;
     setFragranceDetailSheet({
       ...initialState,
-      detail_loading: Boolean(seed.fragrance_id) && !(cachedDetail?.profile_loaded),
+      detail_loading: Boolean(seed.fragrance_id) && !cachedDetailComplete,
       detail_error: null,
     });
 
@@ -14328,7 +14561,7 @@ const OdaraScreen = ({
           }
         : current
     ));
-  }, [fetchFragranceDetail]);
+  }, [fetchFragranceDetail, isGuestMode, userId]);
 
   const openScentIntelSheet = useCallback((input: ScentIntelInput) => {
     const label = String(input?.label ?? '').trim();
