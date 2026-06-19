@@ -79,6 +79,29 @@ function normalizeConfidence(value: unknown): number | null {
   return Math.max(0, Math.min(1, numeric));
 }
 
+function normalizeYear(value: unknown): number | null {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  return rounded >= 1900 && rounded <= 2100 ? rounded : null;
+}
+
+function normalizeConfidenceSummary(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      release_year: null,
+      perfumer_names: null,
+      concentration: null,
+    };
+  }
+  const record = value as JsonRecord;
+  return {
+    release_year: normalizeConfidence(record.release_year),
+    perfumer_names: normalizeConfidence(record.perfumer_names),
+    concentration: normalizeConfidence(record.concentration),
+  };
+}
+
 function sanitizeResolverRow(row: JsonRecord) {
   return {
     fragrance_id: normalizeText(row.fragrance_id),
@@ -98,6 +121,33 @@ function sanitizeResolverRow(row: JsonRecord) {
     patch_safe_now: row.patch_safe_now === true,
     usable_for_vesper_intelligence: row.usable_for_vesper_intelligence === true,
     limited_intel_reason: normalizeText(row.limited_intel_reason),
+    updated_at: normalizeText(row.updated_at),
+  };
+}
+
+function sanitizeMetadataResolverRow(row: JsonRecord) {
+  return {
+    fragrance_id: normalizeText(row.fragrance_id),
+    resolved_release_year: normalizeYear(row.resolved_release_year),
+    resolved_perfumer_names: normalizeTextArray(row.resolved_perfumer_names, 8),
+    resolved_concentration: normalizeText(row.resolved_concentration),
+    release_year_source_type: normalizeText(row.release_year_source_type),
+    release_year_source_tier: normalizeText(row.release_year_source_tier),
+    release_year_source_name: normalizeText(row.release_year_source_name),
+    perfumer_source_type: normalizeText(row.perfumer_source_type),
+    perfumer_source_tier: normalizeText(row.perfumer_source_tier),
+    perfumer_source_name: normalizeText(row.perfumer_source_name),
+    concentration_source_type: normalizeText(row.concentration_source_type),
+    concentration_source_tier: normalizeText(row.concentration_source_tier),
+    concentration_source_name: normalizeText(row.concentration_source_name),
+    metadata_confidence_summary: normalizeConfidenceSummary(row.metadata_confidence_summary),
+    metadata_warnings: normalizeWarnings(row.metadata_warnings),
+    metadata_disclaimer: normalizeText(row.metadata_disclaimer),
+    has_official_metadata: row.has_official_metadata === true,
+    has_community_metadata: row.has_community_metadata === true,
+    has_conflict_hold: row.has_conflict_hold === true,
+    patch_safe_now: row.patch_safe_now === true,
+    catalog_patch_ready: row.catalog_patch_ready === true,
     updated_at: normalizeText(row.updated_at),
   };
 }
@@ -179,10 +229,19 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data, error } = await adminClient.rpc("get_fragrance_vesper_intelligence_v1", {
-      p_fragrance_ids: fragranceIds,
-      p_limit: limit,
-    });
+    const [
+      { data, error },
+      { data: metadataData, error: metadataError },
+    ] = await Promise.all([
+      adminClient.rpc("get_fragrance_vesper_intelligence_v1", {
+        p_fragrance_ids: fragranceIds,
+        p_limit: limit,
+      }),
+      adminClient.rpc("get_fragrance_identity_metadata_resolver_v1", {
+        p_fragrance_ids: fragranceIds,
+        p_limit: limit,
+      }),
+    ]);
 
     if (error) {
       return jsonResponse({ error: "Could not load Vesper intelligence." }, 502, corsHeaders);
@@ -191,8 +250,18 @@ serve(async (req) => {
     const rows = (Array.isArray(data) ? data : [])
       .map((row) => sanitizeResolverRow(row as JsonRecord))
       .filter((row) => row.fragrance_id && row.intelligence_status);
+    const metadataRows = metadataError
+      ? []
+      : (Array.isArray(metadataData) ? metadataData : [])
+          .map((row) => sanitizeMetadataResolverRow(row as JsonRecord))
+          .filter((row) => row.fragrance_id);
 
-    return jsonResponse({ rows, count: rows.length }, 200, corsHeaders);
+    return jsonResponse({
+      rows,
+      metadata_rows: metadataRows,
+      count: rows.length,
+      metadata_count: metadataRows.length,
+    }, 200, corsHeaders);
   } catch {
     return jsonResponse({ error: "Unexpected Vesper intelligence error." }, 500, corsHeaders);
   }
