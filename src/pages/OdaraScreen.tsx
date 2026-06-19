@@ -1,6 +1,14 @@
 import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue, type FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import { normalizeNotes } from "@/lib/normalizeNotes";
+import {
+  buildFragranceDetailDisplayModel,
+  buildFragranceMetadataDisplay,
+  formatFragranceNoteDisplayLabel,
+  formatFragranceNoteDisplayLabels,
+  isScentProfileChip,
+  shouldShowVesperizingNotice,
+} from "@/lib/fragranceDetailDisplayContract";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
@@ -6472,55 +6480,9 @@ const NOTE_TIMELINE_ALIASES: Record<string, string> = {
   musc: 'musk',
 };
 
-const SOURCE_BACKED_NOTE_LABELS: Record<string, string> = {
-  'lemon italy': 'Italian Lemon',
-  'sage france': 'French Sage',
-  'geranium egypt': 'Egyptian Geranium',
-  'cedarwood virginia usa': 'Virginia Cedarwood',
-  whitemusk: 'White Musk',
-  'white musk': 'White Musk',
-  'australian coastal moss': 'Australian Coastal Moss',
-};
-
 function isDerivedDescriptionSource(value: string | null | undefined) {
   const normalized = normalizeDetailText(value);
   return normalized ? DERIVED_DESCRIPTION_SOURCES.has(normalized) : false;
-}
-
-function toDisplayTitleCase(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/\b([a-z])/g, (match) => match.toUpperCase());
-}
-
-function getSourceBackedNoteKey(value: string | null | undefined) {
-  return normalizeDetailText(value)
-    ?.toLowerCase()
-    .replace(/[._-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim() ?? '';
-}
-
-function formatSourceBackedNoteLabel(value: string | null | undefined) {
-  const key = getSourceBackedNoteKey(value);
-  if (!key) return '';
-  return SOURCE_BACKED_NOTE_LABELS[key] ?? toDisplayTitleCase(key);
-}
-
-function formatSourceBackedNoteLabels(values: string[] | null | undefined, max = 8) {
-  const labels: string[] = [];
-  const seen = new Set<string>();
-  for (const value of sanitizeTokenSource(values)) {
-    const label = formatSourceBackedNoteLabel(value);
-    if (!label) continue;
-    const key = label.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    labels.push(label);
-    if (labels.length >= max) break;
-  }
-  return labels;
 }
 
 function formatSourceBackedNotePhrase(label: string, context: 'opening' | 'heart' | 'base') {
@@ -6535,7 +6497,7 @@ function formatSourceBackedNotePhrase(label: string, context: 'opening' | 'heart
 }
 
 function formatTimelineNoteLabel(value: string) {
-  const normalized = formatSourceBackedNoteLabel(value);
+  const normalized = formatFragranceNoteDisplayLabel(value);
   if (!normalized) return '';
   const key = normalized.toLowerCase();
   return NOTE_TIMELINE_ALIASES[key] ?? normalized;
@@ -6651,9 +6613,9 @@ function buildPolishedSourceBackedPyramidDescription(source: {
   middle_notes?: string[] | null | undefined;
   base_notes?: string[] | null | undefined;
 }) {
-  const top = formatSourceBackedNoteLabels(source.top_notes, 3);
-  const heart = formatSourceBackedNoteLabels(source.middle_notes, 3);
-  const base = formatSourceBackedNoteLabels(source.base_notes, 3);
+  const top = formatFragranceNoteDisplayLabels(source.top_notes, 3);
+  const heart = formatFragranceNoteDisplayLabels(source.middle_notes, 3);
+  const base = formatFragranceNoteDisplayLabels(source.base_notes, 3);
   if (top.length === 0 || heart.length === 0 || base.length === 0) return null;
 
   const joined = [
@@ -6852,11 +6814,16 @@ function buildVesperizedDetailDescription(source: {
 
 function getVesperDetailIntelligenceNotice(detail: Pick<
   OdaraFragranceDetailSurfaceState,
-  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_page_url'
+  'fragrance_id' | 'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_page_url'
 >): string | null {
   const intelligence = detail.vesper_intelligence ?? null;
   if (detail.detail_loading && !intelligence) {
-    return null;
+    return shouldShowVesperizingNotice({
+      isCanonicalFragrance: Boolean(normalizeDetailText(detail.fragrance_id)),
+      isLoading: true,
+    })
+      ? 'Vesperizing scent intelligence...'
+      : null;
   }
   if (!intelligence?.usable_for_vesper_intelligence) return null;
   if (isLimitedVesperIntelligence(intelligence)) {
@@ -10468,104 +10435,61 @@ const OdaraFragranceDetailSheet: React.FC<{
     resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
   );
   const accordLabels = normalizeNotes(resolvedDetail.accords, 8);
-  const topLabels = formatSourceBackedNoteLabels(resolvedDetail.top_notes ?? [], 6);
-  const middleLabels = formatSourceBackedNoteLabels(resolvedDetail.middle_notes ?? [], 6);
-  const baseLabels = formatSourceBackedNoteLabels(resolvedDetail.base_notes ?? [], 6);
-  const flatNoteLabels = formatSourceBackedNoteLabels(resolvedDetail.notes, 8);
+  const detailDisplayModel = buildFragranceDetailDisplayModel({
+    familyLabel,
+    familyKey: resolvedDetail.family_key,
+    accordLabels,
+    topNotes: resolvedDetail.top_notes ?? [],
+    middleNotes: resolvedDetail.middle_notes ?? [],
+    baseNotes: resolvedDetail.base_notes ?? [],
+    flatNotes: resolvedDetail.notes ?? [],
+    maxHeroChips: 8,
+  });
+  const topLabels = detailDisplayModel.topLabels;
+  const middleLabels = detailDisplayModel.middleLabels;
+  const baseLabels = detailDisplayModel.baseLabels;
+  const flatNoteLabels = detailDisplayModel.flatNoteLabels;
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
-  const displayReleaseYear = resolvedDetail.release_year
-    ?? normalizeDetailReleaseYear(resolvedDetail.vesper_metadata?.resolved_release_year)
-    ?? null;
-  const catalogPerfumer = normalizeDetailText(resolvedDetail.perfumer);
-  const resolverPerfumer = getResolvedPerfumerText(resolvedDetail.vesper_metadata);
-  const displayPerfumer = catalogPerfumer ?? resolverPerfumer;
-  const catalogConcentration = isKnownDetailConcentration(resolvedDetail.concentration)
-    ? normalizeDetailText(resolvedDetail.concentration)
+  const officialStructuredNoteSourceName = normalizeDetailText(resolvedDetail.vesper_intelligence?.intelligence_source_name)
+    ?? normalizeDetailText(resolvedDetail.brand)
+    ?? 'official source';
+  const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand'
+    || Boolean(normalizeDetailText(resolvedDetail.source_confidence));
+  const officialStructuredNoteSourceLabel = hasStructuredNoteSections && (
+    hasOfficialStructuredNoteSource
+    || normalizeDetailText(resolvedDetail.source_page_url)
+  )
+    ? {
+        label: 'Source-backed notes',
+        subcopy: hasOfficialStructuredNoteSource
+          ? `Official source · ${officialStructuredNoteSourceName}`
+          : `Source-backed profile · ${officialStructuredNoteSourceName}`,
+        helper: hasOfficialStructuredNoteSource
+          ? 'These notes come from source-backed official fragrance data for display guidance, not a recommendation or layer claim.'
+          : 'These notes come from source-backed fragrance data for display guidance, not a recommendation or layer claim.',
+      }
     : null;
-  const resolverConcentration = isKnownDetailConcentration(resolvedDetail.vesper_metadata?.resolved_concentration)
-    ? normalizeDetailText(resolvedDetail.vesper_metadata?.resolved_concentration)
-    : null;
-  const displayConcentration = catalogConcentration ?? resolverConcentration;
-  const displayMetadataApplied: VesperMetadataAppliedFields = {
-    release_year: !resolvedDetail.release_year && displayReleaseYear != null,
-    perfumer: !catalogPerfumer && !!resolverPerfumer,
-    concentration: !catalogConcentration && !!resolverConcentration,
-  };
+  const metadataDisplay = buildFragranceMetadataDisplay({
+    catalogReleaseYear: resolvedDetail.release_year ?? null,
+    resolverReleaseYear: normalizeDetailReleaseYear(resolvedDetail.vesper_metadata?.resolved_release_year),
+    catalogPerfumer: resolvedDetail.perfumer ?? null,
+    resolverPerfumerNames: resolvedDetail.vesper_metadata?.resolved_perfumer_names ?? [],
+    catalogConcentration: resolvedDetail.concentration ?? null,
+    resolverConcentration: resolvedDetail.vesper_metadata?.resolved_concentration ?? null,
+  });
   const detailSourceBackedChipClass = 'inline-flex rounded-full px-3 py-[6px] text-[11px] tracking-[0.04em]';
   const metadataSourceLabel = getMetadataSourceLabel(
     resolvedDetail.vesper_metadata,
-    displayMetadataApplied,
+    metadataDisplay.applied,
   );
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
-  const topIdentityChips = (() => {
-    const chips: Array<{ label: string; position: string }> = [];
-    const seen = new Set<string>();
-    const pushChip = (label: string | null | undefined, position: string) => {
-      const trimmed = typeof label === 'string' ? label.trim() : '';
-      if (!trimmed) return;
-      const key = trimmed.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      chips.push({ label: trimmed, position });
-    };
-
-    pushChip(familyLabel, 'family');
-    pushChip(isKnownDetailConcentration(resolvedDetail.concentration) ? resolvedDetail.concentration : null, 'concentration');
-    if (resolvedDetail.family_key === 'fresh-blue') {
-      pushChip('Fresh Aquatic', 'style');
-    }
-    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_page_url)) {
-      pushChip('Official pyramid', 'source');
-    }
-
-    const identityNoteLabels = [...topLabels, ...middleLabels, ...baseLabels];
-    const preferredIdentityPatterns = [
-      /coastal moss/i,
-      /lemon/i,
-      /sage/i,
-      /cedarwood/i,
-      /musk/i,
-      /geranium/i,
-    ];
-    for (const pattern of preferredIdentityPatterns) {
-      const match = identityNoteLabels.find((label) => pattern.test(label));
-      pushChip(match, 'note');
-    }
-    for (const label of identityNoteLabels) {
-      if (chips.length >= 8) break;
-      pushChip(label, 'note');
-    }
-
-    const availableAccords = accordLabels.filter((accord) => accord.trim().toLowerCase() !== familyLabel?.trim().toLowerCase());
-    const priorityPatterns = [
-      /\bleather|leathery\b/i,
-      /\boud|amber|resin|resinous|incense\b/i,
-      /\bcitrus|bergamot|neroli|orange|grapefruit|lemon\b/i,
-      /\bgreen|aromatic|herbal\b/i,
-      /\bwoody|wood\b/i,
-      /\bspicy|spice\b/i,
-      /\bfloral\b/i,
-      /\bgourmand|sweet\b/i,
-      /\bfruity|fruit\b/i,
-    ];
-    const preferredAccord = priorityPatterns
-      .map((pattern) => availableAccords.find((accord) => pattern.test(accord)))
-      .find(Boolean)
-      ?? availableAccords[0]
-      ?? null;
-    pushChip(preferredAccord, 'accord');
-    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 8);
-  })();
-  const structuredNoteSections = [
-    { title: 'Top', position: 'top', values: topLabels },
-    { title: 'Heart', position: 'heart', values: middleLabels },
-    { title: 'Base', position: 'base', values: baseLabels },
-  ].filter((section) => section.values.length > 0);
+  const topIdentityChips = expandAndDeduplicateScentIntelDisplayTerms(detailDisplayModel.heroProfileChips).slice(0, 8);
+  const structuredNoteSections = detailDisplayModel.structuredNoteSections;
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -10598,11 +10522,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     }
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
-  const detailFactLine = [
-    `Released: ${displayReleaseYear ? String(displayReleaseYear) : 'Unknown'}`,
-    `Perfumer: ${displayPerfumer ?? 'Unknown'}`,
-    `Concentration: ${displayConcentration ?? 'Unknown'}`,
-  ].join(' · ');
+  const detailFactLine = metadataDisplay.factLine;
 
   return (
     <OdaraBottomSheet
@@ -10779,6 +10699,15 @@ const OdaraFragranceDetailSheet: React.FC<{
                     </div>
                   </div>
                 ))}
+                {officialStructuredNoteSourceLabel ? (
+                  <div
+                    className="pt-1 text-[11px] leading-[1.45]"
+                    title={officialStructuredNoteSourceLabel.helper}
+                  >
+                    <div className="font-medium text-foreground/72">{officialStructuredNoteSourceLabel.label}</div>
+                    <div className="text-foreground/48">{officialStructuredNoteSourceLabel.subcopy}</div>
+                  </div>
+                ) : null}
               </div>
             </section>
           ) : orderedNoteChips.length > 0 ? (
@@ -19889,64 +19818,30 @@ const OdaraScreen = ({
     return fragranceDetailCacheRef.current.get(fragranceId) ?? null;
   }, [visibleResolvedCurrentCard?.fragrance_id, fragranceDetailVersion]);
   const heroCardChips = useMemo<Array<{ label: string; position: string; slug?: string }>>(() => {
-    const chips: Array<{ label: string; position: string }> = [];
-    const seen = new Set<string>();
-    const pushChip = (rawLabel: string | null | undefined, position: string) => {
-      const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
-      if (!label) return;
-      const key = label.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      chips.push({ label, position });
-    };
-
     const accordSource = (visibleHeroDetail?.accords?.length ?? 0) > 0
       ? visibleHeroDetail?.accords
       : visibleResolvedCurrentCard?.accords;
     const accordLabels = normalizeNotes(sanitizeTokenSource(accordSource), 6).slice(0, 3);
-    accordLabels.forEach((label) => pushChip(label, 'accord'));
-
-    const structuredNotes = [
-      { position: 'top', values: formatSourceBackedNoteLabels(visibleHeroDetail?.top_notes, 4) },
-      { position: 'heart', values: formatSourceBackedNoteLabels(visibleHeroDetail?.middle_notes, 4) },
-      { position: 'base', values: formatSourceBackedNoteLabels(visibleHeroDetail?.base_notes, 4) },
-    ];
-    const hasStructuredNotes = structuredNotes.some((section) => section.values.length > 0);
-    let noteCount = 0;
-
-    if (hasStructuredNotes) {
-      for (const section of structuredNotes) {
-        for (const label of section.values) {
-          if (chips.length >= 6 || noteCount >= 3) break;
-          const before = chips.length;
-          pushChip(label, section.position);
-          if (chips.length > before) noteCount += 1;
-        }
-        if (chips.length >= 6 || noteCount >= 3) break;
-      }
-    } else {
-      const noteSource = (visibleHeroDetail?.notes?.length ?? 0) > 0
-        ? visibleHeroDetail?.notes
-        : visibleResolvedCurrentCard?.notes;
-      for (const label of formatSourceBackedNoteLabels(sanitizeTokenSource(noteSource), 6)) {
-        if (chips.length >= 6 || noteCount >= 3) break;
-        const before = chips.length;
-        pushChip(label, 'material');
-        if (chips.length > before) noteCount += 1;
-      }
-    }
-
     const familyKey = visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null;
     const familyLabel = formatPlainFamilyStyleLabel(
       visibleHeroFamilyLabel || (familyKey ? getFamilyLabelText(familyKey) : null),
     );
+    const noteSource = (visibleHeroDetail?.notes?.length ?? 0) > 0
+      ? visibleHeroDetail?.notes
+      : visibleResolvedCurrentCard?.notes;
+    const displayModel = buildFragranceDetailDisplayModel({
+      familyLabel,
+      familyKey,
+      accordLabels,
+      topNotes: visibleHeroDetail?.top_notes ?? [],
+      middleNotes: visibleHeroDetail?.middle_notes ?? [],
+      baseNotes: visibleHeroDetail?.base_notes ?? [],
+      flatNotes: sanitizeTokenSource(noteSource),
+      maxHeroChips: 6,
+    });
 
-    if (familyLabel && (chips.length === 0 || chips.length <= 4)) {
-      pushChip(familyLabel, 'family');
-    }
-
-    if (chips.length > 0) {
-      return expandAndDeduplicateScentIntelDisplayTerms(chips)
+    if (displayModel.heroProfileChips.length > 0) {
+      return expandAndDeduplicateScentIntelDisplayTerms(displayModel.heroProfileChips)
         .slice(0, 6)
         .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
     }
@@ -19954,17 +19849,27 @@ const OdaraScreen = ({
     const fallbackTokens = Array.isArray(visibleResolvedHeroRail?.tokens)
       ? visibleResolvedHeroRail.tokens
       : [];
+    const fallbackChips: Array<{ label: string; position: string }> = [];
+    const fallbackSeen = new Set<string>();
+    const pushFallbackChip = (rawLabel: string | null | undefined, position: string) => {
+      const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+      if (!isScentProfileChip(label)) return;
+      const key = label.toLowerCase();
+      if (fallbackSeen.has(key)) return;
+      fallbackSeen.add(key);
+      fallbackChips.push({ label, position });
+    };
     for (const token of fallbackTokens) {
-      if (chips.length >= 2) break;
+      if (fallbackChips.length >= 2) break;
       const label = typeof (token?.token_label ?? token?.label ?? token?.name) === 'string'
         ? String(token.token_label ?? token.label ?? token.name).trim()
         : '';
       if (!label) continue;
       if (/\b(day|night|office|weekend|mood|weather|context|queue|today|pick)\b/i.test(label)) continue;
-      pushChip(label, 'accord');
+      pushFallbackChip(label, 'accord');
     }
 
-    return expandAndDeduplicateScentIntelDisplayTerms(chips)
+    return expandAndDeduplicateScentIntelDisplayTerms(fallbackChips)
       .slice(0, 4)
       .map((t) => ({ label: t.label, position: t.position ?? '', slug: t.slug ?? undefined }));
   }, [
