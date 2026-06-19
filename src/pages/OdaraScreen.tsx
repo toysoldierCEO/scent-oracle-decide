@@ -6856,13 +6856,7 @@ function getVesperDetailIntelligenceNotice(detail: Pick<
 >): string | null {
   const intelligence = detail.vesper_intelligence ?? null;
   if (detail.detail_loading && !intelligence) {
-    const hasSourceBackedProfile = sanitizeTokenSource(detail.notes).length > 0
-      || sanitizeTokenSource(detail.top_notes).length > 0
-      || sanitizeTokenSource(detail.middle_notes).length > 0
-      || sanitizeTokenSource(detail.base_notes).length > 0
-      || Boolean(normalizeDetailText(detail.source_page_url));
-    if (hasSourceBackedProfile) return null;
-    return 'Vesperizing scent intelligence...';
+    return null;
   }
   if (!intelligence?.usable_for_vesper_intelligence) return null;
   if (isLimitedVesperIntelligence(intelligence)) {
@@ -19913,9 +19907,9 @@ const OdaraScreen = ({
     accordLabels.forEach((label) => pushChip(label, 'accord'));
 
     const structuredNotes = [
-      { position: 'top', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.top_notes), 4) },
-      { position: 'heart', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.middle_notes), 4) },
-      { position: 'base', values: normalizeNotes(sanitizeTokenSource(visibleHeroDetail?.base_notes), 4) },
+      { position: 'top', values: formatSourceBackedNoteLabels(visibleHeroDetail?.top_notes, 4) },
+      { position: 'heart', values: formatSourceBackedNoteLabels(visibleHeroDetail?.middle_notes, 4) },
+      { position: 'base', values: formatSourceBackedNoteLabels(visibleHeroDetail?.base_notes, 4) },
     ];
     const hasStructuredNotes = structuredNotes.some((section) => section.values.length > 0);
     let noteCount = 0;
@@ -19934,7 +19928,7 @@ const OdaraScreen = ({
       const noteSource = (visibleHeroDetail?.notes?.length ?? 0) > 0
         ? visibleHeroDetail?.notes
         : visibleResolvedCurrentCard?.notes;
-      for (const label of normalizeNotes(sanitizeTokenSource(noteSource), 6)) {
+      for (const label of formatSourceBackedNoteLabels(sanitizeTokenSource(noteSource), 6)) {
         if (chips.length >= 6 || noteCount >= 3) break;
         const before = chips.length;
         pushChip(label, 'material');
