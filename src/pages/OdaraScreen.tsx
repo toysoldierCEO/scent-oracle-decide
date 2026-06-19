@@ -4051,6 +4051,114 @@ const OdaraInsetGroup: React.FC<{
   );
 };
 
+const OdaraMissingFragranceProvisionalCard: React.FC<{
+  card: MissingFragranceProvisionalCard;
+  compact?: boolean;
+  onOpenCanonical?: (fragranceId: string) => void;
+}> = ({ card, compact, onOpenCanonical }) => {
+  const statusLabel = getMissingFragranceStatusLabel(card.request_status, card.canonical_fragrance_id);
+  const desiredStatusLabel = getMissingFragranceDesiredStatusLabel(card.desired_status);
+  const canOpenCanonical = Boolean(card.canonical_fragrance_id && onOpenCanonical);
+  const cardBody = (
+    <>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div
+            className={`${compact ? 'text-[18px]' : 'text-[21px]'} line-clamp-2 leading-[1.05] text-foreground/94`}
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", letterSpacing: '-0.01em' }}
+          >
+            {card.submitted_name}
+          </div>
+          <div className="mt-1 text-[12px] leading-[1.35] text-foreground/56">
+            {card.submitted_brand || 'Brand pending'}
+            {card.submitted_concentration ? ` · ${card.submitted_concentration}` : ''}
+          </div>
+        </div>
+        <span
+          className="shrink-0 rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.16em]"
+          style={{
+            borderColor: 'rgba(218,188,124,0.28)',
+            background: 'rgba(218,188,124,0.11)',
+            color: 'rgba(248,229,185,0.94)',
+          }}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
+          {desiredStatusLabel}
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
+          Limited intel
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
+          Source check pending
+        </span>
+        {card.has_source_url ? (
+          <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/52">
+            Source provided
+          </span>
+        ) : null}
+      </div>
+
+      <p className="mt-3 text-[11.5px] leading-[1.55] text-foreground/48">
+        Vesper is checking source-backed scent data. This item is not fully ranked yet.
+      </p>
+      <p className="mt-1.5 text-[10.5px] leading-[1.5] text-foreground/38">
+        No notes, accords, pyramids, perfumer, release year, or performance claims are created from this request.
+      </p>
+      {card.canonical_fragrance_id ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
+          <div className="min-w-0 text-[11.5px] leading-snug text-foreground/52">
+            Matched — ready soon
+          </div>
+          {canOpenCanonical ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (card.canonical_fragrance_id) onOpenCanonical?.(card.canonical_fragrance_id);
+              }}
+              className="shrink-0 rounded-full border px-3 py-1.5 text-[9.5px] uppercase tracking-[0.14em] text-[#f8e5b9] transition-colors hover:bg-white/[0.04]"
+              style={{ borderColor: 'rgba(218,188,124,0.26)' }}
+            >
+              Open
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div
+        className="rounded-[16px] border px-3.5 py-3"
+        style={{
+          borderColor: 'rgba(218,188,124,0.18)',
+          background: 'linear-gradient(180deg, rgba(218,188,124,0.08), rgba(255,255,255,0.025))',
+        }}
+      >
+        {cardBody}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-[24px] border px-4 py-4"
+      style={{
+        borderColor: 'rgba(218,188,124,0.18)',
+        background: 'linear-gradient(180deg, rgba(218,188,124,0.10) 0%, rgba(18,20,26,0.56) 100%)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 32px rgba(0,0,0,0.22)',
+      }}
+    >
+      {cardBody}
+    </div>
+  );
+};
+
 const OdaraInsetRow: React.FC<{
   label: string;
   hint?: string;
@@ -4296,6 +4404,27 @@ type OdaraCollectionSort = 'role' | 'rating' | 'family' | 'name' | 'brand';
 type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
 type MissingFragranceDesiredStatus = 'owned' | 'wishlist' | 'tried' | 'liked';
+type MissingFragranceRequestStatus =
+  | 'pending'
+  | 'investigating'
+  | 'source_found'
+  | 'matched_existing'
+  | 'canonical_created'
+  | 'rejected';
+type MissingFragranceProvisionalCard = {
+  request_id: string;
+  submitted_name: string;
+  submitted_brand: string | null;
+  submitted_concentration: string | null;
+  desired_status: MissingFragranceDesiredStatus;
+  request_status: MissingFragranceRequestStatus;
+  limited_intel: boolean;
+  canonical_fragrance_id: string | null;
+  has_source_url: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  resolved_at: string | null;
+};
 
 const MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS: Array<{ value: MissingFragranceDesiredStatus; label: string }> = [
   { value: 'wishlist', label: 'Wishlist' },
@@ -4311,6 +4440,119 @@ const buildEmptyMissingFragranceForm = () => ({
   sourceUrl: '',
   desiredStatus: 'wishlist' as MissingFragranceDesiredStatus,
 });
+
+const normalizeMissingFragranceDesiredStatus = (value: unknown): MissingFragranceDesiredStatus => {
+  const status = readTrimmedLayerText(value).toLowerCase();
+  return status === 'owned' || status === 'tried' || status === 'liked' || status === 'wishlist'
+    ? status
+    : 'wishlist';
+};
+
+const normalizeMissingFragranceRequestStatus = (value: unknown): MissingFragranceRequestStatus => {
+  const status = readTrimmedLayerText(value).toLowerCase();
+  return status === 'investigating'
+    || status === 'source_found'
+    || status === 'matched_existing'
+    || status === 'canonical_created'
+    || status === 'rejected'
+    || status === 'pending'
+    ? status
+    : 'pending';
+};
+
+const getMissingFragranceDesiredStatusLabel = (status: MissingFragranceDesiredStatus) => {
+  if (status === 'owned') return 'Owned';
+  if (status === 'tried') return 'Tried';
+  if (status === 'liked') return 'Liked';
+  return 'Wishlist';
+};
+
+const getMissingFragranceStatusLabel = (status: MissingFragranceRequestStatus, canonicalFragranceId?: string | null) => {
+  if (canonicalFragranceId || status === 'matched_existing' || status === 'canonical_created') return 'Matched';
+  if (status === 'source_found') return 'Source check pending';
+  if (status === 'investigating') return 'Vesperizing';
+  if (status === 'rejected') return 'Needs review';
+  return 'Vesperizing';
+};
+
+const shouldShowMissingFragranceProvisionalCard = (card: MissingFragranceProvisionalCard) => (
+  card.request_status !== 'rejected'
+);
+
+const normalizeMissingFragranceIntakeRow = (row: any): MissingFragranceProvisionalCard | null => {
+  const requestId = readTrimmedLayerText(row?.id, row?.request_id);
+  const submittedName = readTrimmedLayerText(row?.submitted_name, row?.name);
+  if (!requestId || !submittedName) return null;
+
+  const sourceUrl = readTrimmedLayerText(row?.submitted_source_url, row?.source_url);
+  return {
+    request_id: requestId,
+    submitted_name: submittedName,
+    submitted_brand: readTrimmedLayerText(row?.submitted_brand, row?.brand) || null,
+    submitted_concentration: readTrimmedLayerText(row?.submitted_concentration, row?.concentration) || null,
+    desired_status: normalizeMissingFragranceDesiredStatus(row?.desired_status),
+    request_status: normalizeMissingFragranceRequestStatus(row?.request_status),
+    limited_intel: row?.limited_intel !== false,
+    canonical_fragrance_id: readTrimmedLayerText(row?.canonical_fragrance_id) || null,
+    has_source_url: Boolean(sourceUrl),
+    created_at: readTrimmedLayerText(row?.created_at) || null,
+    updated_at: readTrimmedLayerText(row?.updated_at) || null,
+    resolved_at: readTrimmedLayerText(row?.resolved_at) || null,
+  };
+};
+
+const extractMissingFragranceIntakeRows = (data: any): any[] => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.requests)) return data.requests;
+  return [];
+};
+
+const normalizeMissingFragranceIntakeRows = (data: any): MissingFragranceProvisionalCard[] => {
+  const byId = new Map<string, MissingFragranceProvisionalCard>();
+  const bySubmittedIdentity = new Map<string, string>();
+  for (const row of extractMissingFragranceIntakeRows(data)) {
+    const card = normalizeMissingFragranceIntakeRow(row);
+    if (!card || !shouldShowMissingFragranceProvisionalCard(card)) continue;
+    const identityKey = [
+      normalizeOdaraSearchQuery(card.submitted_name),
+      normalizeOdaraSearchQuery(card.submitted_brand ?? ''),
+      normalizeOdaraSearchQuery(card.submitted_concentration ?? ''),
+      card.desired_status,
+    ].join('|');
+    const existingRequestId = bySubmittedIdentity.get(identityKey);
+    if (existingRequestId) {
+      const existing = byId.get(existingRequestId);
+      const existingTime = Date.parse(existing?.updated_at ?? existing?.created_at ?? '');
+      const nextTime = Date.parse(card.updated_at ?? card.created_at ?? '');
+      if ((Number.isFinite(existingTime) ? existingTime : 0) >= (Number.isFinite(nextTime) ? nextTime : 0)) {
+        continue;
+      }
+      byId.delete(existingRequestId);
+    }
+    bySubmittedIdentity.set(identityKey, card.request_id);
+    byId.set(card.request_id, card);
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const aTime = Date.parse(a.updated_at ?? a.created_at ?? '');
+    const bTime = Date.parse(b.updated_at ?? b.created_at ?? '');
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
+};
+
+const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, normalizedQuery: string) => {
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (queryTokens.length === 0) return true;
+  const searchable = normalizeOdaraSearchQuery([
+    card.submitted_name,
+    card.submitted_brand,
+    card.submitted_concentration,
+    card.desired_status,
+    card.request_status,
+    'vesperizing limited intel source check pending',
+  ].filter(Boolean).join(' '));
+  return queryTokens.every((token) => searchable.includes(token));
+};
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired' | 'wishlist';
@@ -11392,6 +11634,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     loading: boolean;
     error: string | null;
   }>>({});
+  const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
+  const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
+  const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
 
   useEffect(() => {
     setWardrobeBrandFilter(null);
@@ -11435,6 +11680,34 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     setPayload(normalizeCollectionPayload((data ?? null) as OdaraCollectionPayload | null));
     setLoading(false);
+  }, [activeSessionUserId, sessionResolved]);
+
+  const loadProvisionalIntakeCards = useCallback(async () => {
+    if (!sessionResolved) return;
+
+    if (!activeSessionUserId) {
+      setProvisionalIntakeCards([]);
+      setProvisionalIntakeLoading(false);
+      setProvisionalIntakeError(null);
+      return;
+    }
+
+    setProvisionalIntakeLoading(true);
+    setProvisionalIntakeError(null);
+    const { data, error: intakeError } = await odaraSupabase.rpc('get_my_fragrance_intake_requests_v1' as any, {
+      p_include_resolved: true,
+      p_limit: 50,
+    } as any);
+
+    if (intakeError) {
+      setProvisionalIntakeCards([]);
+      setProvisionalIntakeError('Vesperizing requests could not load yet.');
+      setProvisionalIntakeLoading(false);
+      return;
+    }
+
+    setProvisionalIntakeCards(normalizeMissingFragranceIntakeRows(data));
+    setProvisionalIntakeLoading(false);
   }, [activeSessionUserId, sessionResolved]);
 
   const loadPersistedPreferences = useCallback(async () => {
@@ -11656,6 +11929,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   useEffect(() => {
     void loadCollection();
   }, [loadCollection]);
+
+  useEffect(() => {
+    void loadProvisionalIntakeCards();
+  }, [loadProvisionalIntakeCards]);
 
   useEffect(() => {
     let cancelled = false;
@@ -12159,6 +12436,40 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     });
   }, [normalizedWardrobeSearchQuery, visibleWardrobeCards]);
 
+  const visibleProvisionalIntakeCards = useMemo(() => {
+    let cards = [...provisionalIntakeCards];
+
+    if (wardrobeBrandFilter) {
+      const target = wardrobeBrandFilter.toLowerCase();
+      cards = cards.filter((card) => readTrimmedLayerText(card.submitted_brand).toLowerCase() === target);
+    }
+    if (wardrobeWishlistOnly) {
+      cards = cards.filter((card) => card.desired_status === 'wishlist');
+    }
+    if (wardrobeLikedOnly) {
+      cards = cards.filter((card) => card.desired_status === 'liked');
+    }
+    if (wardrobeRetiredOnly || wardrobeFavoriteOnly || wardrobeUnwornOnly || wardrobeFamilyFilter || wardrobeSeasonFilter) {
+      cards = [];
+    }
+    if (normalizedWardrobeSearchQuery) {
+      cards = cards.filter((card) => missingFragranceMatchesQuery(card, normalizedWardrobeSearchQuery));
+    }
+
+    return cards;
+  }, [
+    normalizedWardrobeSearchQuery,
+    provisionalIntakeCards,
+    wardrobeBrandFilter,
+    wardrobeFamilyFilter,
+    wardrobeFavoriteOnly,
+    wardrobeLikedOnly,
+    wardrobeRetiredOnly,
+    wardrobeSeasonFilter,
+    wardrobeUnwornOnly,
+    wardrobeWishlistOnly,
+  ]);
+
   const activeWardrobeFilterCount = [
     wardrobeSeasonFilter,
     wardrobeFamilyFilter,
@@ -12194,6 +12505,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     : null;
 
   const hasWardrobeSearchQuery = normalizedWardrobeSearchQuery.length > 0;
+  const hasVisibleWardrobeRows = filteredWardrobeCards.length > 0 || visibleProvisionalIntakeCards.length > 0;
 
   const hasAnyMeaningfulSignal = useMemo(
     () => Object.values(effectiveSignalMap).some((signal) => hasMeaningfulWardrobeSignal(signal)),
@@ -12265,6 +12577,18 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     return scored.slice(0, 48).map((entry) => entry.item);
   }, [catalog, deferredSearchQuery, selectedBrand]);
+
+  const searchProvisionalIntakeCards = useMemo(() => {
+    const normalizedQuery = normalizeOdaraSearchQuery(deferredSearchQuery);
+    if (!normalizedQuery) return [];
+    const selectedBrandKey = readTrimmedLayerText(selectedBrand).toLowerCase();
+    return provisionalIntakeCards
+      .filter((card) => missingFragranceMatchesQuery(card, normalizedQuery))
+      .filter((card) => {
+        if (!selectedBrandKey) return true;
+        return readTrimmedLayerText(card.submitted_brand).toLowerCase() === selectedBrandKey;
+      });
+  }, [deferredSearchQuery, provisionalIntakeCards, selectedBrand]);
 
   const openSearch = useCallback(() => {
     setOnboardingSeen(true);
@@ -12723,7 +13047,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             {catalogError}
           </div>
         </OdaraInsetGroup>
-      ) : searchResults.length === 0 ? (
+      ) : searchResults.length === 0 && searchProvisionalIntakeCards.length === 0 ? (
         <OdaraInsetGroup emphasis>
           <div className="px-4 py-6 text-center">
             <div
@@ -12739,7 +13063,31 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         </OdaraInsetGroup>
       ) : (
         <OdaraInsetGroup emphasis>
-          <div className="divide-y divide-white/[0.04]">
+          <div>
+            {searchProvisionalIntakeCards.length > 0 ? (
+              <div className="space-y-3 border-b border-white/[0.04] px-4 py-4">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
+                    Vesperizing
+                  </div>
+                  <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
+                    Pending source checks are limited-intel until Vesper finds verified scent data.
+                  </div>
+                </div>
+                {searchProvisionalIntakeCards.map((card) => (
+                  <OdaraMissingFragranceProvisionalCard
+                    key={`search-provisional-${card.request_id}`}
+                    card={card}
+                    compact
+                    onOpenCanonical={card.canonical_fragrance_id && catalogById.has(card.canonical_fragrance_id)
+                      ? (fragranceId) => openDetail(fragranceId)
+                      : undefined}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {searchResults.length > 0 ? (
+              <div className="divide-y divide-white/[0.04]">
             {searchResults.map((item) => (
               <div
                 key={item.fragrance_id}
@@ -12795,6 +13143,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 </button>
               </div>
             ))}
+              </div>
+            ) : null}
           </div>
         </OdaraInsetGroup>
       )}
@@ -13549,7 +13899,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </div>
         ) : null}
 
-        {filteredWardrobeCards.length === 0 ? (
+        {!hasVisibleWardrobeRows ? (
           <OdaraInsetGroup emphasis>
             <div className="px-5 py-10 text-center">
               <div
@@ -13601,6 +13951,41 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           </OdaraInsetGroup>
         ) : (
           <div className="flex flex-col gap-4 px-1 pb-6 pt-1">
+            {visibleProvisionalIntakeCards.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 px-1">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
+                      Vesperizing
+                    </div>
+                    <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
+                      Pending source checks stay separate from ranked collection scents.
+                    </div>
+                  </div>
+                  {provisionalIntakeLoading ? (
+                    <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-foreground/36">
+                      Syncing
+                    </span>
+                  ) : null}
+                </div>
+                <div className="grid gap-3">
+                  {visibleProvisionalIntakeCards.map((card) => (
+                    <OdaraMissingFragranceProvisionalCard
+                      key={`provisional-${card.request_id}`}
+                      card={card}
+                      onOpenCanonical={card.canonical_fragrance_id && catalogById.has(card.canonical_fragrance_id)
+                        ? (fragranceId) => openDetail(fragranceId, 'wardrobe')
+                        : undefined}
+                    />
+                  ))}
+                </div>
+                {provisionalIntakeError ? (
+                  <p className="px-1 text-[11px] leading-snug text-foreground/42">
+                    {provisionalIntakeError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {filteredWardrobeCards.map((card) => {
               const cardVisual = getOdaraGlassCardVisualRecipe(getCollectionTileTint(card), 'collection');
               const tint = getEnhancedCollectionTint(card);
@@ -14042,6 +14427,9 @@ const OdaraScreen = ({
   const [missingIntakeSubmitting, setMissingIntakeSubmitting] = useState(false);
   const [missingIntakeError, setMissingIntakeError] = useState<string | null>(null);
   const [missingIntakeSuccess, setMissingIntakeSuccess] = useState<string | null>(null);
+  const [missingIntakeCards, setMissingIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
+  const [missingIntakeCardsLoading, setMissingIntakeCardsLoading] = useState(false);
+  const [missingIntakeCardsError, setMissingIntakeCardsError] = useState<string | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
@@ -14115,6 +14503,42 @@ const OdaraScreen = ({
     setMissingIntakeError(null);
     setMissingIntakeSuccess(null);
   }, []);
+
+  const loadMissingIntakeCards = useCallback(async () => {
+    if (isGuestMode || !userId) {
+      setMissingIntakeCards([]);
+      setMissingIntakeCardsLoading(false);
+      setMissingIntakeCardsError(null);
+      return;
+    }
+
+    setMissingIntakeCardsLoading(true);
+    setMissingIntakeCardsError(null);
+    const { data, error } = await odaraSupabase.rpc('get_my_fragrance_intake_requests_v1' as any, {
+      p_include_resolved: true,
+      p_limit: 50,
+    } as any);
+
+    if (error) {
+      setMissingIntakeCards([]);
+      setMissingIntakeCardsError('Vesperizing requests could not load yet.');
+      setMissingIntakeCardsLoading(false);
+      return;
+    }
+
+    setMissingIntakeCards(normalizeMissingFragranceIntakeRows(data));
+    setMissingIntakeCardsLoading(false);
+  }, [isGuestMode, userId]);
+
+  useEffect(() => {
+    void loadMissingIntakeCards();
+  }, [loadMissingIntakeCards]);
+
+  useEffect(() => {
+    if (!searchOpen || isGuestMode || !userId) return;
+    void loadMissingIntakeCards();
+  }, [isGuestMode, loadMissingIntakeCards, searchOpen, userId]);
+
   const normalizedSelectedContextKey = useMemo(
     () => normalizePersistedContextKey(selectedContext),
     [selectedContext],
@@ -19559,6 +19983,10 @@ const OdaraScreen = ({
     && !searchLoading
     && !searchError
     && !searchHasExactFragranceMatch;
+  const visibleMissingIntakeCards = useMemo(() => {
+    if (!searchHasQuery) return [];
+    return missingIntakeCards.filter((card) => missingFragranceMatchesQuery(card, normalizedActiveSearchQuery));
+  }, [missingIntakeCards, normalizedActiveSearchQuery, searchHasQuery]);
 
   useEffect(() => {
     if (missingIntakeOpen || !searchHasQuery) return;
@@ -19612,9 +20040,10 @@ const OdaraScreen = ({
       if (error) throw error;
 
       const duplicateActiveRequest = Boolean((data as any)?.duplicate_active_request);
+      await loadMissingIntakeCards();
       setMissingIntakeSuccess(duplicateActiveRequest
         ? 'Vesper already has this request queued. Verified scent data stays pending.'
-        : 'Vesper will look for verified scent data.');
+        : 'Vesper is checking source-backed scent data.');
       setMissingIntakeError(null);
       haptic('success');
     } catch (error: any) {
@@ -19622,7 +20051,7 @@ const OdaraScreen = ({
     } finally {
       setMissingIntakeSubmitting(false);
     }
-  }, [isGuestMode, missingIntakeForm, userId]);
+  }, [isGuestMode, loadMissingIntakeCards, missingIntakeForm, userId]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -20107,15 +20536,49 @@ const OdaraScreen = ({
                       );
                     })}
                   </div>
-                ) : (
+                ) : visibleMissingIntakeCards.length === 0 ? (
                   <p className="text-[12.5px] text-foreground/52">
                     Nothing found yet. Try the exact fragrance name or ask Vesper to find it.
                   </p>
-                )}
+                ) : null}
+
+                {visibleMissingIntakeCards.length > 0 ? (
+                  <div className={searchResults.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-1'}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]/76">
+                          Vesperizing
+                        </div>
+                        <div className="mt-1 text-[11px] leading-snug text-foreground/44">
+                          Vesper will look for verified scent data. You do not need to enter notes or accords.
+                        </div>
+                      </div>
+                      {missingIntakeCardsLoading ? (
+                        <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-foreground/34">
+                          Syncing
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-2.5">
+                      {visibleMissingIntakeCards.map((card) => (
+                        <OdaraMissingFragranceProvisionalCard
+                          key={`global-search-provisional-${card.request_id}`}
+                          card={card}
+                          compact
+                        />
+                      ))}
+                    </div>
+                    {missingIntakeCardsError ? (
+                      <p className="mt-2 text-[11px] leading-snug text-foreground/40">
+                        {missingIntakeCardsError}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {showMissingFragranceIntakeCta ? (
                   <div
-                    className={searchResults.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-3'}
+                    className={searchResults.length > 0 || visibleMissingIntakeCards.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-3'}
                   >
                     {!missingIntakeOpen ? (
                       <button
