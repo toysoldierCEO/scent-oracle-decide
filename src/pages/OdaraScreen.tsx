@@ -11608,6 +11608,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     isGuestMode: false,
     scope: 'collection',
   });
+  const isGuestMode = false;
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
