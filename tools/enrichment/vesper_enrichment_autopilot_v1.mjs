@@ -241,6 +241,7 @@ const NON_NOTE_SHOPIFY_TAGS = new Set([
   "clearance",
   "cologne",
   "citrus",
+  "citruses",
   "eau de parfum",
   "eau de toilette",
   "edp",
@@ -251,9 +252,13 @@ const NON_NOTE_SHOPIFY_TAGS = new Set([
   "fragrances",
   "fresh",
   "fresh spicy",
+  "fresh spices",
   "fruity",
   "gift card",
+  "green",
   "herbal",
+  "iris pink pepper",
+  "marine",
   "men",
   "mens",
   "musky",
@@ -270,10 +275,13 @@ const NON_NOTE_SHOPIFY_TAGS = new Set([
   "travel spray",
   "pinch of royalty",
   "tygar",
+  "added pheromones",
   "unisex",
   "warm spicy",
   "women",
   "womens",
+  "woods",
+  "woodsy",
   "woody",
 ]);
 
@@ -283,6 +291,7 @@ const INSPIRATION_BRAND_TAGS = new Set([
   "bond no 9",
   "byredo",
   "chanel",
+  "christian dior",
   "clive christian",
   "creed",
   "dior",
@@ -302,8 +311,13 @@ const INSPIRATION_BRAND_TAGS = new Set([
   "parfums de marly",
   "pdm",
   "roja",
+  "roja dove",
+  "roja parfums",
   "tom ford",
   "tiziana terenzi",
+  "nasomatto",
+  "viktor rolf",
+  "viktor and rolf",
   "xerjoff",
   "ysl",
   "yves saint laurent",
@@ -446,6 +460,8 @@ const maxRegistryPayloads = Math.min(
   positiveInt(argv["max-registry-payloads"], DEFAULT_MAX_REGISTRY_PAYLOADS),
   DEFAULT_MAX_REGISTRY_PAYLOADS,
 );
+const targetFile = argv["target-file"] ?? null;
+const targetLimit = positiveInt(argv["target-limit"], maxTargets);
 const allowOfficialFetch = argv["allow-official-fetch"] !== "false";
 const providerMode = argv["provider-mode"] ?? "detect-env";
 const brandAllowlist = parseAllowlist(argv["brand-allowlist"]);
@@ -460,7 +476,8 @@ async function main() {
   const projectRef = readProjectRef();
   const linkedProject = readLinkedProjectRef();
   const catalogRows = queryCatalogRows();
-  const selectedTargets = selectTargets(catalogRows);
+  const targetSpec = loadTargetSpec(targetFile, targetLimit);
+  const selectedTargets = selectTargets(catalogRows, targetSpec);
   const providerConfigured = hasProviderKey();
 
   const registryRows = [];
@@ -484,7 +501,7 @@ async function main() {
     const reviewRow = buildReviewRow(target, officialFinding, providerFinding, generatedAt);
     if (reviewRow.helper_payload && registryRows.length < maxRegistryPayloads) {
       registryRows.push(reviewRow);
-    } else if (reviewRow.safety_bucket === "RED_blocked") {
+    } else if (reviewRow.review_envelope?.safety_bucket === "RED_blocked") {
       blockedRows.push(reviewRow);
     } else {
       needsReviewRows.push(reviewRow);
@@ -503,6 +520,9 @@ async function main() {
     project_ref_from_local_metadata: projectRef,
     linked_project_ref_from_local_json: linkedProject,
     max_targets: maxTargets,
+    target_file: targetFile,
+    target_limit: targetSpec?.limit ?? null,
+    target_source_count: targetSpec?.orderedIds.length ?? null,
     max_registry_payloads: maxRegistryPayloads,
     selected_target_count: selectedTargets.length,
     registry_payload_count: registryRows.length,
@@ -544,6 +564,7 @@ async function main() {
     projectRef,
     linkedProject,
     selectedTargets,
+    targetSpec,
     registryRows,
     providerRows,
     needsReviewRows,
@@ -597,6 +618,50 @@ function prefixForBatchLabel(label) {
 function positiveInt(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function loadTargetSpec(path, limit) {
+  if (!path) return null;
+  if (!existsSync(path)) {
+    throw new Error(`target file does not exist: ${path}`);
+  }
+  const packet = JSON.parse(readFileSync(path, "utf8"));
+  const rows = Array.isArray(packet)
+    ? packet
+    : Array.isArray(packet.top_50_priority_targets)
+      ? packet.top_50_priority_targets
+      : Array.isArray(packet.targets)
+        ? packet.targets
+        : Array.isArray(packet.rows)
+          ? packet.rows
+          : [];
+  const orderedIds = [];
+  const byId = new Map();
+  for (const row of rows) {
+    const id = typeof row?.fragrance_id === "string" ? row.fragrance_id.trim() : "";
+    if (!id || byId.has(id)) continue;
+    orderedIds.push(id);
+    byId.set(id, {
+      priority_name: row.name ?? null,
+      priority_brand: row.brand ?? null,
+      coverage_score: row.coverage_score ?? null,
+      score_band: row.score_band ?? null,
+      bucket_flags: row.bucket_flags ?? null,
+      missing_critical_fields: Array.isArray(row.missing_critical_fields) ? row.missing_critical_fields : [],
+      recommended_next_action: row.recommended_next_action ?? null,
+    });
+    if (orderedIds.length >= limit) break;
+  }
+  if (orderedIds.length === 0) {
+    throw new Error(`target file did not contain fragrance_id values: ${path}`);
+  }
+  return {
+    path,
+    limit,
+    orderedIds,
+    idSet: new Set(orderedIds),
+    byId,
+  };
 }
 
 function parseAllowlist(value) {
@@ -819,15 +884,15 @@ function parseCliJson(output) {
   return JSON.parse(jsonText);
 }
 
-function selectTargets(rows) {
+function selectTargets(rows, targetSpec = null) {
   const brandCounts = new Map();
   for (const row of rows) {
     const key = normText(row.brand);
     brandCounts.set(key, (brandCounts.get(key) ?? 0) + 1);
   }
 
-  return rows
-    .filter((row) => !row.active_registry_evidence)
+  const rankedRows = rows
+    .filter((row) => (targetSpec ? targetSpec.idSet.has(row.id) : !row.active_registry_evidence))
     .filter((row) => !brandAllowlist || brandAllowlist.has(normText(row.brand)))
     .map((row) => {
       const noteCount = arr(row.notes).length;
@@ -847,6 +912,7 @@ function selectTargets(rows) {
       const cleanIdentityScore = duplicateRisk === "none" ? 5 : -10;
       return {
         ...row,
+        priority_target: targetSpec?.byId.get(row.id) ?? null,
         note_count: noteCount,
         top_count: topCount,
         heart_count: heartCount,
@@ -864,7 +930,17 @@ function selectTargets(rows) {
           officialSourceAvailableScore +
           cleanIdentityScore,
       };
-    })
+    });
+
+  if (targetSpec) {
+    const byId = new Map(rankedRows.map((row) => [row.id, row]));
+    return targetSpec.orderedIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .slice(0, Math.min(maxTargets, targetSpec.limit));
+  }
+
+  return rankedRows
     .sort((a, b) => b.rank_score - a.rank_score || a.name.localeCompare(b.name))
     .slice(0, maxTargets);
 }
@@ -904,6 +980,67 @@ async function inspectOfficialSource(target) {
   const currentUrl = safeUrl(target.source_url);
   const officialDomainMatch = currentUrl && domainMatchesOfficial(target.brand, currentUrl);
   if (!currentUrl || !officialDomainMatch) {
+    const discoveredCandidates = officialSourceCandidateUrls(target, currentUrl);
+    if (allowOfficialFetch && discoveredCandidates.length) {
+      const failedCandidates = [];
+      for (const candidateUrl of discoveredCandidates) {
+        const finding = await fetchOfficialFinding(target, candidateUrl);
+        if (finding.direct_source_verification_status === "direct_product_page_verified") {
+          return {
+            ...finding,
+            extraction_warnings: [
+              "official_source_url_discovered_from_target_name_slug",
+              ...arr(finding.extraction_warnings),
+            ],
+            evidence_payload: {
+              ...(finding.evidence_payload ?? {}),
+              official_source_discovery: {
+                method: "target_name_to_official_product_slug",
+                accepted_url: candidateUrl,
+                attempted_urls: discoveredCandidates,
+              },
+            },
+            reason: `${finding.reason} Official source URL was discovered from the prioritized target list and exact product-page identity was verified.`,
+          };
+        }
+        failedCandidates.push({
+          source_url: candidateUrl,
+          status: finding.direct_source_verification_status,
+          evidence_type: finding.source_evidence_type,
+        });
+      }
+      return {
+        source_url: currentUrl,
+        source_evidence_type: currentUrl ? "ambiguous" : "missing_official_source",
+        direct_source_verification_status: "official_source_discovery_failed",
+        extraction_method: "official_source_candidate_discovery",
+        extraction_quality: "low",
+        extraction_confidence: 0,
+        extraction_warnings: [
+          currentUrl
+            ? "current source URL is not on a recognized official brand domain"
+            : "no current source URL available for direct official verification",
+          "official product URL candidates did not prove exact identity",
+        ],
+        clone_vs_inspiration_risk: "unknown",
+        official_notes: [],
+        official_top_notes: [],
+        official_heart_notes: [],
+        official_base_notes: [],
+        evidence_payload: {
+          official_source_discovery: {
+            method: "target_name_to_official_product_slug",
+            attempted_urls: discoveredCandidates,
+            failed_candidates: failedCandidates,
+          },
+        },
+        source_confidence: 0.5,
+        source_verification_summary:
+          "Official source URL candidates were attempted, but no exact official brand product page was verified.",
+        reason:
+          "No active official source evidence was generated. This row needs source discovery before registry capture.",
+      };
+    }
     return {
       source_url: currentUrl,
       source_evidence_type: currentUrl ? "ambiguous" : "missing_official_source",
@@ -953,8 +1090,47 @@ async function inspectOfficialSource(target) {
     };
   }
 
+  return fetchOfficialFinding(target, currentUrl);
+}
+
+function officialSourceCandidateUrls(target, currentUrl = null) {
+  if (!target || !domainKnownForOfficialDiscovery(target.brand)) return [];
+  const urls = [];
+  if (currentUrl && domainMatchesOfficial(target.brand, currentUrl)) {
+    urls.push(currentUrl);
+  }
+  for (const slug of officialProductSlugCandidates(target.name)) {
+    urls.push(`https://alexandriafragrances.com/products/${slug}`);
+  }
+  return [...new Set(urls.map((url) => safeUrl(url)).filter(Boolean))].slice(0, 4);
+}
+
+function domainKnownForOfficialDiscovery(brand) {
+  const normalized = normText(brand);
+  return normalized === "alexandria fragrances" || normalized === "alexandria";
+}
+
+function officialProductSlugCandidates(name) {
+  const normalized = String(name ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[’'`]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+  const candidates = new Set();
+  if (normalized) candidates.add(normalized);
+  if (normalized.startsWith("the-")) candidates.add(normalized.slice(4));
+  if (normalized.endsWith("-perfume-oil")) candidates.add(normalized.replace(/-perfume-oil$/, ""));
+  if (normalized.includes("-x")) candidates.add(normalized.replace(/-x\b/g, "x"));
+  return [...candidates].filter(Boolean);
+}
+
+async function fetchOfficialFinding(target, sourceUrl) {
   try {
-    const response = await fetch(currentUrl, {
+    const response = await fetch(sourceUrl, {
       headers: {
         "user-agent": `${VERSION}/1.0 review-packet-generator`,
         accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -963,14 +1139,14 @@ async function inspectOfficialSource(target) {
     });
     if (!response.ok) {
       return {
-        source_url: currentUrl,
+        source_url: sourceUrl,
         source_evidence_type: "ambiguous",
         direct_source_verification_status: `http_${response.status}`,
         extraction_method: "official_fetch_http_error",
         extraction_quality: "low",
         extraction_confidence: 0,
         extraction_warnings: [`official URL returned HTTP ${response.status}`],
-        clone_vs_inspiration_risk: cloneRiskFor(target, currentUrl, "", "", null).status,
+        clone_vs_inspiration_risk: cloneRiskFor(target, sourceUrl, "", "", null).status,
         official_notes: [],
         official_top_notes: [],
         official_heart_notes: [],
@@ -983,17 +1159,17 @@ async function inspectOfficialSource(target) {
       };
     }
     const html = await response.text();
-    return classifyOfficialPage(target, currentUrl, html);
+    return classifyOfficialPage(target, sourceUrl, html);
   } catch (error) {
     return {
-      source_url: currentUrl,
+      source_url: sourceUrl,
       source_evidence_type: "ambiguous",
       direct_source_verification_status: "fetch_error",
       extraction_method: "official_fetch_error",
       extraction_quality: "low",
       extraction_confidence: 0,
       extraction_warnings: ["official-domain URL fetch failed"],
-      clone_vs_inspiration_risk: cloneRiskFor(target, currentUrl, "", "", null).status,
+      clone_vs_inspiration_risk: cloneRiskFor(target, sourceUrl, "", "", null).status,
       official_notes: [],
       official_top_notes: [],
       official_heart_notes: [],
@@ -1479,6 +1655,7 @@ function buildReviewRow(target, officialFinding, providerFinding, generatedAt) {
   const concentrationAmbiguity = target.concentration_ambiguity_guess;
   const identityMatchStatus = identityStatusFor(target, officialFinding, duplicateRisk, concentrationAmbiguity);
   const safetyBucket = safetyBucketFor(officialFinding, identityMatchStatus, duplicateRisk, concentrationAmbiguity);
+  const activeRegistryEvidence = target.active_registry_evidence === true;
   const lane = recommendedLaneFor(target, officialFinding, comparisonStatus, safetyBucket);
   const action = recommendedActionFor(target, officialFinding, comparisonStatus, safetyBucket);
   const helper = recommendedHelperFor(lane);
@@ -1491,6 +1668,7 @@ function buildReviewRow(target, officialFinding, providerFinding, generatedAt) {
       safety_bucket: safetyBucket,
       registry_safe_capture: Boolean(
         officialFinding.source_url &&
+          !activeRegistryEvidence &&
           ACCEPTED_REGISTRY_EVIDENCE_TYPES.has(officialFinding.source_evidence_type) &&
           ["GREEN_registry_safe_capture", "PURPLE_helper_review_candidate_later"].includes(safetyBucket),
       ),
@@ -1515,7 +1693,7 @@ function buildReviewRow(target, officialFinding, providerFinding, generatedAt) {
       family_key: target.family_key,
     },
     candidate_view_guard_result: {
-      active_registry_evidence: false,
+      active_registry_evidence: activeRegistryEvidence,
       source: "public.fragrance_official_source_registry_candidate_view_v1.active_capture_guard",
     },
     current_public_fragrances_snapshot: {
@@ -1578,6 +1756,7 @@ function buildReviewRow(target, officialFinding, providerFinding, generatedAt) {
 
   if (
     officialFinding.source_url &&
+    !activeRegistryEvidence &&
     ACCEPTED_REGISTRY_EVIDENCE_TYPES.has(officialFinding.source_evidence_type) &&
     ["GREEN_registry_safe_capture", "PURPLE_helper_review_candidate_later"].includes(safetyBucket)
   ) {
@@ -2254,6 +2433,9 @@ function classifyAlexandriaProductTag(tag) {
   }
   if (INSPIRATION_BRAND_TAGS.has(normalized)) {
     return { accept: false, reason: "inspiration_brand_tag" };
+  }
+  if (/[&–—]/.test(raw)) {
+    return { accept: false, reason: "joined_or_prose_tag" };
   }
   if (/\b(inspired|type|dupe|clone|alternative)\b/i.test(raw)) {
     return { accept: false, reason: "inspiration_context_tag" };

@@ -136,6 +136,8 @@ function runGeneration(state) {
   passThroughArg(commandArgs, "allow-official-fetch");
   passThroughArg(commandArgs, "provider-mode");
   passThroughArg(commandArgs, "brand-allowlist");
+  passThroughArg(commandArgs, "target-file");
+  passThroughArg(commandArgs, "target-limit");
 
   const result = runCommand(state, "node", commandArgs, "generate autopilot packet");
   if (result.status !== 0) {
