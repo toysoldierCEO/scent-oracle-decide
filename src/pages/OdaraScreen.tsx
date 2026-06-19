@@ -4475,6 +4475,12 @@ const getMissingFragranceStatusLabel = (status: MissingFragranceRequestStatus, c
   return 'Vesperizing';
 };
 
+const isResolvedMissingFragranceCard = (card: MissingFragranceProvisionalCard) => (
+  Boolean(card.canonical_fragrance_id)
+    || card.request_status === 'matched_existing'
+    || card.request_status === 'canonical_created'
+);
+
 const shouldShowMissingFragranceProvisionalCard = (card: MissingFragranceProvisionalCard) => (
   card.request_status !== 'rejected'
 );
@@ -6681,10 +6687,14 @@ function buildGeneratedFragranceDescription(source: {
   density_score?: number | null | undefined;
 }) {
   const highlights = buildFragranceDescriptionHighlights(source);
+  const familyLabel = source.family_label ?? (source.family_key ? getFamilyLabelText(source.family_key) : null);
+  if (highlights.length === 0 && !familyLabel) {
+    return 'Source-backed scent profile is still being completed.';
+  }
   const texture = buildFragranceTexturePhrase(source);
   const lead = highlights.length > 0
     ? joinFragrancePhrases(highlights)
-    : (source.family_label ?? (source.family_key ? getFamilyLabelText(source.family_key) : 'the scent profile')).toLowerCase();
+    : familyLabel.toLowerCase();
 
   const longTexture = texture ? ` with ${texture}` : '';
   let sentence = `${toSentenceCase(lead)}${longTexture}.`;
@@ -6751,10 +6761,16 @@ function buildVesperizedDetailDescription(source: {
 
 function getVesperDetailIntelligenceNotice(detail: Pick<
   OdaraFragranceDetailSurfaceState,
-  'detail_loading' | 'vesper_intelligence'
+  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_url'
 >): string | null {
   const intelligence = detail.vesper_intelligence ?? null;
   if (detail.detail_loading && !intelligence) {
+    const hasSourceBackedProfile = sanitizeTokenSource(detail.notes).length > 0
+      || sanitizeTokenSource(detail.top_notes).length > 0
+      || sanitizeTokenSource(detail.middle_notes).length > 0
+      || sanitizeTokenSource(detail.base_notes).length > 0
+      || Boolean(normalizeDetailText(detail.source_url));
+    if (hasSourceBackedProfile) return null;
     return 'Vesperizing scent intelligence...';
   }
   if (!intelligence?.usable_for_vesper_intelligence) return null;
@@ -6871,12 +6887,6 @@ type FragrancePerformanceBarDescriptor = {
   source: FragrancePerformanceSource;
 };
 
-const ODARA_DETAIL_PERFORMANCE_ROWS = [
-  { key: 'longevity', label: 'Longevity' },
-  { key: 'projection', label: 'Projection' },
-  { key: 'trail', label: 'Trail' },
-] as const;
-
 function formatFragrancePerformanceStrength(score: number) {
   if (score <= 0.3) return 'Soft';
   if (score <= 0.55) return 'Moderate';
@@ -6987,32 +6997,18 @@ const OdaraPerformanceLifeBar: React.FC<{
   );
 };
 
-const OdaraPerformanceEmptyLifeBar: React.FC<{
-  label: string;
-  tint: { frame: string; glowStrong: string };
-}> = ({ label, tint }) => (
-  <div>
-    <div className="flex items-center justify-between gap-3 text-[12px] text-foreground/70">
-      <span>{label}</span>
-      <span className="text-foreground/42">—</span>
-    </div>
-    <div
-      className="relative mt-2 h-[14px] overflow-hidden rounded-full border"
-      aria-label={`${label} unavailable`}
-      role="img"
-      style={{
-        borderColor: 'rgba(255,255,255,0.08)',
-        background: 'linear-gradient(180deg, rgba(7,10,16,0.78) 0%, rgba(2,6,12,0.88) 100%)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -8px 18px rgba(0,0,0,0.22)',
-      }}
-    >
-      <span
-        className="pointer-events-none absolute inset-x-[8%] top-[2px] h-[3px] rounded-full"
-        style={{
-          background: `linear-gradient(90deg, rgba(80,248,245,0.08) 0%, ${tint.frame} 54%, rgba(91,168,255,0.08) 100%)`,
-          boxShadow: `0 0 8px ${tint.glowStrong}`,
-        }}
-      />
+const OdaraPerformancePendingPanel: React.FC = () => (
+  <div
+    className="rounded-[16px] px-4 py-3 text-[12px] leading-[1.5] text-foreground/56"
+    style={{
+      border: '1px solid rgba(255,255,255,0.075)',
+      background: 'rgba(255,255,255,0.028)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+    }}
+  >
+    <div className="font-medium text-foreground/72">Performance intel pending</div>
+    <div className="mt-1 text-foreground/46">
+      Longevity, projection, and trail will stay blank until Vesper has trusted wear data.
     </div>
   </div>
 );
@@ -10402,11 +10398,6 @@ const OdaraFragranceDetailSheet: React.FC<{
   );
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
-  const detailPerformanceByKey = new Map(detailPerformanceBars.map((metric) => [metric.key, metric]));
-  const detailPerformanceRows = ODARA_DETAIL_PERFORMANCE_ROWS.map((row) => ({
-    ...row,
-    metric: detailPerformanceByKey.get(row.key) ?? null,
-  }));
   const topIdentityChips = (() => {
     const chips: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -10420,6 +10411,32 @@ const OdaraFragranceDetailSheet: React.FC<{
     };
 
     pushChip(familyLabel, 'family');
+    pushChip(isKnownDetailConcentration(resolvedDetail.concentration) ? resolvedDetail.concentration : null, 'concentration');
+    if (resolvedDetail.family_key === 'fresh-blue') {
+      pushChip('Fresh Aquatic', 'style');
+    }
+    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_url)) {
+      pushChip('Official pyramid', 'source');
+    }
+
+    const identityNoteLabels = [...topLabels, ...middleLabels, ...baseLabels];
+    const preferredIdentityPatterns = [
+      /coastal moss/i,
+      /lemon/i,
+      /sage/i,
+      /cedarwood/i,
+      /musk/i,
+      /geranium/i,
+    ];
+    for (const pattern of preferredIdentityPatterns) {
+      const match = identityNoteLabels.find((label) => pattern.test(label));
+      pushChip(match, 'note');
+    }
+    for (const label of identityNoteLabels) {
+      if (chips.length >= 8) break;
+      pushChip(label, 'note');
+    }
+
     const availableAccords = accordLabels.filter((accord) => accord.trim().toLowerCase() !== familyLabel?.trim().toLowerCase());
     const priorityPatterns = [
       /\bleather|leathery\b/i,
@@ -10438,7 +10455,7 @@ const OdaraFragranceDetailSheet: React.FC<{
       ?? availableAccords[0]
       ?? null;
     pushChip(preferredAccord, 'accord');
-    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 4);
+    return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 8);
   })();
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
@@ -10576,13 +10593,13 @@ const OdaraFragranceDetailSheet: React.FC<{
           <section>
             <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
             <div className="space-y-4">
-              {detailPerformanceRows.map((row) => (
-                row.metric ? (
-                  <OdaraPerformanceLifeBar key={row.key} metric={row.metric} tint={tint} />
-                ) : (
-                  <OdaraPerformanceEmptyLifeBar key={row.key} label={row.label} tint={tint} />
-                )
-              ))}
+              {detailPerformanceBars.length > 0 ? (
+                detailPerformanceBars.map((metric) => (
+                  <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
+                ))
+              ) : (
+                <OdaraPerformancePendingPanel />
+              )}
             </div>
           </section>
 
@@ -11637,6 +11654,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
   const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
   const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
+  const matchedWishlistHandoffRequestIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setWardrobeBrandFilter(null);
@@ -12456,8 +12474,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       cards = cards.filter((card) => missingFragranceMatchesQuery(card, normalizedWardrobeSearchQuery));
     }
 
-    return cards;
+    return cards.filter((card) => {
+      if (!isResolvedMissingFragranceCard(card) || !card.canonical_fragrance_id) return true;
+      const signal = effectiveSignalMap[card.canonical_fragrance_id] ?? null;
+      return !signal || !hasMeaningfulWardrobeSignal(signal);
+    });
   }, [
+    effectiveSignalMap,
     normalizedWardrobeSearchQuery,
     provisionalIntakeCards,
     wardrobeBrandFilter,
@@ -12587,8 +12610,12 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       .filter((card) => {
         if (!selectedBrandKey) return true;
         return readTrimmedLayerText(card.submitted_brand).toLowerCase() === selectedBrandKey;
+      })
+      .filter((card) => {
+        if (!isResolvedMissingFragranceCard(card) || !card.canonical_fragrance_id) return true;
+        return !catalogById.has(card.canonical_fragrance_id);
       });
-  }, [deferredSearchQuery, provisionalIntakeCards, selectedBrand]);
+  }, [catalogById, deferredSearchQuery, provisionalIntakeCards, selectedBrand]);
 
   const openSearch = useCallback(() => {
     setOnboardingSeen(true);
@@ -12663,6 +12690,71 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       };
     });
   }, [effectiveSignalMap]);
+
+  useEffect(() => {
+    if (!sessionResolved || isGuestMode || !activeSessionUserId) return;
+
+    for (const card of provisionalIntakeCards) {
+      if (card.desired_status !== 'wishlist') continue;
+      if (!isResolvedMissingFragranceCard(card) || !card.canonical_fragrance_id) continue;
+      if (matchedWishlistHandoffRequestIdsRef.current.has(card.request_id)) continue;
+
+      const catalogItem = catalogById.get(card.canonical_fragrance_id);
+      if (!catalogItem) continue;
+
+      const currentSignal = effectiveSignalMap[card.canonical_fragrance_id] ?? null;
+      if (currentSignal?.owned || currentSignal?.wishlist_persisted) continue;
+
+      matchedWishlistHandoffRequestIdsRef.current.add(card.request_id);
+      void (async () => {
+        try {
+          const { data, error: rpcError } = await odaraSupabase.rpc('set_user_collection_wishlist_v1' as any, {
+            p_fragrance_id: card.canonical_fragrance_id,
+            p_next_active: true,
+            p_source: 'search',
+          } as any);
+
+          if (rpcError) throw rpcError;
+
+          const wishlistActive = Boolean((data as any)?.wishlist_active);
+          if (wishlistActive) {
+            upsertSessionSignal(catalogItem, (current) => ({
+              ...current,
+              wishlist: true,
+              wishlist_persisted: true,
+              negative_state: 0,
+              negative_persisted: false,
+              updated_at: Date.now(),
+            }));
+          }
+
+          const refreshResults = await Promise.allSettled([
+            loadCollection(),
+            loadPersistedWishlists(),
+            loadProvisionalIntakeCards(),
+          ]);
+          for (const result of refreshResults) {
+            if (result.status === 'rejected') {
+              console.error('[Odara] matched intake wishlist refresh failed', result.reason);
+            }
+          }
+        } catch (handoffError) {
+          console.error('[Odara] matched intake wishlist handoff failed', handoffError);
+        }
+      })();
+    }
+  }, [
+    activeSessionUserId,
+    catalogById,
+    effectiveSignalMap,
+    isGuestMode,
+    loadCollection,
+    loadPersistedWishlists,
+    loadProvisionalIntakeCards,
+    provisionalIntakeCards,
+    sessionResolved,
+    upsertSessionSignal,
+  ]);
 
   const handleOwn = useCallback(async () => {
     if (!selectedCatalogItem || !activeSessionUserId || selectedOwned) return;
