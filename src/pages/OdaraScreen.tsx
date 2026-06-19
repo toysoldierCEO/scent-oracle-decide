@@ -6761,7 +6761,7 @@ function buildVesperizedDetailDescription(source: {
 
 function getVesperDetailIntelligenceNotice(detail: Pick<
   OdaraFragranceDetailSurfaceState,
-  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_url'
+  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_page_url'
 >): string | null {
   const intelligence = detail.vesper_intelligence ?? null;
   if (detail.detail_loading && !intelligence) {
