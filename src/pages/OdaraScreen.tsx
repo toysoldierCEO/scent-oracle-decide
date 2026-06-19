@@ -6769,7 +6769,7 @@ function getVesperDetailIntelligenceNotice(detail: Pick<
       || sanitizeTokenSource(detail.top_notes).length > 0
       || sanitizeTokenSource(detail.middle_notes).length > 0
       || sanitizeTokenSource(detail.base_notes).length > 0
-      || Boolean(normalizeDetailText(detail.source_url));
+      || Boolean(normalizeDetailText(detail.source_page_url));
     if (hasSourceBackedProfile) return null;
     return 'Vesperizing scent intelligence...';
   }
