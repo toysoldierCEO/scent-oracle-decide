@@ -10415,7 +10415,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     if (resolvedDetail.family_key === 'fresh-blue') {
       pushChip('Fresh Aquatic', 'style');
     }
-    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_url)) {
+    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_page_url)) {
       pushChip('Official pyramid', 'source');
     }
 
