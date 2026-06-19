@@ -6761,7 +6761,7 @@ function buildVesperizedDetailDescription(source: {
 
 function getVesperDetailIntelligenceNotice(detail: Pick<
   OdaraFragranceDetailSurfaceState,
-  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_url'
+  'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_page_url'
 >): string | null {
   const intelligence = detail.vesper_intelligence ?? null;
   if (detail.detail_loading && !intelligence) {
@@ -6769,7 +6769,7 @@ function getVesperDetailIntelligenceNotice(detail: Pick<
       || sanitizeTokenSource(detail.top_notes).length > 0
       || sanitizeTokenSource(detail.middle_notes).length > 0
       || sanitizeTokenSource(detail.base_notes).length > 0
-      || Boolean(normalizeDetailText(detail.source_url));
+      || Boolean(normalizeDetailText(detail.source_page_url));
     if (hasSourceBackedProfile) return null;
     return 'Vesperizing scent intelligence...';
   }
@@ -10415,7 +10415,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     if (resolvedDetail.family_key === 'fresh-blue') {
       pushChip('Fresh Aquatic', 'style');
     }
-    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_url)) {
+    if (hasStructuredNoteSections && normalizeDetailText(resolvedDetail.source_page_url)) {
       pushChip('Official pyramid', 'source');
     }
 
@@ -11608,6 +11608,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     isGuestMode: false,
     scope: 'collection',
   });
+  const isGuestMode = false;
   const [payload, setPayload] = useState<OdaraCollectionPayload | null>(null);
   const [persistedPreferencesById, setPersistedPreferencesById] = useState<Record<string, OdaraPersistedWardrobePreference>>({});
   const [persistedWishlistsById, setPersistedWishlistsById] = useState<Record<string, OdaraPersistedWardrobeWishlistSignal>>({});
