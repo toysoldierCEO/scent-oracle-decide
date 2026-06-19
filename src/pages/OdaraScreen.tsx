@@ -6472,15 +6472,73 @@ const NOTE_TIMELINE_ALIASES: Record<string, string> = {
   musc: 'musk',
 };
 
+const SOURCE_BACKED_NOTE_LABELS: Record<string, string> = {
+  'lemon italy': 'Italian Lemon',
+  'sage france': 'French Sage',
+  'geranium egypt': 'Egyptian Geranium',
+  'cedarwood virginia usa': 'Virginia Cedarwood',
+  whitemusk: 'White Musk',
+  'white musk': 'White Musk',
+  'australian coastal moss': 'Australian Coastal Moss',
+};
+
 function isDerivedDescriptionSource(value: string | null | undefined) {
   const normalized = normalizeDetailText(value);
   return normalized ? DERIVED_DESCRIPTION_SOURCES.has(normalized) : false;
 }
 
-function formatTimelineNoteLabel(value: string) {
-  const normalized = value.trim().toLowerCase();
+function toDisplayTitleCase(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (match) => match.toUpperCase());
+}
+
+function getSourceBackedNoteKey(value: string | null | undefined) {
+  return normalizeDetailText(value)
+    ?.toLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() ?? '';
+}
+
+function formatSourceBackedNoteLabel(value: string | null | undefined) {
+  const key = getSourceBackedNoteKey(value);
+  if (!key) return '';
+  return SOURCE_BACKED_NOTE_LABELS[key] ?? toDisplayTitleCase(key);
+}
+
+function formatSourceBackedNoteLabels(values: string[] | null | undefined, max = 8) {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const value of sanitizeTokenSource(values)) {
+    const label = formatSourceBackedNoteLabel(value);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    labels.push(label);
+    if (labels.length >= max) break;
+  }
+  return labels;
+}
+
+function formatSourceBackedNotePhrase(label: string, context: 'opening' | 'heart' | 'base') {
+  const normalized = label.trim();
+  const key = normalized.toLowerCase();
   if (!normalized) return '';
-  return NOTE_TIMELINE_ALIASES[normalized] ?? normalized;
+  if (context === 'opening' && key === 'australian coastal moss') return 'coastal moss';
+  if (context === 'heart' && key === 'french sage') return 'sage';
+  if (context === 'heart' && key === 'egyptian geranium') return 'geranium';
+  if (context === 'base' && key === 'white musk') return 'clean white musk';
+  return `${normalized.charAt(0).toLowerCase()}${normalized.slice(1)}`;
+}
+
+function formatTimelineNoteLabel(value: string) {
+  const normalized = formatSourceBackedNoteLabel(value);
+  if (!normalized) return '';
+  const key = normalized.toLowerCase();
+  return NOTE_TIMELINE_ALIASES[key] ?? normalized;
 }
 
 function selectTimelinePhraseNotes(values: string[], section: 'opening' | 'heart' | 'drydown') {
@@ -6584,6 +6642,37 @@ function buildTimelineDescriptionFromStructuredNotes(source: {
     heart: heart.length > 0 ? heart : top,
     drydown: base.length > 0 ? base : heart,
   }, source.accords);
+}
+
+function buildPolishedSourceBackedPyramidDescription(source: {
+  family_key?: string | null | undefined;
+  notes?: string[] | null | undefined;
+  top_notes?: string[] | null | undefined;
+  middle_notes?: string[] | null | undefined;
+  base_notes?: string[] | null | undefined;
+}) {
+  const top = formatSourceBackedNoteLabels(source.top_notes, 3);
+  const heart = formatSourceBackedNoteLabels(source.middle_notes, 3);
+  const base = formatSourceBackedNoteLabels(source.base_notes, 3);
+  if (top.length === 0 || heart.length === 0 || base.length === 0) return null;
+
+  const joined = [
+    source.family_key,
+    ...sanitizeTokenSource(source.notes),
+    ...sanitizeTokenSource(source.top_notes),
+    ...sanitizeTokenSource(source.middle_notes),
+    ...sanitizeTokenSource(source.base_notes),
+  ].join(' ').toLowerCase();
+  const isFreshAquaticProfile = source.family_key === 'fresh-blue'
+    || /\b(lemon|coastal moss|aquatic|fresh|sage|geranium)\b/.test(joined);
+  if (!isFreshAquaticProfile) return null;
+
+  const topPhrase = joinFragrancePhrases(top.map((label) => formatSourceBackedNotePhrase(label, 'opening')));
+  const heartPhrase = joinFragrancePhrases(heart.map((label) => formatSourceBackedNotePhrase(label, 'heart')));
+  const basePhrase = joinFragrancePhrases(base.map((label) => formatSourceBackedNotePhrase(label, 'base')));
+  if (!topPhrase || !heartPhrase || !basePhrase) return null;
+
+  return `${toSentenceCase(`${topPhrase} open crisp and airy, moving into ${heartPhrase} before drying down to ${basePhrase}`)}.`;
 }
 
 function pickTimelineNotesByPatterns(
@@ -6747,7 +6836,9 @@ function buildVesperizedDetailDescription(source: {
 }) {
   const sourceDescription = normalizeDetailText(source.short_description);
   const sourceType = normalizeDetailText(source.description_source);
+  const polishedSourceBackedPyramid = buildPolishedSourceBackedPyramidDescription(source);
   const sourceBackedTimeline = buildTimelineDescriptionFromStructuredNotes(source);
+  if (polishedSourceBackedPyramid) return polishedSourceBackedPyramid;
   if (sourceDescription && sourceType && !isDerivedDescriptionSource(sourceType)) {
     return sourceBackedTimeline
       ?? rewriteSourceBackedDescription(sourceDescription)
@@ -10383,18 +10474,37 @@ const OdaraFragranceDetailSheet: React.FC<{
     resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
   );
   const accordLabels = normalizeNotes(resolvedDetail.accords, 8);
-  const topLabels = normalizeNotes(resolvedDetail.top_notes ?? [], 6);
-  const middleLabels = normalizeNotes(resolvedDetail.middle_notes ?? [], 6);
-  const baseLabels = normalizeNotes(resolvedDetail.base_notes ?? [], 6);
-  const flatNoteLabels = normalizeNotes(resolvedDetail.notes, 8);
+  const topLabels = formatSourceBackedNoteLabels(resolvedDetail.top_notes ?? [], 6);
+  const middleLabels = formatSourceBackedNoteLabels(resolvedDetail.middle_notes ?? [], 6);
+  const baseLabels = formatSourceBackedNoteLabels(resolvedDetail.base_notes ?? [], 6);
+  const flatNoteLabels = formatSourceBackedNoteLabels(resolvedDetail.notes, 8);
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
+  const displayReleaseYear = resolvedDetail.release_year
+    ?? normalizeDetailReleaseYear(resolvedDetail.vesper_metadata?.resolved_release_year)
+    ?? null;
+  const catalogPerfumer = normalizeDetailText(resolvedDetail.perfumer);
+  const resolverPerfumer = getResolvedPerfumerText(resolvedDetail.vesper_metadata);
+  const displayPerfumer = catalogPerfumer ?? resolverPerfumer;
+  const catalogConcentration = isKnownDetailConcentration(resolvedDetail.concentration)
+    ? normalizeDetailText(resolvedDetail.concentration)
+    : null;
+  const resolverConcentration = isKnownDetailConcentration(resolvedDetail.vesper_metadata?.resolved_concentration)
+    ? normalizeDetailText(resolvedDetail.vesper_metadata?.resolved_concentration)
+    : null;
+  const displayConcentration = catalogConcentration ?? resolverConcentration;
+  const displayMetadataApplied: VesperMetadataAppliedFields = {
+    release_year: !resolvedDetail.release_year && displayReleaseYear != null,
+    perfumer: !catalogPerfumer && !!resolverPerfumer,
+    concentration: !catalogConcentration && !!resolverConcentration,
+  };
+  const detailSourceBackedChipClass = 'inline-flex rounded-full px-3 py-[6px] text-[11px] tracking-[0.04em]';
   const metadataSourceLabel = getMetadataSourceLabel(
     resolvedDetail.vesper_metadata,
-    resolvedDetail.vesper_metadata_applied,
+    displayMetadataApplied,
   );
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
@@ -10457,6 +10567,11 @@ const OdaraFragranceDetailSheet: React.FC<{
     pushChip(preferredAccord, 'accord');
     return expandAndDeduplicateScentIntelDisplayTerms(chips).slice(0, 8);
   })();
+  const structuredNoteSections = [
+    { title: 'Top', position: 'top', values: topLabels },
+    { title: 'Heart', position: 'heart', values: middleLabels },
+    { title: 'Base', position: 'base', values: baseLabels },
+  ].filter((section) => section.values.length > 0);
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
     const seen = new Set<string>();
@@ -10490,9 +10605,9 @@ const OdaraFragranceDetailSheet: React.FC<{
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
   const detailFactLine = [
-    `Released: ${resolvedDetail.release_year ? String(resolvedDetail.release_year) : 'Unknown'}`,
-    `Perfumer: ${normalizeDetailText(resolvedDetail.perfumer) ?? 'Unknown'}`,
-    `Concentration: ${isKnownDetailConcentration(resolvedDetail.concentration) ? resolvedDetail.concentration : 'Unknown'}`,
+    `Released: ${displayReleaseYear ? String(displayReleaseYear) : 'Unknown'}`,
+    `Perfumer: ${displayPerfumer ?? 'Unknown'}`,
+    `Concentration: ${displayConcentration ?? 'Unknown'}`,
   ].join(' · ');
 
   return (
@@ -10570,7 +10685,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                     fragranceName={resolvedDetail.name}
                     fragranceBrand={resolvedDetail.brand}
                     position={chip.position}
-                    className="inline-flex rounded-full px-3 py-[6px] text-[10px] uppercase tracking-[0.24em]"
+                    className={detailSourceBackedChipClass}
                     style={{
                       color: tone.color,
                       border: `1px solid ${tone.border}`,
@@ -10635,7 +10750,44 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          {orderedNoteChips.length > 0 ? (
+          {hasStructuredNoteSections ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
+              <div className="space-y-3">
+                {structuredNoteSections.map((section) => (
+                  <div key={`detail-note-section-${section.position}`} className="space-y-2">
+                    <div className="text-[11px] leading-none text-foreground/46">{section.title}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {expandAndDeduplicateScentIntelDisplayTerms(
+                        section.values.map((label) => ({ label, position: section.position })),
+                      ).map((note, index) => {
+                        const tone = getAccordChipTone(note.label, resolvedDetail.family_key);
+                        return (
+                          <ScentIntelChipButton
+                            key={`detail-note-${section.position}-${note.slug ?? note.label}-${index}`}
+                            label={note.label}
+                            slug={note.slug ?? null}
+                            onOpen={onOpenScentIntel}
+                            fragranceId={resolvedDetail.fragrance_id}
+                            fragranceName={resolvedDetail.name}
+                            fragranceBrand={resolvedDetail.brand}
+                            position={note.position}
+                            className={detailSourceBackedChipClass}
+                            style={{
+                              color: tone.color,
+                              border: `1px solid ${tone.border}`,
+                              background: tone.background,
+                              boxShadow: `0 0 14px ${tone.glow}`,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : orderedNoteChips.length > 0 ? (
             <section>
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
               <div className="flex flex-wrap gap-2">
@@ -10651,7 +10803,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                       fragranceName={resolvedDetail.name}
                       fragranceBrand={resolvedDetail.brand}
                       position={note.position}
-                      className={getScentIntelChipClass()}
+                      className={detailSourceBackedChipClass}
                       style={{
                         color: tone.color,
                         border: `1px solid ${tone.border}`,
