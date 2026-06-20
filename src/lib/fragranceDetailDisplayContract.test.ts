@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
+  buildSourceBackedPyramidDescription,
+  formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
+  formatFragranceNoteProsePhrase,
+  isGroundedWearContextLabel,
+  isLayerToolActionLabel,
   isScentProfileChip,
   shouldShowVesperizingNotice,
 } from './fragranceDetailDisplayContract';
@@ -39,13 +44,31 @@ describe('fragranceDetailDisplayContract', () => {
     });
 
     const labels = model.heroProfileChips.map((chip) => chip.label);
-    expect(labels).toContain('Fresh Blue');
     expect(labels).toContain('Fresh Aquatic');
     expect(labels).toContain('Aromatic');
     expect(labels).toContain('Italian Lemon');
     expect(labels).toContain('White Musk');
+    expect(labels).not.toContain('Fresh Blue');
     expect(labels).not.toContain('EDP');
     expect(labels).not.toContain('Official Pyramid');
+  });
+
+  it('maps internal fresh-blue taxonomy to a user-facing family label', () => {
+    expect(formatFragranceFamilyDisplayLabel({ familyKey: 'fresh-blue' })).toBe('Fresh Aquatic');
+    expect(formatFragranceFamilyDisplayLabel({ familyLabel: 'Fresh Blue' })).toBe('Fresh Aquatic');
+    expect(formatFragranceFamilyDisplayLabel({
+      familyKey: null,
+      familyLabel: 'fresh-blue',
+      noteLabels: ['Australian Coastal Moss'],
+    })).toBe('Fresh Aquatic');
+  });
+
+  it('keeps Layer Tool out of grounded Best Worn labels while preserving it as an action label', () => {
+    expect(isGroundedWearContextLabel('Daily')).toBe(true);
+    expect(isGroundedWearContextLabel('Hot weather')).toBe(true);
+    expect(isGroundedWearContextLabel('Anchor')).toBe(true);
+    expect(isGroundedWearContextLabel('Layer Tool')).toBe(false);
+    expect(isLayerToolActionLabel('Layer Tool')).toBe(true);
   });
 
   it('uses structured note sections when a source-backed pyramid exists', () => {
@@ -83,5 +106,25 @@ describe('fragranceDetailDisplayContract', () => {
     );
     expect(display.applied.perfumer).toBe(true);
     expect(display.applied.concentration).toBe(false);
+  });
+
+  it('builds Pacific-style source-backed pyramid prose with sentence-safe casing', () => {
+    const description = buildSourceBackedPyramidDescription({
+      familyKey: 'fresh-blue',
+      topNotes: ['Lemon Italy', 'Australian Coastal Moss'],
+      middleNotes: ['Sage France', 'Geranium Egypt'],
+      baseNotes: ['Cedarwood Virginia USA', 'Whitemusk'],
+    });
+
+    expect(description).toBe(
+      'Bright Italian lemon and coastal moss open crisp and airy, moving into sage and geranium before drying down to Virginia cedarwood and clean white musk.',
+    );
+    expect(description).not.toContain('virginia Cedarwood');
+  });
+
+  it('uses sentence-safe note phrase labels separate from title-case chip labels', () => {
+    expect(formatFragranceNoteProsePhrase('Cedarwood Virginia USA', 'base')).toBe('Virginia cedarwood');
+    expect(formatFragranceNoteProsePhrase('Whitemusk', 'base')).toBe('clean white musk');
+    expect(formatFragranceNoteDisplayLabel('Cedarwood Virginia USA')).toBe('Virginia Cedarwood');
   });
 });

@@ -4,8 +4,12 @@ import { normalizeNotes } from "@/lib/normalizeNotes";
 import {
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
+  buildSourceBackedPyramidDescription,
+  formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
   formatFragranceNoteDisplayLabels,
+  isGroundedWearContextLabel,
+  isLayerToolActionLabel,
   isScentProfileChip,
   shouldShowVesperizingNotice,
 } from "@/lib/fragranceDetailDisplayContract";
@@ -6490,17 +6494,6 @@ function isDerivedDescriptionSource(value: string | null | undefined) {
   return normalized ? DERIVED_DESCRIPTION_SOURCES.has(normalized) : false;
 }
 
-function formatSourceBackedNotePhrase(label: string, context: 'opening' | 'heart' | 'base') {
-  const normalized = label.trim();
-  const key = normalized.toLowerCase();
-  if (!normalized) return '';
-  if (context === 'opening' && key === 'australian coastal moss') return 'coastal moss';
-  if (context === 'heart' && key === 'french sage') return 'sage';
-  if (context === 'heart' && key === 'egyptian geranium') return 'geranium';
-  if (context === 'base' && key === 'white musk') return 'clean white musk';
-  return `${normalized.charAt(0).toLowerCase()}${normalized.slice(1)}`;
-}
-
 function formatTimelineNoteLabel(value: string) {
   const normalized = formatFragranceNoteDisplayLabel(value);
   if (!normalized) return '';
@@ -6618,28 +6611,13 @@ function buildPolishedSourceBackedPyramidDescription(source: {
   middle_notes?: string[] | null | undefined;
   base_notes?: string[] | null | undefined;
 }) {
-  const top = formatFragranceNoteDisplayLabels(source.top_notes, 3);
-  const heart = formatFragranceNoteDisplayLabels(source.middle_notes, 3);
-  const base = formatFragranceNoteDisplayLabels(source.base_notes, 3);
-  if (top.length === 0 || heart.length === 0 || base.length === 0) return null;
-
-  const joined = [
-    source.family_key,
-    ...sanitizeTokenSource(source.notes),
-    ...sanitizeTokenSource(source.top_notes),
-    ...sanitizeTokenSource(source.middle_notes),
-    ...sanitizeTokenSource(source.base_notes),
-  ].join(' ').toLowerCase();
-  const isFreshAquaticProfile = source.family_key === 'fresh-blue'
-    || /\b(lemon|coastal moss|aquatic|fresh|sage|geranium)\b/.test(joined);
-  if (!isFreshAquaticProfile) return null;
-
-  const topPhrase = joinFragrancePhrases(top.map((label) => formatSourceBackedNotePhrase(label, 'opening')));
-  const heartPhrase = joinFragrancePhrases(heart.map((label) => formatSourceBackedNotePhrase(label, 'heart')));
-  const basePhrase = joinFragrancePhrases(base.map((label) => formatSourceBackedNotePhrase(label, 'base')));
-  if (!topPhrase || !heartPhrase || !basePhrase) return null;
-
-  return `${toSentenceCase(`${topPhrase} open crisp and airy, moving into ${heartPhrase} before drying down to ${basePhrase}`)}.`;
+  return buildSourceBackedPyramidDescription({
+    familyKey: source.family_key,
+    flatNotes: source.notes,
+    topNotes: source.top_notes,
+    middleNotes: source.middle_notes,
+    baseNotes: source.base_notes,
+  });
 }
 
 function pickTimelineNotesByPatterns(
@@ -10436,10 +10414,18 @@ const OdaraFragranceDetailSheet: React.FC<{
     'hero',
   );
   const detailLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(detailBaseTint, detailGlassVisual);
-  const familyLabel = formatPlainFamilyStyleLabel(
-    resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
-  );
   const accordLabels = normalizeNotes(resolvedDetail.accords, 8);
+  const familyLabel = formatFragranceFamilyDisplayLabel({
+    familyKey: resolvedDetail.family_key,
+    familyLabel: resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
+    accordLabels,
+    noteLabels: [
+      ...sanitizeTokenSource(resolvedDetail.notes),
+      ...sanitizeTokenSource(resolvedDetail.top_notes),
+      ...sanitizeTokenSource(resolvedDetail.middle_notes),
+      ...sanitizeTokenSource(resolvedDetail.base_notes),
+    ],
+  });
   const detailDisplayModel = buildFragranceDetailDisplayModel({
     familyLabel,
     familyKey: resolvedDetail.family_key,
@@ -10455,7 +10441,14 @@ const OdaraFragranceDetailSheet: React.FC<{
   const baseLabels = detailDisplayModel.baseLabels;
   const flatNoteLabels = detailDisplayModel.flatNoteLabels;
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
-  const roleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
+  const rawRoleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
+  const rawRoleKey = resolvedDetail.wardrobe_role_key?.trim() || null;
+  const roleLabel = isGroundedWearContextLabel(rawRoleLabel)
+    ? rawRoleLabel
+    : isGroundedWearContextLabel(rawRoleKey)
+      ? formatDetailRoleLabelFromKey(rawRoleKey)
+      : null;
+  const showLayerToolAction = isLayerToolActionLabel(rawRoleLabel) || isLayerToolActionLabel(rawRoleKey);
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
@@ -10621,6 +10614,32 @@ const OdaraFragranceDetailSheet: React.FC<{
             <div className="text-[14px] leading-[1.4] text-foreground/72">
               <span className="text-foreground/54">Best worn:</span>{' '}
               <span className="text-foreground/88">{roleLabel}</span>
+            </div>
+          ) : null}
+
+          {showLayerToolAction ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-[18px] border px-3.5 py-3"
+              style={{
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.03)',
+              }}
+            >
+              <div className="min-w-0">
+                <div className="text-[12px] uppercase tracking-[0.18em] text-foreground/54">Layer Tool</div>
+                <div className="mt-1 text-[11.5px] leading-snug text-foreground/42">
+                  Pairing guidance appears only when Vesper has enough trusted scent data.
+                </div>
+              </div>
+              <span
+                className="shrink-0 rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/56"
+                style={{
+                  borderColor: 'rgba(255,255,255,0.10)',
+                  background: 'rgba(255,255,255,0.025)',
+                }}
+              >
+                Try layering
+              </span>
             </div>
           ) : null}
 

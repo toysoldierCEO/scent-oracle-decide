@@ -29,6 +29,21 @@ type FragranceMetadataDisplayInput = {
   resolverConcentration?: string | null;
 };
 
+type FragranceFamilyDisplayInput = {
+  familyKey?: string | null;
+  familyLabel?: string | null;
+  accordLabels?: string[] | null;
+  noteLabels?: string[] | null;
+};
+
+type SourceBackedPyramidDescriptionInput = {
+  familyKey?: string | null;
+  topNotes?: string[] | null;
+  middleNotes?: string[] | null;
+  baseNotes?: string[] | null;
+  flatNotes?: string[] | null;
+};
+
 type VesperizingNoticeInput = {
   isCanonicalFragrance?: boolean;
   isMatchedExistingIntake?: boolean;
@@ -81,6 +96,36 @@ const PROCESSING_OR_STATE_LABEL_KEYS = new Set([
   'limited intel',
   'performance pending',
   'performance intel pending',
+]);
+
+const FAMILY_DISPLAY_LABELS: Record<string, string> = {
+  'fresh blue': 'Fresh Aquatic',
+  'fresh aquatic': 'Fresh Aquatic',
+};
+
+const RAW_FAMILY_LABEL_DISPLAY_MAP: Record<string, string> = {
+  'fresh blue': 'Fresh Aquatic',
+  'fresh-blue': 'Fresh Aquatic',
+  'fresh aquatic': 'Fresh Aquatic',
+  'fresh-aquatic': 'Fresh Aquatic',
+};
+
+const GROUNDED_WEAR_CONTEXT_LABELS = new Set([
+  'daily',
+  'work',
+  'evening',
+  'date night',
+  'hot weather',
+  'cold weather',
+  'fresh daytime',
+  'anchor',
+]);
+
+const LAYER_TOOL_LABELS = new Set([
+  'layer tool',
+  'layer tools',
+  'layer-tool',
+  'layer_tool',
 ]);
 
 function normalizeDisplayKey(value: string | null | undefined) {
@@ -151,6 +196,58 @@ export function formatFragranceNoteDisplayLabels(values: string[] | null | undef
     if (labels.length >= max) break;
   }
   return labels;
+}
+
+export function formatFragranceFamilyDisplayLabel(input: FragranceFamilyDisplayInput) {
+  const familyKey = normalizeDisplayKey(input.familyKey);
+  const rawFamilyLabel = normalizeText(input.familyLabel);
+  const familyLabelKey = normalizeDisplayKey(rawFamilyLabel);
+  if (familyKey && FAMILY_DISPLAY_LABELS[familyKey]) return FAMILY_DISPLAY_LABELS[familyKey];
+  if (familyLabelKey && RAW_FAMILY_LABEL_DISPLAY_MAP[familyLabelKey]) return RAW_FAMILY_LABEL_DISPLAY_MAP[familyLabelKey];
+
+  const joinedSource = [
+    familyKey,
+    familyLabelKey,
+    ...cleanStringList(input.accordLabels).map(normalizeDisplayKey),
+    ...cleanStringList(input.noteLabels).map(normalizeDisplayKey),
+  ].join(' ');
+  if (/\b(aquatic|marine|oceanic|coastal|sea air|sea-air|watery|blue)\b/.test(joinedSource)) {
+    return 'Fresh Aquatic';
+  }
+  if (/\b(fresh|clean|bright|citrus|green|airy)\b/.test(joinedSource)) {
+    return 'Fresh';
+  }
+
+  if (rawFamilyLabel && !/[-_]/.test(rawFamilyLabel)) return rawFamilyLabel;
+  if (familyKey) return toDisplayTitleCase(familyKey.replace(/[-_]+/g, ' '));
+  return rawFamilyLabel;
+}
+
+export function isLayerToolActionLabel(value: string | null | undefined) {
+  const key = normalizeDisplayKey(value);
+  return !!key && LAYER_TOOL_LABELS.has(key);
+}
+
+export function isGroundedWearContextLabel(value: string | null | undefined) {
+  const key = normalizeDisplayKey(value);
+  if (!key || isLayerToolActionLabel(key)) return false;
+  return GROUNDED_WEAR_CONTEXT_LABELS.has(key);
+}
+
+export function formatFragranceNoteProsePhrase(
+  value: string | null | undefined,
+  context: 'opening' | 'heart' | 'base',
+) {
+  const label = formatFragranceNoteDisplayLabel(value);
+  const key = normalizeDisplayKey(label);
+  if (!key) return '';
+  if (context === 'opening' && key === 'italian lemon') return 'Italian lemon';
+  if (context === 'opening' && key === 'australian coastal moss') return 'coastal moss';
+  if (context === 'heart' && key === 'french sage') return 'sage';
+  if (context === 'heart' && key === 'egyptian geranium') return 'geranium';
+  if (context === 'base' && key === 'virginia cedarwood') return 'Virginia cedarwood';
+  if (context === 'base' && key === 'white musk') return 'clean white musk';
+  return label.charAt(0).toLowerCase() + label.slice(1);
 }
 
 export function isMetadataLabel(value: string | null | undefined) {
@@ -224,6 +321,38 @@ export function buildFragranceMetadataDisplay(input: FragranceMetadataDisplayInp
   };
 }
 
+export function buildSourceBackedPyramidDescription(input: SourceBackedPyramidDescriptionInput) {
+  const topLabels = formatFragranceNoteDisplayLabels(input.topNotes, 3);
+  const middleLabels = formatFragranceNoteDisplayLabels(input.middleNotes, 3);
+  const baseLabels = formatFragranceNoteDisplayLabels(input.baseNotes, 3);
+  if (topLabels.length === 0 || middleLabels.length === 0 || baseLabels.length === 0) return null;
+
+  const joined = [
+    normalizeDisplayKey(input.familyKey),
+    ...cleanStringList(input.flatNotes).map(normalizeDisplayKey),
+    ...topLabels.map(normalizeDisplayKey),
+    ...middleLabels.map(normalizeDisplayKey),
+    ...baseLabels.map(normalizeDisplayKey),
+  ].join(' ');
+  const isFreshAquaticProfile = normalizeDisplayKey(input.familyKey) === 'fresh-blue'
+    || normalizeDisplayKey(input.familyKey) === 'fresh blue'
+    || /\b(lemon|coastal moss|aquatic|fresh|sage|geranium)\b/.test(joined);
+  if (!isFreshAquaticProfile) return null;
+
+  const joinPhrases = (parts: string[]) => {
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0]!;
+    if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+    return `${parts[0]}, ${parts[1]}, and ${parts[2]}`;
+  };
+  const topPhrase = joinPhrases(topLabels.map((label) => formatFragranceNoteProsePhrase(label, 'opening')));
+  const heartPhrase = joinPhrases(middleLabels.map((label) => formatFragranceNoteProsePhrase(label, 'heart')));
+  const basePhrase = joinPhrases(baseLabels.map((label) => formatFragranceNoteProsePhrase(label, 'base')));
+  if (!topPhrase || !heartPhrase || !basePhrase) return null;
+
+  return `Bright ${topPhrase} open crisp and airy, moving into ${heartPhrase} before drying down to ${basePhrase}.`;
+}
+
 export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayModelInput) {
   const topLabels = formatFragranceNoteDisplayLabels(input.topNotes, 6);
   const middleLabels = formatFragranceNoteDisplayLabels(input.middleNotes, 6);
@@ -243,9 +372,19 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     chips.push({ label: trimmed, position });
   };
 
-  pushChip(input.familyLabel, 'family');
-  if (input.familyKey === 'fresh-blue') {
-    pushChip('Fresh Aquatic', 'style');
+  const familyDisplayLabel = formatFragranceFamilyDisplayLabel({
+    familyKey: input.familyKey,
+    familyLabel: input.familyLabel,
+    accordLabels: input.accordLabels,
+    noteLabels: [
+      ...cleanStringList(input.flatNotes),
+      ...cleanStringList(input.topNotes),
+      ...cleanStringList(input.middleNotes),
+      ...cleanStringList(input.baseNotes),
+    ],
+  });
+  pushChip(familyDisplayLabel, 'family');
+  if (familyDisplayLabel === 'Fresh Aquatic' || normalizeDisplayKey(input.familyKey) === 'fresh blue') {
     pushChip('Aromatic', 'style');
   }
 
@@ -269,7 +408,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     pushChip(label, 'note');
   }
 
-  const familyKey = normalizeDisplayKey(input.familyLabel);
+  const familyKey = normalizeDisplayKey(familyDisplayLabel);
   const availableAccords = cleanStringList(input.accordLabels).filter((accord) => normalizeDisplayKey(accord) !== familyKey);
   const priorityPatterns = [
     /\bleather|leathery\b/i,
