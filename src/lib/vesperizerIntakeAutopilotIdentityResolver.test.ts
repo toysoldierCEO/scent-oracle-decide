@@ -114,4 +114,69 @@ describe('vesperizer intake identity resolver', () => {
       next_action: 'manual source search or add exact official URL to intake',
     });
   });
+
+  it('uses a selected identity candidate to continue into source-backed canonical candidate review', () => {
+    const selectedTarget = {
+      ...baseBlankBrandTarget,
+      submitted_brand: 'Mihan Aromatics',
+      selected_identity_candidate: {
+        candidate_name: 'Sienna Brume',
+        candidate_brand: 'Mihan Aromatics',
+        candidate_source_url: 'https://mihanaromatics.com/product/sienna-brume',
+        source_type: 'official_brand',
+        confidence: 0.92,
+        selection_state: 'auto_selected',
+      },
+    };
+
+    const result = classifyTarget(
+      selectedTarget,
+      [],
+      null,
+      {
+        status: 'selected_identity_candidate',
+        attempts: [],
+        candidates: [{
+          ...mihanCandidate,
+          candidate_id: 'candidate-id',
+          selection_state: 'auto_selected',
+        }],
+      },
+      {
+        status: 'official_source_found',
+        attempts: [{
+          url: 'https://mihanaromatics.com/product/sienna-brume',
+          status: 'fetched',
+          source_type: 'official_brand',
+          identity: {
+            exact_name_support: true,
+            brand_support: true,
+            url_identity_support: true,
+            confidence: 0.86,
+          },
+        }],
+        best: {
+          url: 'https://mihanaromatics.com/product/sienna-brume',
+          source_type: 'official_brand',
+          identity: {
+            exact_name_support: true,
+            brand_support: true,
+            url_identity_support: true,
+            confidence: 0.86,
+          },
+        },
+      },
+    );
+
+    expect(result.summary.state).toBe('canonical_candidate_ready');
+    expect(result.summary.identity_summary.status).toBe('selected_identity_candidate');
+    expect(result.summary.source_summary.status).toBe('official_source_found');
+    expect(result.canonicalCandidate).toMatchObject({
+      submitted_name: 'Sienna Brume',
+      submitted_brand: 'Mihan Aromatics',
+      source_type: 'official_brand',
+      confidence: 0.86,
+    });
+    expect(result.sourceNotFound).toBeNull();
+  });
 });

@@ -4080,19 +4080,38 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
   card: MissingFragranceProvisionalCard;
   compact?: boolean;
   onOpenCanonical?: (fragranceId: string) => void;
-}> = ({ card, compact, onOpenCanonical }) => {
+  onSelectIdentityCandidate?: (candidateId: string) => void;
+  selectingIdentityCandidateId?: string | null;
+}> = ({ card, compact, onOpenCanonical, onSelectIdentityCandidate, selectingIdentityCandidateId }) => {
   const statusLabel = getMissingFragranceStatusLabel(card.request_status, card.canonical_fragrance_id);
   const desiredStatusLabel = getMissingFragranceDesiredStatusLabel(card.desired_status);
   const canOpenCanonical = Boolean(card.canonical_fragrance_id && onOpenCanonical);
+  const selectedIdentityCandidate = getSelectedMissingFragranceIdentityCandidate(card);
+  const proposedIdentityCandidates = getProposedMissingFragranceIdentityCandidates(card);
+  const likelyIdentityCandidate = selectedIdentityCandidate ?? (
+    proposedIdentityCandidates.length === 1 ? proposedIdentityCandidates[0] : null
+  );
+  const showCandidatePicker = !selectedIdentityCandidate && proposedIdentityCandidates.length > 1;
   const resolvedStatusCopy = card.desired_status === 'owned'
     ? 'Matched — in Collection'
     : `Matched — ${desiredStatusLabel}`;
-  const brandLine = card.submitted_brand
+  const brandLine = selectedIdentityCandidate
+    ? `${selectedIdentityCandidate.candidate_brand}${card.submitted_concentration ? ` · ${card.submitted_concentration}` : ''}`
+    : card.submitted_brand
     ? `${card.submitted_brand}${card.submitted_concentration ? ` · ${card.submitted_concentration}` : ''}`
     : card.submitted_concentration || 'Brand being checked';
   const helperCopy = card.canonical_fragrance_id
     ? 'Matched to the catalog. Vesper will use the normal fragrance profile when it is available.'
+    : selectedIdentityCandidate
+      ? 'Vesper matched the scent identity and is continuing source-backed profile work.'
+      : likelyIdentityCandidate
+        ? 'Vesper found a likely identity. Confirm it so source-backed profile work can continue.'
     : 'Vesper is checking source-backed scent data.';
+  const renderCandidateSource = (candidate: MissingFragranceIdentityCandidate) => (
+    candidate.source_type === 'official_brand'
+      ? 'Official source match'
+      : candidate.source_label || 'Possible source match'
+  );
   const cardBody = (
     <>
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -4125,6 +4144,73 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
           ? ' It stays in Collection while the profile is completed.'
           : ` It stays marked ${desiredStatusLabel.toLowerCase()} until the profile is completed.`}
       </p>
+      {selectedIdentityCandidate ? (
+        <div className="mt-3 rounded-[14px] border border-[#dabc7c]/18 bg-[#dabc7c]/[0.055] px-3 py-2.5">
+          <div className="text-[9.5px] uppercase tracking-[0.16em] text-[#f8e5b9]/74">
+            Matched identity
+          </div>
+          <div className="mt-1 text-[12.5px] leading-snug text-foreground/82">
+            {selectedIdentityCandidate.candidate_name} · {selectedIdentityCandidate.candidate_brand}
+          </div>
+          <div className="mt-0.5 text-[11px] leading-snug text-foreground/44">
+            {renderCandidateSource(selectedIdentityCandidate)}
+          </div>
+        </div>
+      ) : likelyIdentityCandidate ? (
+        <div className="mt-3 rounded-[14px] border border-[#dabc7c]/18 bg-[#dabc7c]/[0.055] px-3 py-2.5">
+          <div className="text-[9.5px] uppercase tracking-[0.16em] text-[#f8e5b9]/74">
+            Vesper found a likely match
+          </div>
+          <div className="mt-1 text-[12.5px] leading-snug text-foreground/82">
+            {likelyIdentityCandidate.candidate_name} · {likelyIdentityCandidate.candidate_brand}
+          </div>
+          <div className="mt-0.5 text-[11px] leading-snug text-foreground/44">
+            {renderCandidateSource(likelyIdentityCandidate)}
+          </div>
+          {onSelectIdentityCandidate ? (
+            <button
+              type="button"
+              onClick={() => onSelectIdentityCandidate(likelyIdentityCandidate.id)}
+              disabled={selectingIdentityCandidateId === likelyIdentityCandidate.id}
+              className="mt-2 rounded-full border px-3 py-1.5 text-[9.5px] uppercase tracking-[0.14em] text-[#f8e5b9] transition-colors hover:bg-white/[0.04] disabled:cursor-wait disabled:opacity-55"
+              style={{ borderColor: 'rgba(218,188,124,0.26)' }}
+            >
+              {selectingIdentityCandidateId === likelyIdentityCandidate.id ? 'Saving' : 'Use this match'}
+            </button>
+          ) : null}
+        </div>
+      ) : showCandidatePicker ? (
+        <div className="mt-3 rounded-[14px] border border-[#dabc7c]/18 bg-[#dabc7c]/[0.055] px-3 py-2.5">
+          <div className="text-[9.5px] uppercase tracking-[0.16em] text-[#f8e5b9]/74">
+            Which scent did you mean?
+          </div>
+          <div className="mt-2 space-y-2">
+            {proposedIdentityCandidates.slice(0, 4).map((candidate) => (
+              <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.07] bg-white/[0.025] px-2.5 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] leading-snug text-foreground/82">
+                    {candidate.candidate_name} · {candidate.candidate_brand}
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] leading-snug text-foreground/42">
+                    {renderCandidateSource(candidate)}
+                  </div>
+                </div>
+                {onSelectIdentityCandidate ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectIdentityCandidate(candidate.id)}
+                    disabled={selectingIdentityCandidateId === candidate.id}
+                    className="shrink-0 rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-[#f8e5b9] transition-colors hover:bg-white/[0.04] disabled:cursor-wait disabled:opacity-55"
+                    style={{ borderColor: 'rgba(218,188,124,0.24)' }}
+                  >
+                    {selectingIdentityCandidateId === candidate.id ? 'Saving' : 'Use'}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {card.canonical_fragrance_id ? (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
           <div className="min-w-0 text-[11.5px] leading-snug text-foreground/52">
@@ -4430,6 +4516,27 @@ type MissingFragranceRequestStatus =
   | 'canonical_created'
   | 'resolved'
   | 'rejected';
+type MissingFragranceIdentityCandidateSelectionState =
+  | 'proposed'
+  | 'auto_selected'
+  | 'user_selected'
+  | 'rejected'
+  | 'superseded';
+type MissingFragranceIdentityCandidate = {
+  id: string;
+  intake_request_id: string;
+  candidate_name: string;
+  candidate_brand: string;
+  source_type: 'official_brand' | 'trusted_retailer' | 'community_non_official' | 'search_index' | string;
+  source_label: string | null;
+  source_host: string | null;
+  confidence: number | null;
+  confidence_reasons: string[];
+  ambiguity_warnings: string[];
+  selection_state: MissingFragranceIdentityCandidateSelectionState;
+  created_at: string | null;
+  updated_at: string | null;
+};
 type MissingFragranceProvisionalCard = {
   request_id: string;
   submitted_name: string;
@@ -4440,6 +4547,7 @@ type MissingFragranceProvisionalCard = {
   limited_intel: boolean;
   canonical_fragrance_id: string | null;
   has_source_url: boolean;
+  identity_candidates: MissingFragranceIdentityCandidate[];
   created_at: string | null;
   updated_at: string | null;
   resolved_at: string | null;
@@ -4479,6 +4587,90 @@ const getMissingFragranceStatusLabel = (status: MissingFragranceRequestStatus, c
   return 'Vesperizing';
 };
 
+const normalizeMissingFragranceIdentityCandidateState = (
+  value: unknown
+): MissingFragranceIdentityCandidateSelectionState => {
+  const state = readTrimmedLayerText(value).toLowerCase();
+  return state === 'auto_selected'
+    || state === 'user_selected'
+    || state === 'rejected'
+    || state === 'superseded'
+    || state === 'proposed'
+    ? state
+    : 'proposed';
+};
+
+const normalizeMissingFragranceIdentityCandidate = (row: any): MissingFragranceIdentityCandidate | null => {
+  const id = readTrimmedLayerText(row?.id, row?.candidate_id);
+  const intakeRequestId = readTrimmedLayerText(row?.intake_request_id, row?.request_id);
+  const candidateName = readTrimmedLayerText(row?.candidate_name, row?.name);
+  const candidateBrand = readTrimmedLayerText(row?.candidate_brand, row?.brand);
+  if (!id || !intakeRequestId || !candidateName || !candidateBrand) return null;
+
+  const confidenceValue = Number(row?.confidence);
+  const toTextArray = (value: any) => (
+    Array.isArray(value)
+      ? value.map((item) => readTrimmedLayerText(item)).filter(Boolean)
+      : []
+  );
+
+  return {
+    id,
+    intake_request_id: intakeRequestId,
+    candidate_name: candidateName,
+    candidate_brand: candidateBrand,
+    source_type: readTrimmedLayerText(row?.source_type) || 'search_index',
+    source_label: readTrimmedLayerText(row?.source_label) || null,
+    source_host: readTrimmedLayerText(row?.source_host) || null,
+    confidence: Number.isFinite(confidenceValue) ? confidenceValue : null,
+    confidence_reasons: toTextArray(row?.confidence_reasons),
+    ambiguity_warnings: toTextArray(row?.ambiguity_warnings),
+    selection_state: normalizeMissingFragranceIdentityCandidateState(row?.selection_state),
+    created_at: readTrimmedLayerText(row?.created_at) || null,
+    updated_at: readTrimmedLayerText(row?.updated_at) || null,
+  };
+};
+
+const normalizeMissingFragranceIdentityCandidates = (data: any): MissingFragranceIdentityCandidate[] => {
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  return rows
+    .map(normalizeMissingFragranceIdentityCandidate)
+    .filter((candidate): candidate is MissingFragranceIdentityCandidate => Boolean(candidate))
+    .sort((a, b) => {
+      const rank = (state: MissingFragranceIdentityCandidateSelectionState) => (
+        state === 'user_selected' ? 0 : state === 'auto_selected' ? 1 : 2
+      );
+      return rank(a.selection_state) - rank(b.selection_state)
+        || (b.confidence ?? 0) - (a.confidence ?? 0);
+    });
+};
+
+const attachMissingFragranceIdentityCandidates = (
+  cards: MissingFragranceProvisionalCard[],
+  candidates: MissingFragranceIdentityCandidate[]
+) => {
+  const byRequest = new Map<string, MissingFragranceIdentityCandidate[]>();
+  for (const candidate of candidates) {
+    const next = byRequest.get(candidate.intake_request_id) ?? [];
+    next.push(candidate);
+    byRequest.set(candidate.intake_request_id, next);
+  }
+  return cards.map((card) => ({
+    ...card,
+    identity_candidates: byRequest.get(card.request_id) ?? [],
+  }));
+};
+
+const getSelectedMissingFragranceIdentityCandidate = (card: MissingFragranceProvisionalCard) => (
+  card.identity_candidates.find((candidate) => (
+    candidate.selection_state === 'user_selected' || candidate.selection_state === 'auto_selected'
+  )) ?? null
+);
+
+const getProposedMissingFragranceIdentityCandidates = (card: MissingFragranceProvisionalCard) => (
+  card.identity_candidates.filter((candidate) => candidate.selection_state === 'proposed')
+);
+
 const isResolvedMissingFragranceCard = (card: MissingFragranceProvisionalCard) => (
   Boolean(card.canonical_fragrance_id)
     || card.request_status === 'matched_existing'
@@ -4506,6 +4698,7 @@ const normalizeMissingFragranceIntakeRow = (row: any): MissingFragranceProvision
     limited_intel: row?.limited_intel !== false,
     canonical_fragrance_id: readTrimmedLayerText(row?.canonical_fragrance_id) || null,
     has_source_url: Boolean(sourceUrl),
+    identity_candidates: [],
     created_at: readTrimmedLayerText(row?.created_at) || null,
     updated_at: readTrimmedLayerText(row?.updated_at) || null,
     resolved_at: readTrimmedLayerText(row?.resolved_at) || null,
@@ -4551,6 +4744,41 @@ const normalizeMissingFragranceIntakeRows = (data: any): MissingFragranceProvisi
   });
 };
 
+const loadMissingFragranceCardsWithIdentityCandidates = async (
+  pIncludeResolved = true,
+  pLimit = 50
+) => {
+  const { data, error } = await odaraSupabase.rpc('get_my_fragrance_intake_requests_v1' as any, {
+    p_include_resolved: pIncludeResolved,
+    p_limit: pLimit,
+  } as any);
+
+  if (error) {
+    return {
+      cards: [] as MissingFragranceProvisionalCard[],
+      error,
+      candidateError: null as any,
+    };
+  }
+
+  const cards = normalizeMissingFragranceIntakeRows(data);
+  if (cards.length === 0) {
+    return { cards, error: null as any, candidateError: null as any };
+  }
+
+  const { data: candidateData, error: candidateError } = await odaraSupabase.rpc(
+    'get_my_fragrance_intake_identity_candidates_v1' as any,
+    { p_intake_request_id: null } as any
+  );
+  const candidates = candidateError ? [] : normalizeMissingFragranceIdentityCandidates(candidateData);
+
+  return {
+    cards: attachMissingFragranceIdentityCandidates(cards, candidates),
+    error: null as any,
+    candidateError: candidateError ?? null,
+  };
+};
+
 const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, normalizedQuery: string) => {
   const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
   if (queryTokens.length === 0) return true;
@@ -4561,6 +4789,12 @@ const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, nor
     card.desired_status,
     getMissingFragranceDesiredStatusLabel(card.desired_status),
     card.request_status,
+    ...card.identity_candidates.flatMap((candidate) => [
+      candidate.candidate_name,
+      candidate.candidate_brand,
+      candidate.source_label,
+      candidate.source_host,
+    ]),
     'collection vesperizing source check pending',
   ].filter(Boolean).join(' '));
   return queryTokens.every((token) => searchable.includes(token));
@@ -11750,6 +11984,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
   const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
   const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
+  const [selectingIdentityCandidateId, setSelectingIdentityCandidateId] = useState<string | null>(null);
   const matchedCollectionHandoffRequestIdsRef = useRef<Set<string>>(new Set());
   const matchedWishlistHandoffRequestIdsRef = useRef<Set<string>>(new Set());
 
@@ -11809,10 +12044,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     setProvisionalIntakeLoading(true);
     setProvisionalIntakeError(null);
-    const { data, error: intakeError } = await odaraSupabase.rpc('get_my_fragrance_intake_requests_v1' as any, {
-      p_include_resolved: true,
-      p_limit: 50,
-    } as any);
+    const { cards, error: intakeError, candidateError } = await loadMissingFragranceCardsWithIdentityCandidates(true, 50);
 
     if (intakeError) {
       setProvisionalIntakeCards([]);
@@ -11821,9 +12053,29 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       return;
     }
 
-    setProvisionalIntakeCards(normalizeMissingFragranceIntakeRows(data));
+    setProvisionalIntakeCards(cards);
+    if (candidateError) {
+      setProvisionalIntakeError('Vesperizing scents loaded, but identity matches are still syncing.');
+    }
     setProvisionalIntakeLoading(false);
   }, [activeSessionUserId, sessionResolved]);
+
+  const handleSelectIdentityCandidate = useCallback(async (candidateId: string) => {
+    if (!candidateId || !activeSessionUserId) return;
+    setSelectingIdentityCandidateId(candidateId);
+    setProvisionalIntakeError(null);
+    const { error: selectError } = await odaraSupabase.rpc(
+      'select_my_fragrance_intake_identity_candidate_v1' as any,
+      { p_candidate_id: candidateId } as any
+    );
+    if (selectError) {
+      setProvisionalIntakeError("Couldn't save that match. Try again.");
+      setSelectingIdentityCandidateId(null);
+      return;
+    }
+    await loadProvisionalIntakeCards();
+    setSelectingIdentityCandidateId(null);
+  }, [activeSessionUserId, loadProvisionalIntakeCards]);
 
   const loadPersistedPreferences = useCallback(async () => {
     if (!sessionResolved) {
@@ -13322,6 +13574,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     onOpenCanonical={card.canonical_fragrance_id && catalogById.has(card.canonical_fragrance_id)
                       ? (fragranceId) => openDetail(fragranceId)
                       : undefined}
+                    onSelectIdentityCandidate={handleSelectSearchIdentityCandidate}
+                    selectingIdentityCandidateId={searchSelectingIdentityCandidateId}
                   />
                 ))}
               </div>
@@ -14208,6 +14462,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       onOpenCanonical={card.canonical_fragrance_id && catalogById.has(card.canonical_fragrance_id)
                         ? (fragranceId) => openDetail(fragranceId, 'wardrobe')
                         : undefined}
+                      onSelectIdentityCandidate={handleSelectIdentityCandidate}
+                      selectingIdentityCandidateId={selectingIdentityCandidateId}
                     />
                   ))}
                 </div>
@@ -14662,6 +14918,7 @@ const OdaraScreen = ({
   const [missingIntakeCards, setMissingIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
   const [, setMissingIntakeCardsLoading] = useState(false);
   const [missingIntakeCardsError, setMissingIntakeCardsError] = useState<string | null>(null);
+  const [searchSelectingIdentityCandidateId, setSearchSelectingIdentityCandidateId] = useState<string | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
   const shellAuthActionLabel = isGuestMode ? 'Sign in or create account' : 'Sign out';
@@ -14746,10 +15003,7 @@ const OdaraScreen = ({
 
     setMissingIntakeCardsLoading(true);
     setMissingIntakeCardsError(null);
-    const { data, error } = await odaraSupabase.rpc('get_my_fragrance_intake_requests_v1' as any, {
-      p_include_resolved: true,
-      p_limit: 50,
-    } as any);
+    const { cards, error, candidateError } = await loadMissingFragranceCardsWithIdentityCandidates(true, 50);
 
     if (error) {
       setMissingIntakeCards([]);
@@ -14758,9 +15012,29 @@ const OdaraScreen = ({
       return;
     }
 
-    setMissingIntakeCards(normalizeMissingFragranceIntakeRows(data));
+    setMissingIntakeCards(cards);
+    if (candidateError) {
+      setMissingIntakeCardsError('Vesperizing scents loaded, but identity matches are still syncing.');
+    }
     setMissingIntakeCardsLoading(false);
   }, [isGuestMode, userId]);
+
+  const handleSelectSearchIdentityCandidate = useCallback(async (candidateId: string) => {
+    if (!candidateId || isGuestMode || !userId) return;
+    setSearchSelectingIdentityCandidateId(candidateId);
+    setMissingIntakeCardsError(null);
+    const { error: selectError } = await odaraSupabase.rpc(
+      'select_my_fragrance_intake_identity_candidate_v1' as any,
+      { p_candidate_id: candidateId } as any
+    );
+    if (selectError) {
+      setMissingIntakeCardsError("Couldn't save that match. Try again.");
+      setSearchSelectingIdentityCandidateId(null);
+      return;
+    }
+    await loadMissingIntakeCards();
+    setSearchSelectingIdentityCandidateId(null);
+  }, [isGuestMode, loadMissingIntakeCards, userId]);
 
   useEffect(() => {
     void loadMissingIntakeCards();

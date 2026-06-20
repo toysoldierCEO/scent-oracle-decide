@@ -83,6 +83,9 @@ const args = parseArgs(process.argv.slice(2));
 const dryRun = args["dry-run"] !== "false" && args.live !== "true";
 const limit = Math.min(positiveInt(args.limit, DEFAULT_LIMIT), MAX_LIMIT);
 const outputPrefix = args["output-prefix"] ?? `proposed_intake_autopilot_${timestampForFile()}`;
+const persistIdentityCandidates = args["persist-identity-candidates"] === "true"
+  || args["live-persist-identity-candidates"] === "true";
+const livePersistIdentityCandidates = args["live-persist-identity-candidates"] === "true";
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -108,29 +111,53 @@ async function main() {
   const metadataCandidates = [];
   const resolvePlans = [];
   const identityCandidates = [];
+  const identityCandidatePersistenceResults = [];
   const needsReview = [];
   const sourceNotFound = [];
   const summaries = [];
 
   for (const target of targets) {
-    const catalogMatches = await findCatalogMatches(target);
-    const primaryMatch = pickPrimaryCatalogMatch(target, catalogMatches);
-    const identityDiscovery = primaryMatch?.exact || clean(target.submitted_brand)
-      ? { status: clean(target.submitted_brand) ? "skipped_brand_present" : "skipped_existing_catalog", candidates: [], attempts: [] }
-      : await discoverIdentityCandidates(target);
+    const selectedIdentityCandidate = selectedIdentityCandidateForTarget(target);
+    const activeIdentityCandidates = activeIdentityCandidatesForTarget(target);
+    const effectiveTarget = selectedIdentityCandidate
+      ? applyIdentityCandidateToTarget(target, selectedIdentityCandidate)
+      : target;
+    const catalogMatches = await findCatalogMatches(effectiveTarget);
+    const primaryMatch = pickPrimaryCatalogMatch(effectiveTarget, catalogMatches);
+    const identityDiscovery = selectedIdentityCandidate
+      ? {
+          status: "selected_identity_candidate",
+          candidates: [candidateRowToDiscoveryCandidate(selectedIdentityCandidate)],
+          attempts: [],
+          selected_candidate: selectedIdentityCandidate,
+        }
+      : primaryMatch?.exact || clean(effectiveTarget.submitted_brand)
+        ? { status: clean(effectiveTarget.submitted_brand) ? "skipped_brand_present" : "skipped_existing_catalog", candidates: [], attempts: [] }
+        : activeIdentityCandidates.length > 0
+          ? identityDiscoveryFromStoredCandidates(activeIdentityCandidates)
+          : await discoverIdentityCandidates(effectiveTarget);
     const sourceDiscovery = primaryMatch?.exact
       ? { attempts: [], best: null, status: "skipped_existing_catalog" }
+      : selectedIdentityCandidate
+        ? await discoverSources(effectiveTarget)
       : hasActionableIdentityCandidates(identityDiscovery)
         ? { attempts: [], best: null, status: "skipped_identity_candidate_ready" }
-      : await discoverSources(target);
+      : await discoverSources(effectiveTarget);
 
-    const classification = classifyTarget(target, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery);
+    const classification = classifyTarget(effectiveTarget, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery);
     summaries.push(classification.summary);
 
     if (classification.canonicalCandidate) canonicalCandidates.push(classification.canonicalCandidate);
     evidenceCandidates.push(...classification.evidenceCandidates);
     metadataCandidates.push(...classification.metadataCandidates);
     identityCandidates.push(...classification.identityCandidates);
+    if (persistIdentityCandidates && !target.is_ad_hoc && classification.identityCandidates.length > 0) {
+      identityCandidatePersistenceResults.push(
+        persistIdentityCandidateBatch(target.id, classification.identityCandidates, {
+          dryRun: !livePersistIdentityCandidates,
+        }),
+      );
+    }
     if (classification.resolvePlan) resolvePlans.push(classification.resolvePlan);
     if (classification.needsReview) needsReview.push(classification.needsReview);
     if (classification.sourceNotFound) sourceNotFound.push(classification.sourceNotFound);
@@ -149,6 +176,8 @@ async function main() {
     evidence_candidate_count: evidenceCandidates.length,
     metadata_candidate_count: metadataCandidates.length,
     identity_candidate_count: identityCandidates.length,
+    identity_candidate_persistence_result_count: identityCandidatePersistenceResults.length,
+    identity_candidate_persistence_live: livePersistIdentityCandidates,
     identity_auto_resolvable_count: summaries.filter((item) => item.state === "identity_candidates_ready").length,
     needs_identity_confirmation_count: summaries.filter((item) => item.state === "needs_identity_confirmation").length,
     no_identity_found_count: summaries.filter((item) => item.identity_summary?.status === "no_identity_candidates").length,
@@ -158,7 +187,9 @@ async function main() {
     inspected: summaries,
     generated_files: pathsFor(outputPrefix),
     safety: {
-      live_writes_performed: false,
+      live_writes_performed: livePersistIdentityCandidates,
+      live_write_scope: livePersistIdentityCandidates ? "identity_candidates_only" : null,
+      identity_candidate_rows_written: livePersistIdentityCandidates,
       public_fragrances_mutated: false,
       registry_provider_metadata_writes: false,
       resolve_helper_called_live: false,
@@ -173,6 +204,7 @@ async function main() {
     evidenceCandidates,
     metadataCandidates,
     identityCandidates,
+    identityCandidatePersistenceResults,
     resolvePlans,
     needsReview,
     sourceNotFound,
@@ -228,6 +260,8 @@ async function loadIntakeTargets() {
       resolved_at: null,
       canonical_collection_status: null,
       canonical: null,
+      selected_identity_candidate: null,
+      active_identity_candidates: [],
       is_ad_hoc: true,
     }];
   }
@@ -252,6 +286,100 @@ async function queryIntakes(sql) {
   const result = runSupabaseJsonQuery(wrapped);
   const rows = firstJsonField(result, "rows");
   return Array.isArray(rows) ? rows : [];
+}
+
+function selectedIdentityCandidateForTarget(target) {
+  const candidate = normalizeStoredIdentityCandidate(target.selected_identity_candidate);
+  return candidate && ["auto_selected", "user_selected"].includes(candidate.selection_state) ? candidate : null;
+}
+
+function activeIdentityCandidatesForTarget(target) {
+  const rows = Array.isArray(target.active_identity_candidates) ? target.active_identity_candidates : [];
+  return rows
+    .map(normalizeStoredIdentityCandidate)
+    .filter(Boolean)
+    .filter((candidate) => ["proposed", "auto_selected", "user_selected"].includes(candidate.selection_state))
+    .sort((a, b) => {
+      const stateRank = (value) => value === "user_selected" ? 0 : value === "auto_selected" ? 1 : 2;
+      return stateRank(a.selection_state) - stateRank(b.selection_state)
+        || Number(b.confidence ?? 0) - Number(a.confidence ?? 0);
+    });
+}
+
+function normalizeStoredIdentityCandidate(row) {
+  if (!row || typeof row !== "object") return null;
+  const candidateName = clean(row.candidate_name);
+  const candidateBrand = clean(row.candidate_brand);
+  const confidence = Number(row.confidence);
+  if (!candidateName || !candidateBrand || !Number.isFinite(confidence)) return null;
+  return {
+    id: row.id ?? null,
+    intake_request_id: row.intake_request_id ?? null,
+    candidate_name: candidateName,
+    candidate_brand: candidateBrand,
+    candidate_source_url: cleanUrl(row.candidate_source_url),
+    source_type: row.source_type ?? "search_index",
+    confidence,
+    confidence_reasons: arrayFromJson(row.confidence_reasons),
+    ambiguity_warnings: arrayFromJson(row.ambiguity_warnings),
+    selection_state: row.selection_state ?? "proposed",
+  };
+}
+
+function candidateRowToDiscoveryCandidate(candidate) {
+  return {
+    candidate_id: candidate.id ?? null,
+    name: candidate.candidate_name,
+    brand: candidate.candidate_brand,
+    source_url: candidate.candidate_source_url,
+    source_type: candidate.source_type,
+    confidence: candidate.confidence,
+    confidence_reasons: candidate.confidence_reasons,
+    ambiguity_warnings: candidate.ambiguity_warnings,
+    selection_state: candidate.selection_state,
+    next_action: candidate.selection_state === "proposed"
+      ? "user_confirm_identity"
+      : "continue source/evidence capture using selected identity",
+  };
+}
+
+function applyIdentityCandidateToTarget(target, candidate) {
+  return {
+    ...target,
+    submitted_name: candidate.candidate_name || target.submitted_name,
+    submitted_brand: candidate.candidate_brand || target.submitted_brand,
+    submitted_source_url: candidate.candidate_source_url || target.submitted_source_url,
+    selected_identity_candidate: candidate,
+    original_submitted_name: target.submitted_name,
+    original_submitted_brand: target.submitted_brand,
+  };
+}
+
+function identityDiscoveryFromStoredCandidates(candidates) {
+  const discoveryCandidates = candidates.map(candidateRowToDiscoveryCandidate);
+  const highConfidence = discoveryCandidates.filter((candidate) => Number(candidate.confidence) >= 0.82);
+  const competing = discoveryCandidates.filter((candidate) => Number(candidate.confidence) >= 0.7);
+
+  if (highConfidence.length === 1 && competing.length === 1) {
+    return {
+      status: "identity_candidates_ready",
+      attempts: [],
+      candidates: highConfidence,
+      stored_candidate_source: true,
+    };
+  }
+
+  return {
+    status: "needs_identity_confirmation",
+    attempts: [],
+    candidates: discoveryCandidates.slice(0, 5),
+    stored_candidate_source: true,
+  };
+}
+
+function arrayFromJson(value) {
+  if (Array.isArray(value)) return value.filter((item) => clean(item)).map((item) => String(item).trim());
+  return [];
 }
 
 function intakeProjectionSql() {
@@ -299,7 +427,66 @@ function intakeProjectionSql() {
         from public.fragrances f
         where f.id = i.canonical_fragrance_id
       ) f
-    ) as canonical
+    ) as canonical,
+    (
+      select to_jsonb(c)
+      from (
+        select
+          c.id,
+          c.intake_request_id,
+          c.candidate_name,
+          c.candidate_brand,
+          c.candidate_source_url,
+          c.source_type,
+          c.confidence,
+          c.confidence_reasons,
+          c.ambiguity_warnings,
+          c.selection_state,
+          c.created_at,
+          c.updated_at
+        from public.fragrance_intake_identity_candidates_v1 c
+        where c.intake_request_id = i.id
+          and c.selection_state in ('auto_selected', 'user_selected')
+        order by
+          case c.selection_state
+            when 'user_selected' then 0
+            else 1
+          end,
+          c.confidence desc,
+          c.created_at desc
+        limit 1
+      ) c
+    ) as selected_identity_candidate,
+    (
+      select coalesce(jsonb_agg(to_jsonb(c) order by c.confidence desc, c.created_at desc), '[]'::jsonb)
+      from (
+        select
+          c.id,
+          c.intake_request_id,
+          c.candidate_name,
+          c.candidate_brand,
+          c.candidate_source_url,
+          c.source_type,
+          c.confidence,
+          c.confidence_reasons,
+          c.ambiguity_warnings,
+          c.selection_state,
+          c.created_at,
+          c.updated_at
+        from public.fragrance_intake_identity_candidates_v1 c
+        where c.intake_request_id = i.id
+          and c.selection_state in ('proposed', 'auto_selected', 'user_selected')
+        order by
+          case c.selection_state
+            when 'user_selected' then 0
+            when 'auto_selected' then 1
+            else 2
+          end,
+          c.confidence desc,
+          c.created_at desc
+        limit 10
+      ) c
+    ) as active_identity_candidates
   `;
 }
 
@@ -485,7 +672,7 @@ async function discoverIdentityCandidates(target) {
       name: submittedName,
       brand: attempt.identity?.candidate_brand ?? attempt.candidate_brand ?? null,
       source_url: attempt.url,
-      source_type: attempt.source_type === "official_brand" ? "official_brand" : "source_candidate",
+      source_type: attempt.source_type === "official_brand" ? "official_brand" : "search_index",
       confidence: attempt.identity?.confidence ?? 0.5,
       confidence_reasons: attempt.identity?.confidence_reasons ?? [],
       ambiguity_warnings: attempt.identity?.ambiguity_warnings ?? [],
@@ -951,6 +1138,7 @@ function writeArtifacts(prefix, artifacts) {
   writeJson(paths.evidenceCandidates, artifacts.evidenceCandidates);
   writeJson(paths.metadataCandidates, artifacts.metadataCandidates);
   writeJson(paths.identityCandidates, artifacts.identityCandidates);
+  writeJson(paths.identityCandidatePersistenceResults, artifacts.identityCandidatePersistenceResults);
   writeJson(paths.resolvePlans, artifacts.resolvePlans);
   writeJson(paths.needsReview, artifacts.needsReview);
   writeJson(paths.sourceNotFound, artifacts.sourceNotFound);
@@ -968,6 +1156,8 @@ function writeMarkdown(path, summary) {
     `- evidence_candidate_count: ${summary.evidence_candidate_count}`,
     `- metadata_candidate_count: ${summary.metadata_candidate_count}`,
     `- identity_candidate_count: ${summary.identity_candidate_count}`,
+    `- identity_candidate_persistence_result_count: ${summary.identity_candidate_persistence_result_count}`,
+    `- identity_candidate_persistence_live: ${summary.identity_candidate_persistence_live}`,
     `- identity_auto_resolvable_count: ${summary.identity_auto_resolvable_count}`,
     `- needs_identity_confirmation_count: ${summary.needs_identity_confirmation_count}`,
     `- no_identity_found_count: ${summary.no_identity_found_count}`,
@@ -1003,6 +1193,7 @@ function pathsFor(prefix) {
     evidenceCandidates: `${prefix}_evidence_candidates.json`,
     metadataCandidates: `${prefix}_metadata_candidates.json`,
     identityCandidates: `${prefix}_identity_candidates.json`,
+    identityCandidatePersistenceResults: `${prefix}_identity_candidate_persistence_results.json`,
     resolvePlans: `${prefix}_resolve_plans.json`,
     needsReview: `${prefix}_needs_review.json`,
     sourceNotFound: `${prefix}_source_not_found.json`,
@@ -1028,6 +1219,39 @@ function runSupabaseJsonQuery(sql) {
     throw new Error(`Supabase query did not return JSON: ${redact(result.stdout.slice(0, 1000))}`);
   }
   return parsed;
+}
+
+function persistIdentityCandidateBatch(intakeId, candidates, { dryRun }) {
+  assertUuid(intakeId, "identity candidate intake id");
+  const payload = candidates.map((candidate) => ({
+    candidate_name: candidate.name ?? candidate.candidate_name,
+    candidate_brand: candidate.brand ?? candidate.candidate_brand,
+    candidate_source_url: candidate.source_url ?? candidate.candidate_source_url ?? null,
+    source_type: candidate.source_type === "official_brand"
+      ? "official_brand"
+      : candidate.source_type === "trusted_retailer"
+        ? "trusted_retailer"
+        : candidate.source_type === "community_non_official"
+          ? "community_non_official"
+          : "search_index",
+    confidence: Number(candidate.confidence ?? 0),
+    confidence_reasons: Array.isArray(candidate.confidence_reasons) ? candidate.confidence_reasons : [],
+    ambiguity_warnings: Array.isArray(candidate.ambiguity_warnings) ? candidate.ambiguity_warnings : [],
+  }));
+  const sql = `
+    select public.record_fragrance_intake_identity_candidates_v1(
+      ${sqlString(intakeId)}::uuid,
+      ${sqlString(JSON.stringify(payload))}::jsonb,
+      ${sqlString(VERSION)},
+      ${dryRun ? "true" : "false"}
+    ) as result;
+  `;
+  const result = runSupabaseJsonQuery(sql);
+  return firstJsonField(result, "result") ?? {
+    dry_run: dryRun,
+    intake_request_id: intakeId,
+    error: "record helper returned no result",
+  };
 }
 
 function firstJsonField(result, fieldName) {
