@@ -4087,6 +4087,12 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
   const resolvedStatusCopy = card.desired_status === 'owned'
     ? 'Matched — in Collection'
     : `Matched — ${desiredStatusLabel}`;
+  const brandLine = card.submitted_brand
+    ? `${card.submitted_brand}${card.submitted_concentration ? ` · ${card.submitted_concentration}` : ''}`
+    : card.submitted_concentration || 'Brand being checked';
+  const helperCopy = card.canonical_fragrance_id
+    ? 'Matched to the catalog. Vesper will use the normal fragrance profile when it is available.'
+    : 'Vesper is checking source-backed scent data.';
   const cardBody = (
     <>
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -4098,8 +4104,7 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
             {card.submitted_name}
           </div>
           <div className="mt-1 text-[12px] leading-[1.35] text-foreground/56">
-            {card.submitted_brand || 'Brand pending'}
-            {card.submitted_concentration ? ` · ${card.submitted_concentration}` : ''}
+            {brandLine}
           </div>
         </div>
         <span
@@ -4114,28 +4119,11 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
         </span>
       </div>
 
-      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
-          {desiredStatusLabel}
-        </span>
-        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
-          Limited intel
-        </span>
-        <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/60">
-          Source check pending
-        </span>
-        {card.has_source_url ? (
-          <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9.5px] uppercase tracking-[0.14em] text-foreground/52">
-            Source provided
-          </span>
-        ) : null}
-      </div>
-
       <p className="mt-3 text-[11.5px] leading-[1.55] text-foreground/48">
-        Vesper is checking source-backed scent data. This saved item is not ranked or layered yet.
-      </p>
-      <p className="mt-1.5 text-[10.5px] leading-[1.5] text-foreground/38">
-        No notes, accords, pyramids, perfumer, release year, or performance claims are created from this request.
+        {helperCopy}
+        {card.desired_status === 'owned'
+          ? ' It stays in Collection while the profile is completed.'
+          : ` It stays marked ${desiredStatusLabel.toLowerCase()} until the profile is completed.`}
       </p>
       {card.canonical_fragrance_id ? (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
@@ -4488,9 +4476,6 @@ const getMissingFragranceDesiredStatusLabel = getMissingScentDesiredStatusLabel;
 
 const getMissingFragranceStatusLabel = (status: MissingFragranceRequestStatus, canonicalFragranceId?: string | null) => {
   if (canonicalFragranceId || status === 'matched_existing' || status === 'canonical_created' || status === 'resolved') return 'Matched';
-  if (status === 'source_found') return 'Source check pending';
-  if (status === 'investigating' || status === 'searching') return 'Vesperizing';
-  if (status === 'needs_review' || status === 'rejected') return 'Needs review';
   return 'Vesperizing';
 };
 
@@ -4576,7 +4561,7 @@ const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, nor
     card.desired_status,
     getMissingFragranceDesiredStatusLabel(card.desired_status),
     card.request_status,
-    'collection vesperizing limited intel source check pending',
+    'collection vesperizing source check pending',
   ].filter(Boolean).join(' '));
   return queryTokens.every((token) => searchable.includes(token));
 };
@@ -11831,7 +11816,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     if (intakeError) {
       setProvisionalIntakeCards([]);
-      setProvisionalIntakeError('Vesperizing requests could not load yet.');
+      setProvisionalIntakeError('Vesperizing scents could not load yet.');
       setProvisionalIntakeLoading(false);
       return;
     }
@@ -13329,14 +13314,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           <div>
             {searchProvisionalIntakeCards.length > 0 ? (
               <div className="space-y-3 border-b border-white/[0.04] px-4 py-4">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
-                    Saved requests
-                  </div>
-                  <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
-                    These saved scents stay limited-intel until Vesper finds verified scent data.
-                  </div>
-                </div>
                 {searchProvisionalIntakeCards.map((card) => (
                   <OdaraMissingFragranceProvisionalCard
                     key={`search-provisional-${card.request_id}`}
@@ -14216,21 +14193,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           <div className="flex flex-col gap-4 px-1 pb-6 pt-1">
             {visibleProvisionalIntakeCards.length > 0 ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 px-1">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
-                      Collection
-                    </div>
-                    <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
-                      Saved scents still checking source data stay out of recommendations and layers until ready.
-                    </div>
-                  </div>
-                  {provisionalIntakeLoading ? (
+                {provisionalIntakeLoading ? (
+                  <div className="flex justify-end px-1">
                     <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-foreground/36">
                       Syncing
                     </span>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 <div className="grid gap-3">
                   {visibleProvisionalIntakeCards.map((card) => (
                     <OdaraMissingFragranceProvisionalCard
@@ -14691,7 +14660,7 @@ const OdaraScreen = ({
   const [missingIntakeError, setMissingIntakeError] = useState<string | null>(null);
   const [missingIntakeSuccess, setMissingIntakeSuccess] = useState<string | null>(null);
   const [missingIntakeCards, setMissingIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
-  const [missingIntakeCardsLoading, setMissingIntakeCardsLoading] = useState(false);
+  const [, setMissingIntakeCardsLoading] = useState(false);
   const [missingIntakeCardsError, setMissingIntakeCardsError] = useState<string | null>(null);
   const [daySwipeOffset, setDaySwipeOffset] = useState(0);
   const [daySwipeDragging, setDaySwipeDragging] = useState(false);
@@ -14784,7 +14753,7 @@ const OdaraScreen = ({
 
     if (error) {
       setMissingIntakeCards([]);
-      setMissingIntakeCardsError('Vesperizing requests could not load yet.');
+      setMissingIntakeCardsError('Vesperizing scents could not load yet.');
       setMissingIntakeCardsLoading(false);
       return;
     }
@@ -20277,7 +20246,7 @@ const OdaraScreen = ({
     setMissingIntakeSuccess(null);
 
     try {
-      const { data, error } = await odaraSupabase.rpc('create_fragrance_intake_request_v1' as any, {
+      const { error } = await odaraSupabase.rpc('create_fragrance_intake_request_v1' as any, {
         p_submitted_name: submittedName,
         p_submitted_brand: submittedBrand || null,
         p_submitted_concentration: submittedConcentration || null,
@@ -20287,20 +20256,23 @@ const OdaraScreen = ({
 
       if (error) throw error;
 
-      const duplicateActiveRequest = Boolean((data as any)?.duplicate_active_request);
       await loadMissingIntakeCards();
-      const desiredStatusLabel = getMissingFragranceDesiredStatusLabel(missingIntakeForm.desiredStatus);
-      setMissingIntakeSuccess(duplicateActiveRequest
-        ? `Vesper already has this ${desiredStatusLabel.toLowerCase()} request queued. Verified scent data stays pending.`
-        : `${desiredStatusLabel} request saved. Vesper is checking source-backed scent data.`);
       setMissingIntakeError(null);
+      setCollectionPreset(missingIntakeForm.desiredStatus === 'wishlist'
+        ? 'wishlist'
+        : missingIntakeForm.desiredStatus === 'liked'
+          ? 'liked'
+          : 'all');
+      setMenuOpen(false);
+      setMenuPage('collection');
+      closeSearchSurface(true);
       haptic('success');
     } catch (error: any) {
       setMissingIntakeError(error?.message ?? "Couldn't send this request yet.");
     } finally {
       setMissingIntakeSubmitting(false);
     }
-  }, [isGuestMode, loadMissingIntakeCards, missingIntakeForm, userId]);
+  }, [closeSearchSurface, isGuestMode, loadMissingIntakeCards, missingIntakeForm, userId]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}>
@@ -20785,38 +20757,41 @@ const OdaraScreen = ({
                       );
                     })}
                   </div>
-                ) : visibleMissingIntakeCards.length === 0 ? (
+                ) : (
                   <p className="text-[12.5px] text-foreground/52">
                     Nothing found yet. Try the exact fragrance name or ask Vesper to find it.
                   </p>
-                ) : null}
+                )}
 
                 {visibleMissingIntakeCards.length > 0 ? (
-                  <div className={searchResults.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-1'}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]/76">
-                          Saved scent requests
-                        </div>
-                        <div className="mt-1 text-[11px] leading-snug text-foreground/44">
-                          Vesper will look for verified scent data. You do not need to enter notes or accords.
-                        </div>
-                      </div>
-                      {missingIntakeCardsLoading ? (
-                        <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-foreground/34">
-                          Syncing
+                  <div className={searchResults.length > 0 ? 'mt-3 border-t border-white/6 pt-3' : 'mt-3'}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCollectionPreset('all');
+                        setMenuOpen(false);
+                        setMenuPage('collection');
+                        closeSearchSurface(true);
+                      }}
+                      className="flex w-full items-center justify-between gap-3 rounded-[16px] border px-3.5 py-3 text-left transition-colors hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/55"
+                      style={{
+                        borderColor: 'rgba(218,188,124,0.18)',
+                        background: 'rgba(218,188,124,0.055)',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-[13px] text-foreground/88">
+                          Already in Collection
                         </span>
-                      ) : null}
-                    </div>
-                    <div className="grid gap-2.5">
-                      {visibleMissingIntakeCards.map((card) => (
-                        <OdaraMissingFragranceProvisionalCard
-                          key={`global-search-provisional-${card.request_id}`}
-                          card={card}
-                          compact
-                        />
-                      ))}
-                    </div>
+                        <span className="mt-0.5 block text-[11.5px] leading-snug text-foreground/48">
+                          Vesper is checking source-backed scent data. Open Collection to view it.
+                        </span>
+                      </span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#f8e5b9]/78">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </button>
                     {missingIntakeCardsError ? (
                       <p className="mt-2 text-[11px] leading-snug text-foreground/40">
                         {missingIntakeCardsError}
@@ -20909,7 +20884,7 @@ const OdaraScreen = ({
                               required
                             />
                           </label>
-                          <div className="grid grid-cols-2 gap-2.5">
+                          <div className="grid gap-2.5 sm:grid-cols-2">
                             <label className="grid gap-1.5">
                               <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Brand</span>
                               <input
@@ -20934,7 +20909,7 @@ const OdaraScreen = ({
                             </label>
                           </div>
                           <label className="grid gap-1.5">
-                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Source URL</span>
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Official page</span>
                             <input
                               type="url"
                               value={missingIntakeForm.sourceUrl}
@@ -20947,7 +20922,7 @@ const OdaraScreen = ({
 
                           <div className="grid gap-1.5">
                             <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Save as</span>
-                            <div className="grid grid-cols-4 gap-1.5">
+                            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                               {MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS.map((option) => {
                                 const active = missingIntakeForm.desiredStatus === option.value;
                                 return (
@@ -20981,14 +20956,14 @@ const OdaraScreen = ({
                           </p>
                         ) : null}
 
-                        <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                           <p className="min-w-0 text-[10.5px] leading-snug text-foreground/42">
-                            This creates a Vesperizer intake request only. It does not create catalog truth, rankings, notes, accords, pyramids, perfumer, or performance data.
+                            Vesper will look for source-backed scent data. You do not need to enter notes or accords.
                           </p>
                           <button
                             type="submit"
                             disabled={missingIntakeSubmitting || !missingIntakeForm.name.trim()}
-                            className="flex h-9 shrink-0 items-center justify-center rounded-full border px-3 text-[11px] uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/55"
+                            className="flex h-9 w-full shrink-0 items-center justify-center rounded-full border px-3 text-[11px] uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#dabc7c]/55 sm:w-auto"
                             style={{
                               borderColor: 'rgba(218,188,124,0.34)',
                               background: 'rgba(218,188,124,0.12)',

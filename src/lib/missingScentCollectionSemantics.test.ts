@@ -24,6 +24,17 @@ describe('missingScentCollectionSemantics', () => {
     expect(getMissingScentDesiredStatusLabel('wishlist')).toBe('Wishlist');
   });
 
+  it('keeps the missing scent save options collection-native and explicit', () => {
+    expect(MISSING_SCENT_DESIRED_STATUS_OPTIONS.map((option) => option.value)).toEqual([
+      'owned',
+      'wishlist',
+      'tried',
+      'liked',
+    ]);
+    expect(getMissingScentDesiredStatusLabel('tried')).toBe('Tried');
+    expect(getMissingScentDesiredStatusLabel('liked')).toBe('Liked');
+  });
+
   it('auto-applies wishlist handoff only for explicit matched wishlist requests', () => {
     expect(shouldAutoApplyWishlistForMatchedIntake({
       desiredStatus: 'wishlist',
