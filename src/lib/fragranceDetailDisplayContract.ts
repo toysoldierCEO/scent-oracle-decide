@@ -20,6 +20,10 @@ type FragranceDetailDisplayModelInput = {
   maxHeroChips?: number;
 };
 
+type FragranceCardDisplayModelInput = FragranceDetailDisplayModelInput & {
+  maxPreviewChips?: number;
+};
+
 type FragranceMetadataDisplayInput = {
   catalogReleaseYear?: number | null;
   resolverReleaseYear?: number | null;
@@ -163,6 +167,11 @@ function isKnownConcentrationValue(value: string | null | undefined) {
   return !!normalized && normalized.toUpperCase() !== 'UNKNOWN';
 }
 
+function isKnownPerfumerValue(value: string | null | undefined) {
+  const normalized = normalizeText(value);
+  return !!normalized && normalized.toUpperCase() !== 'UNKNOWN';
+}
+
 function dedupeChips(chips: FragranceDisplayChip[]) {
   const seen = new Set<string>();
   const result: FragranceDisplayChip[] = [];
@@ -291,7 +300,9 @@ export function shouldShowVesperizingNotice(input: VesperizingNoticeInput) {
 }
 
 export function buildFragranceMetadataDisplay(input: FragranceMetadataDisplayInput) {
-  const catalogPerfumer = normalizeText(input.catalogPerfumer);
+  const catalogPerfumer = isKnownPerfumerValue(input.catalogPerfumer)
+    ? normalizeText(input.catalogPerfumer)
+    : null;
   const resolverPerfumerNames = cleanStringList(input.resolverPerfumerNames).slice(0, 4);
   const resolverPerfumer = resolverPerfumerNames.length > 0 ? resolverPerfumerNames.join(', ') : null;
   const catalogConcentration = isKnownConcentrationValue(input.catalogConcentration)
@@ -436,5 +447,35 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     hasStructuredNoteSections,
     structuredNoteSections,
     heroProfileChips: dedupeChips(chips).slice(0, input.maxHeroChips ?? 8),
+  };
+}
+
+export function buildFragranceCardDisplayModel(input: FragranceCardDisplayModelInput) {
+  const familyChipLabel = formatFragranceFamilyDisplayLabel({
+    familyKey: input.familyKey,
+    familyLabel: input.familyLabel,
+    accordLabels: input.accordLabels,
+    noteLabels: [
+      ...cleanStringList(input.flatNotes),
+      ...cleanStringList(input.topNotes),
+      ...cleanStringList(input.middleNotes),
+      ...cleanStringList(input.baseNotes),
+    ],
+  }) ?? 'Unclassified';
+  const familyKey = normalizeDisplayKey(familyChipLabel);
+  const model = buildFragranceDetailDisplayModel({
+    ...input,
+    familyLabel: familyChipLabel,
+    maxHeroChips: Math.max((input.maxPreviewChips ?? 3) + 2, 5),
+  });
+  const previewChips = model.heroProfileChips
+    .filter((chip) => chip.position !== 'family')
+    .filter((chip) => normalizeDisplayKey(chip.label) !== familyKey)
+    .filter((chip) => isScentProfileChip(chip.label))
+    .slice(0, input.maxPreviewChips ?? 3);
+
+  return {
+    familyChipLabel,
+    previewChips,
   };
 }

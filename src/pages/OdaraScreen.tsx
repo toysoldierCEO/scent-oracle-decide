@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo, useDeferredValue, ty
 import type { User } from "@supabase/supabase-js";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import {
+  buildFragranceCardDisplayModel,
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
   buildSourceBackedPyramidDescription,
@@ -259,7 +260,10 @@ function normalizeSearchFamilyKey(value: unknown) {
 function getFamilyLabelText(familyKey: string) {
   const normalized = normalizeSearchFamilyKey(familyKey);
   if (!normalized) return '';
-  return FAMILY_LABELS[normalized] ?? normalized.toUpperCase();
+  return formatFragranceFamilyDisplayLabel({
+    familyKey: normalized,
+    familyLabel: FAMILY_LABELS[normalized] ?? normalized,
+  }) ?? '';
 }
 
 function readPositiveLayerCount(...values: unknown[]) {
@@ -3636,7 +3640,7 @@ function buildLockedMainCardRender(
     ?? (heroFamilyKey ? (FAMILY_COLORS[heroFamilyKey] ?? '#888') : '#888');
   const heroFamilyLabel = snapshot.resolvedHeroRail?.familyLabel
     ?? snapshot.familyLabel
-    ?? (heroFamilyKey ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase()) : '');
+    ?? (heroFamilyKey ? getFamilyLabelText(heroFamilyKey) : '');
   const activeHero: DisplayCard = {
     ...lockedTruth.lockedCard,
     family: heroFamilyKey,
@@ -3674,7 +3678,7 @@ function buildLockedMainCardRender(
     activeLayer: activeLayer ?? null,
     activeLayerFamilyKey: snapshot.layerFamilyKey ?? activeLayer?.family_key ?? '',
     activeLayerFamilyLabel: snapshot.layerFamilyLabel
-      || (snapshot.layerFamilyKey ? (FAMILY_LABELS[snapshot.layerFamilyKey] ?? snapshot.layerFamilyKey.toUpperCase()) : ''),
+      || (snapshot.layerFamilyKey ? getFamilyLabelText(snapshot.layerFamilyKey) : ''),
     activeLayerTokens: Array.isArray(snapshot.layerTokens) ? snapshot.layerTokens : [],
     layerModes: resolvedCurrentCard.layerModes,
     selectedMode: lockedTruth.lockedMood,
@@ -5806,6 +5810,11 @@ function isKnownDetailConcentration(value: string | null | undefined) {
   return !!normalized && normalized.toUpperCase() !== 'UNKNOWN';
 }
 
+function isKnownDetailPerfumer(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value);
+  return !!normalized && normalized.toUpperCase() !== 'UNKNOWN';
+}
+
 function getResolvedPerfumerText(metadata: VesperFragranceMetadata | null | undefined) {
   const names = sanitizeTokenSource(metadata?.resolved_perfumer_names).slice(0, 4);
   return names.length > 0 ? names.join(', ') : null;
@@ -5829,7 +5838,9 @@ function applyVesperMetadataToDetail(
 
   const existingReleaseYear = normalizeDetailReleaseYear(detail.release_year);
   const resolverReleaseYear = normalizeDetailReleaseYear(metadata.resolved_release_year);
-  const existingPerfumer = normalizeDetailText(detail.perfumer);
+  const existingPerfumer = isKnownDetailPerfumer(detail.perfumer)
+    ? normalizeDetailText(detail.perfumer)
+    : null;
   const resolverPerfumer = getResolvedPerfumerText(metadata);
   const existingConcentration = normalizeDetailText(detail.concentration);
   const resolverConcentration = normalizeDetailText(metadata.resolved_concentration);
@@ -14246,9 +14257,17 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 buildFamilyLabel(card.family_key),
                 card.family_key,
               ) || 'Unclassified';
-              const familyChipLabel = card.family_key
-                ? (FAMILY_LABELS[card.family_key] ?? familyLabel.replace(/\s+/g, '-').toUpperCase())
-                : familyLabel.replace(/\s+/g, '-').toUpperCase();
+              const cardDisplayModel = buildFragranceCardDisplayModel({
+                familyKey: card.family_key,
+                familyLabel,
+                accordLabels: sanitizeTokenSource(card.item.accords),
+                flatNotes: sanitizeTokenSource(card.item.notes),
+                topNotes: sanitizeTokenSource(card.item.top_notes),
+                middleNotes: sanitizeTokenSource(card.item.heart_notes),
+                baseNotes: sanitizeTokenSource(card.item.base_notes),
+                maxPreviewChips: 3,
+              });
+              const familyChipLabel = cardDisplayModel.familyChipLabel;
               const familyChipTone = card.family_key
                 ? getOdaraFamilyMappedChipTone(card.family_key)
                 : getAccordChipTone(familyChipLabel, card.family_key);
@@ -14261,14 +14280,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               ].filter((value): value is string => Boolean(value));
               const railChips = (() => {
                 const seenLabels = new Set<string>();
-                return expandAndDeduplicateScentIntelDisplayTerms([
-                  ...sanitizeTokenSource(card.item.accords)
-                    .slice(0, 6)
-                    .map((label) => ({ label, position: 'accord' })),
-                  ...sanitizeTokenSource(card.item.notes)
-                    .slice(0, 6)
-                    .map((label) => ({ label, position: 'note' })),
-                ])
+                return expandAndDeduplicateScentIntelDisplayTerms(cardDisplayModel.previewChips)
                   .filter((chip) => normalizeOdaraSearchQuery(chip.label) !== normalizeOdaraSearchQuery(familyChipLabel))
                   .filter((chip) => {
                     const normalizedLabel = normalizeOdaraSearchQuery(chip.label);
@@ -14388,8 +14400,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         <div className={`${metadataLabels.length > 0 ? 'mt-3.5' : 'mt-3'} min-w-0 pb-1`}>
                           <div
                             data-no-card-swipe
-                            className="odara-token-rail-fade hide-horizontal-scrollbar flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pr-3"
-                            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                            className="flex w-full min-w-0 flex-wrap items-center gap-1.5 overflow-hidden"
                           >
                             {railChips.map((chip, index) => {
                               const tone = getAccordChipTone(chip.label, card.family_key);
@@ -14403,7 +14414,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                                   fragranceName={card.name}
                                   fragranceBrand={card.brand}
                                   position={chip.position ?? 'accord'}
-                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
+                                  className="max-w-[9rem] min-w-0 truncate rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
                                   style={{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
@@ -14414,7 +14425,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                               ) : (
                                 <span
                                   key={`wardrobe-card-chip-${card.fragrance_id}-${chip.position ?? 'accord'}-${chip.slug ?? chip.label}-${index}`}
-                                  className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
+                                  className="max-w-[9rem] min-w-0 truncate rounded-full px-2.5 py-[6px] text-[9px] tracking-[0.02em]"
                                   style={{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
@@ -17980,7 +17991,7 @@ const OdaraScreen = ({
   const tint = FAMILY_TINTS[familyKey] ?? DEFAULT_TINT;
   const heroCardVisual = getOdaraGlassCardVisualRecipe(tint, 'hero');
   const familyColor = FAMILY_COLORS[familyKey] ?? '#888';
-  const familyLabel = FAMILY_LABELS[familyKey] ?? familyKey.toUpperCase();
+  const familyLabel = familyKey ? getFamilyLabelText(familyKey) : '';
   const getPreviewTone = (dateStr: string) => {
     const lane = isGuestMode
       ? (lockedSelections[`${dateStr}:${selectedContext}`] ?? null)
@@ -18305,8 +18316,8 @@ const OdaraScreen = ({
     const heroFamilyColorForDisplay = heroFamilyKey
       ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
       : '#888';
-    const heroFamilyLabelForDisplay = heroFamilyKey
-      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
+  const heroFamilyLabelForDisplay = heroFamilyKey
+      ? getFamilyLabelText(heroFamilyKey)
       : '';
     const finalLayerDetail = finalLayer?.id
       ? (fragranceDetailCacheRef.current.get(finalLayer.id) ?? null)
@@ -18338,7 +18349,7 @@ const OdaraScreen = ({
     const layerSurfaceSettled = resolvedCurrentCardIsHeroCard || (!!finalLayer && (!!finalLayerDetail || (layerHasFamily && layerHasTokens)));
     const layerSurfacesReady = resolvedCurrentCardIsHeroCard || layerSurfaceSettled;
     const layerFamilyKeyForDisplay = layerSurfacesReady ? layerFamilyKey : '';
-    const layerFamilyLabel = layerFamilyKeyForDisplay ? (FAMILY_LABELS[layerFamilyKeyForDisplay] ?? layerFamilyKeyForDisplay.toUpperCase()) : '';
+    const layerFamilyLabel = layerFamilyKeyForDisplay ? getFamilyLabelText(layerFamilyKeyForDisplay) : '';
 
     const visibleLayer = finalLayer
       ? {
@@ -19549,7 +19560,7 @@ const OdaraScreen = ({
     const heroImageUrl = resolveBottleImageUrl(hero, heroDetail);
     const heroFamilyKey = typeof hero?.family === 'string' ? hero.family : '';
     const heroFamilyLabel = heroFamilyKey
-      ? (FAMILY_LABELS[heroFamilyKey] ?? heroFamilyKey.toUpperCase())
+      ? getFamilyLabelText(heroFamilyKey)
       : '';
     const heroFamilyColor = heroFamilyKey
       ? (FAMILY_COLORS[heroFamilyKey] ?? '#888')
@@ -19575,7 +19586,7 @@ const OdaraScreen = ({
       });
     const layerFamilyKey = layer?.family_key ?? '';
     const layerFamilyLabel = layerFamilyKey
-      ? (FAMILY_LABELS[layerFamilyKey] ?? layerFamilyKey.toUpperCase())
+      ? getFamilyLabelText(layerFamilyKey)
       : '';
     const reasonChip = visibleGuestRender.reasonChipLabel
       ? {
@@ -19634,8 +19645,11 @@ const OdaraScreen = ({
 
     const current = activeMainCardRender.resolvedCurrentCard;
     const familyLabel = typeof current.familyLabel === 'string' && current.familyLabel.trim().length > 0
-      ? current.familyLabel.trim()
-      : (current.family ? (FAMILY_LABELS[current.family] ?? current.family.toUpperCase()) : '');
+      ? (formatFragranceFamilyDisplayLabel({
+          familyKey: current.family,
+          familyLabel: current.familyLabel.trim(),
+        }) ?? current.familyLabel.trim())
+      : (current.family ? getFamilyLabelText(current.family) : '');
     const normalizedNotes = sanitizeTokenSource(current.notes);
     const normalizedAccords = sanitizeTokenSource(current.accords);
     const layerTokens = (Array.isArray(current.layerTokens) ? current.layerTokens : [])
@@ -19777,7 +19791,7 @@ const OdaraScreen = ({
       brand: lockedCard.brand,
       family: lockedCard.family,
       image_url: lockedCard.image_url ?? null,
-      familyLabel: visibleResolvedHeroRail?.familyLabel ?? (lockedCard.family ? (FAMILY_LABELS[lockedCard.family] ?? lockedCard.family.toUpperCase()) : ''),
+      familyLabel: visibleResolvedHeroRail?.familyLabel ?? (lockedCard.family ? getFamilyLabelText(lockedCard.family) : ''),
       familyColor: visibleResolvedHeroRail?.familyColor ?? (lockedCard.family ? (FAMILY_COLORS[lockedCard.family] ?? '#888') : '#888'),
       reason_chip_label: lockedCard.reason_chip_label ?? null,
       reason_chip_explanation: lockedCard.reason_chip_explanation ?? null,
@@ -19786,7 +19800,7 @@ const OdaraScreen = ({
       layer: signedInVisibleLayer ?? null,
       layerFamilyKey: signedInVisibleLayer?.family_key ?? '',
       layerFamilyLabel: signedInVisibleLayer?.family_key
-        ? (FAMILY_LABELS[signedInVisibleLayer.family_key] ?? signedInVisibleLayer.family_key.toUpperCase())
+        ? getFamilyLabelText(signedInVisibleLayer.family_key)
         : '',
       layerTokens: Array.isArray(visibleResolvedCurrentCard?.layerTokens) ? visibleResolvedCurrentCard.layerTokens : [],
       layerModes: visibleResolvedLayerModes,

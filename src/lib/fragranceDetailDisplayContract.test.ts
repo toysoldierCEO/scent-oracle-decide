@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFragranceCardDisplayModel,
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
   buildSourceBackedPyramidDescription,
@@ -108,6 +109,19 @@ describe('fragranceDetailDisplayContract', () => {
     expect(display.applied.concentration).toBe(false);
   });
 
+  it('uses approved resolver perfumer names when catalog perfumer is literal Unknown', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: 'Unknown',
+      catalogConcentration: 'EDP',
+      resolverPerfumerNames: ['François Merle-Baudoin', 'Carine Certain Boin'],
+      resolverConcentration: 'EDP',
+    });
+
+    expect(display.factLine).toContain('Perfumer: François Merle-Baudoin, Carine Certain Boin');
+    expect(display.applied.perfumer).toBe(true);
+  });
+
   it('builds Pacific-style source-backed pyramid prose with sentence-safe casing', () => {
     const description = buildSourceBackedPyramidDescription({
       familyKey: 'fresh-blue',
@@ -126,5 +140,29 @@ describe('fragranceDetailDisplayContract', () => {
     expect(formatFragranceNoteProsePhrase('Cedarwood Virginia USA', 'base')).toBe('Virginia cedarwood');
     expect(formatFragranceNoteProsePhrase('Whitemusk', 'base')).toBe('clean white musk');
     expect(formatFragranceNoteDisplayLabel('Cedarwood Virginia USA')).toBe('Virginia Cedarwood');
+  });
+
+  it('builds collection card chips without raw family keys or raw official note labels', () => {
+    const model = buildFragranceCardDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'FRESH-BLUE',
+      accordLabels: ['EDP', 'Official Pyramid', 'Aromatic'],
+      topNotes: ['Lemon Italy', 'Australian Coastal Moss'],
+      middleNotes: ['Sage France', 'Geranium Egypt'],
+      baseNotes: ['Cedarwood Virginia USA', 'Whitemusk'],
+      flatNotes: ['Lemon Italy', 'Sage France'],
+      maxPreviewChips: 3,
+    });
+
+    const previewLabels = model.previewChips.map((chip) => chip.label);
+    expect(model.familyChipLabel).toBe('Fresh Aquatic');
+    expect(model.familyChipLabel).not.toBe('FRESH-BLUE');
+    expect(previewLabels).toContain('Italian Lemon');
+    expect(previewLabels).toContain('Australian Coastal Moss');
+    expect(previewLabels).not.toContain('Lemon Italy');
+    expect(previewLabels).not.toContain('Sage France');
+    expect(previewLabels).not.toContain('EDP');
+    expect(previewLabels).not.toContain('Official Pyramid');
+    expect(previewLabels.length).toBeLessThanOrEqual(3);
   });
 });
