@@ -45,6 +45,8 @@ describe('fragranceDetailDisplayContract', () => {
     });
 
     const labels = model.heroProfileChips.map((chip) => chip.label);
+    const topIdentityLabels = model.topIdentityChips.map((chip) => chip.label);
+    expect(topIdentityLabels).toEqual(['Fresh Aquatic']);
     expect(labels).toContain('Fresh Aquatic');
     expect(labels).toContain('Aromatic');
     expect(labels).toContain('Italian Lemon');
@@ -52,6 +54,57 @@ describe('fragranceDetailDisplayContract', () => {
     expect(labels).not.toContain('Fresh Blue');
     expect(labels).not.toContain('EDP');
     expect(labels).not.toContain('Official Pyramid');
+  });
+
+  it('keeps canonical detail top identity to family only for Pacific-style pyramid details', () => {
+    const model = buildFragranceDetailDisplayModel({
+      familyLabel: 'Fresh Blue',
+      familyKey: 'fresh-blue',
+      accordLabels: ['EDP', 'Official Pyramid', 'Aromatic'],
+      topNotes: ['Lemon Italy', 'Australian Coastal Moss'],
+      middleNotes: ['Sage France', 'Geranium Egypt'],
+      baseNotes: ['Cedarwood Virginia USA', 'Whitemusk'],
+    });
+
+    expect(model.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
+    expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
+    expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Official Pyramid');
+    expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('EDP');
+    expect(model.detailSectionOrder).toEqual([
+      'family',
+      'notes',
+      'accords',
+      'performance',
+      'layer_tool',
+      'source_provenance',
+      'metadata',
+      'actions',
+    ]);
+    expect(model.detailSectionOrder.indexOf('notes')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
+    expect(model.detailSectionOrder.indexOf('source_provenance')).toBeLessThan(model.detailSectionOrder.indexOf('metadata'));
+  });
+
+  it('uses the same canonical order for key-note-only fragrances such as Into the Woods', () => {
+    const model = buildFragranceDetailDisplayModel({
+      familyKey: 'woods',
+      familyLabel: 'Woody',
+      accordLabels: ['Woody', 'Aromatic'],
+      flatNotes: ['Oud', 'Cedarwood', 'Amber'],
+    });
+
+    expect(model.hasStructuredNoteSections).toBe(false);
+    expect(model.detailSectionOrder).toEqual([
+      'family',
+      'key_notes',
+      'accords',
+      'performance',
+      'layer_tool',
+      'source_provenance',
+      'metadata',
+      'actions',
+    ]);
+    expect(model.detailSectionOrder.indexOf('key_notes')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
+    expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
   });
 
   it('maps internal fresh-blue taxonomy to a user-facing family label', () => {

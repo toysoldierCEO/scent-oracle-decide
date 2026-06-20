@@ -9,6 +9,17 @@ export type FragranceDisplayNoteSection = {
   values: string[];
 };
 
+export type FragranceDetailSectionId =
+  | 'family'
+  | 'notes'
+  | 'key_notes'
+  | 'accords'
+  | 'performance'
+  | 'layer_tool'
+  | 'source_provenance'
+  | 'metadata'
+  | 'actions';
+
 type FragranceDetailDisplayModelInput = {
   familyLabel?: string | null;
   familyKey?: string | null;
@@ -421,6 +432,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
 
   const familyKey = normalizeDisplayKey(familyDisplayLabel);
   const availableAccords = cleanStringList(input.accordLabels).filter((accord) => normalizeDisplayKey(accord) !== familyKey);
+  const hasAccords = availableAccords.some((accord) => isScentProfileChip(accord));
   const priorityPatterns = [
     /\bleather|leathery\b/i,
     /\boud|amber|resin|resinous|incense\b/i,
@@ -438,8 +450,21 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     ?? availableAccords.find((accord) => isScentProfileChip(accord))
     ?? null;
   pushChip(preferredAccord, 'accord');
+  const detailSectionOrder: FragranceDetailSectionId[] = ['family'];
+  if (hasStructuredNoteSections) {
+    detailSectionOrder.push('notes');
+  } else if (flatNoteLabels.length > 0) {
+    detailSectionOrder.push('key_notes');
+  }
+  if (hasAccords) detailSectionOrder.push('accords');
+  detailSectionOrder.push('performance', 'layer_tool', 'source_provenance', 'metadata', 'actions');
 
   return {
+    familyDisplayLabel,
+    topIdentityChips: familyDisplayLabel
+      ? dedupeChips([{ label: familyDisplayLabel, position: 'family' }]).slice(0, 1)
+      : [],
+    detailSectionOrder,
     topLabels,
     middleLabels,
     baseLabels,

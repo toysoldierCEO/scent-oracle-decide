@@ -8139,6 +8139,25 @@ function buildFragranceDetailSurfaceStateFromDisplayCard(card: DisplayCard): Oda
   };
 }
 
+function fragranceDetailSurfaceStateToDisplayCard(detail: OdaraFragranceDetailSurfaceState): DisplayCard | null {
+  const fragranceId = readTrimmedLayerText(detail.fragrance_id);
+  const name = readTrimmedLayerText(detail.name);
+  if (!fragranceId || !name) return null;
+  return {
+    fragrance_id: fragranceId,
+    name,
+    brand: readTrimmedLayerText(detail.brand),
+    family: normalizeSearchFamilyKey(readTrimmedLayerText(detail.family_key)),
+    reason: 'Layer tool anchor selected from fragrance detail.',
+    image_url: detail.image_url ?? detail.thumbnail_url ?? null,
+    notes: sanitizeTokenSource(detail.notes),
+    accords: sanitizeTokenSource(detail.accords),
+    reason_chip_label: null,
+    reason_chip_explanation: null,
+    isHero: false,
+  };
+}
+
 function buildFragranceDetailSurfaceStateFromSearchResult(result: OdaraSearchFragranceResult): OdaraFragranceDetailSurfaceState {
   const roleFields = resolveDetailRoleFields(result);
   const performanceFields = resolveDetailPerformanceFields(result);
@@ -10635,8 +10654,9 @@ const OdaraFragranceDetailSheet: React.FC<{
   open: boolean;
   onClose: () => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
+  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   footerActions?: React.ReactNode;
-}> = ({ detail, open, onClose, onOpenScentIntel, footerActions }) => {
+}> = ({ detail, open, onClose, onOpenScentIntel, onOpenLayerTool, footerActions }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -10703,7 +10723,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     : isGroundedWearContextLabel(rawRoleKey)
       ? formatDetailRoleLabelFromKey(rawRoleKey)
       : null;
-  const showLayerToolAction = isLayerToolActionLabel(rawRoleLabel) || isLayerToolActionLabel(rawRoleKey);
+  const showLayerToolAction = Boolean(resolvedDetail.fragrance_id);
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
@@ -10739,9 +10759,14 @@ const OdaraFragranceDetailSheet: React.FC<{
     resolvedDetail.vesper_metadata,
     metadataDisplay.applied,
   );
+  const sourceProvenanceLabels = [
+    officialStructuredNoteSourceLabel,
+    !hasStructuredNoteSections ? providerNoteSourceLabel : null,
+    metadataSourceLabel,
+  ].filter((label): label is { label: string; subcopy: string; helper: string } => Boolean(label));
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
-  const topIdentityChips = expandAndDeduplicateScentIntelDisplayTerms(detailDisplayModel.heroProfileChips).slice(0, 8);
+  const familyDisplayLabel = detailDisplayModel.familyDisplayLabel ?? familyLabel ?? null;
   const structuredNoteSections = detailDisplayModel.structuredNoteSections;
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
@@ -10838,30 +10863,10 @@ const OdaraFragranceDetailSheet: React.FC<{
         </div>
 
         <div className="space-y-5">
-          {topIdentityChips.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {topIdentityChips.map((chip, index) => {
-                const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
-                return (
-                  <ScentIntelChipButton
-                    key={`detail-top-identity-${chip.position}-${chip.label}-${index}`}
-                    label={chip.label}
-                    slug={chip.slug ?? null}
-                    onOpen={onOpenScentIntel}
-                    fragranceId={resolvedDetail.fragrance_id}
-                    fragranceName={resolvedDetail.name}
-                    fragranceBrand={resolvedDetail.brand}
-                    position={chip.position}
-                    className={detailSourceBackedChipClass}
-                    style={{
-                      color: tone.color,
-                      border: `1px solid ${tone.border}`,
-                      background: tone.background,
-                      boxShadow: `0 0 12px ${tone.glow}`,
-                    }}
-                  />
-                );
-              })}
+          {familyDisplayLabel ? (
+            <div className="text-[14px] leading-[1.4] text-foreground/72">
+              <span className="text-foreground/54">Family:</span>{' '}
+              <span className="text-foreground/88">{familyDisplayLabel}</span>
             </div>
           ) : null}
 
@@ -10870,77 +10875,6 @@ const OdaraFragranceDetailSheet: React.FC<{
               <span className="text-foreground/54">Best worn:</span>{' '}
               <span className="text-foreground/88">{roleLabel}</span>
             </div>
-          ) : null}
-
-          {showLayerToolAction ? (
-            <div
-              className="flex items-center justify-between gap-3 rounded-[18px] border px-3.5 py-3"
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.03)',
-              }}
-            >
-              <div className="min-w-0">
-                <div className="text-[12px] uppercase tracking-[0.18em] text-foreground/54">Layer Tool</div>
-                <div className="mt-1 text-[11.5px] leading-snug text-foreground/42">
-                  Pairing guidance appears only when Vesper has enough trusted scent data.
-                </div>
-              </div>
-              <span
-                className="shrink-0 rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/56"
-                style={{
-                  borderColor: 'rgba(255,255,255,0.10)',
-                  background: 'rgba(255,255,255,0.025)',
-                }}
-              >
-                Try layering
-              </span>
-            </div>
-          ) : null}
-
-          <section>
-            <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
-            <div className="space-y-4">
-              {detailPerformanceBars.length > 0 ? (
-                detailPerformanceBars.map((metric) => (
-                  <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
-                ))
-              ) : (
-                <OdaraPerformancePendingPanel />
-              )}
-            </div>
-          </section>
-
-          {accordLabels.length > 0 ? (
-            <section>
-              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
-              <div className="flex flex-wrap gap-2">
-                {expandAndDeduplicateScentIntelDisplayTerms(
-                  accordLabels.slice(0, 6).map((label) => ({ label, position: 'accord' })),
-                ).map((chip, index) => {
-                  const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
-                  return (
-                    <ScentIntelChipButton
-                      key={`detail-accord-${chip.position}-${chip.slug ?? chip.label}-${index}`}
-                      label={chip.label}
-                      slug={chip.slug ?? null}
-                      onOpen={onOpenScentIntel}
-                      fragranceId={resolvedDetail.fragrance_id}
-                      fragranceName={resolvedDetail.name}
-                      fragranceBrand={resolvedDetail.brand}
-                      position={chip.position ?? 'accord'}
-                      className={getScentIntelChipClass()}
-                      style={{
-                        color: tone.color,
-                        border: `1px solid ${tone.border}`,
-                        background: tone.background,
-                        boxShadow: `0 0 14px ${tone.glow}`,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </section>
           ) : null}
 
           {hasStructuredNoteSections ? (
@@ -10978,20 +10912,11 @@ const OdaraFragranceDetailSheet: React.FC<{
                     </div>
                   </div>
                 ))}
-                {officialStructuredNoteSourceLabel ? (
-                  <div
-                    className="pt-1 text-[11px] leading-[1.45]"
-                    title={officialStructuredNoteSourceLabel.helper}
-                  >
-                    <div className="font-medium text-foreground/72">{officialStructuredNoteSourceLabel.label}</div>
-                    <div className="text-foreground/48">{officialStructuredNoteSourceLabel.subcopy}</div>
-                  </div>
-                ) : null}
               </div>
             </section>
           ) : orderedNoteChips.length > 0 ? (
             <section>
-              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Notes</div>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Key Notes</div>
               <div className="flex flex-wrap gap-2">
                 {orderedNoteChips.map((note, index) => {
                   const tone = getAccordChipTone(note.label, resolvedDetail.family_key);
@@ -11019,29 +10944,97 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
+          {accordLabels.length > 0 ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
+              <div className="flex flex-wrap gap-2">
+                {expandAndDeduplicateScentIntelDisplayTerms(
+                  accordLabels.slice(0, 6).map((label) => ({ label, position: 'accord' })),
+                ).map((chip, index) => {
+                  const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
+                  return (
+                    <ScentIntelChipButton
+                      key={`detail-accord-${chip.position}-${chip.slug ?? chip.label}-${index}`}
+                      label={chip.label}
+                      slug={chip.slug ?? null}
+                      onOpen={onOpenScentIntel}
+                      fragranceId={resolvedDetail.fragrance_id}
+                      fragranceName={resolvedDetail.name}
+                      fragranceBrand={resolvedDetail.brand}
+                      position={chip.position ?? 'accord'}
+                      className={getScentIntelChipClass()}
+                      style={{
+                        color: tone.color,
+                        border: `1px solid ${tone.border}`,
+                        background: tone.background,
+                        boxShadow: `0 0 14px ${tone.glow}`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          <section>
+            <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
+            <div className="space-y-4">
+              {detailPerformanceBars.length > 0 ? (
+                detailPerformanceBars.map((metric) => (
+                  <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
+                ))
+              ) : (
+                <OdaraPerformancePendingPanel />
+              )}
+            </div>
+          </section>
+
+          {showLayerToolAction ? (
+            <section
+              className="flex items-center justify-between gap-3 rounded-[16px] border px-3.5 py-2.5"
+              style={{
+                borderColor: 'rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.025)',
+              }}
+            >
+              <div className="min-w-0 text-[11.5px] leading-snug text-foreground/46">
+                Layering guidance stays pending until Vesper has enough trusted scent data.
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenLayerTool?.(resolvedDetail)}
+                disabled={!onOpenLayerTool}
+                className="shrink-0 rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/66 transition-colors disabled:opacity-45"
+                style={{
+                  borderColor: 'rgba(217,181,108,0.18)',
+                  background: 'rgba(217,181,108,0.07)',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                Try Layering
+              </button>
+            </section>
+          ) : null}
+
+          {sourceProvenanceLabels.length > 0 ? (
+            <div
+              className="space-y-2 pt-1 text-[11px] leading-[1.45]"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              {sourceProvenanceLabels.map((label) => (
+                <div key={`${label.label}-${label.subcopy}`} title={label.helper}>
+                  <div className="font-medium text-foreground/72">{label.label}</div>
+                  <div className="text-foreground/48">{label.subcopy}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <div
             className="pt-1 text-[13px] leading-[1.5] text-foreground/66"
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
             {detailFactLine}
-            {metadataSourceLabel ? (
-              <div
-                className="mt-2 text-[11px] leading-[1.45]"
-                title={metadataSourceLabel.helper}
-              >
-                <div className="font-medium text-foreground/72">{metadataSourceLabel.label}</div>
-                <div className="text-foreground/48">{metadataSourceLabel.subcopy}</div>
-              </div>
-            ) : null}
-            {providerNoteSourceLabel && !hasStructuredNoteSections ? (
-              <div
-                className="mt-2 text-[11px] leading-[1.45]"
-                title={providerNoteSourceLabel.helper}
-              >
-                <div className="font-medium text-foreground/72">{providerNoteSourceLabel.label}</div>
-                <div className="text-foreground/48">{providerNoteSourceLabel.subcopy}</div>
-              </div>
-            ) : null}
           </div>
 
           {footerActions ? (
@@ -11064,9 +11057,10 @@ const OdaraFragranceDetailSheet: React.FC<{
 const OdaraLegacyCollectionPage: React.FC<{
   onClose: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
+  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   isGuestMode: boolean;
-}> = ({ onClose, onOpenFragranceDetail, userId, isGuestMode }) => {
+}> = ({ onClose, onOpenFragranceDetail, onOpenLayerTool, userId, isGuestMode }) => {
   const {
     activeSessionUserId,
     sessionResolved,
@@ -11932,6 +11926,7 @@ const OdaraWardrobeBottleArt: React.FC<{
 const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   onClose: () => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
+  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   userId: string | null;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
@@ -11953,7 +11948,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       image_url?: string | null;
     } | null;
   }) => void;
-}> = ({ onClose, onOpenScentIntel, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
+}> = ({ onClose, onOpenScentIntel, onOpenLayerTool, userId, selectedContext, entryPreset = 'all', onCapturePreferenceMoment }) => {
   const {
     activeSessionUserId,
     sessionResolved,
@@ -13736,6 +13731,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           setSurface(detailReturnSurface);
         }}
         onOpenScentIntel={onOpenScentIntel}
+        onOpenLayerTool={onOpenLayerTool}
         footerActions={(
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-[14px] py-1">
@@ -14745,6 +14741,7 @@ const OdaraCollectionPage: React.FC<{
   onClose: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
+  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   onCapturePreferenceMoment?: (payload: {
     preference_state: PersistedPreferenceMomentState;
     source: string;
@@ -14767,12 +14764,13 @@ const OdaraCollectionPage: React.FC<{
   isGuestMode: boolean;
   selectedContext: string;
   entryPreset?: OdaraCollectionEntryPreset;
-}> = ({ onClose, onOpenFragranceDetail, onOpenScentIntel, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
+}> = ({ onClose, onOpenFragranceDetail, onOpenScentIntel, onOpenLayerTool, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, entryPreset = 'all' }) => {
   if (isGuestMode) {
     return (
       <OdaraLegacyCollectionPage
         onClose={onClose}
         onOpenFragranceDetail={onOpenFragranceDetail}
+        onOpenLayerTool={onOpenLayerTool}
         userId={userId}
         isGuestMode={isGuestMode}
       />
@@ -14783,6 +14781,7 @@ const OdaraCollectionPage: React.FC<{
     <OdaraSignedInWardrobeOnboardingPage
       onClose={onClose}
       onOpenScentIntel={onOpenScentIntel}
+      onOpenLayerTool={onOpenLayerTool}
       userId={userId}
       selectedContext={selectedContext}
       entryPreset={entryPreset}
@@ -14799,6 +14798,7 @@ const OdaraMenuDestination: React.FC<{
   onSearch?: () => void;
   onOpenFragranceDetail: (detail: OdaraFragranceDetailSurfaceState) => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
+  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   onCapturePreferenceMoment?: (payload: {
     preference_state: PersistedPreferenceMomentState;
     source: string;
@@ -14821,7 +14821,7 @@ const OdaraMenuDestination: React.FC<{
   isGuestMode: boolean;
   selectedContext: string;
   collectionPreset?: OdaraCollectionEntryPreset;
-}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, onOpenScentIntel, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
+}> = ({ page, onClose, onOpenCollection, onSearch, onOpenFragranceDetail, onOpenScentIntel, onOpenLayerTool, onCapturePreferenceMoment, userId, isGuestMode, selectedContext, collectionPreset = 'all' }) => {
   if (page === 'profile') {
     return (
       <OdaraProfilePage
@@ -14840,6 +14840,7 @@ const OdaraMenuDestination: React.FC<{
         onClose={onClose}
         onOpenFragranceDetail={onOpenFragranceDetail}
         onOpenScentIntel={onOpenScentIntel}
+        onOpenLayerTool={onOpenLayerTool}
         onCapturePreferenceMoment={onCapturePreferenceMoment}
         userId={userId}
         isGuestMode={isGuestMode}
@@ -17850,6 +17851,69 @@ const OdaraScreen = ({
     updateSignedInDayState,
   ]);
 
+  const handleOpenLayerToolFromDetail = useCallback(async (detail: OdaraFragranceDetailSurfaceState) => {
+    const anchorCard = fragranceDetailSurfaceStateToDisplayCard(detail);
+    if (!anchorCard) return;
+    if (isGuestMode) {
+      setFragranceDetailSheet(null);
+      setMenuPage(null);
+      setGuestLayerExpanded(true);
+      return;
+    }
+
+    if (signedInSearchPreviewDisabledReason) {
+      showSearchFeedback(anchorCard.fragrance_id, signedInSearchPreviewDisabledReason);
+      return;
+    }
+
+    const capturedSlot = stateKey;
+    const current = signedInDayStateMapRef.current[currentDayStateKey] ?? createDefaultSignedInDayState();
+    const detailHydration = await fetchFragranceDetail(anchorCard.fragrance_id);
+    const resolvedCard = resolveDisplayCardWithDetails(anchorCard, detailHydration);
+    if (activeSlotRef.current !== capturedSlot) return;
+
+    if (!current.manualHeroCard && !current.manualLayerCard) {
+      captureSignedInSearchPreviewSnapshot(currentDayStateKey);
+    }
+
+    const nextDayState: SignedInDayState = {
+      ...current,
+      manualHeroCard: resolvedCard,
+      manualLayerCard: null,
+      lockState: 'neutral',
+      lockedCard: null,
+      lockedLayerCard: null,
+      lockedLayerMode: null,
+      lockedResolvedCurrentCard: null,
+      lockedContext: null,
+      lockedMood: 'balance',
+      lockedPromotedAltId: null,
+    };
+
+    const prefetchedAlternates = await primeSignedInPreviewTopCard(resolvedCard);
+    if (activeSlotRef.current !== capturedSlot) return;
+
+    const decision = resolveSearchPreviewDecision(nextDayState);
+    updateSignedInDayState(currentDayStateKey, () => nextDayState);
+    applySignedInSearchPreviewDecision(decision, { prefetchedAlternates });
+    setLayerExpanded(true);
+    setMenuPage(null);
+    setFragranceDetailSheet(null);
+    showSearchFeedback(anchorCard.fragrance_id, 'Layer tool opened');
+  }, [
+    applySignedInSearchPreviewDecision,
+    captureSignedInSearchPreviewSnapshot,
+    currentDayStateKey,
+    fetchFragranceDetail,
+    isGuestMode,
+    primeSignedInPreviewTopCard,
+    resolveSearchPreviewDecision,
+    showSearchFeedback,
+    signedInSearchPreviewDisabledReason,
+    stateKey,
+    updateSignedInDayState,
+  ]);
+
   // Effect 1: CLEAR card state immediately when the slot (date or context) changes
   useEffect(() => {
     if (prevSlotRef.current === stateKey) return; // same slot, no-op
@@ -20674,6 +20738,7 @@ const OdaraScreen = ({
           }}
           onOpenFragranceDetail={openFragranceDetailSheet}
           onOpenScentIntel={openScentIntelSheet}
+          onOpenLayerTool={handleOpenLayerToolFromDetail}
           userId={userId}
           isGuestMode={isGuestMode}
           selectedContext={selectedContext}
@@ -20686,6 +20751,7 @@ const OdaraScreen = ({
         detail={fragranceDetailSheet}
         onClose={() => setFragranceDetailSheet(null)}
         onOpenScentIntel={openScentIntelSheet}
+        onOpenLayerTool={handleOpenLayerToolFromDetail}
       />
 
       <OdaraScentIntelSheet
