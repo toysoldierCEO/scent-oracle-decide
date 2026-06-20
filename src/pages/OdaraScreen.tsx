@@ -9,6 +9,15 @@ import {
   isScentProfileChip,
   shouldShowVesperizingNotice,
 } from "@/lib/fragranceDetailDisplayContract";
+import {
+  DEFAULT_MISSING_SCENT_DESIRED_STATUS,
+  MISSING_SCENT_DESIRED_STATUS_OPTIONS,
+  getMissingScentDesiredStatusLabel,
+  normalizeMissingScentDesiredStatus,
+  shouldAutoApplyCollectionForMatchedIntake,
+  shouldAutoApplyWishlistForMatchedIntake,
+  type MissingScentDesiredStatus,
+} from "@/lib/missingScentCollectionSemantics";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
@@ -4067,6 +4076,9 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
   const statusLabel = getMissingFragranceStatusLabel(card.request_status, card.canonical_fragrance_id);
   const desiredStatusLabel = getMissingFragranceDesiredStatusLabel(card.desired_status);
   const canOpenCanonical = Boolean(card.canonical_fragrance_id && onOpenCanonical);
+  const resolvedStatusCopy = card.desired_status === 'owned'
+    ? 'Matched — in Collection'
+    : `Matched — ${desiredStatusLabel}`;
   const cardBody = (
     <>
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -4112,7 +4124,7 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
       </div>
 
       <p className="mt-3 text-[11.5px] leading-[1.55] text-foreground/48">
-        Vesper is checking source-backed scent data. This item is not fully ranked yet.
+        Vesper is checking source-backed scent data. This saved item is not ranked or layered yet.
       </p>
       <p className="mt-1.5 text-[10.5px] leading-[1.5] text-foreground/38">
         No notes, accords, pyramids, perfumer, release year, or performance claims are created from this request.
@@ -4120,7 +4132,7 @@ const OdaraMissingFragranceProvisionalCard: React.FC<{
       {card.canonical_fragrance_id ? (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
           <div className="min-w-0 text-[11.5px] leading-snug text-foreground/52">
-            Matched — ready soon
+            {resolvedStatusCopy}
           </div>
           {canOpenCanonical ? (
             <button
@@ -4411,13 +4423,16 @@ type OdaraCollectionSort = 'role' | 'rating' | 'family' | 'name' | 'brand';
 
 type OdaraWardrobeSurface = 'wardrobe' | 'search' | 'detail' | 'confirmation';
 type OdaraWardrobeDetailReturnSurface = 'wardrobe' | 'search';
-type MissingFragranceDesiredStatus = 'owned' | 'wishlist' | 'tried' | 'liked';
+type MissingFragranceDesiredStatus = MissingScentDesiredStatus;
 type MissingFragranceRequestStatus =
   | 'pending'
   | 'investigating'
+  | 'searching'
   | 'source_found'
+  | 'needs_review'
   | 'matched_existing'
   | 'canonical_created'
+  | 'resolved'
   | 'rejected';
 type MissingFragranceProvisionalCard = {
   request_id: string;
@@ -4434,52 +4449,40 @@ type MissingFragranceProvisionalCard = {
   resolved_at: string | null;
 };
 
-const MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS: Array<{ value: MissingFragranceDesiredStatus; label: string }> = [
-  { value: 'wishlist', label: 'Wishlist' },
-  { value: 'owned', label: 'Owned' },
-  { value: 'tried', label: 'Tried' },
-  { value: 'liked', label: 'Liked' },
-];
+const MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS = MISSING_SCENT_DESIRED_STATUS_OPTIONS;
 
 const buildEmptyMissingFragranceForm = () => ({
   name: '',
   brand: '',
   concentration: '',
   sourceUrl: '',
-  desiredStatus: 'wishlist' as MissingFragranceDesiredStatus,
+  desiredStatus: DEFAULT_MISSING_SCENT_DESIRED_STATUS as MissingFragranceDesiredStatus,
 });
 
-const normalizeMissingFragranceDesiredStatus = (value: unknown): MissingFragranceDesiredStatus => {
-  const status = readTrimmedLayerText(value).toLowerCase();
-  return status === 'owned' || status === 'tried' || status === 'liked' || status === 'wishlist'
-    ? status
-    : 'wishlist';
-};
+const normalizeMissingFragranceDesiredStatus = normalizeMissingScentDesiredStatus;
 
 const normalizeMissingFragranceRequestStatus = (value: unknown): MissingFragranceRequestStatus => {
   const status = readTrimmedLayerText(value).toLowerCase();
   return status === 'investigating'
+    || status === 'searching'
     || status === 'source_found'
+    || status === 'needs_review'
     || status === 'matched_existing'
     || status === 'canonical_created'
+    || status === 'resolved'
     || status === 'rejected'
     || status === 'pending'
     ? status
     : 'pending';
 };
 
-const getMissingFragranceDesiredStatusLabel = (status: MissingFragranceDesiredStatus) => {
-  if (status === 'owned') return 'Owned';
-  if (status === 'tried') return 'Tried';
-  if (status === 'liked') return 'Liked';
-  return 'Wishlist';
-};
+const getMissingFragranceDesiredStatusLabel = getMissingScentDesiredStatusLabel;
 
 const getMissingFragranceStatusLabel = (status: MissingFragranceRequestStatus, canonicalFragranceId?: string | null) => {
-  if (canonicalFragranceId || status === 'matched_existing' || status === 'canonical_created') return 'Matched';
+  if (canonicalFragranceId || status === 'matched_existing' || status === 'canonical_created' || status === 'resolved') return 'Matched';
   if (status === 'source_found') return 'Source check pending';
-  if (status === 'investigating') return 'Vesperizing';
-  if (status === 'rejected') return 'Needs review';
+  if (status === 'investigating' || status === 'searching') return 'Vesperizing';
+  if (status === 'needs_review' || status === 'rejected') return 'Needs review';
   return 'Vesperizing';
 };
 
@@ -4487,6 +4490,7 @@ const isResolvedMissingFragranceCard = (card: MissingFragranceProvisionalCard) =
   Boolean(card.canonical_fragrance_id)
     || card.request_status === 'matched_existing'
     || card.request_status === 'canonical_created'
+    || card.request_status === 'resolved'
 );
 
 const shouldShowMissingFragranceProvisionalCard = (card: MissingFragranceProvisionalCard) => (
@@ -4562,8 +4566,9 @@ const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, nor
     card.submitted_brand,
     card.submitted_concentration,
     card.desired_status,
+    getMissingFragranceDesiredStatusLabel(card.desired_status),
     card.request_status,
-    'vesperizing limited intel source check pending',
+    'collection vesperizing limited intel source check pending',
   ].filter(Boolean).join(' '));
   return queryTokens.every((token) => searchable.includes(token));
 };
@@ -11730,6 +11735,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
   const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
   const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
+  const matchedCollectionHandoffRequestIdsRef = useRef<Set<string>>(new Set());
   const matchedWishlistHandoffRequestIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -12771,15 +12777,74 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     if (!sessionResolved || isGuestMode || !activeSessionUserId) return;
 
     for (const card of provisionalIntakeCards) {
-      if (card.desired_status !== 'wishlist') continue;
       if (!isResolvedMissingFragranceCard(card) || !card.canonical_fragrance_id) continue;
-      if (matchedWishlistHandoffRequestIdsRef.current.has(card.request_id)) continue;
 
       const catalogItem = catalogById.get(card.canonical_fragrance_id);
       if (!catalogItem) continue;
 
       const currentSignal = effectiveSignalMap[card.canonical_fragrance_id] ?? null;
-      if (currentSignal?.owned || currentSignal?.wishlist_persisted) continue;
+      if (shouldAutoApplyCollectionForMatchedIntake({
+        desiredStatus: card.desired_status,
+        isResolved: isResolvedMissingFragranceCard(card),
+        canonicalFragranceId: card.canonical_fragrance_id,
+        alreadyOwned: Boolean(currentSignal?.owned),
+      })) {
+        if (matchedCollectionHandoffRequestIdsRef.current.has(card.request_id)) continue;
+
+        matchedCollectionHandoffRequestIdsRef.current.add(card.request_id);
+        void (async () => {
+          try {
+            const { error: rpcError } = await odaraSupabase.rpc('add_to_collection_v2' as any, {
+              p_user_id: activeSessionUserId,
+              p_name: catalogItem.name,
+              p_brand: catalogItem.brand ?? '',
+              p_release_year: catalogItem.release_year,
+              p_concentration: catalogItem.concentration,
+              p_status: 'owned',
+              p_love_level: null,
+              p_negative_level: null,
+              p_longevity_feedback: null,
+              p_projection_feedback: null,
+            } as any);
+
+            if (rpcError) throw rpcError;
+
+            upsertSessionSignal(catalogItem, (current) => ({
+              ...current,
+              owned: true,
+              own_persisted: true,
+              wishlist: false,
+              wishlist_persisted: false,
+              negative_state: 0,
+              negative_persisted: false,
+              updated_at: Date.now(),
+            }));
+
+            const refreshResults = await Promise.allSettled([
+              loadCollection(),
+              loadPersistedWishlists(),
+              loadProvisionalIntakeCards(),
+            ]);
+            for (const result of refreshResults) {
+              if (result.status === 'rejected') {
+                console.error('[Odara] matched intake collection refresh failed', result.reason);
+              }
+            }
+          } catch (handoffError) {
+            console.error('[Odara] matched intake collection handoff failed', handoffError);
+          }
+        })();
+        continue;
+      }
+
+      if (matchedWishlistHandoffRequestIdsRef.current.has(card.request_id)) continue;
+      if (!shouldAutoApplyWishlistForMatchedIntake({
+        desiredStatus: card.desired_status,
+        isResolved: isResolvedMissingFragranceCard(card),
+        canonicalFragranceId: card.canonical_fragrance_id,
+        alreadyOwned: Boolean(currentSignal?.owned),
+        alreadyWishlisted: Boolean(currentSignal?.wishlist_persisted),
+      })) continue;
 
       matchedWishlistHandoffRequestIdsRef.current.add(card.request_id);
       void (async () => {
@@ -13236,10 +13301,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               <div className="space-y-3 border-b border-white/[0.04] px-4 py-4">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
-                    Vesperizing
+                    Saved requests
                   </div>
                   <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
-                    Pending source checks are limited-intel until Vesper finds verified scent data.
+                    These saved scents stay limited-intel until Vesper finds verified scent data.
                   </div>
                 </div>
                 {searchProvisionalIntakeCards.map((card) => (
@@ -14124,10 +14189,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 <div className="flex items-center justify-between gap-3 px-1">
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.24em] text-[#f8e5b9]/76">
-                      Vesperizing
+                      Collection
                     </div>
                     <div className="mt-1 text-[11.5px] leading-snug text-foreground/44">
-                      Pending source checks stay separate from ranked collection scents.
+                      Saved scents still checking source data stay out of recommendations and layers until ready.
                     </div>
                   </div>
                   {provisionalIntakeLoading ? (
@@ -20129,8 +20194,14 @@ const OdaraScreen = ({
     && !searchHasExactFragranceMatch;
   const visibleMissingIntakeCards = useMemo(() => {
     if (!searchHasQuery) return [];
-    return missingIntakeCards.filter((card) => missingFragranceMatchesQuery(card, normalizedActiveSearchQuery));
-  }, [missingIntakeCards, normalizedActiveSearchQuery, searchHasQuery]);
+    const visibleCanonicalResultIds = new Set(searchResults.map((result) => result.fragrance_id));
+    return missingIntakeCards
+      .filter((card) => missingFragranceMatchesQuery(card, normalizedActiveSearchQuery))
+      .filter((card) => {
+        if (!isResolvedMissingFragranceCard(card) || !card.canonical_fragrance_id) return true;
+        return !visibleCanonicalResultIds.has(card.canonical_fragrance_id);
+      });
+  }, [missingIntakeCards, normalizedActiveSearchQuery, searchHasQuery, searchResults]);
 
   useEffect(() => {
     if (missingIntakeOpen || !searchHasQuery) return;
@@ -20185,9 +20256,10 @@ const OdaraScreen = ({
 
       const duplicateActiveRequest = Boolean((data as any)?.duplicate_active_request);
       await loadMissingIntakeCards();
+      const desiredStatusLabel = getMissingFragranceDesiredStatusLabel(missingIntakeForm.desiredStatus);
       setMissingIntakeSuccess(duplicateActiveRequest
-        ? 'Vesper already has this request queued. Verified scent data stays pending.'
-        : 'Vesper is checking source-backed scent data.');
+        ? `Vesper already has this ${desiredStatusLabel.toLowerCase()} request queued. Verified scent data stays pending.`
+        : `${desiredStatusLabel} request saved. Vesper is checking source-backed scent data.`);
       setMissingIntakeError(null);
       haptic('success');
     } catch (error: any) {
@@ -20691,7 +20763,7 @@ const OdaraScreen = ({
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-[10px] uppercase tracking-[0.22em] text-[#f8e5b9]/76">
-                          Vesperizing
+                          Saved scent requests
                         </div>
                         <div className="mt-1 text-[11px] leading-snug text-foreground/44">
                           Vesper will look for verified scent data. You do not need to enter notes or accords.
@@ -20740,7 +20812,7 @@ const OdaraScreen = ({
                             Ask Vesper to find it
                           </span>
                           <span className="mt-0.5 block text-[11.5px] leading-snug text-foreground/48">
-                            Create a pending limited-intel request. No fake notes or rankings.
+                            Save it to Collection while Vesper checks source-backed data. No fake notes or rankings.
                           </span>
                         </span>
                         <span
@@ -20767,10 +20839,10 @@ const OdaraScreen = ({
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="text-[13px] text-foreground/90">
-                              Ask Vesper to find it
+                              Save missing scent
                             </div>
                             <p className="mt-1 text-[11.5px] leading-snug text-foreground/48">
-                              Pending requests stay limited-intel until verified scent data is found.
+                              Vesper will look for verified scent data. You do not need to enter notes or accords.
                             </p>
                           </div>
                           <button
@@ -20841,7 +20913,7 @@ const OdaraScreen = ({
                           </label>
 
                           <div className="grid gap-1.5">
-                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Desired status intent</span>
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-foreground/42">Save as</span>
                             <div className="grid grid-cols-4 gap-1.5">
                               {MISSING_FRAGRANCE_DESIRED_STATUS_OPTIONS.map((option) => {
                                 const active = missingIntakeForm.desiredStatus === option.value;
@@ -20878,7 +20950,7 @@ const OdaraScreen = ({
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <p className="min-w-0 text-[10.5px] leading-snug text-foreground/42">
-                            This will not create catalog, collection, ranking, note, accord, pyramid, perfumer, or performance data.
+                            This creates a Vesperizer intake request only. It does not create catalog truth, rankings, notes, accords, pyramids, perfumer, or performance data.
                           </p>
                           <button
                             type="submit"
@@ -20890,7 +20962,7 @@ const OdaraScreen = ({
                               color: 'rgba(248,229,185,0.94)',
                             }}
                           >
-                            {missingIntakeSubmitting ? 'Sending' : 'Submit'}
+                            {missingIntakeSubmitting ? 'Saving' : 'Save'}
                           </button>
                         </div>
                       </form>
