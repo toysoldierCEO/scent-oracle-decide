@@ -3,15 +3,21 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const VERSION = "vesperizer_intake_autopilot_v1";
 const SUPABASE_CLI = "supabase@2.106.0";
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 const FETCH_TIMEOUT_MS = 8000;
+const MAX_IDENTITY_DISCOVERY_URLS = 80;
+const IDENTITY_DISCOVERY_CONCURRENCY = 6;
 
 const TERMINAL_STATES = new Set([
   "matched_existing_catalog",
+  "resolving_identity",
+  "identity_candidates_ready",
+  "needs_identity_confirmation",
   "canonical_candidate_ready",
   "evidence_capture_ready",
   "profile_completion_ready",
@@ -38,6 +44,8 @@ const OFFICIAL_DOMAINS_BY_BRAND = new Map([
   ["jean paul gaultier", ["jeanpaulgaultier.com"]],
   ["le labo", ["lelabofragrances.com"]],
   ["maison francis kurkdjian", ["franciskurkdjian.com"]],
+  ["mihan aromatics", ["mihanaromatics.com"]],
+  ["mihan", ["mihanaromatics.com"]],
   ["parfums de marly", ["parfums-de-marly.com"]],
   ["prada", ["prada-beauty.com", "prada.com"]],
   ["tom ford", ["tomfordbeauty.com", "tomford.com"]],
@@ -46,15 +54,42 @@ const OFFICIAL_DOMAINS_BY_BRAND = new Map([
   ["yves saint laurent", ["yslbeautyus.com", "yslbeauty.com"]],
 ]);
 
+const BRAND_LABEL_BY_KEY = new Map([
+  ["alexandria", "Alexandria Fragrances"],
+  ["alexandria fragrances", "Alexandria Fragrances"],
+  ["chanel", "Chanel"],
+  ["creed", "Creed"],
+  ["dior", "Dior"],
+  ["diptyque", "Diptyque"],
+  ["goldfield banks", "Goldfield & Banks"],
+  ["goldfield & banks", "Goldfield & Banks"],
+  ["goldfield and banks", "Goldfield & Banks"],
+  ["guerlain", "Guerlain"],
+  ["heeley", "Heeley"],
+  ["jean paul gaultier", "Jean Paul Gaultier"],
+  ["le labo", "Le Labo"],
+  ["maison francis kurkdjian", "Maison Francis Kurkdjian"],
+  ["mihan aromatics", "Mihan Aromatics"],
+  ["mihan", "Mihan Aromatics"],
+  ["parfums de marly", "Parfums de Marly"],
+  ["prada", "Prada"],
+  ["tom ford", "Tom Ford"],
+  ["versace", "Versace"],
+  ["xerjoff", "Xerjoff"],
+  ["yves saint laurent", "Yves Saint Laurent"],
+]);
+
 const args = parseArgs(process.argv.slice(2));
 const dryRun = args["dry-run"] !== "false" && args.live !== "true";
 const limit = Math.min(positiveInt(args.limit, DEFAULT_LIMIT), MAX_LIMIT);
 const outputPrefix = args["output-prefix"] ?? `proposed_intake_autopilot_${timestampForFile()}`;
 
-main().catch((error) => {
-  console.error(`[${VERSION}] failed: ${error?.stack || error?.message || String(error)}`);
-  process.exitCode = 1;
-});
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(`[${VERSION}] failed: ${error?.stack || error?.message || String(error)}`);
+    process.exitCode = 1;
+  });
+}
 
 async function main() {
   const startedAt = new Date().toISOString();
@@ -72,6 +107,7 @@ async function main() {
   const evidenceCandidates = [];
   const metadataCandidates = [];
   const resolvePlans = [];
+  const identityCandidates = [];
   const needsReview = [];
   const sourceNotFound = [];
   const summaries = [];
@@ -79,16 +115,22 @@ async function main() {
   for (const target of targets) {
     const catalogMatches = await findCatalogMatches(target);
     const primaryMatch = pickPrimaryCatalogMatch(target, catalogMatches);
+    const identityDiscovery = primaryMatch?.exact || clean(target.submitted_brand)
+      ? { status: clean(target.submitted_brand) ? "skipped_brand_present" : "skipped_existing_catalog", candidates: [], attempts: [] }
+      : await discoverIdentityCandidates(target);
     const sourceDiscovery = primaryMatch?.exact
       ? { attempts: [], best: null, status: "skipped_existing_catalog" }
+      : hasActionableIdentityCandidates(identityDiscovery)
+        ? { attempts: [], best: null, status: "skipped_identity_candidate_ready" }
       : await discoverSources(target);
 
-    const classification = classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery);
+    const classification = classifyTarget(target, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery);
     summaries.push(classification.summary);
 
     if (classification.canonicalCandidate) canonicalCandidates.push(classification.canonicalCandidate);
     evidenceCandidates.push(...classification.evidenceCandidates);
     metadataCandidates.push(...classification.metadataCandidates);
+    identityCandidates.push(...classification.identityCandidates);
     if (classification.resolvePlan) resolvePlans.push(classification.resolvePlan);
     if (classification.needsReview) needsReview.push(classification.needsReview);
     if (classification.sourceNotFound) sourceNotFound.push(classification.sourceNotFound);
@@ -106,6 +148,10 @@ async function main() {
     canonical_candidate_count: canonicalCandidates.length,
     evidence_candidate_count: evidenceCandidates.length,
     metadata_candidate_count: metadataCandidates.length,
+    identity_candidate_count: identityCandidates.length,
+    identity_auto_resolvable_count: summaries.filter((item) => item.state === "identity_candidates_ready").length,
+    needs_identity_confirmation_count: summaries.filter((item) => item.state === "needs_identity_confirmation").length,
+    no_identity_found_count: summaries.filter((item) => item.identity_summary?.status === "no_identity_candidates").length,
     resolve_plan_count: resolvePlans.length,
     needs_review_count: needsReview.length,
     source_not_found_count: sourceNotFound.length,
@@ -126,6 +172,7 @@ async function main() {
     canonicalCandidates,
     evidenceCandidates,
     metadataCandidates,
+    identityCandidates,
     resolvePlans,
     needsReview,
     sourceNotFound,
@@ -150,23 +197,26 @@ async function loadIntakeTargets() {
   }
 
   if (targetName || targetBrand) {
-    if (!targetName || !targetBrand) {
-      throw new Error("--target-name and --target-brand must be supplied together.");
+    if (!targetName) {
+      throw new Error("--target-name is required when --target-brand is supplied.");
     }
+    const brandPredicate = targetBrand
+      ? `and ${sqlNormalizeText("i.submitted_brand")} = ${sqlString(normalizeIdentity(targetBrand))}`
+      : `and nullif(btrim(coalesce(i.submitted_brand, '')), '') is null`;
     const targets = await queryIntakes(`
       select ${intakeProjectionSql()}
       from public.fragrance_intake_requests_v1 i
       where ${sqlNormalizeText("i.submitted_name")} = ${sqlString(normalizeIdentity(targetName))}
-        and ${sqlNormalizeText("i.submitted_brand")} = ${sqlString(normalizeIdentity(targetBrand))}
+        ${brandPredicate}
       order by i.created_at desc
       limit 5
     `);
     if (targets.length > 0) return targets;
 
     return [{
-      id: `ad_hoc:${normalizeIdentity(targetBrand)}:${normalizeIdentity(targetName)}`,
+      id: `ad_hoc:${normalizeIdentity(targetBrand ?? "blank-brand")}:${normalizeIdentity(targetName)}`,
       submitted_name: targetName,
-      submitted_brand: targetBrand,
+      submitted_brand: targetBrand ?? null,
       submitted_concentration: null,
       submitted_source_url: null,
       desired_status: "review_only",
@@ -368,10 +418,111 @@ async function discoverSources(target) {
   };
 }
 
-function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
+async function discoverIdentityCandidates(target) {
+  const submittedName = clean(target.submitted_name);
+  if (!submittedName) {
+    return { status: "no_identity_candidates", attempts: [], candidates: [] };
+  }
+
+  const sourceUrl = cleanUrl(target.submitted_source_url);
+  const candidateSources = [];
+  if (sourceUrl) {
+    candidateSources.push({
+      url: sourceUrl,
+      brand_key: null,
+      brand: null,
+      source_type: "submitted_source_url",
+      source_authority: "user_submitted_source_url",
+    });
+  }
+  candidateSources.push(...nameOnlyOfficialCandidateSources(submittedName));
+
+  const attempts = await mapWithConcurrency(
+    uniqueBy(candidateSources, (source) => source.url).slice(0, MAX_IDENTITY_DISCOVERY_URLS),
+    IDENTITY_DISCOVERY_CONCURRENCY,
+    async (source) => {
+      const authority = source.brand
+        ? classifySourceAuthority(source.brand, source.url)
+        : classifyKnownSourceAuthority(source.url);
+      if (!authority.allowed && source.source_type !== "submitted_source_url") {
+        return {
+          url: source.url,
+          status: "skipped_non_official_or_unsafe",
+          source_type: authority.sourceType,
+          source_authority: authority.label,
+          candidate_brand: source.brand,
+        };
+      }
+
+      try {
+        const fetched = await fetchText(source.url);
+        const identity = evaluateIdentityCandidate(target, source, fetched.text, source.url);
+        return {
+          url: source.url,
+          status: fetched.ok ? "fetched" : "fetch_failed",
+          http_status: fetched.status,
+          source_type: authority.allowed ? authority.sourceType : source.source_type,
+          source_authority: authority.allowed ? authority.label : source.source_authority,
+          candidate_brand: source.brand,
+          identity,
+        };
+      } catch (error) {
+        return {
+          url: source.url,
+          status: "fetch_error",
+          error: safeError(error),
+          source_type: authority.sourceType ?? source.source_type,
+          source_authority: authority.label ?? source.source_authority,
+          candidate_brand: source.brand,
+        };
+      }
+    },
+  );
+
+  const candidates = attempts
+    .filter((attempt) => attempt.status === "fetched" && attempt.identity?.source_text_name_support)
+    .map((attempt) => ({
+      name: submittedName,
+      brand: attempt.identity?.candidate_brand ?? attempt.candidate_brand ?? null,
+      source_url: attempt.url,
+      source_type: attempt.source_type === "official_brand" ? "official_brand" : "source_candidate",
+      confidence: attempt.identity?.confidence ?? 0.5,
+      confidence_reasons: attempt.identity?.confidence_reasons ?? [],
+      ambiguity_warnings: attempt.identity?.ambiguity_warnings ?? [],
+      next_action: attempt.identity?.confidence >= 0.82
+        ? "review candidate; if accepted, continue source/evidence capture using this brand"
+        : "confirm identity before source/evidence capture",
+    }))
+    .filter((candidate) => candidate.brand)
+    .sort((a, b) => b.confidence - a.confidence);
+
+  const dedupedCandidates = uniqueBy(candidates, (candidate) => `${normalizeIdentity(candidate.name)}|${normalizeIdentity(candidate.brand)}|${candidate.source_url}`);
+  const strongCandidates = dedupedCandidates.filter((candidate) => candidate.confidence >= 0.82);
+
+  if (strongCandidates.length === 1 && dedupedCandidates.filter((candidate) => candidate.confidence >= 0.7).length === 1) {
+    return { status: "identity_candidates_ready", attempts, candidates: strongCandidates };
+  }
+
+  if (dedupedCandidates.length > 0) {
+    return {
+      status: "needs_identity_confirmation",
+      attempts,
+      candidates: dedupedCandidates.slice(0, 5),
+    };
+  }
+
+  return {
+    status: "no_identity_candidates",
+    attempts,
+    candidates: [],
+  };
+}
+
+export function classifyTarget(target, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery) {
   const normalizedName = normalizeIdentity(target.submitted_name);
   const normalizedBrand = normalizeIdentity(target.submitted_brand);
   const existingCanonical = primaryMatch?.exact ? primaryMatch : null;
+  const identitySummary = summarizeIdentityDiscovery(identityDiscovery);
   const sourceSummary = summarizeSourceDiscovery(sourceDiscovery);
   const baseSummary = {
     intake_id: target.id,
@@ -385,6 +536,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
     state: null,
     reason: null,
     next_action: null,
+    identity_summary: identitySummary,
     source_summary: sourceSummary,
   };
 
@@ -410,6 +562,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
       canonicalCandidate: null,
       evidenceCandidates: [],
       metadataCandidates: [],
+      identityCandidates: [],
       resolvePlan: target.canonical_fragrance_id ? null : {
         intake_id: target.id,
         submitted_name: target.submitted_name,
@@ -421,6 +574,62 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
         next_action: "run resolve_fragrance_intake_request_v1 with p_dry_run=true in a separate reviewed step",
       },
       needsReview: null,
+      sourceNotFound: null,
+    };
+  }
+
+  if (identityDiscovery.status === "identity_candidates_ready") {
+    const candidates = identityDiscovery.candidates ?? [];
+    const recommended = candidates[0] ?? null;
+    const summary = {
+      ...baseSummary,
+      state: "identity_candidates_ready",
+      confidence: recommended?.confidence ?? 0.78,
+      reason: "A high-confidence identity candidate was found before source discovery.",
+      next_action: "review identity candidate, then run source/evidence capture with the selected brand",
+      user_facing_card_should_still_say_vesperizing: true,
+      recommended_identity_candidate: recommended,
+    };
+    return {
+      summary,
+      canonicalCandidate: null,
+      evidenceCandidates: [],
+      metadataCandidates: [],
+      identityCandidates: candidates.map((candidate) => ({
+        intake_id: target.id,
+        ...candidate,
+      })),
+      resolvePlan: null,
+      needsReview: null,
+      sourceNotFound: null,
+    };
+  }
+
+  if (identityDiscovery.status === "needs_identity_confirmation") {
+    const candidates = identityDiscovery.candidates ?? [];
+    const summary = {
+      ...baseSummary,
+      state: "needs_identity_confirmation",
+      confidence: candidates[0]?.confidence ?? 0.62,
+      reason: "Multiple or uncertain identity candidates were found; user or reviewer confirmation is required.",
+      next_action: "present identity candidates for confirmation before source/evidence capture",
+      user_facing_card_should_still_say_vesperizing: true,
+      identity_candidates: candidates,
+    };
+    return {
+      summary,
+      canonicalCandidate: null,
+      evidenceCandidates: [],
+      metadataCandidates: [],
+      identityCandidates: candidates.map((candidate) => ({
+        intake_id: target.id,
+        ...candidate,
+      })),
+      resolvePlan: null,
+      needsReview: {
+        ...summary,
+        review_type: "identity_confirmation",
+      },
       sourceNotFound: null,
     };
   }
@@ -471,6 +680,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
       canonicalCandidate,
       evidenceCandidates: [evidenceCandidate],
       metadataCandidates: [metadataCandidate],
+      identityCandidates: [],
       resolvePlan: null,
       needsReview: null,
       sourceNotFound: null,
@@ -492,6 +702,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
       canonicalCandidate: null,
       evidenceCandidates: [],
       metadataCandidates: [],
+      identityCandidates: [],
       resolvePlan: null,
       needsReview: {
         ...summary,
@@ -513,7 +724,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
     ...baseSummary,
     state: "source_not_found_after_attempts",
     confidence: 0.2,
-    reason: "No exact catalog match and no exact official source support found during bounded dry-run discovery.",
+    reason: "No identity candidates, exact catalog match, or exact official source support found during bounded dry-run discovery.",
     next_action: "manual source search or add exact official URL to intake",
     user_facing_card_should_still_say_vesperizing: true,
   };
@@ -522,6 +733,7 @@ function classifyTarget(target, catalogMatches, primaryMatch, sourceDiscovery) {
     canonicalCandidate: null,
     evidenceCandidates: [],
     metadataCandidates: [],
+    identityCandidates: [],
     resolvePlan: null,
     needsReview: null,
     sourceNotFound: summary,
@@ -555,13 +767,48 @@ function summarizeCatalogProfile(row, collectionStatus) {
 
 function officialCandidateUrls(brand, name) {
   const domains = OFFICIAL_DOMAINS_BY_BRAND.get(normalizeBrandKey(brand)) ?? [];
-  const slug = slugifyProductName(name);
   const urls = [];
   for (const domain of domains) {
-    urls.push(`https://${domain}/products/${slug}`);
-    urls.push(`https://${domain}/product/${slug}`);
+    for (const path of officialProductPathCandidates(name)) {
+      urls.push(`https://${domain}${path}`);
+    }
   }
   return urls;
+}
+
+function nameOnlyOfficialCandidateSources(name) {
+  const sources = [];
+  const seen = new Set();
+  for (const [brandKey, domains] of OFFICIAL_DOMAINS_BY_BRAND.entries()) {
+    const brand = BRAND_LABEL_BY_KEY.get(brandKey) ?? titleCaseWords(brandKey);
+    for (const domain of domains) {
+      const sourceKey = `${brand}|${domain}`;
+      if (seen.has(sourceKey)) continue;
+      seen.add(sourceKey);
+      for (const path of officialProductPathCandidates(name)) {
+        sources.push({
+          url: `https://${domain}${path}`,
+          brand_key: brandKey,
+          brand,
+          source_type: "official_brand",
+          source_authority: domain,
+        });
+      }
+    }
+  }
+  return sources;
+}
+
+function officialProductPathCandidates(name) {
+  const slug = slugifyProductName(name);
+  return [
+    `/products/${slug}`,
+    `/product/${slug}`,
+    `/products/${slug}-parfum`,
+    `/product/${slug}-parfum`,
+    `/products/${slug}-eau-de-parfum`,
+    `/product/${slug}-eau-de-parfum`,
+  ];
 }
 
 function classifySourceAuthority(brand, url) {
@@ -576,6 +823,20 @@ function classifySourceAuthority(brand, url) {
     return { allowed: false, sourceType: "non_official", label: `host_not_in_official_domain_allowlist:${host}` };
   }
   return { allowed: true, sourceType: "official_brand", label: host };
+}
+
+function classifyKnownSourceAuthority(url) {
+  const parsed = safeParseUrl(url);
+  if (!parsed || parsed.protocol !== "https:") {
+    return { allowed: false, sourceType: "unsafe_url", label: "unsafe_or_non_https_url" };
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  for (const domains of OFFICIAL_DOMAINS_BY_BRAND.values()) {
+    if (domains.some((domain) => host === domain || host.endsWith(`.${domain}`))) {
+      return { allowed: true, sourceType: "official_brand", label: host };
+    }
+  }
+  return { allowed: false, sourceType: "unclassified_source", label: `host_not_in_known_official_domains:${host}` };
 }
 
 async function fetchText(url) {
@@ -617,6 +878,59 @@ function evaluateSourceIdentity(target, sourceText, url) {
   };
 }
 
+function evaluateIdentityCandidate(target, source, sourceText, url) {
+  const haystack = normalizeIdentity(stripHtml(sourceText));
+  const nameKey = normalizeIdentity(target.submitted_name);
+  const brandKey = normalizeIdentity(source.brand);
+  const urlKey = normalizeIdentity(url);
+  const nameSupport = Boolean(nameKey && haystack.includes(nameKey));
+  const urlNameSupport = Boolean(nameKey && urlKey.includes(nameKey));
+  const brandSupport = Boolean(brandKey && haystack.includes(brandKey));
+  const officialDomainSupport = source.source_type === "official_brand" && Boolean(source.brand);
+  const exactNameSupport = nameSupport || urlNameSupport;
+  const exactBrandSupport = brandSupport || officialDomainSupport;
+  const confidenceReasons = [];
+  const ambiguityWarnings = [];
+
+  if (nameSupport) confidenceReasons.push("source text contains exact submitted fragrance name");
+  if (urlNameSupport) confidenceReasons.push("source URL contains exact submitted fragrance name slug");
+  if (brandSupport) confidenceReasons.push("source text contains candidate brand");
+  if (officialDomainSupport) confidenceReasons.push("candidate URL is on known official brand domain");
+  if (!nameSupport && urlNameSupport) ambiguityWarnings.push("name support came from URL slug; source text should be reviewed");
+  if (!brandSupport && officialDomainSupport) ambiguityWarnings.push("brand support came from official domain allowlist");
+
+  const confidence = exactNameSupport && exactBrandSupport
+    ? (nameSupport && brandSupport ? 0.92 : 0.84)
+    : exactNameSupport
+      ? 0.62
+      : 0.2;
+
+  return {
+    exact_name_support: exactNameSupport,
+    source_text_name_support: nameSupport,
+    brand_support: exactBrandSupport,
+    candidate_brand: source.brand,
+    url_identity_support: urlNameSupport,
+    confidence,
+    confidence_reasons: confidenceReasons,
+    ambiguity_warnings: ambiguityWarnings,
+  };
+}
+
+function hasActionableIdentityCandidates(identityDiscovery) {
+  return identityDiscovery?.status === "identity_candidates_ready"
+    || identityDiscovery?.status === "needs_identity_confirmation";
+}
+
+function summarizeIdentityDiscovery(identityDiscovery) {
+  return {
+    status: identityDiscovery?.status ?? "not_run",
+    attempts_count: identityDiscovery?.attempts?.length ?? 0,
+    candidate_count: identityDiscovery?.candidates?.length ?? 0,
+    best_candidate: identityDiscovery?.candidates?.[0] ?? null,
+  };
+}
+
 function summarizeSourceDiscovery(sourceDiscovery) {
   return {
     status: sourceDiscovery.status,
@@ -636,6 +950,7 @@ function writeArtifacts(prefix, artifacts) {
   writeJson(paths.canonicalCandidates, artifacts.canonicalCandidates);
   writeJson(paths.evidenceCandidates, artifacts.evidenceCandidates);
   writeJson(paths.metadataCandidates, artifacts.metadataCandidates);
+  writeJson(paths.identityCandidates, artifacts.identityCandidates);
   writeJson(paths.resolvePlans, artifacts.resolvePlans);
   writeJson(paths.needsReview, artifacts.needsReview);
   writeJson(paths.sourceNotFound, artifacts.sourceNotFound);
@@ -652,6 +967,10 @@ function writeMarkdown(path, summary) {
     `- canonical_candidate_count: ${summary.canonical_candidate_count}`,
     `- evidence_candidate_count: ${summary.evidence_candidate_count}`,
     `- metadata_candidate_count: ${summary.metadata_candidate_count}`,
+    `- identity_candidate_count: ${summary.identity_candidate_count}`,
+    `- identity_auto_resolvable_count: ${summary.identity_auto_resolvable_count}`,
+    `- needs_identity_confirmation_count: ${summary.needs_identity_confirmation_count}`,
+    `- no_identity_found_count: ${summary.no_identity_found_count}`,
     `- resolve_plan_count: ${summary.resolve_plan_count}`,
     `- needs_review_count: ${summary.needs_review_count}`,
     `- source_not_found_count: ${summary.source_not_found_count}`,
@@ -683,6 +1002,7 @@ function pathsFor(prefix) {
     canonicalCandidates: `${prefix}_canonical_candidates.json`,
     evidenceCandidates: `${prefix}_evidence_candidates.json`,
     metadataCandidates: `${prefix}_metadata_candidates.json`,
+    identityCandidates: `${prefix}_identity_candidates.json`,
     resolvePlans: `${prefix}_resolve_plans.json`,
     needsReview: `${prefix}_needs_review.json`,
     sourceNotFound: `${prefix}_source_not_found.json`,
@@ -835,6 +1155,32 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function uniqueBy(values, selector) {
+  const seen = new Set();
+  const next = [];
+  for (const value of values) {
+    const key = selector(value);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    next.push(value);
+  }
+  return next;
+}
+
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results.filter(Boolean);
+}
+
 function countBy(items, selector) {
   const counts = {};
   for (const item of items) {
@@ -859,4 +1205,16 @@ function redact(value) {
   return String(value ?? "")
     .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
     .replace(/service[_-]?role[a-zA-Z0-9._=-]*/gi, "service_role[redacted]");
+}
+
+function titleCaseWords(value) {
+  return String(value ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function isDirectRun() {
+  return Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
