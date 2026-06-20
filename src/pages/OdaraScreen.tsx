@@ -28,6 +28,13 @@ import {
   resolveSignedInAddAsTodayDisabledReason,
   resolveSignedInAddAsTodayLocked,
 } from "@/lib/signedInAddAsTodayGating";
+import {
+  buildFragranceSearchBackendQueryVariants,
+  buildFragranceSearchTokens,
+  matchesFragranceSearchQuery,
+  normalizeFragranceSearchText,
+  scoreFragranceSearchCandidate,
+} from "@/lib/fragranceSearchNormalization";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
@@ -1446,12 +1453,11 @@ interface OdaraSearchFragranceResult {
 }
 
 function normalizeOdaraSearchQuery(query: string) {
-  return query
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeFragranceSearchText(query);
+}
+
+function getOdaraSearchTokens(query: string) {
+  return buildFragranceSearchTokens(query);
 }
 
 function normalizeOdaraSearchFragranceResult(
@@ -1506,6 +1512,46 @@ function searchResultToDisplayCard(result: OdaraSearchFragranceResult): DisplayC
     reason_chip_explanation: null,
     isHero: false,
   };
+}
+
+function scoreOdaraSearchResult(query: string, result: OdaraSearchFragranceResult) {
+  return scoreFragranceSearchCandidate(query, {
+    name: result.title,
+    brand: result.brand,
+    family: result.family_key,
+    familyLabel: result.family_key ? getFamilyLabelText(result.family_key) : '',
+    notes: result.notes,
+    accords: result.accords,
+  });
+}
+
+function mergeOdaraSearchResults(
+  query: string,
+  primaryResults: OdaraSearchFragranceResult[],
+  fallbackResults: OdaraSearchFragranceResult[],
+  limit = 48,
+) {
+  const byId = new Map<string, OdaraSearchFragranceResult>();
+  for (const result of [...primaryResults, ...fallbackResults]) {
+    if (!result.fragrance_id || byId.has(result.fragrance_id)) continue;
+    byId.set(result.fragrance_id, result);
+  }
+
+  return Array.from(byId.values())
+    .map((result) => ({
+      result,
+      score: scoreOdaraSearchResult(query, result),
+      sourceRank: result.source === 'search_rpc' ? 1 : 0,
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => (
+      b.score - a.score
+      || b.sourceRank - a.sourceRank
+      || a.result.brand.localeCompare(b.result.brand, undefined, { sensitivity: 'base' })
+      || a.result.title.localeCompare(b.result.title, undefined, { sensitivity: 'base' })
+    ))
+    .slice(0, limit)
+    .map((entry) => entry.result);
 }
 
 const MAX_SESSION_HISTORY = 30;
@@ -4762,9 +4808,7 @@ const loadMissingFragranceCardsWithIdentityCandidates = async (
 };
 
 const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, normalizedQuery: string) => {
-  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
-  if (queryTokens.length === 0) return true;
-  const searchable = normalizeOdaraSearchQuery([
+  return matchesFragranceSearchQuery(normalizedQuery, [
     card.submitted_name,
     card.submitted_brand,
     card.submitted_concentration,
@@ -4778,8 +4822,7 @@ const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, nor
       candidate.source_host,
     ]),
     'collection vesperizing source check pending',
-  ].filter(Boolean).join(' '));
-  return queryTokens.every((token) => searchable.includes(token));
+  ]);
 };
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
@@ -12763,11 +12806,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   );
 
   const filteredWardrobeCards = useMemo(() => {
-    const queryTokens = normalizedWardrobeSearchQuery.split(/\s+/).filter(Boolean);
+    const queryTokens = getOdaraSearchTokens(normalizedWardrobeSearchQuery);
     if (queryTokens.length === 0) return visibleWardrobeCards;
 
     return visibleWardrobeCards.filter((card) => {
-      const searchableValues = [
+      return matchesFragranceSearchQuery(normalizedWardrobeSearchQuery, [
         card.name,
         getWardrobeBrandLabel(card.brand),
         readTrimmedLayerText(card.family_label, buildFamilyLabel(card.family_key), card.family_key),
@@ -12777,11 +12820,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         card.is_unworn ? 'unworn never worn' : '',
         sanitizeTokenSource(card.item.notes).join(' '),
         sanitizeTokenSource(card.item.accords).join(' '),
-      ]
-        .map((value) => normalizeOdaraSearchQuery(value))
-        .filter(Boolean);
-
-      return queryTokens.every((token) => searchableValues.some((value) => value.includes(token)));
+      ]);
     });
   }, [normalizedWardrobeSearchQuery, visibleWardrobeCards]);
 
@@ -12888,7 +12927,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
   const searchResults = useMemo(() => {
     const normalizedQuery = normalizeOdaraSearchQuery(deferredSearchQuery);
-    const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    const queryTokens = getOdaraSearchTokens(normalizedQuery);
     const filteredByBrand = selectedBrand
       ? catalog.filter((item) => readTrimmedLayerText(item.brand) === selectedBrand)
       : catalog;
@@ -12899,27 +12938,19 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
     const scored = filteredByBrand
       .map((item) => {
-        const haystacks = [
-          item.name.toLowerCase(),
-          getWardrobeBrandLabel(item.brand).toLowerCase(),
-          item.family_label?.toLowerCase() ?? '',
-          sanitizeTokenSource(item.notes).join(' ').toLowerCase(),
-          sanitizeTokenSource(item.accords).join(' ').toLowerCase(),
-        ];
-
-        let score = 0;
-        for (const token of queryTokens) {
-          if (!token) continue;
-          if (item.name.toLowerCase().startsWith(token)) score += 12;
-          else if (item.name.toLowerCase().includes(token)) score += 7;
-          if ((item.brand ?? '').toLowerCase().startsWith(token)) score += 6;
-          else if ((item.brand ?? '').toLowerCase().includes(token)) score += 3;
-          if ((item.family_label ?? '').toLowerCase().includes(token)) score += 2;
-          if (sanitizeTokenSource(item.notes).some((note) => note.toLowerCase().includes(token))) score += 2;
-          if (sanitizeTokenSource(item.accords).some((accord) => accord.toLowerCase().includes(token))) score += 1;
-          if (haystacks.some((value) => value.includes(token))) score += 0.5;
-        }
-
+        const score = scoreFragranceSearchCandidate(normalizedQuery, {
+          name: item.name,
+          brand: getWardrobeBrandLabel(item.brand),
+          family: item.family_key,
+          familyLabel: item.family_label,
+          notes: [
+            ...sanitizeTokenSource(item.notes),
+            ...sanitizeTokenSource(item.top_notes),
+            ...sanitizeTokenSource(item.heart_notes),
+            ...sanitizeTokenSource(item.base_notes),
+          ],
+          accords: sanitizeTokenSource(item.accords),
+        });
         return { item, score };
       })
       .filter((entry) => entry.score > 0)
@@ -15977,19 +16008,30 @@ const OdaraScreen = ({
     const normalizedQuery = normalizeOdaraSearchQuery(query);
     if (!normalizedQuery) return [] as OdaraSearchFragranceResult[];
 
-    const pattern = `%${normalizedQuery}%`;
-    const { data, error } = await odaraSupabase
-      .from('fragrances')
-      .select('id, name, brand, family_key, notes, accords')
-      .or(`name.ilike.${pattern},brand.ilike.${pattern},family_key.ilike.${pattern}`)
-      .order('name', { ascending: true })
-      .limit(12);
+    const rowsById = new Map<string, any>();
+    const variants = buildFragranceSearchBackendQueryVariants(normalizedQuery);
+    for (const variant of variants) {
+      const pattern = `%${variant}%`;
+      const { data, error } = await odaraSupabase
+        .from('fragrances')
+        .select('id, name, brand, family_key, notes, accords')
+        .or(`name.ilike.${pattern},brand.ilike.${pattern},family_key.ilike.${pattern}`)
+        .order('name', { ascending: true })
+        .limit(24);
 
-    if (error) throw error;
+      if (error) throw error;
+      for (const row of Array.isArray(data) ? data : []) {
+        const id = typeof row?.id === 'string' ? row.id : '';
+        if (!id || rowsById.has(id)) continue;
+        rowsById.set(id, row);
+      }
+    }
 
-    return (Array.isArray(data) ? data : [])
+    const fallbackResults = Array.from(rowsById.values())
       .map((row) => normalizeOdaraSearchFragranceResult(row, 'catalog_fallback'))
       .filter((row): row is OdaraSearchFragranceResult => !!row);
+
+    return mergeOdaraSearchResults(normalizedQuery, [], fallbackResults, 24);
   }, []);
 
   const runFragranceSearch = useCallback(async (query: string) => {
@@ -16009,17 +16051,20 @@ const OdaraScreen = ({
           searchRpcAvailableRef.current = false;
         } else {
           searchRpcAvailableRef.current = true;
-          return (Array.isArray(data) ? data : [])
+          const rpcResults = (Array.isArray(data) ? data : [])
             .filter((row: any) => row?.section_key === 'fragrances' && row?.fragrance_id)
             .map((row: any) => normalizeOdaraSearchFragranceResult(row, 'search_rpc'))
             .filter((row): row is OdaraSearchFragranceResult => !!row);
+          const fallbackResults = await runFallbackFragranceSearch(normalizedQuery);
+          return mergeOdaraSearchResults(normalizedQuery, rpcResults, fallbackResults);
         }
       } catch {
         searchRpcAvailableRef.current = false;
       }
     }
 
-    return runFallbackFragranceSearch(normalizedQuery);
+    const fallbackResults = await runFallbackFragranceSearch(normalizedQuery);
+    return mergeOdaraSearchResults(normalizedQuery, fallbackResults, []);
   }, [isGuestMode, runFallbackFragranceSearch, userId]);
 
   useEffect(() => {
@@ -20436,12 +20481,11 @@ const OdaraScreen = ({
   const searchHasExactFragranceMatch = useMemo(() => {
     if (!normalizedActiveSearchQuery) return false;
     return searchResults.some((result) => {
-      const normalizedTitle = normalizeOdaraSearchQuery(result.title);
-      const normalizedNameBrand = normalizeOdaraSearchQuery([result.title, result.brand].filter(Boolean).join(' '));
-      const normalizedBrandName = normalizeOdaraSearchQuery([result.brand, result.title].filter(Boolean).join(' '));
-      return normalizedTitle === normalizedActiveSearchQuery
-        || normalizedNameBrand === normalizedActiveSearchQuery
-        || normalizedBrandName === normalizedActiveSearchQuery;
+      return matchesFragranceSearchQuery(normalizedActiveSearchQuery, [
+        result.title,
+        [result.title, result.brand].filter(Boolean).join(' '),
+        [result.brand, result.title].filter(Boolean).join(' '),
+      ]);
     });
   }, [normalizedActiveSearchQuery, searchResults]);
   const showMissingFragranceIntakeCta = searchOpen
