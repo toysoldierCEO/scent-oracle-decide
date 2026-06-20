@@ -23,6 +23,7 @@ import {
   shouldAutoApplyWishlistForMatchedIntake,
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
+import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
@@ -1661,29 +1662,6 @@ function buildMoodLaneKey(
   mood: LayerMood,
 ) {
   return `${slotPrefix}|${fragranceId}|${mood}`;
-}
-
-function collectPriorMoodCompanionExclusionIds(
-  slotPrefix: string,
-  fragranceId: string,
-  targetMood: LayerMood,
-  readMoodLaneStack: (moodKey: string) => BackendModeEntry[],
-) {
-  const targetMoodIndex = LAYER_MODE_ORDER.indexOf(targetMood);
-  if (targetMoodIndex <= 0) return [];
-
-  const excludeIds: string[] = [];
-  for (const priorMood of LAYER_MODE_ORDER.slice(0, targetMoodIndex)) {
-    const priorMoodKey = buildMoodLaneKey(slotPrefix, fragranceId, priorMood);
-    for (const entry of readMoodLaneStack(priorMoodKey)) {
-      const layerFragranceId = entry?.layer_fragrance_id;
-      if (layerFragranceId && !excludeIds.includes(layerFragranceId)) {
-        excludeIds.push(layerFragranceId);
-      }
-    }
-  }
-
-  return excludeIds;
 }
 
 function modeValueToBackendModeEntry(
@@ -17205,19 +17183,19 @@ const OdaraScreen = ({
     };
 
     const collectExcludeIds = () => {
-      const excludeIds = collectPriorMoodCompanionExclusionIds(
+      const excludeIds = collectSameCardModeCompanionExclusionIds({
         slotPrefix,
         fragranceId,
-        mood,
+        targetMood: mood,
+        moodOrder: LAYER_MODE_ORDER,
+        buildMoodLaneKey,
         readMoodLaneStack,
-      );
+        extraExcludeIds,
+      });
       for (const existing of readMoodLaneStack(moodKey)) {
         if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
           excludeIds.push(existing.layer_fragrance_id);
         }
-      }
-      for (const extraId of extraExcludeIds) {
-        if (extraId && !excludeIds.includes(extraId)) excludeIds.push(extraId);
       }
       return excludeIds;
     };
@@ -17382,7 +17360,7 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, signedInResolvedOracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
+  }, [userId, selectedContext, selectedDate, resolvedTemperature, signedInResolvedOracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
 
   const ensureMoodLaneDepth = useCallback(async (
     fragranceId: string,
