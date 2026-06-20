@@ -24,6 +24,10 @@ import {
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
+import {
+  resolveSignedInAddAsTodayDisabledReason,
+  resolveSignedInAddAsTodayLocked,
+} from "@/lib/signedInAddAsTodayGating";
 import { odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
@@ -16477,11 +16481,10 @@ const OdaraScreen = ({
   const signedInSearchPreviewSnapshotActive = !isGuestMode
     && !!signedInSearchPreviewSnapshotRef.current[currentDayStateKey];
   const signedInSelectedDayIsPast = !isGuestMode && currentDateKey < todayDateKey;
-  const signedInSearchPreviewLocked = !isGuestMode && (
-    signedInDayState.lockState === 'locked'
-    || signedInResolvedDayDecisionSource === 'locked'
-    || !!signedInResolvedLockTruth
-  );
+  const signedInSearchPreviewLocked = resolveSignedInAddAsTodayLocked({
+    isGuestMode,
+    hasResolvedLockTruth: !!signedInResolvedLockTruth,
+  });
   const signedInIsReadOnlyHistoryCard = signedInSelectedDayIsPast;
   const signedInDisabledMoodReasons = useMemo(() => {
     if (isGuestMode) return undefined;
@@ -16510,15 +16513,16 @@ const OdaraScreen = ({
     return reasons;
   }, [isGuestMode, signedInSearchPreviewLocked, signedInSelectedDayIsPast]);
   const signedInSearchPreviewDisabledReason = useMemo(() => {
-    if (isGuestMode) return null;
-    if (signedInSelectedDayIsPast) return 'Past days are read-only';
-    if (signedInSearchPreviewLocked) {
-      return 'Unlock to preview';
-    }
-    return null;
+    return resolveSignedInAddAsTodayDisabledReason({
+      isGuestMode,
+      selectedDayIsPast: signedInSelectedDayIsPast,
+      hasResolvedLockTruth: !!signedInResolvedLockTruth,
+      resolvedDayDecisionSource: signedInResolvedDayDecisionSource,
+    });
   }, [
     isGuestMode,
-    signedInSearchPreviewLocked,
+    signedInResolvedDayDecisionSource,
+    signedInResolvedLockTruth,
     signedInSelectedDayIsPast,
   ]);
   const lockState: LockState = signedInDayState.lockState;
