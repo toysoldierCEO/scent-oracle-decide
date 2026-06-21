@@ -371,15 +371,15 @@ function validateProviderPacket(report, packet) {
   rows.forEach((row, index) => {
     const rowLabel = row?.name ? `${row.name} / ${row.brand ?? "unknown brand"}` : `provider[${index}]`;
     const provider = String(row?.provider ?? "");
-    const isFragrella = /fragr?ella/i.test(provider);
+    const isFragella = /fragr?ella/i.test(provider);
     const isVesperSourceTier = /^Vesper /i.test(provider);
-    if (!isFragrella && !isVesperSourceTier) {
-      fail(report, "provider", "provider_identity", `${rowLabel}: provider must be Fragrella or Vesper source-tier research`);
+    if (!isFragella && !isVesperSourceTier) {
+      fail(report, "provider", "provider_identity", `${rowLabel}: provider must be Fragella or Vesper source-tier research`);
     } else {
       pass(report, "provider", "provider_identity", `${rowLabel}: provider identity allowed`);
     }
 
-    if (isFragrella && row?.trust_lane === "provider_only_enrichment") {
+    if (isFragella && row?.trust_lane === "provider_only_enrichment") {
       pass(report, "provider", "trust_lane", `${rowLabel}: provider-only trust lane`);
     } else if (isVesperSourceTier && row?.trust_lane === "non_official_source_intelligence") {
       pass(report, "provider", "trust_lane", `${rowLabel}: non-official source intelligence trust lane`);

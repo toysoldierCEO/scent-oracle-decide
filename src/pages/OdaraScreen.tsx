@@ -5137,7 +5137,7 @@ function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
     || (/^https:\/\/cdn\.fragella\.com\/images\//i.test(normalized) && /\.webp(?:$|[?#])/i.test(normalized));
 }
 
-function deriveFragrellaTransparentBottleImageUrl(url: string | null | undefined) {
+function deriveFragellaTransparentBottleImageUrl(url: string | null | undefined) {
   const trimmed = readTrimmedImageUrl(url);
   if (!trimmed) return null;
   if (!/^https:\/\/cdn\.fragella\.com\/images\//i.test(trimmed)) return null;
@@ -5201,7 +5201,7 @@ function buildPreferredBottleImageCandidates(...sources: unknown[]) {
   const { transparentCandidates, regularCandidates } = collectWardrobeBottleImageUrls(...sources);
   const candidates: string[] = [];
   transparentCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
-  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, deriveFragrellaTransparentBottleImageUrl(url)));
+  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, deriveFragellaTransparentBottleImageUrl(url)));
   regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
   return candidates;
 }

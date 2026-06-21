@@ -19,11 +19,11 @@ official brand source
 
 Official notes/source may update approved source fields through explicit helpers, but final taxonomy still requires proposal and acceptance.
 
-### Provider / Fragrella lane
+### Provider / Fragella lane
 
 Provider evidence is useful but not official source truth.
 
-Fragrella is the first enrichment lane for missing-scent intake, before official-source verification and before retailer/professional/community fallback lanes. The legacy `Fragella` spelling may still appear in API hostnames or secret names for compatibility, but user-facing product language should use `Fragrella`.
+Fragella is the first enrichment lane for missing-scent intake, before official-source verification and before retailer/professional/community fallback lanes. The compatibility `Fragrella` spelling may still appear in older secret names for backward compatibility, but user-facing product language should use `Fragella`.
 
 Provider lanes may stage evidence and promote notes through scoped helpers, but must preserve provenance and limitations.
 

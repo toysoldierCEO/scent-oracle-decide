@@ -151,7 +151,7 @@ function readTrimmedImageUrl(value: unknown) {
   return null;
 }
 
-function deriveFragrellaTransparentBottleImageUrl(url: string | null | undefined) {
+function deriveFragellaTransparentBottleImageUrl(url: string | null | undefined) {
   const trimmed = readTrimmedImageUrl(url);
   if (!trimmed) return null;
   if (!/^https:\/\/cdn\.fragella\.com\/images\//i.test(trimmed)) return null;
@@ -173,7 +173,7 @@ function buildLayerBottleImageCandidates(url: string | null | undefined) {
   if (isLikelyTransparentBottleImageUrl(resolved)) {
     pushUniqueImageUrl(candidates, resolved);
   } else {
-    pushUniqueImageUrl(candidates, deriveFragrellaTransparentBottleImageUrl(resolved));
+    pushUniqueImageUrl(candidates, deriveFragellaTransparentBottleImageUrl(resolved));
     pushUniqueImageUrl(candidates, resolved);
   }
   return candidates;
