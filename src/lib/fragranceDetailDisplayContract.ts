@@ -11,6 +11,7 @@ export type FragranceDisplayNoteSection = {
 
 export type FragrancePerformanceDisplayMode = 'bars' | 'compact_pending';
 export type FragranceLayerToolDisplayMode = 'compact_cta';
+export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata' | 'curated';
 
 export type FragranceDetailSectionId =
   | 'family'
@@ -53,6 +54,13 @@ type FragranceFamilyDisplayInput = {
   familyLabel?: string | null;
   accordLabels?: string[] | null;
   noteLabels?: string[] | null;
+};
+
+type FragranceTrustLineInput = {
+  kind?: FragranceTrustLineKind | null;
+  sourceName?: string | null;
+  fallbackBrand?: string | null;
+  profileConfidence?: number | null;
 };
 
 type SourceBackedPyramidDescriptionInput = {
@@ -258,6 +266,19 @@ export function formatFragranceFamilyDisplayLabel(input: FragranceFamilyDisplayI
   return rawFamilyLabel;
 }
 
+export function getFragranceFamilySemanticColorKey(input: FragranceFamilyDisplayInput) {
+  const familyKey = normalizeDisplayKey(input.familyKey);
+  if (familyKey === 'fresh blue' || familyKey === 'fresh aquatic') return 'fresh-aquatic';
+  if (familyKey === 'fresh') return 'fresh';
+  if (familyKey) return familyKey.replace(/\s+/g, '-');
+
+  const familyLabel = formatFragranceFamilyDisplayLabel(input);
+  const familyLabelKey = normalizeDisplayKey(familyLabel);
+  if (familyLabelKey === 'fresh aquatic') return 'fresh-aquatic';
+  if (familyLabelKey === 'fresh') return 'fresh';
+  return familyLabelKey ? familyLabelKey.replace(/\s+/g, '-') : null;
+}
+
 export function formatSourceDisplayName(
   sourceName: string | null | undefined,
   fallbackBrand?: string | null,
@@ -267,6 +288,21 @@ export function formatSourceDisplayName(
   const sourceKey = normalizeDisplayKey(source);
   if (source && sourceKey && !INTERNAL_SOURCE_NAME_KEYS.has(sourceKey)) return source;
   return fallback ?? 'official source';
+}
+
+export function buildFragranceTrustLine(input: FragranceTrustLineInput) {
+  const kind = input.kind ?? null;
+  const source = formatSourceDisplayName(input.sourceName, input.fallbackBrand);
+  if (kind === 'official_pyramid') return `Source-backed notes · Official source · ${source}`;
+  if (kind === 'official_key_notes') return `Official source-backed key notes · Official source · ${source}`;
+  if (kind === 'provider') return 'Source-backed notes · Structured provider data · brand confirmation pending';
+  if (kind === 'metadata') return 'Source-backed metadata · Official product-page metadata';
+  if (kind === 'curated') {
+    return typeof input.profileConfidence === 'number' && Number.isFinite(input.profileConfidence)
+      ? `Profile confidence ${Math.round(input.profileConfidence)}% · Curated app profile`
+      : 'Curated app profile';
+  }
+  return null;
 }
 
 export function isLayerToolActionLabel(value: string | null | undefined) {

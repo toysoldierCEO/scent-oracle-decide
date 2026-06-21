@@ -5,15 +5,16 @@ import {
   buildFragranceCardDisplayModel,
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
+  buildFragranceTrustLine,
   buildSourceBackedPyramidDescription,
   formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
   formatFragranceNoteDisplayLabels,
   formatSourceDisplayName,
+  getFragranceFamilySemanticColorKey,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isScentProfileChip,
-  shouldShowVesperizingNotice,
 } from "@/lib/fragranceDetailDisplayContract";
 import {
   DEFAULT_MISSING_SCENT_DESIRED_STATUS,
@@ -812,6 +813,7 @@ const FAMILY_COLORS: Record<string, string> = {
   "sweet-gourmand": "#C77DFF", "dark-leather": "#5A3A2E", "woody-clean": "#7FAF8E",
   "citrus-cologne": "#F4D35E", "floral-musk": "#C4A0B9", "citrus-aromatic": "#B8C94E",
   "fresh-citrus": "#F4D35E", "spicy-warm": "#D4713B", "fresh-aquatic": "#5BC0DE",
+  "fresh": "#8CCFE3",
   "earthy-patchouli": "#8B7355", "aromatic-fougere": "#6B8E6B", "floral-rich": "#D4839E",
   "green-earthy": "#6B8E5A",
 };
@@ -829,6 +831,7 @@ const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: string }>
   "fresh-citrus":    { bg: "rgba(232,212,77,0.07)",  glow: "rgba(232,212,77,0.15)",  border: "rgba(232,212,77,0.12)" },
   "spicy-warm":      { bg: "rgba(212,113,59,0.08)",  glow: "rgba(212,113,59,0.18)",  border: "rgba(212,113,59,0.14)" },
   "fresh-aquatic":   { bg: "rgba(91,192,222,0.08)",  glow: "rgba(91,192,222,0.18)",  border: "rgba(91,192,222,0.14)" },
+  "fresh":           { bg: "rgba(140,207,227,0.08)", glow: "rgba(140,207,227,0.18)", border: "rgba(140,207,227,0.14)" },
   "earthy-patchouli":{ bg: "rgba(139,115,85,0.08)",  glow: "rgba(139,115,85,0.18)",  border: "rgba(139,115,85,0.14)" },
   "aromatic-fougere":{ bg: "rgba(107,142,107,0.08)", glow: "rgba(107,142,107,0.18)", border: "rgba(107,142,107,0.14)" },
   "floral-rich":     { bg: "rgba(212,131,158,0.07)", glow: "rgba(212,131,158,0.15)", border: "rgba(212,131,158,0.12)" },
@@ -842,6 +845,7 @@ const FAMILY_LABELS: Record<string, string> = {
   "sweet-gourmand": "SWEET-GOURMAND", "dark-leather": "DARK-LEATHER", "tobacco-boozy": "TOBACCO-BOOZY",
   "floral-musk": "FLORAL-MUSK", "citrus-aromatic": "CITRUS-AROMATIC", "citrus-cologne": "CITRUS-COLOGNE",
   "fresh-citrus": "FRESH-CITRUS", "spicy-warm": "SPICY-WARM", "fresh-aquatic": "FRESH-AQUATIC",
+  "fresh": "FRESH",
   "earthy-patchouli": "EARTHY-PATCHOULI", "aromatic-fougere": "AROMATIC-FOUGÈRE",
   "floral-rich": "FLORAL-RICH", "green-earthy": "GREEN-EARTHY",
 };
@@ -7051,37 +7055,6 @@ function buildVesperizedDetailDescription(source: {
   return buildCompactFragranceSummary(source) ?? buildGeneratedFragranceDescription(source);
 }
 
-function getVesperDetailIntelligenceNotice(detail: Pick<
-  OdaraFragranceDetailSurfaceState,
-  'fragrance_id' | 'detail_loading' | 'vesper_intelligence' | 'notes' | 'top_notes' | 'middle_notes' | 'base_notes' | 'source_page_url'
->): string | null {
-  const intelligence = detail.vesper_intelligence ?? null;
-  if (detail.detail_loading && !intelligence) {
-    return shouldShowVesperizingNotice({
-      isCanonicalFragrance: Boolean(normalizeDetailText(detail.fragrance_id)),
-      isLoading: true,
-    })
-      ? 'Vesperizing scent intelligence...'
-      : null;
-  }
-  if (!intelligence?.usable_for_vesper_intelligence) return null;
-  if (isLimitedVesperIntelligence(intelligence)) {
-    return intelligence.limited_intel_reason
-      ?? 'Limited scent intelligence available; Vesper will keep guidance general.';
-  }
-  if (isProviderVesperIntelligence(intelligence)) return null;
-  if (intelligence.intelligence_source_type === 'official_brand') {
-    if (intelligence.intelligence_source_tier === 'official_pyramid') {
-      return 'Official source-backed note pyramid. Not a patch authorization.';
-    }
-    if (intelligence.intelligence_source_tier === 'official_key_notes' || intelligence.intelligence_source_tier === 'official_notes_only') {
-      return 'Official source-backed key notes. Not a full pyramid or patch authorization.';
-    }
-    return intelligence.source_disclaimer ?? 'Official source-backed scent intelligence. Not a patch authorization.';
-  }
-  return intelligence.source_disclaimer;
-}
-
 function formatPlainFamilyStyleLabel(value: string | null | undefined) {
   const normalized = normalizeDetailText(value);
   if (!normalized) return null;
@@ -7441,7 +7414,10 @@ function getCollectionFamilySortLabel(item: OdaraCollectionItem) {
 }
 
 function getCollectionTileTint(item: Pick<OdaraCollectionItem, 'family_key' | 'family_label'>) {
-  const normalized = normalizeSearchFamilyKey(item.family_key ?? item.family_label ?? '');
+  const normalized = getFragranceFamilySemanticColorKey({
+    familyKey: item.family_key,
+    familyLabel: item.family_label,
+  }) ?? normalizeSearchFamilyKey(item.family_key ?? item.family_label ?? '');
   return FAMILY_TINTS[normalized] ?? DEFAULT_TINT;
 }
 
@@ -10700,6 +10676,8 @@ const OdaraFragranceDetailSheet: React.FC<{
       ...sanitizeTokenSource(resolvedDetail.base_notes),
     ],
   });
+  const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
+    .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const detailDisplayModel = buildFragranceDetailDisplayModel({
     familyLabel,
     familyKey: resolvedDetail.family_key,
@@ -10709,6 +10687,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     baseNotes: resolvedDetail.base_notes ?? [],
     flatNotes: resolvedDetail.notes ?? [],
     maxHeroChips: 8,
+    hasTrustedPerformance: detailPerformanceBars.length > 0,
   });
   const topLabels = detailDisplayModel.topLabels;
   const middleLabels = detailDisplayModel.middleLabels;
@@ -10724,28 +10703,11 @@ const OdaraFragranceDetailSheet: React.FC<{
       : null;
   const showLayerToolAction = Boolean(resolvedDetail.fragrance_id);
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
-  const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
-  const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
     resolvedDetail.brand,
   );
-  const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand'
-    || Boolean(normalizeDetailText(resolvedDetail.source_confidence));
-  const officialStructuredNoteSourceLabel = hasStructuredNoteSections && (
-    hasOfficialStructuredNoteSource
-    || normalizeDetailText(resolvedDetail.source_page_url)
-  )
-    ? {
-        label: 'Source-backed notes',
-        subcopy: hasOfficialStructuredNoteSource
-          ? `Official source · ${officialStructuredNoteSourceName}`
-          : `Source-backed profile · ${officialStructuredNoteSourceName}`,
-        helper: hasOfficialStructuredNoteSource
-          ? 'These notes come from source-backed official fragrance data for display guidance, not a recommendation or layer claim.'
-          : 'These notes come from source-backed fragrance data for display guidance, not a recommendation or layer claim.',
-      }
-    : null;
+  const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand';
   const metadataDisplay = buildFragranceMetadataDisplay({
     catalogReleaseYear: resolvedDetail.release_year ?? null,
     resolverReleaseYear: normalizeDetailReleaseYear(resolvedDetail.vesper_metadata?.resolved_release_year),
@@ -10759,14 +10721,10 @@ const OdaraFragranceDetailSheet: React.FC<{
     resolvedDetail.vesper_metadata,
     metadataDisplay.applied,
   );
-  const sourceProvenanceLabels = [
-    officialStructuredNoteSourceLabel,
-    !hasStructuredNoteSections ? providerNoteSourceLabel : null,
-    metadataSourceLabel,
-  ].filter((label): label is { label: string; subcopy: string; helper: string } => Boolean(label));
-  const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
-    .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const familyDisplayLabel = detailDisplayModel.familyDisplayLabel ?? familyLabel ?? null;
+  const familyChipTone = familyDisplayLabel
+    ? getAccordChipTone(familyDisplayLabel, resolvedDetail.family_key)
+    : null;
   const detailBottleImageCandidates = buildPreferredBottleImageCandidates(
     resolvedDetail,
     resolvedDetail.image_url,
@@ -10805,6 +10763,38 @@ const OdaraFragranceDetailSheet: React.FC<{
     }
     return expandAndDeduplicateScentIntelDisplayTerms(notes);
   })();
+  const officialSourceTier = normalizeDetailText(resolvedDetail.vesper_intelligence?.intelligence_source_tier);
+  const hasOfficialKeyNotes = hasOfficialStructuredNoteSource && (
+    !hasStructuredNoteSections
+    || officialSourceTier === 'official_key_notes'
+    || officialSourceTier === 'official_notes_only'
+  ) && orderedNoteChips.length > 0;
+  const hasProviderNotes = Boolean(isProviderVesperIntelligence(resolvedDetail.vesper_intelligence));
+  const hasCuratedProfile = Boolean(
+    resolvedDetail.fragrance_id
+    && !hasOfficialStructuredNoteSource
+    && !hasProviderNotes
+    && (
+      familyDisplayLabel
+      || orderedNoteChips.length > 0
+      || accordLabels.length > 0
+    ),
+  );
+  const detailTrustLine = buildFragranceTrustLine({
+    kind: hasStructuredNoteSections && hasOfficialStructuredNoteSource
+      ? 'official_pyramid'
+      : hasOfficialKeyNotes
+        ? 'official_key_notes'
+        : hasProviderNotes
+          ? 'provider'
+          : metadataSourceLabel
+            ? 'metadata'
+            : hasCuratedProfile
+              ? 'curated'
+              : null,
+    sourceName: officialStructuredNoteSourceName,
+    fallbackBrand: resolvedDetail.brand,
+  });
   const detailFactLine = metadataDisplay.factLine;
 
   return (
@@ -10826,7 +10816,21 @@ const OdaraFragranceDetailSheet: React.FC<{
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)',
         }}
       >
-        <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="mt-0.5 h-[108px] w-[72px] shrink-0">
+            <OdaraWardrobeBottleArt
+              name={resolvedDetail.name ?? 'Fragrance'}
+              brand={resolvedDetail.brand}
+              family_key={resolvedDetail.family_key}
+              family_label={resolvedDetail.family_label}
+              image_url={detailBottleImageCandidates[0] ?? resolvedDetail.image_url ?? null}
+              thumbnail_url={resolvedDetail.thumbnail_url ?? null}
+              alt={`${resolvedDetail.name ?? 'Fragrance'} bottle`}
+              compact
+              frameless
+              className="h-full w-full"
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <div
               className="text-[30px] leading-[1.02] text-foreground/94"
@@ -10842,25 +10846,6 @@ const OdaraFragranceDetailSheet: React.FC<{
                 {detailDescription}
               </div>
             ) : null}
-            {vesperDetailNotice ? (
-              <div className="mt-2 max-w-[38ch] text-[11px] leading-[1.45] text-foreground/50">
-                {vesperDetailNotice}
-              </div>
-            ) : null}
-          </div>
-          <div className="mt-1 h-[104px] w-[68px] shrink-0">
-            <OdaraWardrobeBottleArt
-              name={resolvedDetail.name ?? 'Fragrance'}
-              brand={resolvedDetail.brand}
-              family_key={resolvedDetail.family_key}
-              family_label={resolvedDetail.family_label}
-              image_url={detailBottleImageCandidates[0] ?? resolvedDetail.image_url ?? null}
-              thumbnail_url={resolvedDetail.thumbnail_url ?? null}
-              alt={`${resolvedDetail.name ?? 'Fragrance'} bottle`}
-              compact
-              frameless
-              className="h-full w-full"
-            />
           </div>
           <button
             type="button"
@@ -10882,19 +10867,39 @@ const OdaraFragranceDetailSheet: React.FC<{
         </div>
 
         <div className="space-y-5">
-          {familyDisplayLabel ? (
-            <div className="flex items-center gap-2.5">
-              <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
-              <span
-                className="inline-flex max-w-full rounded-full px-3 py-[6px] text-[11px] font-medium tracking-[0.06em] text-foreground/84"
-                style={{
-                  border: `1px solid ${tint.frame}`,
-                  background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
-                  boxShadow: `0 0 16px ${tint.glowStrong}`,
-                }}
-              >
-                {familyDisplayLabel}
-              </span>
+          {familyDisplayLabel || showLayerToolAction ? (
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              {familyDisplayLabel && familyChipTone ? (
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
+                  <span
+                    className="inline-flex max-w-full rounded-full px-3 py-[6px] text-[11px] font-medium tracking-[0.06em]"
+                    style={{
+                      color: familyChipTone.color,
+                      border: `1px solid ${familyChipTone.border}`,
+                      background: familyChipTone.background,
+                      boxShadow: `0 0 12px ${familyChipTone.glow}`,
+                    }}
+                  >
+                    {familyDisplayLabel}
+                  </span>
+                </div>
+              ) : <span />}
+              {showLayerToolAction ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenLayerTool?.(resolvedDetail)}
+                  disabled={!onOpenLayerTool}
+                  className="inline-flex items-center justify-center rounded-full border px-3 py-[7px] text-[9.5px] uppercase tracking-[0.16em] text-foreground/66 transition-colors hover:text-foreground/84 disabled:opacity-45"
+                  style={{
+                    borderColor: 'rgba(217,181,108,0.16)',
+                    background: 'rgba(217,181,108,0.055)',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  Try Layering
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -11017,35 +11022,12 @@ const OdaraFragranceDetailSheet: React.FC<{
             </div>
           </section>
 
-          {showLayerToolAction ? (
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => onOpenLayerTool?.(resolvedDetail)}
-                disabled={!onOpenLayerTool}
-                className="inline-flex items-center justify-center rounded-full border px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] text-foreground/68 transition-colors hover:text-foreground/84 disabled:opacity-45"
-                style={{
-                  borderColor: 'rgba(217,181,108,0.18)',
-                  background: 'rgba(217,181,108,0.07)',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                Try Layering
-              </button>
-            </div>
-          ) : null}
-
-          {sourceProvenanceLabels.length > 0 ? (
+          {detailTrustLine ? (
             <div
-              className="space-y-2 pt-1 text-[11px] leading-[1.45]"
+              className="pt-2 text-[11px] leading-[1.45] text-foreground/50"
               style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
             >
-              {sourceProvenanceLabels.map((label) => (
-                <div key={`${label.label}-${label.subcopy}`} title={label.helper}>
-                  <div className="font-medium text-foreground/72">{label.label}</div>
-                  <div className="text-foreground/48">{label.subcopy}</div>
-                </div>
-              ))}
+              {detailTrustLine}
             </div>
           ) : null}
 

@@ -4,11 +4,13 @@ import {
   buildFragranceCardDisplayModel,
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
+  buildFragranceTrustLine,
   buildSourceBackedPyramidDescription,
   formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
   formatFragranceNoteProsePhrase,
   formatSourceDisplayName,
+  getFragranceFamilySemanticColorKey,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isScentProfileChip,
@@ -119,11 +121,19 @@ describe('fragranceDetailDisplayContract', () => {
   it('maps internal fresh-blue taxonomy to a user-facing family label', () => {
     expect(formatFragranceFamilyDisplayLabel({ familyKey: 'fresh-blue' })).toBe('Fresh Aquatic');
     expect(formatFragranceFamilyDisplayLabel({ familyLabel: 'Fresh Blue' })).toBe('Fresh Aquatic');
+    expect(formatFragranceFamilyDisplayLabel({ familyLabel: 'fresh' })).toBe('Fresh');
     expect(formatFragranceFamilyDisplayLabel({
       familyKey: null,
       familyLabel: 'fresh-blue',
       noteLabels: ['Australian Coastal Moss'],
     })).toBe('Fresh Aquatic');
+  });
+
+  it('maps family labels to intentional semantic color lanes', () => {
+    expect(getFragranceFamilySemanticColorKey({ familyKey: 'fresh-blue' })).toBe('fresh-aquatic');
+    expect(getFragranceFamilySemanticColorKey({ familyKey: 'fresh-aquatic' })).toBe('fresh-aquatic');
+    expect(getFragranceFamilySemanticColorKey({ familyLabel: 'Fresh Blue' })).toBe('fresh-aquatic');
+    expect(getFragranceFamilySemanticColorKey({ familyLabel: 'fresh' })).toBe('fresh');
   });
 
   it('keeps Layer Tool out of grounded Best Worn labels while preserving it as an action label', () => {
@@ -138,6 +148,20 @@ describe('fragranceDetailDisplayContract', () => {
     expect(formatSourceDisplayName('public.fragrances', 'Goldfield & Banks')).toBe('Goldfield & Banks');
     expect(formatSourceDisplayName('public.fragrances', null)).toBe('official source');
     expect(formatSourceDisplayName('Alexandria Fragrances', 'Alexandria Fragrances')).toBe('Alexandria Fragrances');
+  });
+
+  it('builds compact trust lines without backend/debug names', () => {
+    expect(buildFragranceTrustLine({
+      kind: 'official_pyramid',
+      sourceName: 'public.fragrances',
+      fallbackBrand: 'Goldfield & Banks',
+    })).toBe('Source-backed notes · Official source · Goldfield & Banks');
+    expect(buildFragranceTrustLine({
+      kind: 'official_key_notes',
+      sourceName: 'Alexandria Fragrances',
+      fallbackBrand: 'Alexandria Fragrances',
+    })).toBe('Official source-backed key notes · Official source · Alexandria Fragrances');
+    expect(buildFragranceTrustLine({ kind: 'curated' })).toBe('Curated app profile');
   });
 
   it('uses structured note sections when a source-backed pyramid exists', () => {
