@@ -9,6 +9,9 @@ export type FragranceDisplayNoteSection = {
   values: string[];
 };
 
+export type FragrancePerformanceDisplayMode = 'bars' | 'compact_pending';
+export type FragranceLayerToolDisplayMode = 'compact_cta';
+
 export type FragranceDetailSectionId =
   | 'family'
   | 'notes'
@@ -29,6 +32,7 @@ type FragranceDetailDisplayModelInput = {
   baseNotes?: string[] | null;
   flatNotes?: string[] | null;
   maxHeroChips?: number;
+  hasTrustedPerformance?: boolean;
 };
 
 type FragranceCardDisplayModelInput = FragranceDetailDisplayModelInput & {
@@ -124,6 +128,17 @@ const RAW_FAMILY_LABEL_DISPLAY_MAP: Record<string, string> = {
   'fresh aquatic': 'Fresh Aquatic',
   'fresh-aquatic': 'Fresh Aquatic',
 };
+
+const INTERNAL_SOURCE_NAME_KEYS = new Set([
+  'public fragrances',
+  'public fragrance',
+  'public.fragrances',
+  'fragrances',
+  'fragrance official source registry',
+  'fragrance official source registry v1',
+  'provider intelligence',
+  'metadata evidence',
+]);
 
 const GROUNDED_WEAR_CONTEXT_LABELS = new Set([
   'daily',
@@ -241,6 +256,17 @@ export function formatFragranceFamilyDisplayLabel(input: FragranceFamilyDisplayI
   if (rawFamilyLabel && !/[-_]/.test(rawFamilyLabel)) return rawFamilyLabel;
   if (familyKey) return toDisplayTitleCase(familyKey.replace(/[-_]+/g, ' '));
   return rawFamilyLabel;
+}
+
+export function formatSourceDisplayName(
+  sourceName: string | null | undefined,
+  fallbackBrand?: string | null,
+) {
+  const source = normalizeText(sourceName);
+  const fallback = normalizeText(fallbackBrand);
+  const sourceKey = normalizeDisplayKey(source);
+  if (source && sourceKey && !INTERNAL_SOURCE_NAME_KEYS.has(sourceKey)) return source;
+  return fallback ?? 'official source';
 }
 
 export function isLayerToolActionLabel(value: string | null | undefined) {
@@ -461,6 +487,11 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
 
   return {
     familyDisplayLabel,
+    familyChip: familyDisplayLabel
+      ? { label: familyDisplayLabel, position: 'family' }
+      : null,
+    performanceDisplayMode: input.hasTrustedPerformance ? 'bars' as FragrancePerformanceDisplayMode : 'compact_pending' as FragrancePerformanceDisplayMode,
+    layerToolDisplayMode: 'compact_cta' as FragranceLayerToolDisplayMode,
     topIdentityChips: familyDisplayLabel
       ? dedupeChips([{ label: familyDisplayLabel, position: 'family' }]).slice(0, 1)
       : [],

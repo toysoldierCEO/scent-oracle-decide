@@ -8,6 +8,7 @@ import {
   formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
   formatFragranceNoteProsePhrase,
+  formatSourceDisplayName,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isScentProfileChip,
@@ -67,6 +68,9 @@ describe('fragranceDetailDisplayContract', () => {
     });
 
     expect(model.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
+    expect(model.familyChip).toEqual({ label: 'Fresh Aquatic', position: 'family' });
+    expect(model.performanceDisplayMode).toBe('compact_pending');
+    expect(model.layerToolDisplayMode).toBe('compact_cta');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Official Pyramid');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('EDP');
@@ -107,6 +111,11 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
   });
 
+  it('uses bar mode only when trusted performance data is available', () => {
+    expect(buildFragranceDetailDisplayModel({ hasTrustedPerformance: false }).performanceDisplayMode).toBe('compact_pending');
+    expect(buildFragranceDetailDisplayModel({ hasTrustedPerformance: true }).performanceDisplayMode).toBe('bars');
+  });
+
   it('maps internal fresh-blue taxonomy to a user-facing family label', () => {
     expect(formatFragranceFamilyDisplayLabel({ familyKey: 'fresh-blue' })).toBe('Fresh Aquatic');
     expect(formatFragranceFamilyDisplayLabel({ familyLabel: 'Fresh Blue' })).toBe('Fresh Aquatic');
@@ -123,6 +132,12 @@ describe('fragranceDetailDisplayContract', () => {
     expect(isGroundedWearContextLabel('Anchor')).toBe(true);
     expect(isGroundedWearContextLabel('Layer Tool')).toBe(false);
     expect(isLayerToolActionLabel('Layer Tool')).toBe(true);
+  });
+
+  it('keeps internal source names out of user-facing provenance labels', () => {
+    expect(formatSourceDisplayName('public.fragrances', 'Goldfield & Banks')).toBe('Goldfield & Banks');
+    expect(formatSourceDisplayName('public.fragrances', null)).toBe('official source');
+    expect(formatSourceDisplayName('Alexandria Fragrances', 'Alexandria Fragrances')).toBe('Alexandria Fragrances');
   });
 
   it('uses structured note sections when a source-backed pyramid exists', () => {

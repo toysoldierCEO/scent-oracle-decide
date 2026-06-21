@@ -9,6 +9,7 @@ import {
   formatFragranceFamilyDisplayLabel,
   formatFragranceNoteDisplayLabel,
   formatFragranceNoteDisplayLabels,
+  formatSourceDisplayName,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isScentProfileChip,
@@ -7288,17 +7289,15 @@ const OdaraPerformanceLifeBar: React.FC<{
 };
 
 const OdaraPerformancePendingPanel: React.FC = () => (
-  <div
-    className="rounded-[16px] px-4 py-3 text-[12px] leading-[1.5] text-foreground/56"
-    style={{
-      border: '1px solid rgba(255,255,255,0.075)',
-      background: 'rgba(255,255,255,0.028)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-    }}
-  >
-    <div className="font-medium text-foreground/72">Performance intel pending</div>
-    <div className="mt-1 text-foreground/46">
-      Longevity, projection, and trail will stay blank until Vesper has trusted wear data.
+  <div className="space-y-2 text-[12px] leading-[1.45] text-foreground/58">
+    {['Longevity', 'Projection', 'Trail'].map((label) => (
+      <div key={`performance-pending-${label}`} className="flex items-center justify-between gap-4">
+        <span className="text-foreground/50">{label}</span>
+        <span className="text-foreground/42">—</span>
+      </div>
+    ))}
+    <div className="pt-1 text-[11px] text-foreground/42">
+      Trusted wear data pending
     </div>
   </div>
 );
@@ -10727,9 +10726,10 @@ const OdaraFragranceDetailSheet: React.FC<{
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const vesperDetailNotice = getVesperDetailIntelligenceNotice(resolvedDetail);
   const providerNoteSourceLabel = getProviderNoteSourceLabel(resolvedDetail.vesper_intelligence);
-  const officialStructuredNoteSourceName = normalizeDetailText(resolvedDetail.vesper_intelligence?.intelligence_source_name)
-    ?? normalizeDetailText(resolvedDetail.brand)
-    ?? 'official source';
+  const officialStructuredNoteSourceName = formatSourceDisplayName(
+    resolvedDetail.vesper_intelligence?.intelligence_source_name,
+    resolvedDetail.brand,
+  );
   const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand'
     || Boolean(normalizeDetailText(resolvedDetail.source_confidence));
   const officialStructuredNoteSourceLabel = hasStructuredNoteSections && (
@@ -10767,6 +10767,11 @@ const OdaraFragranceDetailSheet: React.FC<{
   const detailPerformanceBars = buildFragrancePerformanceBars(resolvedDetail)
     .filter((metric) => ['longevity', 'projection', 'trail'].includes(metric.key));
   const familyDisplayLabel = detailDisplayModel.familyDisplayLabel ?? familyLabel ?? null;
+  const detailBottleImageCandidates = buildPreferredBottleImageCandidates(
+    resolvedDetail,
+    resolvedDetail.image_url,
+    resolvedDetail.thumbnail_url,
+  );
   const structuredNoteSections = detailDisplayModel.structuredNoteSections;
   const orderedNoteChips = (() => {
     const notes: Array<{ label: string; position: string }> = [];
@@ -10843,6 +10848,20 @@ const OdaraFragranceDetailSheet: React.FC<{
               </div>
             ) : null}
           </div>
+          <div className="mt-1 h-[104px] w-[68px] shrink-0">
+            <OdaraWardrobeBottleArt
+              name={resolvedDetail.name ?? 'Fragrance'}
+              brand={resolvedDetail.brand}
+              family_key={resolvedDetail.family_key}
+              family_label={resolvedDetail.family_label}
+              image_url={detailBottleImageCandidates[0] ?? resolvedDetail.image_url ?? null}
+              thumbnail_url={resolvedDetail.thumbnail_url ?? null}
+              alt={`${resolvedDetail.name ?? 'Fragrance'} bottle`}
+              compact
+              frameless
+              className="h-full w-full"
+            />
+          </div>
           <button
             type="button"
             aria-label="Close fragrance detail"
@@ -10864,9 +10883,18 @@ const OdaraFragranceDetailSheet: React.FC<{
 
         <div className="space-y-5">
           {familyDisplayLabel ? (
-            <div className="text-[14px] leading-[1.4] text-foreground/72">
-              <span className="text-foreground/54">Family:</span>{' '}
-              <span className="text-foreground/88">{familyDisplayLabel}</span>
+            <div className="flex items-center gap-2.5">
+              <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
+              <span
+                className="inline-flex max-w-full rounded-full px-3 py-[6px] text-[11px] font-medium tracking-[0.06em] text-foreground/84"
+                style={{
+                  border: `1px solid ${tint.frame}`,
+                  background: `linear-gradient(180deg, ${tint.inner} 0%, rgba(255,255,255,0.018) 100%)`,
+                  boxShadow: `0 0 16px ${tint.glowStrong}`,
+                }}
+              >
+                {familyDisplayLabel}
+              </span>
             </div>
           ) : null}
 
@@ -10990,21 +11018,12 @@ const OdaraFragranceDetailSheet: React.FC<{
           </section>
 
           {showLayerToolAction ? (
-            <section
-              className="flex items-center justify-between gap-3 rounded-[16px] border px-3.5 py-2.5"
-              style={{
-                borderColor: 'rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.025)',
-              }}
-            >
-              <div className="min-w-0 text-[11.5px] leading-snug text-foreground/46">
-                Layering guidance stays pending until Vesper has enough trusted scent data.
-              </div>
+            <div className="flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => onOpenLayerTool?.(resolvedDetail)}
                 disabled={!onOpenLayerTool}
-                className="shrink-0 rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-foreground/66 transition-colors disabled:opacity-45"
+                className="inline-flex items-center justify-center rounded-full border px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] text-foreground/68 transition-colors hover:text-foreground/84 disabled:opacity-45"
                 style={{
                   borderColor: 'rgba(217,181,108,0.18)',
                   background: 'rgba(217,181,108,0.07)',
@@ -11013,7 +11032,7 @@ const OdaraFragranceDetailSheet: React.FC<{
               >
                 Try Layering
               </button>
-            </section>
+            </div>
           ) : null}
 
           {sourceProvenanceLabels.length > 0 ? (
