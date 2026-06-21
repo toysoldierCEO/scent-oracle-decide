@@ -119,8 +119,11 @@ const PROCESSING_OR_STATE_LABEL_KEYS = new Set([
   'vesperizing',
   'source check pending',
   'limited intel',
-  'performance pending',
-  'performance intel pending',
+  'wear strength not verified',
+  'evidence limited performance',
+  'evidence-limited performance',
+  'community performance unavailable',
+  'performance unknown after search',
 ]);
 
 const FAMILY_DISPLAY_LABELS: Record<string, string> = {
@@ -353,7 +356,7 @@ export function isProcessingOrStateLabel(value: string | null | undefined) {
   if (!key) return false;
   return PROCESSING_OR_STATE_LABEL_KEYS.has(key)
     || key.includes('vesperizing')
-    || key.includes('performance intel pending');
+    || (key.includes('performance') && key.includes('pending'));
 }
 
 export function isScentProfileChip(value: string | null | undefined) {

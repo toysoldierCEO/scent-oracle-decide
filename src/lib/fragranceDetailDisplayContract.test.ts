@@ -32,7 +32,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(isScentProfileChip('Eau de Parfum')).toBe(false);
     expect(isScentProfileChip('Official Pyramid')).toBe(false);
     expect(isScentProfileChip('Source-backed notes')).toBe(false);
-    expect(isScentProfileChip('Performance intel pending')).toBe(false);
+    expect(isScentProfileChip('Wear strength not verified')).toBe(false);
     expect(isScentProfileChip('Italian Lemon')).toBe(true);
     expect(isScentProfileChip('Fresh Aquatic')).toBe(true);
   });

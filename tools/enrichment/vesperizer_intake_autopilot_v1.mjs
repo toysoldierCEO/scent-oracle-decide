@@ -739,7 +739,7 @@ export function classifyTarget(target, catalogMatches, primaryMatch, identityDis
         ? "Intake is already linked to a canonical catalog fragrance."
         : "Exact catalog match exists; resolution can be reviewed separately.",
       next_action: target.canonical_fragrance_id
-        ? (profile.recommendation_ready ? "no_live_action_needed" : "profile_or_performance_review_before_recommendations")
+        ? (profile.recommendation_ready ? "no_live_action_needed" : "profile_or_identity_review_before_recommendations")
         : "review_resolve_helper_dry_run_before_live_link",
       user_facing_card_should_still_say_vesperizing: false,
       canonical_profile: profile,
@@ -933,6 +933,26 @@ function summarizeCatalogProfile(row, collectionStatus) {
     || arrayLength(row.top_notes) + arrayLength(row.heart_notes) + arrayLength(row.base_notes) > 0;
   const hasPerformance = row.longevity_score != null || row.projection_score != null;
   const sourceBackedProfile = !!clean(row.source_url) && hasNotes;
+  const normalizedCollectionStatus = clean(collectionStatus)?.toLowerCase() ?? null;
+  const isWishlistOnly = ["wishlist", "would_buy", "would buy"].includes(normalizedCollectionStatus ?? "");
+  const isRetired = row.retired === true || normalizedCollectionStatus === "retired";
+  const isDisliked = row.has_disliked === true
+    || row.negative_state === 2
+    || normalizedCollectionStatus === "disliked";
+  const isOwnedCollection = ["owned", "collection", "signature", "liked", "tried"].includes(normalizedCollectionStatus ?? "");
+  const profileUsable = hasFamily && hasNotes;
+  const collectionRecommendationEligible = Boolean(isOwnedCollection && profileUsable && !isRetired && !isDisliked);
+  const exclusionReason = isRetired
+    ? "retired_explicitly_removed_from_rotation"
+    : isDisliked
+      ? "disliked_hard_negative"
+      : isWishlistOnly
+        ? "wishlist_is_purchase_intent_not_owned_collection"
+        : !isOwnedCollection
+          ? "not_in_owned_collection"
+          : !profileUsable
+            ? "canonical_identity_or_profile_incomplete"
+            : null;
   return {
     name: row.name,
     brand: row.brand,
@@ -944,11 +964,15 @@ function summarizeCatalogProfile(row, collectionStatus) {
     perfumer_catalog_present: !!clean(row.perfumer),
     performance_present: hasPerformance,
     collection_status: collectionStatus ?? null,
-    recommendation_ready: Boolean(collectionStatus && hasFamily && hasNotes && hasPerformance),
-    layer_ready: Boolean(collectionStatus && hasFamily && hasNotes && hasPerformance),
+    collection_recommendation_eligible: collectionRecommendationEligible,
+    recommendation_ready: collectionRecommendationEligible,
+    layer_ready: collectionRecommendationEligible,
     recommendation_gate_reason: hasPerformance
-      ? "trusted_profile_and_performance_present"
-      : "performance_intel_pending",
+      ? "owned_collection_profile_present_with_wear_strength"
+      : collectionRecommendationEligible
+        ? "owned_collection_profile_present_wear_strength_not_verified"
+        : exclusionReason,
+    performance_confidence: hasPerformance ? "available" : "wear_strength_not_verified",
   };
 }
 

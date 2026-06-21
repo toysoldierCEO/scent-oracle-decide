@@ -3,13 +3,15 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { URL } from "node:url";
+import { pathToFileURL, URL } from "node:url";
 
 const VERSION = "vesper_enrichment_autopilot_v1";
 const DEFAULT_BATCH_LABEL = "auto_001";
 const DEFAULT_MAX_TARGETS = 100;
 const DEFAULT_MAX_REGISTRY_PAYLOADS = 50;
 const SUPABASE_CLI = "supabase@2.106.0";
+const FRAGRELLA_PROVIDER_NAME = "Fragrella";
+const FRAGRELLA_DEFAULT_API_BASE_URL = "https://api.fragella.com/api/v1";
 
 const HIGH_VALUE_BRANDS = [
   "Chanel",
@@ -466,10 +468,12 @@ const allowOfficialFetch = argv["allow-official-fetch"] !== "false";
 const providerMode = argv["provider-mode"] ?? "detect-env";
 const brandAllowlist = parseAllowlist(argv["brand-allowlist"]);
 
-main().catch((error) => {
-  console.error(`[${VERSION}] failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(`[${VERSION}] failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
 
 async function main() {
   const generatedAt = new Date().toISOString();
@@ -478,7 +482,8 @@ async function main() {
   const catalogRows = queryCatalogRows();
   const targetSpec = loadTargetSpec(targetFile, targetLimit);
   const selectedTargets = selectTargets(catalogRows, targetSpec);
-  const providerConfigured = hasProviderKey();
+  const providerConfig = getFragrellaProviderConfig();
+  const providerConfigured = providerConfig.configured;
 
   const registryRows = [];
   const providerRows = [];
@@ -487,11 +492,11 @@ async function main() {
   let nonOfficialDiscoveryAttempts = 0;
 
   for (const target of selectedTargets) {
-    const officialFinding = await inspectOfficialSource(target);
-    const providerFinding = await inspectProviderSource(target, providerConfigured);
+    const providerFinding = await inspectProviderSource(target, providerConfig);
     if (providerFinding) {
       providerRows.push(providerFinding);
     }
+    const officialFinding = await inspectOfficialSource(target);
     const nonOfficialFinding = await inspectNonOfficialSource(target, officialFinding, nonOfficialDiscoveryAttempts);
     if (nonOfficialFinding) {
       providerRows.push(nonOfficialFinding);
@@ -607,6 +612,12 @@ function parseArgs(args) {
     }
   }
   return parsed;
+}
+
+function isDirectRun() {
+  return process.argv[1]
+    ? import.meta.url === pathToFileURL(process.argv[1]).href
+    : false;
 }
 
 function prefixForBatchLabel(label) {
@@ -1183,36 +1194,378 @@ async function fetchOfficialFinding(target, sourceUrl) {
   }
 }
 
-async function inspectProviderSource(target, providerConfigured) {
+async function inspectProviderSource(target, providerConfig = getFragrellaProviderConfig()) {
   if (providerMode === "off") return null;
-  if (!providerConfigured) {
+  if (!providerConfig.configured) {
     return {
       fragrance_id: target.id,
       name: target.name,
       brand: target.brand,
-      provider: "Fragella",
+      provider: FRAGRELLA_PROVIDER_NAME,
       status: "not_configured",
       trust_lane: "provider_only_enrichment",
       source_confidence: null,
       notes: [],
       accords: [],
+      top_notes: [],
+      heart_notes: [],
+      base_notes: [],
+      image_url: null,
+      concentration: null,
+      community_performance: null,
       reason:
-        "Provider API key was not configured in the environment, so provider enrichment was not queried.",
+        "Fragrella provider config was not available in the environment, so provider enrichment was not queried.",
     };
   }
+
+  const queryResult = await queryFragrellaProvider(target, providerConfig);
+  if (!queryResult.ok) {
+    return {
+      fragrance_id: target.id,
+      name: target.name,
+      brand: target.brand,
+      provider: FRAGRELLA_PROVIDER_NAME,
+      status: queryResult.status,
+      trust_lane: "provider_only_enrichment",
+      source_confidence: null,
+      notes: [],
+      accords: [],
+      top_notes: [],
+      heart_notes: [],
+      base_notes: [],
+      image_url: null,
+      concentration: null,
+      community_performance: null,
+      reason: queryResult.reason,
+      provider_query: queryResult.query,
+      provider_http_status: queryResult.http_status ?? null,
+    };
+  }
+
+  const normalized = normalizeFragrellaProviderPayload(target, queryResult.hit);
   return {
     fragrance_id: target.id,
     name: target.name,
     brand: target.brand,
-    provider: "Fragella",
-    status: "provider_query_supported_but_not_performed_in_v1_default",
+    provider: FRAGRELLA_PROVIDER_NAME,
+    status: normalized.identity_supported ? "usable_provider_intelligence" : "identity_not_supported",
     trust_lane: "provider_only_enrichment",
-    source_confidence: null,
-    notes: [],
-    accords: [],
-    reason:
-      "Provider data is intentionally kept out of official source registry payloads. Enable a dedicated provider run only after review.",
+    official_registry_eligible: false,
+    source_confidence: normalized.source_confidence,
+    match_name: normalized.match_name,
+    match_brand: normalized.match_brand,
+    source_url: normalized.source_url,
+    image_url: normalized.image_url,
+    concentration: normalized.concentration,
+    notes: normalized.notes,
+    top_notes: normalized.top_notes,
+    heart_notes: normalized.heart_notes,
+    base_notes: normalized.base_notes,
+    accords: normalized.accords,
+    community_performance: normalized.community_performance,
+    reason: normalized.identity_supported
+      ? "Fragrella returned provider/community intelligence. This is non-official and excluded from official registry payloads."
+      : "Fragrella returned a candidate, but exact identity support was not strong enough for provider enrichment.",
+    provider_query: queryResult.query,
+    provider_payload_digest: hashObject(queryResult.hit),
   };
+}
+
+export function getVesperEnrichmentLaneOrder() {
+  return [
+    "fragrella_provider",
+    "official_brand_verification",
+    "retailer_professional_community_fallback",
+  ];
+}
+
+export function getFragrellaProviderConfig(env = process.env) {
+  const apiKey = env.FRAGRELLA_API_KEY || env.FRAGELLA_API_KEY || "";
+  const apiKeyEnvName = env.FRAGRELLA_API_KEY
+    ? "FRAGRELLA_API_KEY"
+    : env.FRAGELLA_API_KEY
+      ? "FRAGELLA_API_KEY"
+      : null;
+  const apiBaseUrl = env.FRAGRELLA_API_BASE_URL || env.FRAGELLA_API_BASE_URL || FRAGRELLA_DEFAULT_API_BASE_URL;
+  return {
+    provider: FRAGRELLA_PROVIDER_NAME,
+    configured: Boolean(apiKey),
+    apiKey,
+    apiKeyEnvName,
+    apiBaseUrl: String(apiBaseUrl).replace(/\/+$/, ""),
+    endpointEnvName: env.FRAGRELLA_API_BASE_URL
+      ? "FRAGRELLA_API_BASE_URL"
+      : env.FRAGELLA_API_BASE_URL
+        ? "FRAGELLA_API_BASE_URL"
+        : "default_fragrella_provider_endpoint",
+  };
+}
+
+async function queryFragrellaProvider(target, config) {
+  const queries = buildFragrellaSearchQueries(target);
+  for (const query of queries) {
+    const url = `${config.apiBaseUrl}/fragrances?search=${encodeURIComponent(query)}&limit=5`;
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "x-api-key": config.apiKey,
+          accept: "application/json",
+          "user-agent": `${VERSION}/1.0 provider-review-packet-generator`,
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: `http_${response.status}`,
+          http_status: response.status,
+          query,
+          reason: `Fragrella provider query returned HTTP ${response.status}.`,
+        };
+      }
+      const payload = await response.json();
+      const hits = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.results)
+          ? payload.results
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+      const hit = pickBestFragrellaHit(target, hits);
+      if (hit) return { ok: true, status: "queried", query, hit };
+    } catch (error) {
+      return {
+        ok: false,
+        status: "provider_query_failed",
+        query,
+        reason: `Fragrella provider query failed: ${error?.name ?? "fetch_error"}.`,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    status: "no_provider_match",
+    query: queries[0] ?? null,
+    reason: "Fragrella provider query returned no usable candidate matches.",
+  };
+}
+
+function buildFragrellaSearchQueries(target) {
+  return unique([
+    `${target.brand ?? ""} ${target.name ?? ""}`.trim(),
+    target.name,
+    normText(target.name),
+  ].filter(Boolean)).slice(0, 3);
+}
+
+function pickBestFragrellaHit(target, hits) {
+  let best = null;
+  let bestScore = -1;
+  for (const hit of hits) {
+    const normalized = normalizeFragrellaProviderPayload(target, hit);
+    const score = (normalized.identity_supported ? 2 : 0)
+      + (normalized.match_name ? 0.35 : 0)
+      + (normalized.match_brand ? 0.25 : 0)
+      + (normalized.notes.length + normalized.top_notes.length + normalized.heart_notes.length + normalized.base_notes.length > 0 ? 0.25 : 0)
+      + (normalized.accords.length > 0 ? 0.15 : 0);
+    if (score > bestScore) {
+      best = hit;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+export function normalizeFragrellaProviderPayload(target, hit) {
+  const matchName = firstProviderString(hit, ["name", "Name", "title", "fragrance", "fragrance_name", "fragranceName"]);
+  const matchBrand = firstProviderString(hit, ["brand", "Brand", "brand_name", "brandName", "house", "House"]);
+  const normalizedTargetName = normText(target?.name);
+  const normalizedTargetBrand = normText(target?.brand);
+  const normalizedMatchName = normText(matchName);
+  const normalizedMatchBrand = normText(matchBrand);
+  const identitySupported = Boolean(
+    normalizedTargetName
+      && normalizedMatchName
+      && (
+        normalizedMatchName === normalizedTargetName
+        || normalizedMatchName.includes(normalizedTargetName)
+        || normalizedTargetName.includes(normalizedMatchName)
+      )
+      && (
+        !normalizedTargetBrand
+        || !normalizedMatchBrand
+        || normalizedMatchBrand === normalizedTargetBrand
+        || normalizedMatchBrand.includes(normalizedTargetBrand)
+        || normalizedTargetBrand.includes(normalizedMatchBrand)
+      ),
+  );
+  const topNotes = providerStringList(
+    pickProviderValue(hit, ["top_notes", "topNotes", "Top Notes"]),
+    pickNestedProviderValue(hit, ["Notes", "Top"]),
+    pickNestedProviderValue(hit, ["notes", "top"]),
+  );
+  const heartNotes = providerStringList(
+    pickProviderValue(hit, ["heart_notes", "heartNotes", "middle_notes", "middleNotes", "Heart Notes", "Middle Notes"]),
+    pickNestedProviderValue(hit, ["Notes", "Heart"]),
+    pickNestedProviderValue(hit, ["Notes", "Middle"]),
+    pickNestedProviderValue(hit, ["notes", "heart"]),
+    pickNestedProviderValue(hit, ["notes", "middle"]),
+  );
+  const baseNotes = providerStringList(
+    pickProviderValue(hit, ["base_notes", "baseNotes", "Base Notes"]),
+    pickNestedProviderValue(hit, ["Notes", "Base"]),
+    pickNestedProviderValue(hit, ["notes", "base"]),
+  );
+  const notes = providerStringList(
+    pickProviderValue(hit, ["notes", "Notes", "note_list", "noteList", "fragrance_notes", "fragranceNotes"]),
+    pickNestedProviderValue(hit, ["notes"]),
+    topNotes,
+    heartNotes,
+    baseNotes,
+  );
+  const accords = providerStringList(
+    pickProviderValue(hit, ["accords", "Accords", "main_accords", "mainAccords", "Main Accords"]),
+    Object.keys(pickProviderValue(hit, ["Main Accords Percentage"]) ?? {}),
+  );
+  const imageUrl = safeUrl(firstProviderString(hit, [
+    "Image URL Transparent",
+    "image_url_transparent",
+    "transparent_image_url",
+    "fragella_transparent_image_url",
+    "fragrella_transparent_image_url",
+    "Image URL",
+    "image_url",
+    "imageUrl",
+    "bottle_image_url",
+  ]));
+  const sourceUrl = safeUrl(firstProviderString(hit, ["Purchase URL", "purchase_url", "purchaseUrl", "URL", "url", "Link", "link"]));
+  const concentration = firstProviderString(hit, ["concentration", "Concentration", "type", "Type"]);
+  const sourceConfidence = firstProviderNumber(hit, ["source_confidence", "sourceConfidence", "confidence", "Confidence"]);
+  const communityPerformance = extractFragrellaCommunityPerformance(hit);
+  return {
+    provider: FRAGRELLA_PROVIDER_NAME,
+    official_registry_eligible: false,
+    identity_supported: identitySupported,
+    match_name: matchName,
+    match_brand: matchBrand,
+    source_url: sourceUrl,
+    image_url: imageUrl,
+    concentration,
+    notes,
+    top_notes: topNotes,
+    heart_notes: heartNotes,
+    base_notes: baseNotes,
+    accords,
+    community_performance: communityPerformance,
+    source_confidence: sourceConfidence,
+  };
+}
+
+function extractFragrellaCommunityPerformance(hit) {
+  const longevity = extractPerformanceDistribution(hit, ["longevity", "Longevity"]);
+  const projection = extractPerformanceDistribution(hit, ["projection", "Projection"]);
+  const sillage = extractPerformanceDistribution(hit, ["sillage", "Sillage", "trail", "Trail"]);
+  if (!longevity && !projection && !sillage) return null;
+  return {
+    provider: FRAGRELLA_PROVIDER_NAME,
+    evidence_type: "community_performance",
+    longevity_votes_total: longevity?.votes_total ?? null,
+    longevity_distribution: longevity?.distribution ?? null,
+    projection_votes_total: projection?.votes_total ?? null,
+    projection_distribution: projection?.distribution ?? null,
+    sillage_votes_total: sillage?.votes_total ?? null,
+    sillage_distribution: sillage?.distribution ?? null,
+    captured_at: new Date().toISOString(),
+    source_confidence: null,
+  };
+}
+
+function extractPerformanceDistribution(hit, keys) {
+  const candidates = [];
+  for (const key of keys) {
+    candidates.push(pickProviderValue(hit, [
+      `${key}_distribution`,
+      `${key}Distribution`,
+      `${key}_votes`,
+      `${key}Votes`,
+      `${key} percentage`,
+      `${key} Percentage`,
+    ]));
+    candidates.push(pickNestedProviderValue(hit, ["performance", key]));
+    candidates.push(pickNestedProviderValue(hit, ["community_performance", key]));
+  }
+  const raw = candidates.find((value) => value && typeof value === "object" && !Array.isArray(value));
+  if (!raw) return null;
+  const distribution = {};
+  let votesTotal = 0;
+  for (const [label, value] of Object.entries(raw)) {
+    const count = Number(value);
+    if (!Number.isFinite(count)) continue;
+    distribution[label] = count;
+    votesTotal += count;
+  }
+  return Object.keys(distribution).length > 0
+    ? { distribution, votes_total: votesTotal || null }
+    : null;
+}
+
+function firstProviderString(hit, keys) {
+  for (const key of keys) {
+    const value = pickProviderValue(hit, [key]);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function firstProviderNumber(hit, keys) {
+  for (const key of keys) {
+    const value = pickProviderValue(hit, [key]);
+    const numeric = typeof value === "number"
+      ? value
+      : (typeof value === "string" && value.trim() ? Number(value.trim()) : Number.NaN);
+    if (Number.isFinite(numeric) && numeric >= 0 && numeric <= 1) return numeric;
+  }
+  return null;
+}
+
+function pickProviderValue(hit, keys) {
+  if (!hit || typeof hit !== "object") return null;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(hit, key)) return hit[key];
+  }
+  return null;
+}
+
+function pickNestedProviderValue(hit, path) {
+  let current = hit;
+  for (const segment of path) {
+    if (!current || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, segment)) return null;
+    current = current[segment];
+  }
+  return current;
+}
+
+function providerStringList(...values) {
+  const output = [];
+  const push = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(push);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.keys(value).forEach(push);
+      return;
+    }
+    if (typeof value !== "string") return;
+    for (const part of value.split(/[,;|/]+/)) {
+      const trimmed = part.trim();
+      if (trimmed && !output.some((existing) => normText(existing) === normText(trimmed))) output.push(trimmed);
+    }
+  };
+  values.forEach(push);
+  return output;
 }
 
 async function inspectNonOfficialSource(target, officialFinding, discoveryAttemptsUsed) {
@@ -3364,10 +3717,11 @@ Generated: ${generatedAt}
 - Needs-review rows: ${needsReviewRows.length}
 - Blocked rows: ${blockedRows.length}
 
-## Existing Fragella Lane Findings
+## Existing Fragrella Lane Findings
 
-- Existing code contains a Fragella provider lane in \`supabase/functions/enrich-fragrances/index.ts\`.
-- Existing code contains a Fragella image lane in \`supabase/functions/enrich-fragrance-images/index.ts\`.
+- Existing code contains a Fragrella provider lane in \`supabase/functions/enrich-fragrances/index.ts\` using the legacy \`FRAGELLA_API_KEY\` secret name.
+- Existing code contains a Fragrella image lane in \`supabase/functions/enrich-fragrance-images/index.ts\` using the legacy \`FRAGELLA_API_KEY\` secret name.
+- This runner queries Fragrella before official-source verification when provider config is available, while preserving support for both \`FRAGRELLA_API_KEY\` and legacy \`FRAGELLA_API_KEY\`.
 - Provider data remains provider-derived intelligence only. It is not official source truth and is not included in official-source registry helper payloads.
 - Retailer, professional, and community source-tier rows are scratch intelligence only. They are explicitly excluded from official-source registry helper payloads.
 - Provider API key presence: ${providerConfigured ? "configured by environment name only; value not printed" : "not configured or not exposed to this process"}.
@@ -3461,7 +3815,11 @@ function writeJson(path, value) {
 }
 
 function hasProviderKey() {
-  return Boolean(process.env.FRAGELLA_API_KEY);
+  return getFragrellaProviderConfig().configured;
+}
+
+function unique(values) {
+  return [...new Set(values)];
 }
 
 function hashObject(value) {

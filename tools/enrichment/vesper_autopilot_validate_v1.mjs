@@ -371,15 +371,15 @@ function validateProviderPacket(report, packet) {
   rows.forEach((row, index) => {
     const rowLabel = row?.name ? `${row.name} / ${row.brand ?? "unknown brand"}` : `provider[${index}]`;
     const provider = String(row?.provider ?? "");
-    const isFragella = /fragella/i.test(provider);
+    const isFragrella = /fragr?ella/i.test(provider);
     const isVesperSourceTier = /^Vesper /i.test(provider);
-    if (!isFragella && !isVesperSourceTier) {
-      fail(report, "provider", "provider_identity", `${rowLabel}: provider must be Fragella or Vesper source-tier research`);
+    if (!isFragrella && !isVesperSourceTier) {
+      fail(report, "provider", "provider_identity", `${rowLabel}: provider must be Fragrella or Vesper source-tier research`);
     } else {
       pass(report, "provider", "provider_identity", `${rowLabel}: provider identity allowed`);
     }
 
-    if (isFragella && row?.trust_lane === "provider_only_enrichment") {
+    if (isFragrella && row?.trust_lane === "provider_only_enrichment") {
       pass(report, "provider", "trust_lane", `${rowLabel}: provider-only trust lane`);
     } else if (isVesperSourceTier && row?.trust_lane === "non_official_source_intelligence") {
       pass(report, "provider", "trust_lane", `${rowLabel}: non-official source intelligence trust lane`);
@@ -395,8 +395,6 @@ function validateProviderPacket(report, packet) {
 
     if (row?.official_source_url) {
       fail(report, "provider", "official_url_contamination", `${rowLabel}: provider row contains official_source_url`);
-    } else if (isFragella && row?.source_url) {
-      fail(report, "provider", "provider_url_contamination", `${rowLabel}: Fragella status row contains source_url`);
     } else {
       pass(report, "provider", "official_url_contamination", `${rowLabel}: no official source URL`);
     }

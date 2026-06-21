@@ -33,6 +33,22 @@ const skippedSourceDiscovery = {
   best: null,
 };
 
+const canonicalProfileWithoutPerformance = {
+  id: 'fragrance-sienna',
+  name: 'Sienna Brume',
+  brand: 'Mihan Aromatics',
+  exact: true,
+  confidence: 0.99,
+  family_key: 'fresh-floral',
+  notes: ['Tangerine', 'Amber'],
+  top_notes: [],
+  heart_notes: [],
+  base_notes: [],
+  source_url: 'https://mihanaromatics.com/product/sienna-brume',
+  longevity_score: null,
+  projection_score: null,
+};
+
 describe('vesperizer intake identity resolver', () => {
   it('routes a blank-brand exact identity candidate to identity_candidates_ready', () => {
     const result = classifyTarget(
@@ -178,5 +194,88 @@ describe('vesperizer intake identity resolver', () => {
       confidence: 0.86,
     });
     expect(result.sourceNotFound).toBeNull();
+  });
+
+  it('treats owned Collection scents with usable profiles as recommendation eligible even without performance', () => {
+    const result = classifyTarget(
+      {
+        ...baseBlankBrandTarget,
+        canonical_fragrance_id: 'fragrance-sienna',
+        canonical_collection_status: 'owned',
+      },
+      [canonicalProfileWithoutPerformance],
+      canonicalProfileWithoutPerformance,
+      { status: 'not_needed', attempts: [], candidates: [] },
+      { status: 'not_needed', attempts: [], best: null },
+    );
+
+    expect(result.summary.state).toBe('matched_existing_catalog');
+    expect(result.summary.canonical_profile).toMatchObject({
+      collection_status: 'owned',
+      collection_recommendation_eligible: true,
+      recommendation_ready: true,
+      layer_ready: true,
+      performance_present: false,
+      performance_confidence: 'wear_strength_not_verified',
+      recommendation_gate_reason: 'owned_collection_profile_present_wear_strength_not_verified',
+    });
+  });
+
+  it('excludes Retired and Disliked scents from recommendation rotation', () => {
+    const retired = classifyTarget(
+      {
+        ...baseBlankBrandTarget,
+        canonical_fragrance_id: 'fragrance-sienna',
+        canonical_collection_status: 'retired',
+      },
+      [canonicalProfileWithoutPerformance],
+      canonicalProfileWithoutPerformance,
+      { status: 'not_needed', attempts: [], candidates: [] },
+      { status: 'not_needed', attempts: [], best: null },
+    );
+
+    const disliked = classifyTarget(
+      {
+        ...baseBlankBrandTarget,
+        canonical_fragrance_id: 'fragrance-sienna',
+        canonical_collection_status: 'disliked',
+      },
+      [canonicalProfileWithoutPerformance],
+      canonicalProfileWithoutPerformance,
+      { status: 'not_needed', attempts: [], candidates: [] },
+      { status: 'not_needed', attempts: [], best: null },
+    );
+
+    expect(retired.summary.canonical_profile).toMatchObject({
+      recommendation_ready: false,
+      layer_ready: false,
+      recommendation_gate_reason: 'retired_explicitly_removed_from_rotation',
+    });
+    expect(disliked.summary.canonical_profile).toMatchObject({
+      recommendation_ready: false,
+      layer_ready: false,
+      recommendation_gate_reason: 'disliked_hard_negative',
+    });
+  });
+
+  it('does not treat Wishlist as owned Collection recommendation pool', () => {
+    const result = classifyTarget(
+      {
+        ...baseBlankBrandTarget,
+        canonical_fragrance_id: 'fragrance-sienna',
+        canonical_collection_status: 'wishlist',
+      },
+      [canonicalProfileWithoutPerformance],
+      canonicalProfileWithoutPerformance,
+      { status: 'not_needed', attempts: [], candidates: [] },
+      { status: 'not_needed', attempts: [], best: null },
+    );
+
+    expect(result.summary.canonical_profile).toMatchObject({
+      collection_status: 'wishlist',
+      recommendation_ready: false,
+      layer_ready: false,
+      recommendation_gate_reason: 'wishlist_is_purchase_intent_not_owned_collection',
+    });
   });
 });

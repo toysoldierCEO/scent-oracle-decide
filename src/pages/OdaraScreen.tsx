@@ -5137,7 +5137,7 @@ function isLikelyTransparentBottleImageUrl(url: string | null | undefined) {
     || (/^https:\/\/cdn\.fragella\.com\/images\//i.test(normalized) && /\.webp(?:$|[?#])/i.test(normalized));
 }
 
-function deriveFragellaTransparentBottleImageUrl(url: string | null | undefined) {
+function deriveFragrellaTransparentBottleImageUrl(url: string | null | undefined) {
   const trimmed = readTrimmedImageUrl(url);
   if (!trimmed) return null;
   if (!/^https:\/\/cdn\.fragella\.com\/images\//i.test(trimmed)) return null;
@@ -5201,7 +5201,7 @@ function buildPreferredBottleImageCandidates(...sources: unknown[]) {
   const { transparentCandidates, regularCandidates } = collectWardrobeBottleImageUrls(...sources);
   const candidates: string[] = [];
   transparentCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
-  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, deriveFragellaTransparentBottleImageUrl(url)));
+  regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, deriveFragrellaTransparentBottleImageUrl(url)));
   regularCandidates.forEach((url) => pushUniqueImageUrl(candidates, url));
   return candidates;
 }
@@ -7261,16 +7261,16 @@ const OdaraPerformanceLifeBar: React.FC<{
   );
 };
 
-const OdaraPerformancePendingPanel: React.FC = () => (
+const OdaraWearStrengthUnverifiedPanel: React.FC = () => (
   <div className="space-y-2 text-[12px] leading-[1.45] text-foreground/58">
     {['Longevity', 'Projection', 'Trail'].map((label) => (
-      <div key={`performance-pending-${label}`} className="flex items-center justify-between gap-4">
+      <div key={`wear-strength-unverified-${label}`} className="flex items-center justify-between gap-4">
         <span className="text-foreground/50">{label}</span>
         <span className="text-foreground/42">—</span>
       </div>
     ))}
     <div className="pt-1 text-[11px] text-foreground/42">
-      Trusted wear data pending
+      Wear strength not verified
     </div>
   </div>
 );
@@ -11000,7 +11000,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                   <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
                 ))
               ) : (
-                <OdaraPerformancePendingPanel />
+                <OdaraWearStrengthUnverifiedPanel />
               )}
             </div>
           </section>
