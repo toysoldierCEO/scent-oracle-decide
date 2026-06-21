@@ -72,6 +72,13 @@ export function getFragellaProviderConfig(env = process.env) {
   };
 }
 
+export function buildFragellaProviderHeaders(config = getFragellaProviderConfig()) {
+  return {
+    "x-api-key": config.apiKey,
+    accept: "application/json",
+  };
+}
+
 export async function queryFragellaProvider(target, config = getFragellaProviderConfig(), options = {}) {
   const queries = buildFragellaSearchQueries(target).slice(0, options.maxQueries ?? 3);
   for (const query of queries) {
@@ -79,11 +86,7 @@ export async function queryFragellaProvider(target, config = getFragellaProvider
     try {
       const response = await fetch(url, {
         method: "GET",
-        headers: {
-          "x-api-key": config.apiKey,
-          accept: "application/json",
-          "user-agent": "fragella_provider_client_v1/1.0 read-only-smoke",
-        },
+        headers: buildFragellaProviderHeaders(config),
         signal: AbortSignal.timeout(options.timeoutMs ?? 8000),
       });
       if (!response.ok) {

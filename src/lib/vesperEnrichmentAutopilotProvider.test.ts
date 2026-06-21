@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFragellaProviderHeaders,
   getFragellaProviderConfig,
   getVesperEnrichmentLaneOrder,
   normalizeFragellaProviderPayload,
@@ -44,6 +45,18 @@ describe('vesper enrichment Fragella provider lane', () => {
       apiKeyEnvName: 'FRAGRELLA_API_KEY',
       apiBaseUrl: 'https://legacy.example/v1',
     });
+  });
+
+  it('uses x-api-key auth without bearer headers', () => {
+    const headers = buildFragellaProviderHeaders(getFragellaProviderConfig({
+      FRAGELLA_API_KEY: 'header-test-secret',
+    }));
+
+    expect(headers).toMatchObject({
+      'x-api-key': 'header-test-secret',
+      accept: 'application/json',
+    });
+    expect(Object.keys(headers).map((key) => key.toLowerCase())).not.toContain('authorization');
   });
 
   it('normalizes Fragella payloads as non-official provider intelligence', () => {
