@@ -10629,9 +10629,8 @@ const OdaraFragranceDetailSheet: React.FC<{
   open: boolean;
   onClose: () => void;
   onOpenScentIntel?: (input: ScentIntelInput) => void;
-  onOpenLayerTool?: (detail: OdaraFragranceDetailSurfaceState) => void;
   footerActions?: React.ReactNode;
-}> = ({ detail, open, onClose, onOpenScentIntel, onOpenLayerTool, footerActions }) => {
+}> = ({ detail, open, onClose, onOpenScentIntel, footerActions }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -10701,7 +10700,6 @@ const OdaraFragranceDetailSheet: React.FC<{
     : isGroundedWearContextLabel(rawRoleKey)
       ? formatDetailRoleLabelFromKey(rawRoleKey)
       : null;
-  const showLayerToolAction = Boolean(resolvedDetail.fragrance_id);
   const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
@@ -10867,8 +10865,8 @@ const OdaraFragranceDetailSheet: React.FC<{
         </div>
 
         <div className="space-y-5">
-          {familyDisplayLabel || showLayerToolAction ? (
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {familyDisplayLabel ? (
+            <div className="flex flex-wrap items-center gap-2.5">
               {familyDisplayLabel && familyChipTone ? (
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
@@ -10884,21 +10882,6 @@ const OdaraFragranceDetailSheet: React.FC<{
                     {familyDisplayLabel}
                   </span>
                 </div>
-              ) : <span />}
-              {showLayerToolAction ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenLayerTool?.(resolvedDetail)}
-                  disabled={!onOpenLayerTool}
-                  className="inline-flex items-center justify-center rounded-full border px-3 py-[7px] text-[9.5px] uppercase tracking-[0.16em] text-foreground/66 transition-colors hover:text-foreground/84 disabled:opacity-45"
-                  style={{
-                    borderColor: 'rgba(217,181,108,0.16)',
-                    background: 'rgba(217,181,108,0.055)',
-                    WebkitTapHighlightColor: 'transparent',
-                  }}
-                >
-                  Try Layering
-                </button>
               ) : null}
             </div>
           ) : null}
@@ -13732,7 +13715,6 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           setSurface(detailReturnSurface);
         }}
         onOpenScentIntel={onOpenScentIntel}
-        onOpenLayerTool={onOpenLayerTool}
         footerActions={(
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-[14px] py-1">
@@ -20752,7 +20734,6 @@ const OdaraScreen = ({
         detail={fragranceDetailSheet}
         onClose={() => setFragranceDetailSheet(null)}
         onOpenScentIntel={openScentIntelSheet}
-        onOpenLayerTool={handleOpenLayerToolFromDetail}
       />
 
       <OdaraScentIntelSheet

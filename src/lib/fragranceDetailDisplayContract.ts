@@ -10,7 +10,6 @@ export type FragranceDisplayNoteSection = {
 };
 
 export type FragrancePerformanceDisplayMode = 'bars' | 'compact_pending';
-export type FragranceLayerToolDisplayMode = 'compact_cta';
 export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata' | 'curated';
 
 export type FragranceDetailSectionId =
@@ -19,7 +18,6 @@ export type FragranceDetailSectionId =
   | 'key_notes'
   | 'accords'
   | 'performance'
-  | 'layer_tool'
   | 'source_provenance'
   | 'metadata'
   | 'actions';
@@ -519,7 +517,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     detailSectionOrder.push('key_notes');
   }
   if (hasAccords) detailSectionOrder.push('accords');
-  detailSectionOrder.push('performance', 'layer_tool', 'source_provenance', 'metadata', 'actions');
+  detailSectionOrder.push('performance', 'source_provenance', 'metadata', 'actions');
 
   return {
     familyDisplayLabel,
@@ -527,7 +525,6 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
       ? { label: familyDisplayLabel, position: 'family' }
       : null,
     performanceDisplayMode: input.hasTrustedPerformance ? 'bars' as FragrancePerformanceDisplayMode : 'compact_pending' as FragrancePerformanceDisplayMode,
-    layerToolDisplayMode: 'compact_cta' as FragranceLayerToolDisplayMode,
     topIdentityChips: familyDisplayLabel
       ? dedupeChips([{ label: familyDisplayLabel, position: 'family' }]).slice(0, 1)
       : [],

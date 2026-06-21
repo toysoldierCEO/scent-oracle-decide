@@ -72,7 +72,6 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
     expect(model.familyChip).toEqual({ label: 'Fresh Aquatic', position: 'family' });
     expect(model.performanceDisplayMode).toBe('compact_pending');
-    expect(model.layerToolDisplayMode).toBe('compact_cta');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Official Pyramid');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('EDP');
@@ -81,7 +80,6 @@ describe('fragranceDetailDisplayContract', () => {
       'notes',
       'accords',
       'performance',
-      'layer_tool',
       'source_provenance',
       'metadata',
       'actions',
@@ -104,7 +102,6 @@ describe('fragranceDetailDisplayContract', () => {
       'key_notes',
       'accords',
       'performance',
-      'layer_tool',
       'source_provenance',
       'metadata',
       'actions',
