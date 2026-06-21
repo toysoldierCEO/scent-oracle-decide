@@ -165,7 +165,7 @@ async function auditQueryVariant(target, variant) {
     result.detail_fetch_possible ||= hasDetailReference(hit);
     if (normalized.identity_supported) {
       bestAccepted = normalized;
-      result.exact_identity_match = match.name && match.brand;
+      result.exact_identity_match = match.exact_name && match.exact_brand;
       result.identity_guard_accepted = true;
       result.identity_guard_reason = "accepted";
       break;
@@ -215,6 +215,8 @@ function classifyIdentity(target, normalized) {
   const matchName = normText(normalized.match_name);
   const matchBrand = normText(normalized.match_brand);
   return {
+    exact_name: Boolean(targetName && matchName && matchName === targetName),
+    exact_brand: Boolean(targetBrand && matchBrand && matchBrand === targetBrand),
     name: Boolean(targetName && matchName && (
       matchName === targetName
       || matchName.includes(targetName)
