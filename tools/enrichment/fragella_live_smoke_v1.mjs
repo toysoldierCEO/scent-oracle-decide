@@ -77,7 +77,7 @@ if (!config.configured) {
       query_attempted: true,
       query_status: result.status,
       http_status: result.http_status ?? null,
-      identity_returned: Boolean(normalized?.match_name),
+      identity_returned: Boolean(normalized?.identity_supported),
       brand_returned: Boolean(normalized?.match_brand),
       image_returned: Boolean(normalized?.image_url),
       notes_returned: Boolean(normalized && (

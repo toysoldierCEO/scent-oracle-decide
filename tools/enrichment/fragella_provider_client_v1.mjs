@@ -228,6 +228,56 @@ export function normalizeFragellaProviderPayload(target, hit) {
   };
 }
 
+export function buildFragellaCandidateProfileFlow(normalized) {
+  const identityUsed = Boolean(normalized?.identity_supported && normalized?.match_name);
+  const brandUsed = Boolean(normalized?.match_brand);
+  const imageUsed = Boolean(normalized?.image_url);
+  const notesUsed = Boolean(normalized?.notes?.length);
+  const pyramidUsed = Boolean(
+    normalized?.top_notes?.length
+      || normalized?.heart_notes?.length
+      || normalized?.base_notes?.length,
+  );
+  const accordsUsed = Boolean(normalized?.accords?.length);
+  const concentrationUsed = Boolean(normalized?.concentration);
+  const communityPerformanceUsed = Boolean(normalized?.community_performance);
+
+  return {
+    provider: FRAGELLA_PROVIDER_NAME,
+    provider_data_non_official: true,
+    official_registry_eligible: false,
+    exact_identity_supported: Boolean(normalized?.identity_supported),
+    profile_fields_present: {
+      identity: identityUsed,
+      brand: brandUsed,
+      image: imageUsed,
+      notes: notesUsed,
+      top_notes: Boolean(normalized?.top_notes?.length),
+      heart_notes: Boolean(normalized?.heart_notes?.length),
+      base_notes: Boolean(normalized?.base_notes?.length),
+      accords: accordsUsed,
+      concentration: concentrationUsed,
+      community_performance: communityPerformanceUsed,
+      vote_counts: Boolean(
+        normalized?.community_performance?.longevity_votes_total
+          || normalized?.community_performance?.projection_votes_total
+          || normalized?.community_performance?.sillage_votes_total,
+      ),
+    },
+    candidate_profile_flow: {
+      identity_used: identityUsed,
+      brand_used: brandUsed,
+      image_used: imageUsed,
+      notes_used: notesUsed,
+      pyramid_used: pyramidUsed,
+      accords_used: accordsUsed,
+      concentration_used: concentrationUsed,
+      community_performance_used: communityPerformanceUsed,
+      wear_copy_if_missing: communityPerformanceUsed ? null : "Wear strength not verified",
+    },
+  };
+}
+
 function buildFragellaSearchQueries(target) {
   return unique([
     `${target.brand ?? ""} ${target.name ?? ""}`.trim(),
@@ -241,6 +291,7 @@ function pickBestFragellaHit(target, hits) {
   let bestScore = -1;
   for (const hit of hits) {
     const normalized = normalizeFragellaProviderPayload(target, hit);
+    if (!normalized.identity_supported) continue;
     const score = (normalized.identity_supported ? 2 : 0)
       + (normalized.match_name ? 0.35 : 0)
       + (normalized.match_brand ? 0.25 : 0)

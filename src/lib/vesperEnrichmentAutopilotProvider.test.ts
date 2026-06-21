@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFragellaCandidateProfileFlow,
   buildFragellaProviderHeaders,
   getFragellaProviderConfig,
   getVesperEnrichmentLaneOrder,
   normalizeFragellaProviderPayload,
+  queryFragellaProvider,
 } from '../../tools/enrichment/fragella_provider_client_v1.mjs';
 
 const target = {
@@ -116,6 +118,83 @@ describe('vesper enrichment Fragella provider lane', () => {
       sillage_votes_total: 14,
       source_confidence: null,
     });
+  });
+
+  it('maps normalized Fragella fields into Vesperizer candidate profile flow without official eligibility', () => {
+    const normalized = normalizeFragellaProviderPayload(target, {
+      name: 'Sienna Brume',
+      brand: 'Mihan Aromatics',
+      'Image URL': 'https://cdn.example/sienna.jpg',
+      Notes: {
+        Top: ['Sea Air', 'Bergamot'],
+        Heart: ['Soft Coconut', 'Cucumber'],
+        Base: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+      },
+      accords: ['aromatic', 'fresh'],
+    });
+    const flow = buildFragellaCandidateProfileFlow(normalized);
+
+    expect(flow).toMatchObject({
+      provider: 'Fragella',
+      provider_data_non_official: true,
+      official_registry_eligible: false,
+      candidate_profile_flow: {
+        identity_used: true,
+        brand_used: true,
+        image_used: true,
+        notes_used: true,
+        pyramid_used: true,
+        accords_used: true,
+        concentration_used: false,
+        community_performance_used: false,
+        wear_copy_if_missing: 'Wear strength not verified',
+      },
+    });
+  });
+
+  it('does not accept unrelated provider hits as usable Fragella matches', async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({
+        results: calls.length === 1
+          ? [{
+              name: 'Irisistible unisex',
+              brand: 'April Aromatics',
+              notes: ['Iris', 'Violet'],
+            }]
+          : [{
+              name: 'Sienna Brume Parfum',
+              brand: 'Mihan Aromatics',
+              Notes: {
+                Top: ['Sea Air', 'Bergamot'],
+                Heart: ['Soft Coconut', 'Cucumber'],
+                Base: ['Vanilla', 'Copaiba'],
+              },
+            }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    try {
+      const result = await queryFragellaProvider(target, {
+        provider: 'Fragella',
+        configured: true,
+        apiKey: 'test-secret',
+        apiKeyEnvName: 'FRAGELLA_API_KEY',
+        apiBaseUrl: 'https://provider.example/api',
+        endpointEnvName: 'test',
+      });
+      const normalized = result.ok ? normalizeFragellaProviderPayload(target, result.hit) : null;
+
+      expect(calls.length).toBe(2);
+      expect(result.ok).toBe(true);
+      expect(normalized?.identity_supported).toBe(true);
+      expect(normalized?.match_name).toBe('Sienna Brume Parfum');
+      expect(normalized?.match_brand).toBe('Mihan Aromatics');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('does not invent source confidence when the provider payload omits it', () => {
