@@ -26,7 +26,7 @@ import {
   shouldAutoApplyWishlistForMatchedIntake,
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
-import { shouldApplyAuthStateChangeDuringHydration } from "@/lib/auth-session-hydration";
+import { resolveAuthStateHydrationDecision } from "@/lib/auth-session-hydration";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
   resolveSignedInAddAsTodayDisabledReason,
@@ -203,13 +203,16 @@ function useOdaraActiveSessionUser({
 }) {
   const [activeSessionUser, setActiveSessionUser] = useState<User | null>(null);
   const [sessionResolved, setSessionResolved] = useState<boolean>(isGuestMode);
+  const activeSessionUserRef = useRef<User | null>(null);
 
   useEffect(() => {
     let active = true;
     let sessionBootstrapResolved = false;
+    let authRevision = 0;
 
     const applySessionUser = (nextUser: User | null) => {
       if (!active) return;
+      activeSessionUserRef.current = nextUser;
       setActiveSessionUser(nextUser);
       setSessionResolved(true);
     };
@@ -223,18 +226,42 @@ function useOdaraActiveSessionUser({
 
     setSessionResolved(false);
 
-    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
-      if (!shouldApplyAuthStateChangeDuringHydration({
+    const confirmCurrentSessionBeforeClearing = (revision: number) => {
+      void odaraSupabase.auth.getSession()
+        .then(({ data }) => {
+          if (!active || revision !== authRevision) return;
+          sessionBootstrapResolved = true;
+          applySessionUser(data?.session?.user ?? null);
+        })
+        .catch(() => {
+          if (!active || revision !== authRevision) return;
+          if (active) setSessionResolved(true);
+        });
+    };
+
+    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((event, session) => {
+      authRevision += 1;
+      const revision = authRevision;
+      const decision = resolveAuthStateHydrationDecision({
+        event,
         sessionBootstrapResolved,
         eventHasSession: Boolean(session?.user),
-      })) {
+        currentUserPresent: Boolean(activeSessionUserRef.current),
+      });
+
+      if (decision === 'ignore_transient_null') return;
+
+      if (decision === 'confirm_signed_out') {
+        confirmCurrentSessionBeforeClearing(revision);
         return;
       }
-      applySessionUser(session?.user ?? null);
+
+      applySessionUser(decision === 'apply_signed_out' ? null : (session?.user ?? null));
     });
 
     odaraSupabase.auth.getSession()
       .then(({ data }) => {
+        authRevision += 1;
         sessionBootstrapResolved = true;
         applySessionUser(data?.session?.user ?? null);
       })

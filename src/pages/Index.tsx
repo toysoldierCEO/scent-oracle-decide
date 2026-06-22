@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type
 import { Eye, EyeOff } from 'lucide-react';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
-import { shouldApplyAuthStateChangeDuringHydration } from '@/lib/auth-session-hydration';
+import { resolveAuthStateHydrationDecision } from '@/lib/auth-session-hydration';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -228,6 +228,7 @@ const Index = () => {
   const { weatherByDate, getTemperature, currentTemperature, weatherLoading } = useWeather();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const authUserRef = useRef<{ id: string; email?: string } | null>(null);
   const [authView, setAuthView] = useState<AuthView>('signIn');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -312,29 +313,56 @@ const Index = () => {
   useEffect(() => {
     let active = true;
     let sessionBootstrapResolved = false;
+    let authRevision = 0;
 
     const applySession = (session: any, source: string) => {
       if (!active) return;
       const nextUser = normalizeUser(session?.user);
+      authUserRef.current = nextUser;
       setUser(prev => {
         if (sameUser(prev, nextUser)) return prev;
         return nextUser;
       });
     };
 
-    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
-      if (!shouldApplyAuthStateChangeDuringHydration({
+    const confirmCurrentSessionBeforeClearing = (revision: number, sourceEvent: string) => {
+      void odaraSupabase.auth.getSession()
+        .then(({ data: { session } }) => {
+          if (!active || revision !== authRevision) return;
+          sessionBootstrapResolved = true;
+          applySession(session, `confirm:${sourceEvent}`);
+          if (active) setAuthReady(true);
+        })
+        .catch(() => {
+          if (!active || revision !== authRevision) return;
+          if (active) setAuthReady(true);
+        });
+    };
+
+    const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((event, session) => {
+      authRevision += 1;
+      const revision = authRevision;
+      const decision = resolveAuthStateHydrationDecision({
+        event,
         sessionBootstrapResolved,
         eventHasSession: Boolean(session?.user),
-      })) {
+        currentUserPresent: Boolean(authUserRef.current),
+      });
+
+      if (decision === 'ignore_transient_null') return;
+
+      if (decision === 'confirm_signed_out') {
+        confirmCurrentSessionBeforeClearing(revision, event);
         return;
       }
-      applySession(session, 'onAuthStateChange');
+
+      applySession(decision === 'apply_signed_out' ? null : session, event);
       setAuthReady(true);
     });
 
     odaraSupabase.auth.getSession()
       .then(({ data: { session } }) => {
+        authRevision += 1;
         sessionBootstrapResolved = true;
         applySession(session, 'getSession');
         if (active) setAuthReady(true);

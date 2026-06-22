@@ -45,6 +45,15 @@ describe('auth-persistence', () => {
     expect(vesperAuthStorage.getItem(AUTH_KEY)).toBe('existing-session');
   });
 
+  it('does not remove an existing auth token while only priming a mode switch', () => {
+    window.localStorage.setItem(AUTH_KEY, 'existing-persistent-session');
+
+    primeVesperAuthPersistence(false, AUTH_KEY);
+
+    expect(window.localStorage.getItem(AUTH_KEY)).toBe('existing-persistent-session');
+    expect(vesperAuthStorage.getItem(AUTH_KEY)).toBe('existing-persistent-session');
+  });
+
   it('removes auth keys from both storages', () => {
     window.localStorage.setItem(AUTH_KEY, 'persistent-session');
     window.sessionStorage.setItem(AUTH_KEY, 'session-only');

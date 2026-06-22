@@ -2,8 +2,6 @@ export type VesperAuthPersistenceMode = 'local' | 'session';
 
 export const VESPER_AUTH_PERSISTENCE_MODE_KEY = 'vesper_auth_persistence_mode';
 
-const AUTH_STORAGE_SUFFIXES = ['', '-code-verifier', '-user'] as const;
-
 function getLocalStorage(): Storage | null {
   try {
     return typeof window !== 'undefined' ? window.localStorage : null;
@@ -47,12 +45,6 @@ function safeRemoveItem(storage: Storage | null, key: string) {
   }
 }
 
-function clearAuthKeys(storage: Storage | null, storageKey: string) {
-  for (const suffix of AUTH_STORAGE_SUFFIXES) {
-    safeRemoveItem(storage, `${storageKey}${suffix}`);
-  }
-}
-
 export function readVesperAuthPersistenceMode(): VesperAuthPersistenceMode {
   const stored = safeGetItem(getLocalStorage(), VESPER_AUTH_PERSISTENCE_MODE_KEY);
   return stored === 'session' ? 'session' : 'local';
@@ -73,7 +65,6 @@ function getFallbackStorage(mode: VesperAuthPersistenceMode): Storage | null {
 export function primeVesperAuthPersistence(rememberMe: boolean, storageKey: string) {
   const mode: VesperAuthPersistenceMode = rememberMe ? 'local' : 'session';
   writeVesperAuthPersistenceMode(mode);
-  clearAuthKeys(getFallbackStorage(mode), storageKey);
 }
 
 export const vesperAuthStorage = {
