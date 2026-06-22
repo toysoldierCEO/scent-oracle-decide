@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type
 import { Eye, EyeOff } from 'lucide-react';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
-import { resolveAuthStateHydrationDecision } from '@/lib/auth-session-hydration';
+import {
+  resolveAuthStateHydrationDecision,
+  shouldApplySessionBootstrapResult,
+} from '@/lib/auth-session-hydration';
+import { exposeOdaraBuildInfo } from '@/lib/build-info';
+import { recordOdaraAuthTrace, type OdaraAuthTraceAccessMode } from '@/lib/auth-debug-trace';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -229,6 +234,7 @@ const Index = () => {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const authUserRef = useRef<{ id: string; email?: string } | null>(null);
+  const authReadyRef = useRef(false);
   const [authView, setAuthView] = useState<AuthView>('signIn');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -287,7 +293,40 @@ const Index = () => {
   const setGuestOverride = useCallback((enabled: boolean) => {
     writeGuestOverride(enabled);
     setGuestMode(enabled);
+    recordOdaraAuthTrace({
+      accessMode: enabled ? 'guest' : (authUserRef.current ? 'signed-in' : 'signed-out'),
+      decision: enabled ? 'enabled' : 'disabled',
+      reason: 'guest_override_toggle',
+      source: 'access-mode',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(authUserRef.current),
+    });
   }, []);
+
+  useEffect(() => {
+    exposeOdaraBuildInfo();
+  }, []);
+
+  useEffect(() => {
+    authReadyRef.current = authReady;
+  }, [authReady]);
+
+  useEffect(() => {
+    const accessMode: OdaraAuthTraceAccessMode = access.isSignedIn
+      ? 'signed-in'
+      : access.isGuestMode
+        ? 'guest'
+        : 'signed-out';
+    recordOdaraAuthTrace({
+      accessMode,
+      authReady,
+      decision: 'resolved',
+      reason: 'access_mode_render',
+      source: 'access-mode',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(user),
+    });
+  }, [access.isGuestMode, access.isSignedIn, authReady, user]);
 
   const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
@@ -319,6 +358,15 @@ const Index = () => {
       if (!active) return;
       const nextUser = normalizeUser(session?.user);
       authUserRef.current = nextUser;
+      recordOdaraAuthTrace({
+        authReady: authReadyRef.current,
+        decision: nextUser ? 'applied_session' : 'applied_signed_out',
+        reason: source,
+        sessionPresent: Boolean(session),
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(nextUser),
+      });
       setUser(prev => {
         if (sameUser(prev, nextUser)) return prev;
         return nextUser;
@@ -330,11 +378,31 @@ const Index = () => {
         .then(({ data: { session } }) => {
           if (!active || revision !== authRevision) return;
           sessionBootstrapResolved = true;
+          recordOdaraAuthTrace({
+            authReady: authReadyRef.current,
+            decision: session?.user ? 'confirmed-session-present' : 'confirmed-signed-out',
+            event: sourceEvent,
+            reason: 'getSession_after_null_event',
+            sessionPresent: Boolean(session?.user),
+            source: 'Index',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
           applySession(session, `confirm:${sourceEvent}`);
           if (active) setAuthReady(true);
         })
         .catch(() => {
           if (!active || revision !== authRevision) return;
+          recordOdaraAuthTrace({
+            authReady: authReadyRef.current,
+            decision: 'confirm_failed',
+            event: sourceEvent,
+            reason: 'getSession_after_null_event_error',
+            sessionPresent: false,
+            source: 'Index',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
           if (active) setAuthReady(true);
         });
     };
@@ -347,6 +415,16 @@ const Index = () => {
         sessionBootstrapResolved,
         eventHasSession: Boolean(session?.user),
         currentUserPresent: Boolean(authUserRef.current),
+      });
+      recordOdaraAuthTrace({
+        authReady: authReadyRef.current,
+        decision,
+        event,
+        reason: 'onAuthStateChange',
+        sessionPresent: Boolean(session?.user),
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(authUserRef.current),
       });
 
       if (decision === 'ignore_transient_null') return;
@@ -364,7 +442,22 @@ const Index = () => {
       .then(({ data: { session } }) => {
         authRevision += 1;
         sessionBootstrapResolved = true;
-        applySession(session, 'getSession');
+        const shouldApplyBootstrap = shouldApplySessionBootstrapResult({
+          bootstrapHasSession: Boolean(session?.user),
+          currentUserPresent: Boolean(authUserRef.current),
+        });
+        recordOdaraAuthTrace({
+          authReady: authReadyRef.current,
+          decision: shouldApplyBootstrap ? 'apply_bootstrap' : 'ignore_stale_bootstrap_null',
+          reason: 'getSession_bootstrap',
+          sessionPresent: Boolean(session?.user),
+          source: 'Index',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(authUserRef.current),
+        });
+        if (shouldApplyBootstrap) {
+          applySession(session, 'getSession');
+        }
         if (active) setAuthReady(true);
       })
       .catch(() => {

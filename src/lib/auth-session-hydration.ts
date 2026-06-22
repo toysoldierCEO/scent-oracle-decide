@@ -28,3 +28,15 @@ export function shouldApplyAuthStateChangeDuringHydration(input: AuthStateHydrat
   const decision = resolveAuthStateHydrationDecision(input);
   return decision === 'apply_session' || decision === 'apply_signed_out';
 }
+
+export type AuthSessionBootstrapDecisionInput = {
+  bootstrapHasSession: boolean;
+  currentUserPresent: boolean;
+};
+
+export function shouldApplySessionBootstrapResult({
+  bootstrapHasSession,
+  currentUserPresent,
+}: AuthSessionBootstrapDecisionInput) {
+  return bootstrapHasSession || !currentUserPresent;
+}

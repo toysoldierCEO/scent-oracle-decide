@@ -1,3 +1,5 @@
+import { recordOdaraAuthTrace } from './auth-debug-trace';
+
 export type VesperAuthPersistenceMode = 'local' | 'session';
 
 export const VESPER_AUTH_PERSISTENCE_MODE_KEY = 'vesper_auth_persistence_mode';
@@ -65,6 +67,12 @@ function getFallbackStorage(mode: VesperAuthPersistenceMode): Storage | null {
 export function primeVesperAuthPersistence(rememberMe: boolean, storageKey: string) {
   const mode: VesperAuthPersistenceMode = rememberMe ? 'local' : 'session';
   writeVesperAuthPersistenceMode(mode);
+  recordOdaraAuthTrace({
+    decision: 'primed',
+    reason: rememberMe ? 'remember_me_local' : 'session_only_login',
+    source: 'storage',
+    storageKeyName: storageKey,
+  });
 }
 
 export const vesperAuthStorage = {
@@ -78,9 +86,21 @@ export const vesperAuthStorage = {
     const mode = readVesperAuthPersistenceMode();
     safeSetItem(getPreferredStorage(mode), key, value);
     safeRemoveItem(getFallbackStorage(mode), key);
+    recordOdaraAuthTrace({
+      decision: 'set',
+      reason: 'supabase_storage_set_item',
+      source: 'storage',
+      storageKeyName: key,
+    });
   },
   removeItem(key: string) {
     safeRemoveItem(getLocalStorage(), key);
     safeRemoveItem(getSessionStorage(), key);
+    recordOdaraAuthTrace({
+      decision: 'removed',
+      reason: 'supabase_storage_remove_item',
+      source: 'storage',
+      storageKeyName: key,
+    });
   },
 };

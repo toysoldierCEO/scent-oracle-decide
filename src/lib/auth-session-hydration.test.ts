@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveAuthStateHydrationDecision,
+  shouldApplySessionBootstrapResult,
   shouldApplyAuthStateChangeDuringHydration,
 } from './auth-session-hydration';
 
@@ -77,5 +78,23 @@ describe('auth session hydration', () => {
       eventHasSession: false,
       currentUserPresent: false,
     })).toBe('confirm_signed_out');
+  });
+
+  it('does not let a late null bootstrap result clear a session-bearing event', () => {
+    expect(shouldApplySessionBootstrapResult({
+      bootstrapHasSession: false,
+      currentUserPresent: true,
+    })).toBe(false);
+  });
+
+  it('applies bootstrap when it has a session or no user has been established', () => {
+    expect(shouldApplySessionBootstrapResult({
+      bootstrapHasSession: true,
+      currentUserPresent: true,
+    })).toBe(true);
+    expect(shouldApplySessionBootstrapResult({
+      bootstrapHasSession: false,
+      currentUserPresent: false,
+    })).toBe(true);
   });
 });

@@ -26,7 +26,11 @@ import {
   shouldAutoApplyWishlistForMatchedIntake,
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
-import { resolveAuthStateHydrationDecision } from "@/lib/auth-session-hydration";
+import {
+  resolveAuthStateHydrationDecision,
+  shouldApplySessionBootstrapResult,
+} from "@/lib/auth-session-hydration";
+import { recordOdaraAuthTrace } from "@/lib/auth-debug-trace";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
   resolveSignedInAddAsTodayDisabledReason,
@@ -39,7 +43,7 @@ import {
   normalizeFragranceSearchText,
   scoreFragranceSearchCandidate,
 } from "@/lib/fragranceSearchNormalization";
-import { odaraSupabase } from "@/lib/odara-client";
+import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from "@/lib/odara-client";
 import LayerCard from "@/components/LayerCard";
 import HeartReactionButton, { type HeartState } from "@/components/card-system/HeartReactionButton";
 import FloatingActionLabel from "@/components/card-system/FloatingActionLabel";
@@ -213,6 +217,14 @@ function useOdaraActiveSessionUser({
     const applySessionUser = (nextUser: User | null) => {
       if (!active) return;
       activeSessionUserRef.current = nextUser;
+      recordOdaraAuthTrace({
+        decision: nextUser ? 'applied_session' : 'applied_signed_out',
+        reason: 'active_session_user',
+        sessionPresent: Boolean(nextUser),
+        source: 'OdaraScreen',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(nextUser),
+      });
       setActiveSessionUser(nextUser);
       setSessionResolved(true);
     };
@@ -231,10 +243,26 @@ function useOdaraActiveSessionUser({
         .then(({ data }) => {
           if (!active || revision !== authRevision) return;
           sessionBootstrapResolved = true;
+          recordOdaraAuthTrace({
+            decision: data?.session?.user ? 'confirmed-session-present' : 'confirmed-signed-out',
+            reason: 'getSession_after_null_event',
+            sessionPresent: Boolean(data?.session?.user),
+            source: 'OdaraScreen',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(activeSessionUserRef.current),
+          });
           applySessionUser(data?.session?.user ?? null);
         })
         .catch(() => {
           if (!active || revision !== authRevision) return;
+          recordOdaraAuthTrace({
+            decision: 'confirm_failed',
+            reason: 'getSession_after_null_event_error',
+            sessionPresent: false,
+            source: 'OdaraScreen',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(activeSessionUserRef.current),
+          });
           if (active) setSessionResolved(true);
         });
     };
@@ -247,6 +275,15 @@ function useOdaraActiveSessionUser({
         sessionBootstrapResolved,
         eventHasSession: Boolean(session?.user),
         currentUserPresent: Boolean(activeSessionUserRef.current),
+      });
+      recordOdaraAuthTrace({
+        decision,
+        event,
+        reason: 'onAuthStateChange',
+        sessionPresent: Boolean(session?.user),
+        source: 'OdaraScreen',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(activeSessionUserRef.current),
       });
 
       if (decision === 'ignore_transient_null') return;
@@ -263,7 +300,21 @@ function useOdaraActiveSessionUser({
       .then(({ data }) => {
         authRevision += 1;
         sessionBootstrapResolved = true;
-        applySessionUser(data?.session?.user ?? null);
+        const shouldApplyBootstrap = shouldApplySessionBootstrapResult({
+          bootstrapHasSession: Boolean(data?.session?.user),
+          currentUserPresent: Boolean(activeSessionUserRef.current),
+        });
+        recordOdaraAuthTrace({
+          decision: shouldApplyBootstrap ? 'apply_bootstrap' : 'ignore_stale_bootstrap_null',
+          reason: 'getSession_bootstrap',
+          sessionPresent: Boolean(data?.session?.user),
+          source: 'OdaraScreen',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(activeSessionUserRef.current),
+        });
+        if (shouldApplyBootstrap) {
+          applySessionUser(data?.session?.user ?? null);
+        }
       })
       .catch(() => {
         sessionBootstrapResolved = true;
