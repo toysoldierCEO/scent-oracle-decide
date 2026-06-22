@@ -6,7 +6,6 @@ import {
   resolveAuthStateHydrationDecision,
   shouldApplySessionBootstrapResult,
 } from '@/lib/auth-session-hydration';
-import { exposeOdaraBuildInfo } from '@/lib/build-info';
 import { recordOdaraAuthTrace, type OdaraAuthTraceAccessMode } from '@/lib/auth-debug-trace';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
@@ -301,10 +300,6 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(authUserRef.current),
     });
-  }, []);
-
-  useEffect(() => {
-    exposeOdaraBuildInfo();
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { exposeOdaraBuildInfo } from "@/lib/build-info";
 
 // Suppress verbose debug logs in production to avoid leaking user IDs,
 // RPC names, and internal payload structure to the browser console.
@@ -12,5 +13,6 @@ if (!import.meta.env.DEV) {
   console.info = noop;
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+exposeOdaraBuildInfo();
 
+createRoot(document.getElementById("root")!).render(<App />);
