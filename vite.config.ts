@@ -17,8 +17,8 @@ function readGitCommit() {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   define: {
-    __ODARA_BUILD_COMMIT__: JSON.stringify(process.env.VITE_ODARA_BUILD_COMMIT ?? readGitCommit()),
-    __ODARA_BUILD_TIME__: JSON.stringify(process.env.VITE_ODARA_BUILD_TIME ?? new Date().toISOString()),
+    "import.meta.env.VITE_ODARA_BUILD_COMMIT": JSON.stringify(process.env.VITE_ODARA_BUILD_COMMIT ?? readGitCommit()),
+    "import.meta.env.VITE_ODARA_BUILD_TIME": JSON.stringify(process.env.VITE_ODARA_BUILD_TIME ?? new Date().toISOString()),
   },
   server: {
     host: "::",

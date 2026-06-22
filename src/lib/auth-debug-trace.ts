@@ -34,13 +34,27 @@ export function readSafeAuthStorageMode() {
 export function recordOdaraAuthTrace(entry: Omit<OdaraAuthTraceEntry, 'storageMode' | 'timestamp'>) {
   if (typeof window === 'undefined') return;
   const trace = window.__ODARA_AUTH_TRACE__ ?? [];
-  trace.push({
+  const nextEntry = {
     ...entry,
     storageMode: readSafeAuthStorageMode(),
     timestamp: new Date().toISOString(),
-  });
+  };
+  trace.push(nextEntry);
   if (trace.length > MAX_TRACE_ENTRIES) {
     trace.splice(0, trace.length - MAX_TRACE_ENTRIES);
   }
   window.__ODARA_AUTH_TRACE__ = trace;
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.odaraAuthTraceLength = String(trace.length);
+    document.documentElement.dataset.odaraAuthLastDecision = nextEntry.decision ?? '';
+    document.documentElement.dataset.odaraAuthLastSource = nextEntry.source;
+    document.documentElement.dataset.odaraAuthLastEvent = nextEntry.event ?? '';
+    const traceNodeId = 'odara-auth-trace';
+    const existing = document.getElementById(traceNodeId);
+    const traceNode = existing ?? document.createElement('script');
+    traceNode.id = traceNodeId;
+    traceNode.setAttribute('type', 'application/json');
+    traceNode.textContent = JSON.stringify(trace);
+    if (!existing) document.head.appendChild(traceNode);
+  }
 }

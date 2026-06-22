@@ -1,9 +1,6 @@
-declare const __ODARA_BUILD_COMMIT__: string;
-declare const __ODARA_BUILD_TIME__: string;
-
 export const ODARA_BUILD_INFO = {
-  commit: typeof __ODARA_BUILD_COMMIT__ === 'string' ? __ODARA_BUILD_COMMIT__ : 'unknown',
-  buildTime: typeof __ODARA_BUILD_TIME__ === 'string' ? __ODARA_BUILD_TIME__ : 'unknown',
+  commit: import.meta.env.VITE_ODARA_BUILD_COMMIT ?? 'unknown',
+  buildTime: import.meta.env.VITE_ODARA_BUILD_TIME ?? 'unknown',
   packageVersion: import.meta.env.PACKAGE_VERSION ?? '0.0.0',
 } as const;
 
@@ -16,4 +13,8 @@ declare global {
 export function exposeOdaraBuildInfo() {
   if (typeof window === 'undefined') return;
   window.__ODARA_BUILD__ = ODARA_BUILD_INFO;
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.odaraBuildCommit = ODARA_BUILD_INFO.commit;
+    document.documentElement.dataset.odaraBuildTime = ODARA_BUILD_INFO.buildTime;
+  }
 }
