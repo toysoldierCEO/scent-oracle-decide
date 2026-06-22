@@ -13,6 +13,7 @@ describe('OdaraScreen day selection auth safety', () => {
 
     expect(dayRailSnippet).toContain('type="button"');
     expect(dayRailSnippet).toContain('event.preventDefault()');
+    expect(dayRailSnippet).toContain("decision: 'day_tap_prevent_default_applied'");
     expect(dayRailSnippet).toContain('selectNavigationDay(fd.dateStr)');
   });
 
@@ -32,7 +33,9 @@ describe('OdaraScreen day selection auth safety', () => {
     );
 
     expect(handlerSnippet).toContain("decision: 'day_tap_start'");
+    expect(handlerSnippet).toContain("decision: 'selectedDate_before'");
     expect(handlerSnippet).toContain("decision: 'setSelectedDate_called'");
+    expect(handlerSnippet).toContain("decision: 'selectedDate_after'");
     expect(handlerSnippet).toContain("source: 'day-selection'");
     expect(handlerSnippet).toContain('previousDate: selectedDate');
     expect(handlerSnippet).toContain('targetDate: dateStr');

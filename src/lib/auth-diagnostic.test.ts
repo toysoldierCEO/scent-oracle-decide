@@ -91,13 +91,18 @@ describe('auth-diagnostic', () => {
         contextKey: 'work',
         decision: 'applied_session',
         event: 'SIGNED_IN',
+        guestOverride: false,
+        localAuthKeyExists: true,
         nextDate: '2026-06-23',
         oracleKeyPresent: true,
         oracleSlotKeyPresent: true,
+        origin: 'https://example.test',
+        originChanged: false,
         previousDate: '2026-06-22',
         reason: 'unit_test',
         selectedDate: '2026-06-22',
         sessionPresent: true,
+        sessionAuthKeyExists: false,
         source: 'Index',
         storageKeyName: AUTH_KEY,
         storageMode: 'local',
@@ -112,6 +117,11 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('supabase project ref: projectref');
     expect(summary).toContain('local auth key exists: yes');
     expect(summary).toContain('event=SIGNED_IN');
+    expect(summary).toContain('origin=https://example.test');
+    expect(summary).toContain('originChanged=no');
+    expect(summary).toContain('localAuthKey=yes');
+    expect(summary).toContain('sessionAuthKey=no');
+    expect(summary).toContain('guestOverride=no');
     expect(summary).toContain('previousDate=2026-06-22');
     expect(summary).toContain('nextDate=2026-06-23');
     expect(summary).toContain('targetDate=2026-06-23');

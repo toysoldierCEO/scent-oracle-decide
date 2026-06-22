@@ -4,10 +4,19 @@ import { AuthDiagnosticPanel } from '@/components/AuthDiagnosticPanel';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
 import {
+  ODARA_SHARED_PREVIEW_ORIGIN,
+  resolveOdaraAuthRedirectOrigin,
+} from '@/lib/auth-redirect';
+import {
   resolveAuthStateHydrationDecision,
   shouldApplySessionBootstrapResult,
 } from '@/lib/auth-session-hydration';
-import { recordOdaraAuthTrace, type OdaraAuthTraceAccessMode } from '@/lib/auth-debug-trace';
+import {
+  hasPersistedOdaraAuthTrace,
+  readPersistedOdaraAuthTrace,
+  recordOdaraAuthTrace,
+  type OdaraAuthTraceAccessMode,
+} from '@/lib/auth-debug-trace';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -284,8 +293,13 @@ const Index = () => {
       ? 'guest'
       : 'signed-out';
   const diagnosticAccessModeRef = useRef<OdaraAuthTraceAccessMode>(diagnosticAccessMode);
-  const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
-  const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
+  const hadPersistedAuthTraceOnMountRef = useRef(hasPersistedOdaraAuthTrace());
+  const authRedirectResolution = useMemo(
+    () => resolveOdaraAuthRedirectOrigin(window.location.origin),
+    [],
+  );
+  const isEditorPreview = authRedirectResolution.isExternalPreviewRequired;
+  const authRedirectOrigin = authRedirectResolution.redirectOrigin;
   const isSignUp = authView === 'signUp';
   const isCheckEmail = authView === 'checkEmail';
   const pendingEmail = pendingVerificationEmail || email.trim();
@@ -318,12 +332,27 @@ const Index = () => {
   }, [diagnosticAccessMode]);
 
   useEffect(() => {
+    const persistedTrace = readPersistedOdaraAuthTrace();
+    const previousOrigin = [...persistedTrace].reverse().find((entry) => entry.origin)?.origin ?? null;
+    const originChanged = previousOrigin ? previousOrigin !== window.location.origin : false;
+    const hadPersistedTrace = hadPersistedAuthTraceOnMountRef.current;
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
       authReady,
-      decision: 'loaded',
+      decision: hadPersistedTrace ? 'page_mount_after_reload' : 'loaded',
+      originChanged,
       reason: 'app_mount',
       source: 'page',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(user),
+    });
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      decision: 'auth_key_exists_after_reload',
+      originChanged,
+      reason: 'app_mount_storage_check',
+      source: 'storage',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(user),
     });
@@ -498,6 +527,17 @@ const Index = () => {
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(authUserRef.current),
         });
+        if (hadPersistedAuthTraceOnMountRef.current) {
+          recordOdaraAuthTrace({
+            authReady: authReadyRef.current,
+            decision: 'getSession_after_reload',
+            reason: 'getSession_bootstrap',
+            sessionPresent: Boolean(session?.user),
+            source: 'Index',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
+        }
         if (shouldApplyBootstrap) {
           applySession(session, 'getSession');
         }
@@ -580,9 +620,8 @@ const Index = () => {
           const result = await withTimeout((async () => {
             if (!access.isGuestMode) {
               recordOdaraAuthTrace({
-        accessMode: diagnosticAccessMode,
-        accessMode: diagnosticAccessModeRef.current,
-        authReady: authReadyRef.current,
+                accessMode: diagnosticAccessModeRef.current,
+                authReady: authReadyRef.current,
                 contextKey: selectedContext,
                 decision: 'getSession_before_oracle',
                 oracleKeyPresent: Boolean(oracleKey),
@@ -831,20 +870,41 @@ const Index = () => {
 
   const handleGoogle = async () => {
     if (isEditorPreview) {
-      window.open(SHARED_PREVIEW_ORIGIN, '_blank');
+      window.open(ODARA_SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
     setGuestOverride(false);
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
     primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady: authReadyRef.current,
+      decision: 'sign_in_submit',
+      reason: 'google_oauth_submit',
+      source: 'Index',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(authUserRef.current),
+    });
     setLoading(true);
     try {
       const { error: err } = await odaraSupabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: SHARED_PREVIEW_ORIGIN },
+        options: { redirectTo: authRedirectOrigin },
       });
-      if (err) setAuthError(err.message);
+      if (err) {
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: 'sign_in_result_error',
+          reason: 'google_oauth_error',
+          sessionPresent: false,
+          source: 'Index',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(authUserRef.current),
+        });
+        setAuthError(err.message);
+      }
     } finally { setLoading(false); }
   };
 
@@ -857,7 +917,7 @@ const Index = () => {
         type: 'signup',
         email: pendingEmail,
         options: {
-          emailRedirectTo: SHARED_PREVIEW_ORIGIN,
+          emailRedirectTo: authRedirectOrigin,
         },
       });
       if (err) {
@@ -914,6 +974,15 @@ const Index = () => {
     try {
       const normalizedEmail = email.trim();
       setGuestOverride(false);
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        authReady: authReadyRef.current,
+        decision: 'sign_in_submit',
+        reason: isSignUp ? 'email_signup_submit' : 'password_sign_in_submit',
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(authUserRef.current),
+      });
 
       if (isSignUp) {
         primeVesperAuthPersistence(true, ODARA_AUTH_STORAGE_KEY);
@@ -922,7 +991,7 @@ const Index = () => {
           email: normalizedEmail,
           password,
           options: {
-            emailRedirectTo: SHARED_PREVIEW_ORIGIN,
+            emailRedirectTo: authRedirectOrigin,
             data: {
               first_name: firstName.trim(),
               last_name: lastName.trim(),
@@ -933,9 +1002,40 @@ const Index = () => {
         });
 
         if (err) {
+          recordOdaraAuthTrace({
+            accessMode: diagnosticAccessMode,
+            authReady: authReadyRef.current,
+            decision: 'sign_in_result_error',
+            reason: 'email_signup_error',
+            sessionPresent: false,
+            source: 'Index',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
           setAuthError(err.message);
           return;
         }
+
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: data.session ? 'sign_in_result_success' : 'sign_up_verification_required',
+          reason: 'email_signup_result',
+          sessionPresent: Boolean(data.session?.user),
+          source: 'Index',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(data.session?.user ?? authUserRef.current),
+        });
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: 'auth_key_exists_immediately_after_sign_in',
+          reason: 'email_signup_result_storage_check',
+          sessionPresent: Boolean(data.session?.user),
+          source: 'storage',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(data.session?.user ?? authUserRef.current),
+        });
 
         if (!data.session) {
           setPendingVerificationEmail(normalizedEmail);
@@ -951,14 +1051,44 @@ const Index = () => {
       }
 
       primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
-      const { error: err } = await odaraSupabase.auth.signInWithPassword({
+      const { data, error: err } = await odaraSupabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
       });
 
       if (err) {
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: 'sign_in_result_error',
+          reason: 'password_sign_in_error',
+          sessionPresent: false,
+          source: 'Index',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(authUserRef.current),
+        });
         setAuthError(err.message);
       } else {
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: 'sign_in_result_success',
+          reason: 'password_sign_in_result',
+          sessionPresent: Boolean(data.session?.user),
+          source: 'Index',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(data.session?.user ?? authUserRef.current),
+        });
+        recordOdaraAuthTrace({
+          accessMode: diagnosticAccessMode,
+          authReady: authReadyRef.current,
+          decision: 'auth_key_exists_immediately_after_sign_in',
+          reason: 'password_sign_in_result_storage_check',
+          sessionPresent: Boolean(data.session?.user),
+          source: 'storage',
+          storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userPresent: Boolean(data.session?.user ?? authUserRef.current),
+        });
         persistRememberedEmail(rememberMe, normalizedEmail);
       }
     } finally {

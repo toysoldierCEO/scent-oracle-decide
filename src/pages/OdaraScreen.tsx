@@ -15113,6 +15113,22 @@ const OdaraScreen = ({
       accessMode: isGuestMode ? 'guest' : 'signed-in',
       authReady: true,
       contextKey: selectedContext,
+      decision: 'selectedDate_before',
+      nextDate: dateStr ?? undefined,
+      oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
+      oracleSlotKeyPresent: Boolean(selectedContext && selectedDate),
+      previousDate: selectedDate,
+      reason: 'navigation_day_button',
+      selectedDate,
+      source: 'day-selection',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      targetDate: dateStr ?? undefined,
+      userPresent: Boolean(userId),
+    });
+    recordOdaraAuthTrace({
+      accessMode: isGuestMode ? 'guest' : 'signed-in',
+      authReady: true,
+      contextKey: selectedContext,
       decision: 'day_tap_start',
       nextDate: dateStr ?? undefined,
       oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
@@ -15161,6 +15177,22 @@ const OdaraScreen = ({
       userPresent: Boolean(userId),
     });
     onDateChange(dateStr);
+    recordOdaraAuthTrace({
+      accessMode: isGuestMode ? 'guest' : 'signed-in',
+      authReady: true,
+      contextKey: selectedContext,
+      decision: 'selectedDate_after',
+      nextDate: dateStr,
+      oracleKeyPresent: Boolean(userId && selectedContext && dateStr && resolvedTemperature),
+      oracleSlotKeyPresent: Boolean(selectedContext && dateStr),
+      previousDate: selectedDate,
+      reason: 'navigation_day_button_dispatched',
+      selectedDate: dateStr,
+      source: 'day-selection',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      targetDate: dateStr,
+      userPresent: Boolean(userId),
+    });
     return true;
   }, [isGuestMode, onDateChange, resolvedTemperature, selectedContext, selectedDate, userId]);
   useEffect(() => {
@@ -21527,6 +21559,22 @@ const OdaraScreen = ({
                     ref={(el) => { navigationDayCellRefs.current[i] = el; }}
                     onClick={(event) => {
                       event.preventDefault();
+                      recordOdaraAuthTrace({
+                        accessMode: isGuestMode ? 'guest' : 'signed-in',
+                        authReady: true,
+                        contextKey: selectedContext,
+                        decision: 'day_tap_prevent_default_applied',
+                        nextDate: fd.dateStr,
+                        oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
+                        oracleSlotKeyPresent: Boolean(selectedContext && selectedDate),
+                        previousDate: selectedDate,
+                        reason: 'navigation_day_button_click',
+                        selectedDate,
+                        source: 'day-selection',
+                        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+                        targetDate: fd.dateStr,
+                        userPresent: Boolean(userId),
+                      });
                       selectNavigationDay(fd.dateStr);
                     }}
                     className="relative flex min-w-[44px] flex-none snap-start flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"

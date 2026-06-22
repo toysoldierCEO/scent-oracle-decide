@@ -1,0 +1,29 @@
+import { readFileSync } from 'node:fs';
+
+import { describe, expect, it } from 'vitest';
+
+const source = readFileSync('src/pages/Index.tsx', 'utf8');
+
+describe('Index auth storage tracing', () => {
+  it('records sign-in submit, result, and immediate auth-key presence checks', () => {
+    expect(source).toContain("decision: 'sign_in_submit'");
+    expect(source).toContain("decision: 'sign_in_result_success'");
+    expect(source).toContain("decision: 'sign_in_result_error'");
+    expect(source).toContain("decision: 'auth_key_exists_immediately_after_sign_in'");
+  });
+
+  it('records reload storage and session checks without raw session output', () => {
+    expect(source).toContain("decision: hadPersistedTrace ? 'page_mount_after_reload' : 'loaded'");
+    expect(source).toContain("decision: 'auth_key_exists_after_reload'");
+    expect(source).toContain("decision: 'getSession_after_reload'");
+    expect(source).not.toContain('JSON.stringify(session)');
+  });
+
+  it('uses resolved runtime redirect origin instead of hardcoding auth redirects to the shared preview', () => {
+    expect(source).toContain('resolveOdaraAuthRedirectOrigin(window.location.origin)');
+    expect(source).toContain('options: { redirectTo: authRedirectOrigin }');
+    expect(source).toContain('emailRedirectTo: authRedirectOrigin');
+    expect(source).not.toContain('options: { redirectTo: ODARA_SHARED_PREVIEW_ORIGIN }');
+    expect(source).not.toContain('emailRedirectTo: ODARA_SHARED_PREVIEW_ORIGIN');
+  });
+});

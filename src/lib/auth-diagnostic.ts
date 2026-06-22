@@ -2,6 +2,7 @@ import { ODARA_BUILD_INFO } from './build-info';
 import {
   type OdaraAuthTraceAccessMode,
   type OdaraAuthTraceEntry,
+  readPersistedOdaraAuthTrace,
   readSafeAuthStorageMode,
 } from './auth-debug-trace';
 
@@ -119,7 +120,7 @@ export function readAuthStoragePresence(storageKeyName: string): AuthDiagnosticS
 export function readSafeAuthTrace(): OdaraAuthTraceEntry[] {
   if (typeof window === 'undefined') return [];
   const trace = window.__ODARA_AUTH_TRACE__;
-  return Array.isArray(trace) ? trace.slice(-40) : [];
+  return Array.isArray(trace) ? trace.slice(-40) : readPersistedOdaraAuthTrace().slice(-40);
 }
 
 export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): string {
@@ -151,10 +152,15 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
       `source=${entry.source}`,
       `event=${entry.event ?? 'none'}`,
       `decision=${entry.decision ?? 'none'}`,
+      entry.origin ? `origin=${entry.origin}` : null,
+      entry.originChanged == null ? null : `originChanged=${entry.originChanged ? 'yes' : 'no'}`,
+      entry.localAuthKeyExists == null ? null : `localAuthKey=${entry.localAuthKeyExists ? 'yes' : 'no'}`,
+      entry.sessionAuthKeyExists == null ? null : `sessionAuthKey=${entry.sessionAuthKeyExists ? 'yes' : 'no'}`,
       `session=${entry.sessionPresent == null ? 'unknown' : entry.sessionPresent ? 'yes' : 'no'}`,
       `user=${entry.userPresent == null ? 'unknown' : entry.userPresent ? 'yes' : 'no'}`,
       `authReady=${entry.authReady == null ? 'unknown' : entry.authReady ? 'yes' : 'no'}`,
       `access=${entry.accessMode ?? 'unknown'}`,
+      entry.guestOverride == null ? null : `guestOverride=${entry.guestOverride ? 'yes' : 'no'}`,
       `reason=${entry.reason ?? 'none'}`,
       entry.previousDate ? `previousDate=${entry.previousDate}` : null,
       entry.nextDate ? `nextDate=${entry.nextDate}` : null,

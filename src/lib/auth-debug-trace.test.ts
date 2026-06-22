@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ODARA_AUTH_TRACE_STORAGE_KEY, recordOdaraAuthTrace } from './auth-debug-trace';
+import {
+  ODARA_AUTH_TRACE_STORAGE_KEY,
+  readPersistedOdaraAuthTrace,
+  recordOdaraAuthTrace,
+} from './auth-debug-trace';
 
 describe('auth-debug-trace', () => {
   beforeEach(() => {
@@ -32,7 +36,9 @@ describe('auth-debug-trace', () => {
     expect(window.__ODARA_AUTH_TRACE__?.[0]).toMatchObject({
       decision: 'apply_session',
       event: 'SIGNED_IN',
+      localAuthKeyExists: false,
       sessionPresent: true,
+      sessionAuthKeyExists: false,
       storageKeyName: 'sb-test-auth-token',
       storageMode: 'local',
       userPresent: true,
@@ -45,7 +51,7 @@ describe('auth-debug-trace', () => {
     expect(document.getElementById('odara-auth-trace')?.textContent).toContain('apply_session');
   });
 
-  it('persists safe trace entries in session storage across reload-like remounts', () => {
+  it('persists safe trace entries in local storage across reload-like remounts', () => {
     recordOdaraAuthTrace({
       authReady: true,
       contextKey: 'work',
@@ -62,7 +68,8 @@ describe('auth-debug-trace', () => {
       userPresent: true,
     });
 
-    expect(window.sessionStorage.getItem(ODARA_AUTH_TRACE_STORAGE_KEY)).toContain('day_tap_start');
+    expect(window.localStorage.getItem(ODARA_AUTH_TRACE_STORAGE_KEY)).toContain('day_tap_start');
+    expect(readPersistedOdaraAuthTrace()).toHaveLength(1);
     delete window.__ODARA_AUTH_TRACE__;
 
     recordOdaraAuthTrace({

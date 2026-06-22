@@ -1,18 +1,29 @@
+import { ODARA_GUEST_OVERRIDE_STORAGE_KEY } from './access-mode';
+import { ODARA_BUILD_INFO } from './build-info';
+
 export type OdaraAuthTraceAccessMode = 'signed-in' | 'guest' | 'signed-out' | 'unknown';
 
 export type OdaraAuthTraceEntry = {
   accessMode?: OdaraAuthTraceAccessMode;
   authReady?: boolean;
+  buildCommit?: string;
   contextKey?: string;
   decision?: string;
   event?: string;
+  guestOverride?: boolean;
+  host?: string;
+  localAuthKeyExists?: boolean;
   nextDate?: string;
   oracleKeyPresent?: boolean;
   oracleSlotKeyPresent?: boolean;
+  origin?: string;
+  originChanged?: boolean;
+  path?: string;
   previousDate?: string;
   reason?: string;
   selectedDate?: string;
   sessionPresent?: boolean;
+  sessionAuthKeyExists?: boolean;
   source: 'Index' | 'OdaraScreen' | 'auth-debug' | 'day-selection' | 'oracle' | 'page' | 'storage' | 'access-mode';
   storageKeyName?: string;
   storageMode?: 'local' | 'session';
@@ -39,10 +50,45 @@ export function readSafeAuthStorageMode() {
   }
 }
 
-function readPersistedAuthTrace(): OdaraAuthTraceEntry[] {
+function safeGetStorageItem(storage: Storage | null, key: string): string | null {
+  if (!storage) return null;
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorageItem(storage: Storage | null, key: string, value: string) {
+  if (!storage) return;
+  try {
+    storage.setItem(key, value);
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function getLocalStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSessionStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readPersistedOdaraAuthTrace(): OdaraAuthTraceEntry[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.sessionStorage.getItem(ODARA_AUTH_TRACE_STORAGE_KEY);
+    const raw = safeGetStorageItem(getLocalStorage(), ODARA_AUTH_TRACE_STORAGE_KEY)
+      ?? safeGetStorageItem(getSessionStorage(), ODARA_AUTH_TRACE_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.slice(-MAX_TRACE_ENTRIES) : [];
@@ -53,17 +99,42 @@ function readPersistedAuthTrace(): OdaraAuthTraceEntry[] {
 
 function persistAuthTrace(trace: OdaraAuthTraceEntry[]) {
   if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(ODARA_AUTH_TRACE_STORAGE_KEY, JSON.stringify(trace.slice(-MAX_TRACE_ENTRIES)));
-  } catch {
-    /* ignore storage failures */
+  const serialized = JSON.stringify(trace.slice(-MAX_TRACE_ENTRIES));
+  safeSetStorageItem(getLocalStorage(), ODARA_AUTH_TRACE_STORAGE_KEY, serialized);
+  safeSetStorageItem(getSessionStorage(), ODARA_AUTH_TRACE_STORAGE_KEY, serialized);
+}
+
+function getAuthStoragePresence(storageKeyName?: string) {
+  if (!storageKeyName || typeof window === 'undefined') {
+    return { localAuthKeyExists: undefined, sessionAuthKeyExists: undefined };
   }
+  return {
+    localAuthKeyExists: safeGetStorageItem(getLocalStorage(), storageKeyName) != null,
+    sessionAuthKeyExists: safeGetStorageItem(getSessionStorage(), storageKeyName) != null,
+  };
+}
+
+function readGuestOverrideFlag(): boolean | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return safeGetStorageItem(getSessionStorage(), ODARA_GUEST_OVERRIDE_STORAGE_KEY) === '1';
+}
+
+export function hasPersistedOdaraAuthTrace(): boolean {
+  return readPersistedOdaraAuthTrace().length > 0;
 }
 
 export function recordOdaraAuthTrace(entry: Omit<OdaraAuthTraceEntry, 'storageMode' | 'timestamp'>) {
   if (typeof window === 'undefined') return;
-  const trace = window.__ODARA_AUTH_TRACE__ ?? readPersistedAuthTrace();
+  const trace = window.__ODARA_AUTH_TRACE__ ?? readPersistedOdaraAuthTrace();
+  const storagePresence = getAuthStoragePresence(entry.storageKeyName);
   const nextEntry = {
+    buildCommit: ODARA_BUILD_INFO.commit,
+    guestOverride: readGuestOverrideFlag(),
+    host: window.location.host,
+    localAuthKeyExists: storagePresence.localAuthKeyExists,
+    origin: window.location.origin,
+    path: window.location.pathname,
+    sessionAuthKeyExists: storagePresence.sessionAuthKeyExists,
     ...entry,
     storageMode: readSafeAuthStorageMode(),
     timestamp: new Date().toISOString(),
