@@ -72,7 +72,9 @@ describe('fragranceDetailDisplayContract', () => {
 
     expect(model.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
     expect(model.familyChip).toEqual({ label: 'Fresh Aquatic', position: 'family' });
-    expect(model.performanceDisplayMode).toBe('compact_pending');
+    expect(model.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
+    expect(model.performanceDisplayMode).toBe('hidden');
+    expect(model.hasPerformanceSection).toBe(false);
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Official Pyramid');
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('EDP');
@@ -80,12 +82,11 @@ describe('fragranceDetailDisplayContract', () => {
       'family',
       'notes',
       'accords',
-      'performance',
       'source_provenance',
       'metadata',
       'actions',
     ]);
-    expect(model.detailSectionOrder.indexOf('notes')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
+    expect(model.detailSectionOrder).not.toContain('performance');
     expect(model.detailSectionOrder.indexOf('source_provenance')).toBeLessThan(model.detailSectionOrder.indexOf('metadata'));
   });
 
@@ -102,18 +103,46 @@ describe('fragranceDetailDisplayContract', () => {
       'family',
       'key_notes',
       'accords',
-      'performance',
       'source_provenance',
       'metadata',
       'actions',
     ]);
-    expect(model.detailSectionOrder.indexOf('key_notes')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
-    expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('performance'));
+    expect(model.detailSectionOrder).not.toContain('performance');
+    expect(model.detailSectionOrder.indexOf('key_notes')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
+    expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
   });
 
-  it('uses bar mode only when trusted performance data is available', () => {
-    expect(buildFragranceDetailDisplayModel({ hasTrustedPerformance: false }).performanceDisplayMode).toBe('compact_pending');
-    expect(buildFragranceDetailDisplayModel({ hasTrustedPerformance: true }).performanceDisplayMode).toBe('bars');
+  it('renders performance only when trusted performance data is available', () => {
+    const missingPerformance = buildFragranceDetailDisplayModel({ hasTrustedPerformance: false });
+    expect(missingPerformance.performanceDisplayMode).toBe('hidden');
+    expect(missingPerformance.hasPerformanceSection).toBe(false);
+    expect(missingPerformance.detailSectionOrder).not.toContain('performance');
+
+    const realPerformance = buildFragranceDetailDisplayModel({ hasTrustedPerformance: true });
+    expect(realPerformance.performanceDisplayMode).toBe('bars');
+    expect(realPerformance.hasPerformanceSection).toBe(true);
+    expect(realPerformance.detailSectionOrder).toContain('performance');
+  });
+
+  it('uses one canonical header hierarchy for new and existing canonical details', () => {
+    const newlyResolved = buildFragranceDetailDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+    });
+    const olderCanonical = buildFragranceDetailDisplayModel({
+      familyKey: 'woods',
+      familyLabel: 'Woody',
+      flatNotes: ['Oud', 'Cedarwood', 'Amber'],
+      hasTrustedPerformance: true,
+    });
+
+    expect(newlyResolved.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
+    expect(olderCanonical.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
+    expect(newlyResolved.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
+    expect(olderCanonical.topIdentityChips).toEqual([{ label: 'Woody', position: 'family' }]);
   });
 
   it('maps internal fresh-blue taxonomy to a user-facing family label', () => {

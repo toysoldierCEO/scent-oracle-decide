@@ -7272,20 +7272,6 @@ const OdaraPerformanceLifeBar: React.FC<{
   );
 };
 
-const OdaraWearStrengthUnverifiedPanel: React.FC = () => (
-  <div className="space-y-2 text-[12px] leading-[1.45] text-foreground/58">
-    {['Longevity', 'Projection', 'Trail'].map((label) => (
-      <div key={`wear-strength-unverified-${label}`} className="flex items-center justify-between gap-4">
-        <span className="text-foreground/50">{label}</span>
-        <span className="text-foreground/42">—</span>
-      </div>
-    ))}
-    <div className="pt-1 text-[11px] text-foreground/42">
-      Wear strength not verified
-    </div>
-  </div>
-);
-
 function deriveProfileMonogram(value: string | null | undefined): string {
   const label = String(value ?? '').trim();
   if (!label) return '—';
@@ -10711,7 +10697,6 @@ const OdaraFragranceDetailSheet: React.FC<{
     : isGroundedWearContextLabel(rawRoleKey)
       ? formatDetailRoleLabelFromKey(rawRoleKey)
       : null;
-  const detailDescription = buildVesperizedDetailDescription(resolvedDetail);
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
     resolvedDetail.brand,
@@ -10856,9 +10841,20 @@ const OdaraFragranceDetailSheet: React.FC<{
             {resolvedDetail.brand ? (
               <div className="mt-1.5 text-[13px] text-foreground/58">{resolvedDetail.brand}</div>
             ) : null}
-            {detailDescription ? (
-              <div className="mt-3 max-w-[34ch] text-[15px] leading-[1.48] text-foreground/84">
-                {detailDescription}
+            {familyDisplayLabel && familyChipTone ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
+                <span
+                  className="inline-flex max-w-full rounded-full px-3 py-[6px] text-[11px] font-medium tracking-[0.06em]"
+                  style={{
+                    color: familyChipTone.color,
+                    border: `1px solid ${familyChipTone.border}`,
+                    background: familyChipTone.background,
+                    boxShadow: `0 0 12px ${familyChipTone.glow}`,
+                  }}
+                >
+                  {familyDisplayLabel}
+                </span>
               </div>
             ) : null}
           </div>
@@ -10882,27 +10878,6 @@ const OdaraFragranceDetailSheet: React.FC<{
         </div>
 
         <div className="space-y-5">
-          {familyDisplayLabel ? (
-            <div className="flex flex-wrap items-center gap-2.5">
-              {familyDisplayLabel && familyChipTone ? (
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="text-[9px] uppercase tracking-[0.28em] text-foreground/42">Family</div>
-                  <span
-                    className="inline-flex max-w-full rounded-full px-3 py-[6px] text-[11px] font-medium tracking-[0.06em]"
-                    style={{
-                      color: familyChipTone.color,
-                      border: `1px solid ${familyChipTone.border}`,
-                      background: familyChipTone.background,
-                      boxShadow: `0 0 12px ${familyChipTone.glow}`,
-                    }}
-                  >
-                    {familyDisplayLabel}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
           {roleLabel ? (
             <div className="text-[14px] leading-[1.4] text-foreground/72">
               <span className="text-foreground/54">Best worn:</span>{' '}
@@ -11009,18 +10984,16 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          <section>
-            <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
-            <div className="space-y-4">
-              {detailPerformanceBars.length > 0 ? (
-                detailPerformanceBars.map((metric) => (
+          {detailPerformanceBars.length > 0 ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Performance</div>
+              <div className="space-y-4">
+                {detailPerformanceBars.map((metric) => (
                   <OdaraPerformanceLifeBar key={metric.key} metric={metric} tint={tint} />
-                ))
-              ) : (
-                <OdaraWearStrengthUnverifiedPanel />
-              )}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {detailTrustLine ? (
             <div

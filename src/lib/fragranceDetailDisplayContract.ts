@@ -9,7 +9,7 @@ export type FragranceDisplayNoteSection = {
   values: string[];
 };
 
-export type FragrancePerformanceDisplayMode = 'bars' | 'compact_pending';
+export type FragrancePerformanceDisplayMode = 'bars' | 'hidden';
 export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata' | 'curated';
 
 export type FragranceDetailSectionId =
@@ -548,14 +548,17 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     detailSectionOrder.push('key_notes');
   }
   if (hasAccords) detailSectionOrder.push('accords');
-  detailSectionOrder.push('performance', 'source_provenance', 'metadata', 'actions');
+  if (input.hasTrustedPerformance) detailSectionOrder.push('performance');
+  detailSectionOrder.push('source_provenance', 'metadata', 'actions');
 
   return {
+    headerLayoutOrder: ['title', 'brand', 'family'] as const,
     familyDisplayLabel,
     familyChip: familyDisplayLabel
       ? { label: familyDisplayLabel, position: 'family' }
       : null,
-    performanceDisplayMode: input.hasTrustedPerformance ? 'bars' as FragrancePerformanceDisplayMode : 'compact_pending' as FragrancePerformanceDisplayMode,
+    performanceDisplayMode: input.hasTrustedPerformance ? 'bars' as FragrancePerformanceDisplayMode : 'hidden' as FragrancePerformanceDisplayMode,
+    hasPerformanceSection: Boolean(input.hasTrustedPerformance),
     topIdentityChips: familyDisplayLabel
       ? dedupeChips([{ label: familyDisplayLabel, position: 'family' }]).slice(0, 1)
       : [],
