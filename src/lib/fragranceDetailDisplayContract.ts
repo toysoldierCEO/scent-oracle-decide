@@ -209,6 +209,10 @@ function isKnownPerfumerValue(value: string | null | undefined) {
   return !!normalized && normalized.toUpperCase() !== 'UNKNOWN';
 }
 
+function isKnownReleaseYearValue(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 function dedupeChips(chips: FragranceDisplayChip[]) {
   const seen = new Set<string>();
   const result: FragranceDisplayChip[] = [];
@@ -399,6 +403,12 @@ export function shouldShowVesperizingNotice(input: VesperizingNoticeInput) {
 }
 
 export function buildFragranceMetadataDisplay(input: FragranceMetadataDisplayInput) {
+  const catalogReleaseYear = isKnownReleaseYearValue(input.catalogReleaseYear)
+    ? input.catalogReleaseYear
+    : null;
+  const resolverReleaseYear = isKnownReleaseYearValue(input.resolverReleaseYear)
+    ? input.resolverReleaseYear
+    : null;
   const catalogPerfumer = isKnownPerfumerValue(input.catalogPerfumer)
     ? normalizeText(input.catalogPerfumer)
     : null;
@@ -410,24 +420,26 @@ export function buildFragranceMetadataDisplay(input: FragranceMetadataDisplayInp
   const resolverConcentration = isKnownConcentrationValue(input.resolverConcentration)
     ? normalizeText(input.resolverConcentration)
     : null;
-  const releaseYear = input.catalogReleaseYear ?? input.resolverReleaseYear ?? null;
-  const perfumer = catalogPerfumer ?? resolverPerfumer;
-  const concentration = catalogConcentration ?? resolverConcentration;
+  const releaseYear = resolverReleaseYear ?? catalogReleaseYear;
+  const perfumer = resolverPerfumer ?? catalogPerfumer;
+  const concentration = resolverConcentration ?? catalogConcentration;
+  const fields = [
+    releaseYear != null ? `Released: ${String(releaseYear)}` : null,
+    perfumer ? `Perfumer: ${perfumer}` : null,
+    concentration ? `Concentration: ${concentration}` : null,
+  ].filter((field): field is string => Boolean(field));
 
   return {
     releaseYear,
     perfumer,
     concentration,
     applied: {
-      release_year: !input.catalogReleaseYear && releaseYear != null,
-      perfumer: !catalogPerfumer && !!resolverPerfumer,
-      concentration: !catalogConcentration && !!resolverConcentration,
+      release_year: resolverReleaseYear != null,
+      perfumer: !!resolverPerfumer,
+      concentration: !!resolverConcentration,
     },
-    factLine: [
-      `Released: ${releaseYear ? String(releaseYear) : 'Unknown'}`,
-      `Perfumer: ${perfumer ?? 'Unknown'}`,
-      `Concentration: ${concentration ?? 'Unknown'}`,
-    ].join(' · '),
+    fields,
+    factLine: fields.length > 0 ? fields.join(' · ') : null,
   };
 }
 

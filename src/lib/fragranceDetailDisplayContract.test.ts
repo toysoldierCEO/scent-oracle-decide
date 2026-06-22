@@ -285,6 +285,131 @@ describe('fragranceDetailDisplayContract', () => {
     expect(shouldShowVesperizingNotice({ isUnresolvedIntake: true })).toBe(true);
   });
 
+  it('omits the metadata row when every field is unknown', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: 'Unknown',
+      catalogConcentration: 'UNKNOWN',
+      resolverReleaseYear: null,
+      resolverPerfumerNames: [],
+      resolverConcentration: null,
+    });
+
+    expect(display.factLine).toBeNull();
+    expect(display.fields).toEqual([]);
+    expect(display.releaseYear).toBeNull();
+    expect(display.perfumer).toBeNull();
+    expect(display.concentration).toBeNull();
+  });
+
+  it('renders only known release metadata', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: 2017,
+      catalogPerfumer: null,
+      catalogConcentration: null,
+    });
+
+    expect(display.factLine).toBe('Released: 2017');
+    expect(display.fields).toEqual(['Released: 2017']);
+  });
+
+  it('renders only known perfumer metadata', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: 'François Merle-Baudoin',
+      catalogConcentration: null,
+    });
+
+    expect(display.factLine).toBe('Perfumer: François Merle-Baudoin');
+    expect(display.fields).toEqual(['Perfumer: François Merle-Baudoin']);
+  });
+
+  it('renders only known concentration metadata', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: null,
+      catalogConcentration: 'PARFUM',
+    });
+
+    expect(display.factLine).toBe('Concentration: PARFUM');
+    expect(display.fields).toEqual(['Concentration: PARFUM']);
+  });
+
+  it('renders known metadata fields in Released, Perfumer, Concentration order', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: 2022,
+      catalogPerfumer: 'Alexandra Monet',
+      catalogConcentration: 'EDP',
+    });
+
+    expect(display.factLine).toBe('Released: 2022 · Perfumer: Alexandra Monet · Concentration: EDP');
+    expect(display.fields).toEqual([
+      'Released: 2022',
+      'Perfumer: Alexandra Monet',
+      'Concentration: EDP',
+    ]);
+  });
+
+  it('uses approved resolver metadata before catalog metadata', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: 2020,
+      resolverReleaseYear: 2021,
+      catalogPerfumer: 'Catalog Perfumer',
+      catalogConcentration: 'EDT',
+      resolverPerfumerNames: ['Resolver Perfumer'],
+      resolverConcentration: 'EDP',
+    });
+
+    expect(display.factLine).toBe('Released: 2021 · Perfumer: Resolver Perfumer · Concentration: EDP');
+    expect(display.applied).toEqual({
+      release_year: true,
+      perfumer: true,
+      concentration: true,
+    });
+  });
+
+  it('never renders literal Unknown in user-facing metadata', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: 'Unknown',
+      catalogConcentration: 'Unknown',
+      resolverPerfumerNames: [],
+      resolverConcentration: 'UNKNOWN',
+    });
+
+    expect(display.factLine).toBeNull();
+    expect(display.fields.join(' ')).not.toContain('Unknown');
+  });
+
+  it('omits metadata for a Miraculous Oud-style catalog row with no known fields', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: null,
+      catalogConcentration: 'UNKNOWN',
+      resolverReleaseYear: null,
+      resolverPerfumerNames: [],
+      resolverConcentration: null,
+    });
+
+    expect(display.factLine).toBeNull();
+    expect(display.fields).toEqual([]);
+  });
+
+  it('renders Sienna-style concentration without unknown release or perfumer labels', () => {
+    const display = buildFragranceMetadataDisplay({
+      catalogReleaseYear: null,
+      catalogPerfumer: null,
+      catalogConcentration: 'PARFUM',
+      resolverReleaseYear: null,
+      resolverPerfumerNames: [],
+      resolverConcentration: null,
+    });
+
+    expect(display.factLine).toBe('Concentration: PARFUM');
+    expect(display.factLine).not.toContain('Released: Unknown');
+    expect(display.factLine).not.toContain('Perfumer: Unknown');
+  });
+
   it('uses approved resolver perfumer names when catalog perfumer is missing', () => {
     const display = buildFragranceMetadataDisplay({
       catalogReleaseYear: null,
@@ -295,10 +420,10 @@ describe('fragranceDetailDisplayContract', () => {
     });
 
     expect(display.factLine).toBe(
-      'Released: Unknown · Perfumer: François Merle-Baudoin, Carine Certain Boin · Concentration: EDP',
+      'Perfumer: François Merle-Baudoin, Carine Certain Boin · Concentration: EDP',
     );
     expect(display.applied.perfumer).toBe(true);
-    expect(display.applied.concentration).toBe(false);
+    expect(display.applied.concentration).toBe(true);
   });
 
   it('uses approved resolver perfumer names when catalog perfumer is literal Unknown', () => {

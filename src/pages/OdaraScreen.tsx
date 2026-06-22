@@ -11045,12 +11045,14 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          <div
-            className="pt-1 text-[13px] leading-[1.5] text-foreground/66"
-            style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-          >
-            {detailFactLine}
-          </div>
+          {detailFactLine ? (
+            <div
+              className="pt-1 text-[13px] leading-[1.5] text-foreground/66"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              {detailFactLine}
+            </div>
+          ) : null}
 
           {detailTrustLine ? (
             <div className="text-[11px] leading-[1.45] text-foreground/50">
