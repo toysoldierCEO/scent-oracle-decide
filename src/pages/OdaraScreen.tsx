@@ -10682,21 +10682,16 @@ const OdaraFragranceDetailSheet: React.FC<{
     middleNotes: resolvedDetail.middle_notes ?? [],
     baseNotes: resolvedDetail.base_notes ?? [],
     flatNotes: resolvedDetail.notes ?? [],
+    descriptionText: buildVesperizedDetailDescription(resolvedDetail),
     maxHeroChips: 8,
     hasTrustedPerformance: detailPerformanceBars.length > 0,
   });
+  const detailDescription = detailDisplayModel.descriptionText;
   const topLabels = detailDisplayModel.topLabels;
   const middleLabels = detailDisplayModel.middleLabels;
   const baseLabels = detailDisplayModel.baseLabels;
   const flatNoteLabels = detailDisplayModel.flatNoteLabels;
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
-  const rawRoleLabel = resolvedDetail.wardrobe_role_label?.trim() || null;
-  const rawRoleKey = resolvedDetail.wardrobe_role_key?.trim() || null;
-  const roleLabel = isGroundedWearContextLabel(rawRoleLabel)
-    ? rawRoleLabel
-    : isGroundedWearContextLabel(rawRoleKey)
-      ? formatDetailRoleLabelFromKey(rawRoleKey)
-      : null;
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
     resolvedDetail.brand,
@@ -10878,11 +10873,10 @@ const OdaraFragranceDetailSheet: React.FC<{
         </div>
 
         <div className="space-y-5">
-          {roleLabel ? (
-            <div className="text-[14px] leading-[1.4] text-foreground/72">
-              <span className="text-foreground/54">Best worn:</span>{' '}
-              <span className="text-foreground/88">{roleLabel}</span>
-            </div>
+          {detailDescription ? (
+            <p className="text-[14px] leading-[1.55] text-foreground/72">
+              {detailDescription}
+            </p>
           ) : null}
 
           {hasStructuredNoteSections ? (

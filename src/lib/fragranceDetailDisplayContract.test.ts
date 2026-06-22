@@ -74,6 +74,10 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.familyChip).toEqual({ label: 'Fresh Aquatic', position: 'family' });
     expect(model.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
     expect(model.headerVisualPlacement).toBe('after_identity');
+    expect(model.hasDescriptionSection).toBe(true);
+    expect(model.descriptionText).toBe(
+      'Bright Italian lemon and coastal moss open crisp and airy, moving into sage and geranium before drying down to Virginia cedarwood and clean white musk.',
+    );
     expect(model.performanceDisplayMode).toBe('hidden');
     expect(model.hasPerformanceSection).toBe(false);
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
@@ -81,6 +85,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('EDP');
     expect(model.detailSectionOrder).toEqual([
       'family',
+      'description',
       'notes',
       'accords',
       'source_provenance',
@@ -100,6 +105,7 @@ describe('fragranceDetailDisplayContract', () => {
     });
 
     expect(model.hasStructuredNoteSections).toBe(false);
+    expect(model.hasDescriptionSection).toBe(false);
     expect(model.detailSectionOrder).toEqual([
       'family',
       'key_notes',
@@ -123,6 +129,50 @@ describe('fragranceDetailDisplayContract', () => {
     expect(realPerformance.performanceDisplayMode).toBe('bars');
     expect(realPerformance.hasPerformanceSection).toBe(true);
     expect(realPerformance.detailSectionOrder).toContain('performance');
+  });
+
+  it('builds a Sienna source-backed description and orders it before official notes', () => {
+    const model = buildFragranceDetailDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+      hasTrustedPerformance: false,
+    });
+
+    expect(model.descriptionText).toBe(
+      'Bright sea air and bergamot open crisp and airy, moving into soft coconut and cucumber before drying down to vanilla, copaiba, and juniper berry.',
+    );
+    expect(model.detailSectionOrder).toEqual([
+      'family',
+      'description',
+      'notes',
+      'source_provenance',
+      'metadata',
+      'actions',
+    ]);
+    expect(model.detailSectionOrder.indexOf('description')).toBeLessThan(model.detailSectionOrder.indexOf('notes'));
+    expect(model.detailSectionOrder).not.toContain('performance');
+  });
+
+  it('keeps official pyramid notes separate from conflicting community/provider notes', () => {
+    const model = buildFragranceDetailDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+      flatNotes: ['Cucumber', 'Juniper Berry', 'White Pepper', 'Wood Resin', 'Amber'],
+    });
+
+    expect(model.structuredNoteSections).toEqual([
+      { title: 'Top', position: 'top', values: ['Sea Air', 'Bergamot'] },
+      { title: 'Heart', position: 'heart', values: ['Soft Coconut', 'Cucumber'] },
+      { title: 'Base', position: 'base', values: ['Vanilla', 'Copaiba', 'Juniper Berry'] },
+    ]);
+    expect(model.structuredNoteSections[0]?.values).not.toContain('Cucumber');
+    expect(model.structuredNoteSections[0]?.values).not.toContain('White Pepper');
   });
 
   it('uses one canonical header hierarchy for new and existing canonical details', () => {

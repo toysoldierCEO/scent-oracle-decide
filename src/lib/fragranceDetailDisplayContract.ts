@@ -15,6 +15,7 @@ export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' |
 
 export type FragranceDetailSectionId =
   | 'family'
+  | 'description'
   | 'notes'
   | 'key_notes'
   | 'accords'
@@ -31,6 +32,7 @@ type FragranceDetailDisplayModelInput = {
   middleNotes?: string[] | null;
   baseNotes?: string[] | null;
   flatNotes?: string[] | null;
+  descriptionText?: string | null;
   maxHeroChips?: number;
   hasTrustedPerformance?: boolean;
 };
@@ -542,7 +544,16 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     ?? availableAccords.find((accord) => isScentProfileChip(accord))
     ?? null;
   pushChip(preferredAccord, 'accord');
+  const descriptionText = normalizeText(input.descriptionText)
+    ?? buildSourceBackedPyramidDescription({
+      familyKey: input.familyKey,
+      topNotes: input.topNotes,
+      middleNotes: input.middleNotes,
+      baseNotes: input.baseNotes,
+      flatNotes: input.flatNotes,
+    });
   const detailSectionOrder: FragranceDetailSectionId[] = ['family'];
+  if (descriptionText) detailSectionOrder.push('description');
   if (hasStructuredNoteSections) {
     detailSectionOrder.push('notes');
   } else if (flatNoteLabels.length > 0) {
@@ -555,6 +566,8 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
   return {
     headerLayoutOrder: ['title', 'brand', 'family'] as const,
     headerVisualPlacement: 'after_identity' as FragranceHeaderVisualPlacement,
+    descriptionText,
+    hasDescriptionSection: Boolean(descriptionText),
     familyDisplayLabel,
     familyChip: familyDisplayLabel
       ? { label: familyDisplayLabel, position: 'family' }
