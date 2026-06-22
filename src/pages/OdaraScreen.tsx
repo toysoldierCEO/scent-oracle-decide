@@ -10385,16 +10385,6 @@ function getScentIntelGlassTint(
   return DEFAULT_TINT;
 }
 
-function softenScentIntelGlow(glow: string) {
-  return glow
-    .replace('0.22', '0.11')
-    .replace('0.2', '0.1')
-    .replace('0.18', '0.09')
-    .replace('0.16', '0.08')
-    .replace('0.14', '0.07')
-    .replace('0.12', '0.06');
-}
-
 function getScentIntelChipClass(extra = '') {
   return `rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors hover:text-foreground/92 ${extra}`.trim();
 }
@@ -10660,7 +10650,7 @@ const OdaraScentIntelSheet: React.FC<{
                           color: tone.color,
                           border: `1px solid ${tone.border}`,
                           background: tone.background,
-                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05), 0 0 7px ${softenScentIntelGlow(tone.glow)}`,
+                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                         }}
                       />
                     );
@@ -10843,16 +10833,6 @@ const OdaraFragranceDetailSheet: React.FC<{
     || officialSourceTier === 'official_notes_only'
   ) && orderedNoteChips.length > 0;
   const hasProviderNotes = Boolean(isProviderVesperIntelligence(resolvedDetail.vesper_intelligence));
-  const hasCuratedProfile = Boolean(
-    resolvedDetail.fragrance_id
-    && !hasOfficialStructuredNoteSource
-    && !hasProviderNotes
-    && (
-      familyDisplayLabel
-      || orderedNoteChips.length > 0
-      || accordLabels.length > 0
-    ),
-  );
   const detailTrustLine = buildFragranceTrustLine({
     kind: hasStructuredNoteSections && hasOfficialStructuredNoteSource
       ? 'official_pyramid'
@@ -10862,9 +10842,7 @@ const OdaraFragranceDetailSheet: React.FC<{
           ? 'provider'
           : metadataSourceLabel
             ? 'metadata'
-            : hasCuratedProfile
-              ? 'curated'
-              : null,
+            : null,
     sourceName: officialStructuredNoteSourceName,
     fallbackBrand: resolvedDetail.brand,
   });
@@ -10909,7 +10887,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                     color: familyChipTone.color,
                     border: `1px solid ${familyChipTone.border}`,
                     background: familyChipTone.background,
-                    boxShadow: `0 0 12px ${familyChipTone.glow}`,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                   }}
                 >
                   {familyDisplayLabel}
@@ -10984,7 +10962,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                               color: tone.color,
                               border: `1px solid ${tone.border}`,
                               background: tone.background,
-                              boxShadow: `0 0 14px ${tone.glow}`,
+                              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                             }}
                           />
                         );
@@ -11015,7 +10993,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                         color: tone.color,
                         border: `1px solid ${tone.border}`,
                         background: tone.background,
-                        boxShadow: `0 0 14px ${tone.glow}`,
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                       }}
                     />
                   );
@@ -11047,7 +11025,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                         color: tone.color,
                         border: `1px solid ${tone.border}`,
                         background: tone.background,
-                        boxShadow: `0 0 14px ${tone.glow}`,
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                       }}
                     />
                   );
@@ -11067,21 +11045,18 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          {detailTrustLine ? (
-            <div
-              className="pt-2 text-[11px] leading-[1.45] text-foreground/50"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-            >
-              {detailTrustLine}
-            </div>
-          ) : null}
-
           <div
             className="pt-1 text-[13px] leading-[1.5] text-foreground/66"
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
             {detailFactLine}
           </div>
+
+          {detailTrustLine ? (
+            <div className="text-[11px] leading-[1.45] text-foreground/50">
+              {detailTrustLine}
+            </div>
+          ) : null}
 
           {footerActions ? (
             <div
@@ -14630,7 +14605,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                               color: familyChipTone.color,
                               border: `1px solid ${familyChipTone.border}`,
                               background: familyChipTone.background,
-                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                             }}
                           />
                         ) : (
@@ -14640,7 +14615,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                               color: familyChipTone.color,
                               border: `1px solid ${familyChipTone.border}`,
                               background: familyChipTone.background,
-                              boxShadow: `0 0 14px ${familyChipTone.glow}`,
+                              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                             }}
                           >
                             {familyChipLabel}
@@ -14698,7 +14673,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
                                     background: tone.background,
-                                    boxShadow: `0 0 12px ${tone.glow}`,
+                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                                   }}
                                 />
                               ) : (
@@ -14709,7 +14684,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                                     color: tone.color,
                                     border: `1px solid ${tone.border}`,
                                     background: tone.background,
-                                    boxShadow: `0 0 12px ${tone.glow}`,
+                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                                   }}
                                 >
                                   {chip.label}
@@ -21899,7 +21874,7 @@ const OdaraScreen = ({
                           color: visibleHeroFamilyColor,
                           border: `1px solid ${visibleHeroFamilyColor}36`,
                           background: `${visibleHeroFamilyColor}10`,
-                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03), 0 0 12px ${visibleHeroFamilyColor}20`,
+                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
                         }}
                       />
                     ) : null}
@@ -21931,7 +21906,7 @@ const OdaraScreen = ({
                                   color: tone.color,
                                   border: `1px solid ${tone.border}`,
                                   background: tone.background,
-                                  boxShadow: `0 0 12px ${tone.glow}`,
+                                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                                 }}
                               />
                             );

@@ -88,12 +88,13 @@ describe('fragranceDetailDisplayContract', () => {
       'description',
       'notes',
       'accords',
-      'source_provenance',
       'metadata',
+      'source_provenance',
       'actions',
     ]);
     expect(model.detailSectionOrder).not.toContain('performance');
-    expect(model.detailSectionOrder.indexOf('source_provenance')).toBeLessThan(model.detailSectionOrder.indexOf('metadata'));
+    expect(model.detailSectionOrder.indexOf('metadata')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
+    expect(model.detailSectionOrder.indexOf('source_provenance')).toBeLessThan(model.detailSectionOrder.indexOf('actions'));
   });
 
   it('uses the same canonical order for key-note-only fragrances such as Into the Woods', () => {
@@ -110,13 +111,14 @@ describe('fragranceDetailDisplayContract', () => {
       'family',
       'key_notes',
       'accords',
-      'source_provenance',
       'metadata',
+      'source_provenance',
       'actions',
     ]);
     expect(model.detailSectionOrder).not.toContain('performance');
-    expect(model.detailSectionOrder.indexOf('key_notes')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
-    expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
+    expect(model.detailSectionOrder.indexOf('key_notes')).toBeLessThan(model.detailSectionOrder.indexOf('metadata'));
+    expect(model.detailSectionOrder.indexOf('accords')).toBeLessThan(model.detailSectionOrder.indexOf('metadata'));
+    expect(model.detailSectionOrder.indexOf('metadata')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
   });
 
   it('renders performance only when trusted performance data is available', () => {
@@ -148,11 +150,12 @@ describe('fragranceDetailDisplayContract', () => {
       'family',
       'description',
       'notes',
-      'source_provenance',
       'metadata',
+      'source_provenance',
       'actions',
     ]);
     expect(model.detailSectionOrder.indexOf('description')).toBeLessThan(model.detailSectionOrder.indexOf('notes'));
+    expect(model.detailSectionOrder.indexOf('metadata')).toBeLessThan(model.detailSectionOrder.indexOf('source_provenance'));
     expect(model.detailSectionOrder).not.toContain('performance');
   });
 
@@ -241,7 +244,8 @@ describe('fragranceDetailDisplayContract', () => {
       sourceName: 'Alexandria Fragrances',
       fallbackBrand: 'Alexandria Fragrances',
     })).toBe('Official source-backed key notes · Official source · Alexandria Fragrances');
-    expect(buildFragranceTrustLine({ kind: 'curated' })).toBe('Curated app profile');
+    expect(buildFragranceTrustLine({ kind: null })).toBeNull();
+    expect(buildFragranceTrustLine({})).toBeNull();
   });
 
   it('recognizes brand-matched official source URLs without exposing internals', () => {

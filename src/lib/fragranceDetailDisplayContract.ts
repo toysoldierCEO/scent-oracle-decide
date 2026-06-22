@@ -11,7 +11,7 @@ export type FragranceDisplayNoteSection = {
 
 export type FragrancePerformanceDisplayMode = 'bars' | 'hidden';
 export type FragranceHeaderVisualPlacement = 'after_identity';
-export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata' | 'curated';
+export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata';
 
 export type FragranceDetailSectionId =
   | 'family'
@@ -61,7 +61,6 @@ type FragranceTrustLineInput = {
   kind?: FragranceTrustLineKind | null;
   sourceName?: string | null;
   fallbackBrand?: string | null;
-  profileConfidence?: number | null;
 };
 
 type SourceBackedPyramidDescriptionInput = {
@@ -329,11 +328,6 @@ export function buildFragranceTrustLine(input: FragranceTrustLineInput) {
   if (kind === 'official_key_notes') return `Official source-backed key notes · Official source · ${source}`;
   if (kind === 'provider') return 'Source-backed notes · Structured provider data · brand confirmation pending';
   if (kind === 'metadata') return 'Source-backed metadata · Official product-page metadata';
-  if (kind === 'curated') {
-    return typeof input.profileConfidence === 'number' && Number.isFinite(input.profileConfidence)
-      ? `Profile confidence ${Math.round(input.profileConfidence)}% · Curated app profile`
-      : 'Curated app profile';
-  }
   return null;
 }
 
@@ -561,7 +555,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
   }
   if (hasAccords) detailSectionOrder.push('accords');
   if (input.hasTrustedPerformance) detailSectionOrder.push('performance');
-  detailSectionOrder.push('source_provenance', 'metadata', 'actions');
+  detailSectionOrder.push('metadata', 'source_provenance', 'actions');
 
   return {
     headerLayoutOrder: ['title', 'brand', 'family'] as const,
