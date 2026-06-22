@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type HTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { AuthDiagnosticPanel } from '@/components/AuthDiagnosticPanel';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
 import {
@@ -277,6 +278,11 @@ const Index = () => {
 
   // ── Normalized access mode — single source of truth ──
   const access = useMemo(() => resolveAccessMode(user, guestMode), [user, guestMode]);
+  const diagnosticAccessMode: OdaraAuthTraceAccessMode = access.isSignedIn
+    ? 'signed-in'
+    : access.isGuestMode
+      ? 'guest'
+      : 'signed-out';
   const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
   const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
   const isSignUp = authView === 'signUp';
@@ -307,13 +313,8 @@ const Index = () => {
   }, [authReady]);
 
   useEffect(() => {
-    const accessMode: OdaraAuthTraceAccessMode = access.isSignedIn
-      ? 'signed-in'
-      : access.isGuestMode
-        ? 'guest'
-        : 'signed-out';
     recordOdaraAuthTrace({
-      accessMode,
+      accessMode: diagnosticAccessMode,
       authReady,
       decision: 'resolved',
       reason: 'access_mode_render',
@@ -321,7 +322,7 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(user),
     });
-  }, [access.isGuestMode, access.isSignedIn, authReady, user]);
+  }, [authReady, diagnosticAccessMode, user]);
 
   const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
@@ -831,40 +832,49 @@ const Index = () => {
   // Wait for auth bootstrap (but NOT when in guest mode — guest skips auth entirely)
   if (!authReady && !guestMode) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <span className="text-sm text-muted-foreground">Checking authentication…</span>
-      </div>
+      <>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <span className="text-sm text-muted-foreground">Checking authentication…</span>
+        </div>
+        <AuthDiagnosticPanel
+          accessMode={diagnosticAccessMode}
+          authReady={authReady}
+          guestOverride={guestMode}
+          userPresent={Boolean(user)}
+        />
+      </>
     );
   }
 
   // Show auth screen only when not signed in AND not in guest mode
   if (!access.isSignedIn && !access.isGuestMode) {
     return (
-      <div
-        className="min-h-dvh overflow-y-auto bg-background text-foreground"
-        style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
-      >
-        <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-10 sm:py-14" style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom))' }}>
-          <div className="mx-auto w-full max-w-sm">
-            <div className="mb-8 text-center">
-              <div className="mb-4 flex flex-col items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
-                <span>WELCOME</span>
-                <span>TO</span>
+      <>
+        <div
+          className="min-h-dvh overflow-y-auto bg-background text-foreground"
+          style={{ fontFamily: "'Geist Sans', system-ui, sans-serif" }}
+        >
+          <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-10 sm:py-14" style={{ paddingBottom: 'max(2.5rem, env(safe-area-inset-bottom))' }}>
+            <div className="mx-auto w-full max-w-sm">
+              <div className="mb-8 text-center">
+                <div className="mb-4 flex flex-col items-center gap-1.5 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/50">
+                  <span>WELCOME</span>
+                  <span>TO</span>
+                </div>
+                <h1 className="text-xl font-bold uppercase tracking-[0.4em]">VESPER</h1>
+                {isCheckEmail ? (
+                  <>
+                    <h2 className="mt-3 text-lg font-medium text-foreground">Check your email</h2>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      We sent a verification email to <span className="text-foreground">{pendingEmail}</span>. Confirm your account, then return to sign in.
+                    </p>
+                  </>
+                ) : null}
               </div>
-              <h1 className="text-xl font-bold uppercase tracking-[0.4em]">VESPER</h1>
-              {isCheckEmail ? (
-                <>
-                  <h2 className="mt-3 text-lg font-medium text-foreground">Check your email</h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    We sent a verification email to <span className="text-foreground">{pendingEmail}</span>. Confirm your account, then return to sign in.
-                  </p>
-                </>
-              ) : null}
-            </div>
 
-            <div>
-              {isCheckEmail ? (
-                <div className="space-y-3">
+              <div>
+                {isCheckEmail ? (
+                  <div className="space-y-3">
                   {authError ? (
                     <p className="rounded-xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-300">
                       {authError}
@@ -893,9 +903,9 @@ const Index = () => {
                   >
                     Back to Sign In
                   </button>
-                </div>
-              ) : (
-                <form className="space-y-3" noValidate onSubmit={handleEmailAuth}>
+                  </div>
+                ) : (
+                  <form className="space-y-3" noValidate onSubmit={handleEmailAuth}>
                   {isSignUp ? (
                     <>
                       <AuthTextField
@@ -1037,12 +1047,19 @@ const Index = () => {
                   >
                     Skip for now
                   </button>
-                </form>
-              )}
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+        <AuthDiagnosticPanel
+          accessMode={diagnosticAccessMode}
+          authReady={authReady}
+          guestOverride={guestMode}
+          userPresent={Boolean(user)}
+        />
+      </>
     );
   }
 
@@ -1066,6 +1083,12 @@ const Index = () => {
       />
       {/* Recipe Mode button removed — guest home now always uses get_guest_oracle_home_v6
           which decides standard vs recipe card_type on the backend. */}
+      <AuthDiagnosticPanel
+        accessMode={diagnosticAccessMode}
+        authReady={authReady}
+        guestOverride={guestMode}
+        userPresent={Boolean(user)}
+      />
     </>
   );
 };
