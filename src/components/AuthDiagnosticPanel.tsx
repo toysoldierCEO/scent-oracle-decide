@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OdaraAuthTraceAccessMode } from '@/lib/auth-debug-trace';
 import {
   buildAuthDiagnosticSummary,
+  getNextAuthDebugTapCount,
   getCurrentAuthDiagnosticBase,
   readAuthDebugEnabled,
+  setAuthDebugEnabled,
 } from '@/lib/auth-diagnostic';
+import { recordOdaraAuthTrace } from '@/lib/auth-debug-trace';
 import { ODARA_AUTH_STORAGE_KEY, ODARA_SUPABASE_PROJECT_REF, odaraSupabase } from '@/lib/odara-client';
 
 type AuthDiagnosticPanelProps = {
@@ -27,6 +30,12 @@ export function AuthDiagnosticPanel({
 
   useEffect(() => {
     setEnabled(readAuthDebugEnabled());
+    const handleEnabled = (event: Event) => {
+      const customEvent = event as CustomEvent<{ enabled?: boolean }>;
+      setEnabled(customEvent.detail?.enabled ?? readAuthDebugEnabled());
+    };
+    window.addEventListener('odara-auth-debug-enabled', handleEnabled);
+    return () => window.removeEventListener('odara-auth-debug-enabled', handleEnabled);
   }, []);
 
   useEffect(() => {
@@ -53,6 +62,76 @@ export function AuthDiagnosticPanel({
       window.clearInterval(interval);
     };
   }, [enabled]);
+
+  useEffect(() => {
+    let pressTimer: number | null = null;
+    let tapCount = 0;
+    let lastTapAt: number | null = null;
+
+    const clearPressTimer = () => {
+      if (pressTimer == null) return;
+      window.clearTimeout(pressTimer);
+      pressTimer = null;
+    };
+
+    const enableFromGesture = (reason: string) => {
+      clearPressTimer();
+      setAuthDebugEnabled(true);
+      recordOdaraAuthTrace({
+        accessMode,
+        authReady,
+        decision: 'enabled',
+        reason,
+        source: 'auth-debug',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent,
+      });
+    };
+
+    const isTrigger = (target: EventTarget | null) => {
+      const element = target instanceof Element ? target : null;
+      if (!element) return false;
+      if (element.closest('[data-odara-auth-debug-ignore]')) return false;
+      if (element.closest('button, a, input, textarea, select') && !element.closest('[data-odara-auth-debug-trigger]')) {
+        return false;
+      }
+      return Boolean(element.closest('[data-odara-auth-debug-trigger]'));
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!isTrigger(event.target)) return;
+      clearPressTimer();
+      pressTimer = window.setTimeout(() => enableFromGesture('logo_long_press'), 1000);
+    };
+
+    const handlePointerEnd = () => {
+      clearPressTimer();
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      if (!isTrigger(event.target)) return;
+      const now = Date.now();
+      tapCount = getNextAuthDebugTapCount({ lastTapAt, now, previousCount: tapCount });
+      lastTapAt = now;
+      if (tapCount >= 7) {
+        tapCount = 0;
+        lastTapAt = null;
+        enableFromGesture('logo_seven_taps');
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('pointerup', handlePointerEnd);
+    document.addEventListener('pointercancel', handlePointerEnd);
+    document.addEventListener('click', handleClick);
+    return () => {
+      clearPressTimer();
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointerup', handlePointerEnd);
+      document.removeEventListener('pointercancel', handlePointerEnd);
+      document.removeEventListener('click', handleClick);
+    };
+  }, [accessMode, authReady, userPresent]);
 
   const summary = useMemo(() => {
     if (!enabled) return '';

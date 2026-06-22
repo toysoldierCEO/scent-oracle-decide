@@ -3,18 +3,26 @@ export type OdaraAuthTraceAccessMode = 'signed-in' | 'guest' | 'signed-out' | 'u
 export type OdaraAuthTraceEntry = {
   accessMode?: OdaraAuthTraceAccessMode;
   authReady?: boolean;
+  contextKey?: string;
   decision?: string;
   event?: string;
+  nextDate?: string;
+  oracleKeyPresent?: boolean;
+  oracleSlotKeyPresent?: boolean;
+  previousDate?: string;
   reason?: string;
+  selectedDate?: string;
   sessionPresent?: boolean;
-  source: 'Index' | 'OdaraScreen' | 'storage' | 'access-mode';
+  source: 'Index' | 'OdaraScreen' | 'auth-debug' | 'day-selection' | 'oracle' | 'page' | 'storage' | 'access-mode';
   storageKeyName?: string;
   storageMode?: 'local' | 'session';
+  targetDate?: string;
   timestamp: string;
   userPresent?: boolean;
 };
 
 const MAX_TRACE_ENTRIES = 120;
+export const ODARA_AUTH_TRACE_STORAGE_KEY = 'odara_auth_trace_v1';
 
 declare global {
   interface Window {
@@ -31,9 +39,30 @@ export function readSafeAuthStorageMode() {
   }
 }
 
+function readPersistedAuthTrace(): OdaraAuthTraceEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.sessionStorage.getItem(ODARA_AUTH_TRACE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(-MAX_TRACE_ENTRIES) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAuthTrace(trace: OdaraAuthTraceEntry[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(ODARA_AUTH_TRACE_STORAGE_KEY, JSON.stringify(trace.slice(-MAX_TRACE_ENTRIES)));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 export function recordOdaraAuthTrace(entry: Omit<OdaraAuthTraceEntry, 'storageMode' | 'timestamp'>) {
   if (typeof window === 'undefined') return;
-  const trace = window.__ODARA_AUTH_TRACE__ ?? [];
+  const trace = window.__ODARA_AUTH_TRACE__ ?? readPersistedAuthTrace();
   const nextEntry = {
     ...entry,
     storageMode: readSafeAuthStorageMode(),
@@ -44,6 +73,7 @@ export function recordOdaraAuthTrace(entry: Omit<OdaraAuthTraceEntry, 'storageMo
     trace.splice(0, trace.length - MAX_TRACE_ENTRIES);
   }
   window.__ODARA_AUTH_TRACE__ = trace;
+  persistAuthTrace(trace);
   if (typeof document !== 'undefined') {
     document.documentElement.dataset.odaraAuthTraceLength = String(trace.length);
     document.documentElement.dataset.odaraAuthLastDecision = nextEntry.decision ?? '';

@@ -283,6 +283,7 @@ const Index = () => {
     : access.isGuestMode
       ? 'guest'
       : 'signed-out';
+  const diagnosticAccessModeRef = useRef<OdaraAuthTraceAccessMode>(diagnosticAccessMode);
   const SHARED_PREVIEW_ORIGIN = 'https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app';
   const isEditorPreview = window.location.hostname !== new URL(SHARED_PREVIEW_ORIGIN).hostname;
   const isSignUp = authView === 'signUp';
@@ -311,6 +312,52 @@ const Index = () => {
   useEffect(() => {
     authReadyRef.current = authReady;
   }, [authReady]);
+
+  useEffect(() => {
+    diagnosticAccessModeRef.current = diagnosticAccessMode;
+  }, [diagnosticAccessMode]);
+
+  useEffect(() => {
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      decision: 'loaded',
+      reason: 'app_mount',
+      source: 'page',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(user),
+    });
+
+    const handleVisibilityChange = () => {
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessModeRef.current,
+        authReady: authReadyRef.current,
+        decision: document.visibilityState,
+        reason: 'page_visibility_change',
+        source: 'page',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(authUserRef.current),
+      });
+    };
+    const handleBeforeUnload = () => {
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessModeRef.current,
+        authReady: authReadyRef.current,
+        decision: 'beforeunload',
+        reason: 'beforeunload',
+        source: 'page',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userPresent: Boolean(authUserRef.current),
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   useEffect(() => {
     recordOdaraAuthTrace({
@@ -507,6 +554,19 @@ const Index = () => {
 
     setOracleLoading(true);
     setOracleError(null);
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      contextKey: selectedContext,
+      decision: 'oracle_refetch_started',
+      oracleKeyPresent: Boolean(oracleKey),
+      oracleSlotKeyPresent: Boolean(oracleSlotKey),
+      reason: 'selected_date_or_context_changed',
+      selectedDate,
+      source: 'oracle',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(authUserRef.current),
+    });
 
     launchTimerId = window.setTimeout(() => {
       requestStarted = true;
@@ -519,13 +579,54 @@ const Index = () => {
         try {
           const result = await withTimeout((async () => {
             if (!access.isGuestMode) {
+              recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        accessMode: diagnosticAccessModeRef.current,
+        authReady: authReadyRef.current,
+                contextKey: selectedContext,
+                decision: 'getSession_before_oracle',
+                oracleKeyPresent: Boolean(oracleKey),
+                oracleSlotKeyPresent: Boolean(oracleSlotKey),
+                reason: 'signed_in_oracle_preflight',
+                selectedDate,
+                source: 'oracle',
+                storageKeyName: ODARA_AUTH_STORAGE_KEY,
+                userPresent: Boolean(authUserRef.current),
+              });
               const { data: sessionData } = await odaraSupabase.auth.getSession();
               const session = sessionData?.session;
+              recordOdaraAuthTrace({
+                accessMode: diagnosticAccessMode,
+                authReady: authReadyRef.current,
+                contextKey: selectedContext,
+                decision: session ? 'getSession_result_session_present' : 'getSession_result_no_session',
+                oracleKeyPresent: Boolean(oracleKey),
+                oracleSlotKeyPresent: Boolean(oracleSlotKey),
+                reason: 'signed_in_oracle_preflight',
+                selectedDate,
+                sessionPresent: Boolean(session?.user),
+                source: 'oracle',
+                storageKeyName: ODARA_AUTH_STORAGE_KEY,
+                userPresent: Boolean(authUserRef.current),
+              });
               if (!session) {
                 throw new Error('No active session — cannot call oracle RPC');
               }
             }
 
+            recordOdaraAuthTrace({
+              accessMode: diagnosticAccessMode,
+              authReady: authReadyRef.current,
+              contextKey: selectedContext,
+              decision: 'oracle_rpc_started',
+              oracleKeyPresent: Boolean(oracleKey),
+              oracleSlotKeyPresent: Boolean(oracleSlotKey),
+              reason: 'fetch_home_oracle',
+              selectedDate,
+              source: 'oracle',
+              storageKeyName: ODARA_AUTH_STORAGE_KEY,
+              userPresent: Boolean(authUserRef.current),
+            });
             return fetchHomeOracle({
               access,
               temperature: requestTemperature,
@@ -565,12 +666,38 @@ const Index = () => {
           setOracleLoading(false);
           oracleSuccessKeyRef.current = oracleKey;
           oracleInFlightKeyRef.current = null;
+          recordOdaraAuthTrace({
+            accessMode: diagnosticAccessMode,
+            authReady: authReadyRef.current,
+            contextKey: selectedContext,
+            decision: 'oracle_rpc_success',
+            oracleKeyPresent: Boolean(oracleKey),
+            oracleSlotKeyPresent: Boolean(oracleSlotKey),
+            reason: 'fetch_home_oracle',
+            selectedDate,
+            source: 'oracle',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
         } catch (e: any) {
           if (cancelled || requestId !== oracleRequestIdRef.current) return;
 
           setOracleError(e?.message || 'Unknown error');
           setOracleLoading(false);
           oracleInFlightKeyRef.current = null;
+          recordOdaraAuthTrace({
+            accessMode: diagnosticAccessMode,
+            authReady: authReadyRef.current,
+            contextKey: selectedContext,
+            decision: 'oracle_rpc_error',
+            oracleKeyPresent: Boolean(oracleKey),
+            oracleSlotKeyPresent: Boolean(oracleSlotKey),
+            reason: e?.message || 'Unknown error',
+            selectedDate,
+            source: 'oracle',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
         }
       })();
     }, ORACLE_FETCH_DEBOUNCE_MS);
@@ -591,6 +718,7 @@ const Index = () => {
     stableOracleTemperature,
     shouldDelayOracleForWeather,
     access,
+    diagnosticAccessMode,
     selectedContext,
     selectedDate,
   ]);
@@ -753,6 +881,15 @@ const Index = () => {
       return;
     }
     setGuestOverride(false);
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady: authReadyRef.current,
+      decision: 'sign_out_called',
+      reason: 'explicit_menu_action',
+      source: 'Index',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: Boolean(authUserRef.current),
+    });
     await odaraSupabase.auth.signOut();
   };
 
@@ -861,7 +998,12 @@ const Index = () => {
                   <span>WELCOME</span>
                   <span>TO</span>
                 </div>
-                <h1 className="text-xl font-bold uppercase tracking-[0.4em]">VESPER</h1>
+                <h1
+                  className="select-none text-xl font-bold uppercase tracking-[0.4em]"
+                  data-odara-auth-debug-trigger
+                >
+                  VESPER
+                </h1>
                 {isCheckEmail ? (
                   <>
                     <h2 className="mt-3 text-lg font-medium text-foreground">Check your email</h2>

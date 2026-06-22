@@ -7,6 +7,8 @@ import {
 
 export const ODARA_AUTH_DEBUG_QUERY_PARAM = 'odaraAuthDebug';
 export const ODARA_AUTH_DEBUG_STORAGE_KEY = 'odara_auth_debug_enabled_v1';
+export const ODARA_AUTH_DEBUG_TAP_WINDOW_MS = 2500;
+export const ODARA_AUTH_DEBUG_REQUIRED_TAPS = 7;
 
 export type AuthDiagnosticStoragePresence = {
   localAuthKeyExists: boolean;
@@ -61,6 +63,34 @@ export function readAuthDebugEnabled(): boolean {
   } catch {
     return isAuthDebugSearchEnabled(window.location.search);
   }
+}
+
+export function setAuthDebugEnabled(enabled: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (enabled) {
+      window.sessionStorage.setItem(ODARA_AUTH_DEBUG_STORAGE_KEY, '1');
+    } else {
+      window.sessionStorage.removeItem(ODARA_AUTH_DEBUG_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+  window.dispatchEvent(new CustomEvent('odara-auth-debug-enabled', { detail: { enabled } }));
+}
+
+export function getNextAuthDebugTapCount({
+  lastTapAt,
+  now,
+  previousCount,
+}: {
+  lastTapAt: number | null;
+  now: number;
+  previousCount: number;
+}) {
+  return lastTapAt != null && now - lastTapAt <= ODARA_AUTH_DEBUG_TAP_WINDOW_MS
+    ? previousCount + 1
+    : 1;
 }
 
 export function readAuthStoragePresence(storageKeyName: string): AuthDiagnosticStoragePresence {
@@ -126,7 +156,14 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
       `authReady=${entry.authReady == null ? 'unknown' : entry.authReady ? 'yes' : 'no'}`,
       `access=${entry.accessMode ?? 'unknown'}`,
       `reason=${entry.reason ?? 'none'}`,
-    ].join(' '));
+      entry.previousDate ? `previousDate=${entry.previousDate}` : null,
+      entry.nextDate ? `nextDate=${entry.nextDate}` : null,
+      entry.targetDate ? `targetDate=${entry.targetDate}` : null,
+      entry.selectedDate ? `selectedDate=${entry.selectedDate}` : null,
+      entry.contextKey ? `context=${entry.contextKey}` : null,
+      entry.oracleKeyPresent == null ? null : `oracleKey=${entry.oracleKeyPresent ? 'yes' : 'no'}`,
+      entry.oracleSlotKeyPresent == null ? null : `oracleSlotKey=${entry.oracleSlotKeyPresent ? 'yes' : 'no'}`,
+    ].filter(Boolean).join(' '));
   });
 
   return lines.join('\n');

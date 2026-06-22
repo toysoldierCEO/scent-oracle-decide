@@ -15109,10 +15109,60 @@ const OdaraScreen = ({
     [selectedContext],
   );
   const selectNavigationDay = useCallback((dateStr: string | null | undefined) => {
-    if (!dateStr || dateStr === selectedDate) return false;
+    recordOdaraAuthTrace({
+      accessMode: isGuestMode ? 'guest' : 'signed-in',
+      authReady: true,
+      contextKey: selectedContext,
+      decision: 'day_tap_start',
+      nextDate: dateStr ?? undefined,
+      oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
+      oracleSlotKeyPresent: Boolean(selectedContext && selectedDate),
+      previousDate: selectedDate,
+      reason: 'navigation_day_button',
+      selectedDate,
+      source: 'day-selection',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      targetDate: dateStr ?? undefined,
+      userPresent: Boolean(userId),
+    });
+    if (!dateStr || dateStr === selectedDate) {
+      recordOdaraAuthTrace({
+        accessMode: isGuestMode ? 'guest' : 'signed-in',
+        authReady: true,
+        contextKey: selectedContext,
+        decision: 'day_tap_ignored',
+        nextDate: dateStr ?? undefined,
+        oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
+        oracleSlotKeyPresent: Boolean(selectedContext && selectedDate),
+        previousDate: selectedDate,
+        reason: dateStr ? 'already_selected_date' : 'missing_date',
+        selectedDate,
+        source: 'day-selection',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        targetDate: dateStr ?? undefined,
+        userPresent: Boolean(userId),
+      });
+      return false;
+    }
+    recordOdaraAuthTrace({
+      accessMode: isGuestMode ? 'guest' : 'signed-in',
+      authReady: true,
+      contextKey: selectedContext,
+      decision: 'setSelectedDate_called',
+      nextDate: dateStr,
+      oracleKeyPresent: Boolean(userId && selectedContext && selectedDate && resolvedTemperature),
+      oracleSlotKeyPresent: Boolean(selectedContext && selectedDate),
+      previousDate: selectedDate,
+      reason: 'navigation_day_button',
+      selectedDate,
+      source: 'day-selection',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      targetDate: dateStr,
+      userPresent: Boolean(userId),
+    });
     onDateChange(dateStr);
     return true;
-  }, [onDateChange, selectedDate]);
+  }, [isGuestMode, onDateChange, resolvedTemperature, selectedContext, selectedDate, userId]);
   useEffect(() => {
     if (!searchOpen) return;
 
@@ -20830,6 +20880,7 @@ const OdaraScreen = ({
             <div
               ref={occasionSelectorRef}
               className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+              data-odara-auth-debug-trigger
             >
               <div
                 className="relative inline-flex items-start justify-center text-[13px] font-semibold uppercase text-foreground/90"
@@ -20849,6 +20900,7 @@ const OdaraScreen = ({
                 ))}
                 <button
                   type="button"
+                  data-odara-auth-debug-ignore
                   aria-label={`Select occasion: ${formatOccasionLabel(selectedContext)}`}
                   aria-haspopup="menu"
                   aria-expanded={occasionSelectorOpen}
@@ -20894,6 +20946,7 @@ const OdaraScreen = ({
                         <button
                           key={ctx}
                           type="button"
+                          data-odara-auth-debug-ignore
                           role="menuitemradio"
                           aria-checked={active}
                           onClick={() => {
@@ -21470,8 +21523,10 @@ const OdaraScreen = ({
                 return (
                   <button
                     key={fd.dateStr}
+                    type="button"
                     ref={(el) => { navigationDayCellRefs.current[i] = el; }}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.preventDefault();
                       selectNavigationDay(fd.dateStr);
                     }}
                     className="relative flex min-w-[44px] flex-none snap-start flex-col items-center rounded-[14px] px-1.5 pb-1.5 pt-1 transition-all duration-200 sm:min-w-[46px]"
