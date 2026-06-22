@@ -197,6 +197,35 @@ describe('vesper enrichment Fragella provider lane', () => {
     }
   });
 
+  it('reports provider identity rejection when Fragella returns only wrong-identity hits', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      results: [{
+        name: 'Irisistible unisex',
+        brand: 'April Aromatics',
+        notes: ['Iris', 'Violet'],
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+
+    try {
+      const result = await queryFragellaProvider(target, {
+        provider: 'Fragella',
+        configured: true,
+        apiKey: 'test-secret',
+        apiKeyEnvName: 'FRAGELLA_API_KEY',
+        apiBaseUrl: 'https://provider.example/api',
+        endpointEnvName: 'test',
+      }, { maxQueries: 1 });
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe('provider_identity_rejected');
+      expect(result.reason).toContain('identity guard rejected');
+      expect(result.http_status).toBe(200);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('does not invent source confidence when the provider payload omits it', () => {
     const normalized = normalizeFragellaProviderPayload(target, {
       name: 'Sienna Brume',

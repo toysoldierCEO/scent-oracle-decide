@@ -81,7 +81,11 @@ export function buildFragellaProviderHeaders(config = getFragellaProviderConfig(
 
 export async function queryFragellaProvider(target, config = getFragellaProviderConfig(), options = {}) {
   const queries = buildFragellaSearchQueries(target).slice(0, options.maxQueries ?? 3);
+  let identityRejected = false;
+  let lastQuery = queries[0] ?? null;
+  let lastHttpStatus = null;
   for (const query of queries) {
+    lastQuery = query;
     const url = `${config.apiBaseUrl}/fragrances?search=${encodeURIComponent(query)}&limit=${Number(options.limit ?? 5)}`;
     try {
       const response = await fetch(url, {
@@ -89,6 +93,7 @@ export async function queryFragellaProvider(target, config = getFragellaProvider
         headers: buildFragellaProviderHeaders(config),
         signal: AbortSignal.timeout(options.timeoutMs ?? 8000),
       });
+      lastHttpStatus = response.status;
       if (!response.ok) {
         return {
           ok: false,
@@ -121,6 +126,7 @@ export async function queryFragellaProvider(target, config = getFragellaProvider
             : [];
       const hit = pickBestFragellaHit(target, hits);
       if (hit) return { ok: true, status: "success", http_status: response.status, query, hit };
+      if (hits.length > 0) identityRejected = true;
     } catch (error) {
       return {
         ok: false,
@@ -134,10 +140,12 @@ export async function queryFragellaProvider(target, config = getFragellaProvider
 
   return {
     ok: false,
-    status: "no_provider_match",
-    http_status: null,
-    query: queries[0] ?? null,
-    reason: "Fragella provider query returned no usable candidate matches.",
+    status: identityRejected ? "provider_identity_rejected" : "no_provider_match",
+    http_status: lastHttpStatus,
+    query: lastQuery,
+    reason: identityRejected
+      ? "Fragella provider returned hits, but the identity guard rejected them for this target."
+      : "Fragella provider query returned no usable candidate matches.",
   };
 }
 
