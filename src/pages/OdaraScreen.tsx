@@ -10817,20 +10817,6 @@ const OdaraFragranceDetailSheet: React.FC<{
         }}
       >
         <div className="mb-5 flex items-start gap-3">
-          <div className="mt-0.5 h-[108px] w-[72px] shrink-0">
-            <OdaraWardrobeBottleArt
-              name={resolvedDetail.name ?? 'Fragrance'}
-              brand={resolvedDetail.brand}
-              family_key={resolvedDetail.family_key}
-              family_label={resolvedDetail.family_label}
-              image_url={detailBottleImageCandidates[0] ?? resolvedDetail.image_url ?? null}
-              thumbnail_url={resolvedDetail.thumbnail_url ?? null}
-              alt={`${resolvedDetail.name ?? 'Fragrance'} bottle`}
-              compact
-              frameless
-              className="h-full w-full"
-            />
-          </div>
           <div className="min-w-0 flex-1">
             <div
               className="text-[30px] leading-[1.02] text-foreground/94"
@@ -10857,6 +10843,20 @@ const OdaraFragranceDetailSheet: React.FC<{
                 </span>
               </div>
             ) : null}
+          </div>
+          <div className="mt-1 h-[88px] w-[58px] shrink-0" aria-hidden="true">
+            <OdaraWardrobeBottleArt
+              name={resolvedDetail.name ?? 'Fragrance'}
+              brand={resolvedDetail.brand}
+              family_key={resolvedDetail.family_key}
+              family_label={resolvedDetail.family_label}
+              image_url={detailBottleImageCandidates[0] ?? resolvedDetail.image_url ?? null}
+              thumbnail_url={resolvedDetail.thumbnail_url ?? null}
+              alt={`${resolvedDetail.name ?? 'Fragrance'} bottle`}
+              compact
+              frameless
+              className="h-full w-full"
+            />
           </div>
           <button
             type="button"

@@ -10,6 +10,7 @@ export type FragranceDisplayNoteSection = {
 };
 
 export type FragrancePerformanceDisplayMode = 'bars' | 'hidden';
+export type FragranceHeaderVisualPlacement = 'after_identity';
 export type FragranceTrustLineKind = 'official_pyramid' | 'official_key_notes' | 'provider' | 'metadata' | 'curated';
 
 export type FragranceDetailSectionId =
@@ -553,6 +554,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
 
   return {
     headerLayoutOrder: ['title', 'brand', 'family'] as const,
+    headerVisualPlacement: 'after_identity' as FragranceHeaderVisualPlacement,
     familyDisplayLabel,
     familyChip: familyDisplayLabel
       ? { label: familyDisplayLabel, position: 'family' }

@@ -73,6 +73,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
     expect(model.familyChip).toEqual({ label: 'Fresh Aquatic', position: 'family' });
     expect(model.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
+    expect(model.headerVisualPlacement).toBe('after_identity');
     expect(model.performanceDisplayMode).toBe('hidden');
     expect(model.hasPerformanceSection).toBe(false);
     expect(model.topIdentityChips.map((chip) => chip.label)).not.toContain('Italian Lemon');
@@ -141,6 +142,8 @@ describe('fragranceDetailDisplayContract', () => {
 
     expect(newlyResolved.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
     expect(olderCanonical.headerLayoutOrder).toEqual(['title', 'brand', 'family']);
+    expect(newlyResolved.headerVisualPlacement).toBe('after_identity');
+    expect(olderCanonical.headerVisualPlacement).toBe('after_identity');
     expect(newlyResolved.topIdentityChips).toEqual([{ label: 'Fresh Aquatic', position: 'family' }]);
     expect(olderCanonical.topIdentityChips).toEqual([{ label: 'Woody', position: 'family' }]);
   });
