@@ -291,6 +291,34 @@ export function formatSourceDisplayName(
   return fallback ?? 'official source';
 }
 
+export function isLikelyOfficialBrandSourceUrl(
+  sourceUrl: string | null | undefined,
+  brand: string | null | undefined,
+) {
+  const source = normalizeText(sourceUrl);
+  const brandName = normalizeText(brand);
+  if (!source || !brandName) return false;
+
+  let host = '';
+  try {
+    host = new URL(source).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return false;
+  }
+
+  const tokens = brandName
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+    .filter((token) => !['the', 'and', 'parfum', 'parfums', 'perfume', 'perfumes'].includes(token));
+  const meaningfulTokens = tokens.filter((token) => !['fragrance', 'fragrances', 'aromatics'].includes(token));
+  const requiredTokens = meaningfulTokens.length > 0 ? meaningfulTokens : tokens;
+  if (requiredTokens.length === 0) return false;
+  return requiredTokens.every((token) => host.includes(token));
+}
+
 export function buildFragranceTrustLine(input: FragranceTrustLineInput) {
   const kind = input.kind ?? null;
   const source = formatSourceDisplayName(input.sourceName, input.fallbackBrand);
@@ -330,7 +358,7 @@ export function formatFragranceNoteProsePhrase(
   if (context === 'heart' && key === 'egyptian geranium') return 'geranium';
   if (context === 'base' && key === 'virginia cedarwood') return 'Virginia cedarwood';
   if (context === 'base' && key === 'white musk') return 'clean white musk';
-  return label.charAt(0).toLowerCase() + label.slice(1);
+  return label.toLowerCase();
 }
 
 export function isMetadataLabel(value: string | null | undefined) {
@@ -562,6 +590,7 @@ export function buildFragranceCardDisplayModel(input: FragranceCardDisplayModelI
   });
   const previewChips = model.heroProfileChips
     .filter((chip) => chip.position !== 'family')
+    .filter((chip) => chip.position !== 'note')
     .filter((chip) => normalizeDisplayKey(chip.label) !== familyKey)
     .filter((chip) => isScentProfileChip(chip.label))
     .slice(0, input.maxPreviewChips ?? 3);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type
 import { Eye, EyeOff } from 'lucide-react';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
+import { shouldApplyAuthStateChangeDuringHydration } from '@/lib/auth-session-hydration';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -309,7 +310,11 @@ const Index = () => {
 
   // --- Auth bootstrap ---
   useEffect(() => {
+    let active = true;
+    let sessionBootstrapResolved = false;
+
     const applySession = (session: any, source: string) => {
+      if (!active) return;
       const nextUser = normalizeUser(session?.user);
       setUser(prev => {
         if (sameUser(prev, nextUser)) return prev;
@@ -318,16 +323,31 @@ const Index = () => {
     };
 
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
+      if (!shouldApplyAuthStateChangeDuringHydration({
+        sessionBootstrapResolved,
+        eventHasSession: Boolean(session?.user),
+      })) {
+        return;
+      }
       applySession(session, 'onAuthStateChange');
       setAuthReady(true);
     });
 
-    odaraSupabase.auth.getSession().then(({ data: { session } }) => {
-      applySession(session, 'getSession');
-      setAuthReady(true);
-    });
+    odaraSupabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        sessionBootstrapResolved = true;
+        applySession(session, 'getSession');
+        if (active) setAuthReady(true);
+      })
+      .catch(() => {
+        sessionBootstrapResolved = true;
+        if (active) setAuthReady(true);
+      });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // --- Oracle effect: keyed state machine ---

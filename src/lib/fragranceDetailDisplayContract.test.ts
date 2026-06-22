@@ -13,6 +13,7 @@ import {
   getFragranceFamilySemanticColorKey,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
+  isLikelyOfficialBrandSourceUrl,
   isScentProfileChip,
   shouldShowVesperizingNotice,
 } from './fragranceDetailDisplayContract';
@@ -161,6 +162,22 @@ describe('fragranceDetailDisplayContract', () => {
     expect(buildFragranceTrustLine({ kind: 'curated' })).toBe('Curated app profile');
   });
 
+  it('recognizes brand-matched official source URLs without exposing internals', () => {
+    expect(isLikelyOfficialBrandSourceUrl(
+      'https://www.mihanaromatics.com/products/sienna-brume-parfum',
+      'Mihan Aromatics',
+    )).toBe(true);
+    expect(isLikelyOfficialBrandSourceUrl(
+      'https://mihanaromatics.com/product/sienna-brume',
+      'Mihan Aromatics',
+    )).toBe(true);
+    expect(isLikelyOfficialBrandSourceUrl(
+      'https://example.com/products/sienna-brume',
+      'Mihan Aromatics',
+    )).toBe(false);
+    expect(isLikelyOfficialBrandSourceUrl('public.fragrances', 'Mihan Aromatics')).toBe(false);
+  });
+
   it('uses structured note sections when a source-backed pyramid exists', () => {
     const model = buildFragranceDetailDisplayModel({
       topNotes: ['Lemon Italy', 'Australian Coastal Moss'],
@@ -228,10 +245,29 @@ describe('fragranceDetailDisplayContract', () => {
   it('uses sentence-safe note phrase labels separate from title-case chip labels', () => {
     expect(formatFragranceNoteProsePhrase('Cedarwood Virginia USA', 'base')).toBe('Virginia cedarwood');
     expect(formatFragranceNoteProsePhrase('Whitemusk', 'base')).toBe('clean white musk');
+    expect(formatFragranceNoteProsePhrase('Sea Air', 'opening')).toBe('sea air');
+    expect(formatFragranceNoteProsePhrase('Soft Coconut', 'heart')).toBe('soft coconut');
+    expect(formatFragranceNoteProsePhrase('Juniper Berry', 'base')).toBe('juniper berry');
     expect(formatFragranceNoteDisplayLabel('Cedarwood Virginia USA')).toBe('Virginia Cedarwood');
   });
 
-  it('builds collection card chips without raw family keys or raw official note labels', () => {
+  it('builds Sienna-style source-backed pyramid prose with natural sentence casing', () => {
+    const description = buildSourceBackedPyramidDescription({
+      familyKey: 'fresh-blue',
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+    });
+
+    expect(description).toBe(
+      'Bright sea air and bergamot open crisp and airy, moving into soft coconut and cucumber before drying down to vanilla, copaiba, and juniper berry.',
+    );
+    expect(description).not.toContain('sea Air');
+    expect(description).not.toContain('soft Coconut');
+    expect(description).not.toContain('juniper Berry');
+  });
+
+  it('builds collection card chips without raw family keys or repeated note chips', () => {
     const model = buildFragranceCardDisplayModel({
       familyKey: 'fresh-blue',
       familyLabel: 'FRESH-BLUE',
@@ -246,12 +282,32 @@ describe('fragranceDetailDisplayContract', () => {
     const previewLabels = model.previewChips.map((chip) => chip.label);
     expect(model.familyChipLabel).toBe('Fresh Aquatic');
     expect(model.familyChipLabel).not.toBe('FRESH-BLUE');
-    expect(previewLabels).toContain('Italian Lemon');
-    expect(previewLabels).toContain('Australian Coastal Moss');
+    expect(previewLabels).toEqual(['Aromatic']);
+    expect(previewLabels).not.toContain('Italian Lemon');
+    expect(previewLabels).not.toContain('Australian Coastal Moss');
     expect(previewLabels).not.toContain('Lemon Italy');
     expect(previewLabels).not.toContain('Sage France');
     expect(previewLabels).not.toContain('EDP');
     expect(previewLabels).not.toContain('Official Pyramid');
     expect(previewLabels.length).toBeLessThanOrEqual(3);
+  });
+
+  it('keeps Sienna collection preview chips from repeating official notes', () => {
+    const model = buildFragranceCardDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      accordLabels: ['Aromatic'],
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+      maxPreviewChips: 3,
+    });
+
+    const previewLabels = model.previewChips.map((chip) => chip.label);
+    expect(model.familyChipLabel).toBe('Fresh Aquatic');
+    expect(previewLabels).toEqual(['Aromatic']);
+    expect(previewLabels).not.toContain('Sea Air');
+    expect(previewLabels).not.toContain('Bergamot');
+    expect(previewLabels).not.toContain('Soft Coconut');
   });
 });

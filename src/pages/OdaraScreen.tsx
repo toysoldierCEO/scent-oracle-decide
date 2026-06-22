@@ -12,6 +12,7 @@ import {
   formatFragranceNoteDisplayLabels,
   formatSourceDisplayName,
   getFragranceFamilySemanticColorKey,
+  isLikelyOfficialBrandSourceUrl,
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isScentProfileChip,
@@ -25,6 +26,7 @@ import {
   shouldAutoApplyWishlistForMatchedIntake,
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
+import { shouldApplyAuthStateChangeDuringHydration } from "@/lib/auth-session-hydration";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
   resolveSignedInAddAsTodayDisabledReason,
@@ -204,6 +206,7 @@ function useOdaraActiveSessionUser({
 
   useEffect(() => {
     let active = true;
+    let sessionBootstrapResolved = false;
 
     const applySessionUser = (nextUser: User | null) => {
       if (!active) return;
@@ -221,15 +224,23 @@ function useOdaraActiveSessionUser({
     setSessionResolved(false);
 
     const { data: { subscription } } = odaraSupabase.auth.onAuthStateChange((_event, session) => {
+      if (!shouldApplyAuthStateChangeDuringHydration({
+        sessionBootstrapResolved,
+        eventHasSession: Boolean(session?.user),
+      })) {
+        return;
+      }
       applySessionUser(session?.user ?? null);
     });
 
     odaraSupabase.auth.getSession()
       .then(({ data }) => {
+        sessionBootstrapResolved = true;
         applySessionUser(data?.session?.user ?? null);
       })
       .catch(() => {
-        applySessionUser(null);
+        sessionBootstrapResolved = true;
+        if (active) setSessionResolved(true);
       });
 
     return () => {
@@ -10705,7 +10716,13 @@ const OdaraFragranceDetailSheet: React.FC<{
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
     resolvedDetail.brand,
   );
-  const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand';
+  const catalogOfficialSourceUrl = normalizeDetailText(resolvedDetail.source_page_url);
+  const hasBrandMatchedCatalogOfficialSource = isLikelyOfficialBrandSourceUrl(
+    catalogOfficialSourceUrl,
+    resolvedDetail.brand,
+  );
+  const hasOfficialStructuredNoteSource = resolvedDetail.vesper_intelligence?.intelligence_source_type === 'official_brand'
+    || (hasStructuredNoteSections && hasBrandMatchedCatalogOfficialSource);
   const metadataDisplay = buildFragranceMetadataDisplay({
     catalogReleaseYear: resolvedDetail.release_year ?? null,
     resolverReleaseYear: normalizeDetailReleaseYear(resolvedDetail.vesper_metadata?.resolved_release_year),
