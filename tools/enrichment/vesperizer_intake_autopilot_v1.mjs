@@ -4,6 +4,14 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  buildFragellaCandidateProfileFlow,
+  FRAGELLA_PROVIDER_NAME,
+  getFragellaProviderConfig,
+  loadFragellaLocalEnv,
+  normalizeFragellaProviderPayload,
+  queryFragellaProvider,
+} from "./fragella_provider_client_v1.mjs";
 
 const VERSION = "vesperizer_intake_autopilot_v1";
 const SUPABASE_CLI = "supabase@2.106.0";
@@ -86,6 +94,8 @@ const outputPrefix = args["output-prefix"] ?? `proposed_intake_autopilot_${times
 const persistIdentityCandidates = args["persist-identity-candidates"] === "true"
   || args["live-persist-identity-candidates"] === "true";
 const livePersistIdentityCandidates = args["live-persist-identity-candidates"] === "true";
+const providerMode = args["provider-mode"] ?? "detect-env";
+const proofForceMissingConveyor = args["proof-force-missing-conveyor"] === "true";
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -99,6 +109,11 @@ async function main() {
   if (!dryRun) {
     throw new Error("Live execution is not supported in Intake Autopilot V1. Re-run with --dry-run.");
   }
+  if (proofForceMissingConveyor && !dryRun) {
+    throw new Error("--proof-force-missing-conveyor is dry-run proof only.");
+  }
+  loadFragellaLocalEnv();
+  const providerConfig = getFragellaProviderConfig();
 
   const projectRef = readLinkedProjectRef();
   if (!projectRef) {
@@ -112,6 +127,7 @@ async function main() {
   const resolvePlans = [];
   const identityCandidates = [];
   const identityCandidatePersistenceResults = [];
+  const providerDiscoveries = [];
   const needsReview = [];
   const sourceNotFound = [];
   const summaries = [];
@@ -119,11 +135,24 @@ async function main() {
   for (const target of targets) {
     const selectedIdentityCandidate = selectedIdentityCandidateForTarget(target);
     const activeIdentityCandidates = activeIdentityCandidatesForTarget(target);
-    const effectiveTarget = selectedIdentityCandidate
+    const identityTarget = selectedIdentityCandidate
       ? applyIdentityCandidateToTarget(target, selectedIdentityCandidate)
       : target;
-    const catalogMatches = await findCatalogMatches(effectiveTarget);
-    const primaryMatch = pickPrimaryCatalogMatch(effectiveTarget, catalogMatches);
+    const effectiveTarget = proofForceMissingConveyor
+      ? {
+          ...identityTarget,
+          canonical_fragrance_id: null,
+          canonical_collection_status: null,
+          canonical: null,
+          proof_force_missing_conveyor: true,
+        }
+      : identityTarget;
+    const catalogMatches = proofForceMissingConveyor ? [] : await findCatalogMatches(effectiveTarget);
+    const primaryMatch = proofForceMissingConveyor ? null : pickPrimaryCatalogMatch(effectiveTarget, catalogMatches);
+    const providerDiscovery = await runFragellaFirstProviderLane(effectiveTarget, providerConfig, {
+      enabled: shouldRunFragellaProviderForIntakeTarget(effectiveTarget, primaryMatch),
+    });
+    providerDiscoveries.push(providerDiscovery);
     const identityDiscovery = selectedIdentityCandidate
       ? {
           status: "selected_identity_candidate",
@@ -131,9 +160,11 @@ async function main() {
           attempts: [],
           selected_candidate: selectedIdentityCandidate,
         }
-      : primaryMatch?.exact || clean(effectiveTarget.submitted_brand)
-        ? { status: clean(effectiveTarget.submitted_brand) ? "skipped_brand_present" : "skipped_existing_catalog", candidates: [], attempts: [] }
-        : activeIdentityCandidates.length > 0
+      : primaryMatch?.exact
+        ? { status: "skipped_existing_catalog", candidates: [], attempts: [] }
+        : clean(effectiveTarget.submitted_brand)
+          ? identityDiscoveryFromBrandSuppliedProviderGuard(providerDiscovery)
+      : activeIdentityCandidates.length > 0
           ? identityDiscoveryFromStoredCandidates(activeIdentityCandidates)
           : await discoverIdentityCandidates(effectiveTarget);
     const sourceDiscovery = primaryMatch?.exact
@@ -144,7 +175,7 @@ async function main() {
         ? { attempts: [], best: null, status: "skipped_identity_candidate_ready" }
       : await discoverSources(effectiveTarget);
 
-    const classification = classifyTarget(effectiveTarget, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery);
+    const classification = classifyTarget(effectiveTarget, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery, providerDiscovery);
     summaries.push(classification.summary);
 
     if (classification.canonicalCandidate) canonicalCandidates.push(classification.canonicalCandidate);
@@ -171,7 +202,12 @@ async function main() {
     started_at: startedAt,
     finished_at: finishedAt,
     target_count: targets.length,
+    proof_force_missing_conveyor: proofForceMissingConveyor,
     state_counts: countBy(summaries, (item) => item.state),
+    provider_mode: providerMode,
+    provider_configured: providerConfig.configured,
+    provider_invoked_count: providerDiscoveries.filter((item) => item.invoked).length,
+    provider_identity_rejected_count: providerDiscoveries.filter((item) => item.identity_guard_result === "rejected").length,
     canonical_candidate_count: canonicalCandidates.length,
     evidence_candidate_count: evidenceCandidates.length,
     metadata_candidate_count: metadataCandidates.length,
@@ -375,6 +411,123 @@ function identityDiscoveryFromStoredCandidates(candidates) {
     candidates: discoveryCandidates.slice(0, 5),
     stored_candidate_source: true,
   };
+}
+
+export function shouldRunFragellaProviderForIntakeTarget(target, primaryMatch) {
+  return Boolean(
+    providerMode !== "off"
+      && clean(target?.submitted_name)
+      && !primaryMatch?.exact
+  );
+}
+
+export async function runFragellaFirstProviderLane(target, providerConfig = getFragellaProviderConfig(), options = {}) {
+  if (!options.enabled) {
+    return {
+      provider: FRAGELLA_PROVIDER_NAME,
+      status: primaryMatchStatusLabel(options.reason ?? "skipped_not_missing_target"),
+      invoked: false,
+      ordered_before_official: true,
+      identity_guard_result: "not_run",
+      fields_used: false,
+      official_registry_eligible: false,
+      reason: "Provider lane was skipped because this target already has an exact canonical match or provider mode is off.",
+    };
+  }
+
+  if (providerMode === "off" || options.providerMode === "off") {
+    return {
+      provider: FRAGELLA_PROVIDER_NAME,
+      status: "provider_mode_off",
+      invoked: false,
+      ordered_before_official: true,
+      identity_guard_result: "not_run",
+      fields_used: false,
+      official_registry_eligible: false,
+      reason: "Provider mode is off; official/source fallback may still continue.",
+    };
+  }
+
+  if (!providerConfig?.configured) {
+    return {
+      provider: FRAGELLA_PROVIDER_NAME,
+      status: "not_configured",
+      invoked: false,
+      ordered_before_official: true,
+      identity_guard_result: "not_run",
+      fields_used: false,
+      official_registry_eligible: false,
+      reason: "Fragella provider config was not available; official/source fallback may still continue.",
+    };
+  }
+
+  const providerTarget = {
+    name: target.submitted_name,
+    brand: target.submitted_brand,
+  };
+  const queryProvider = options.queryProvider ?? queryFragellaProvider;
+  const result = await queryProvider(providerTarget, providerConfig, options.queryOptions ?? {});
+  return buildFragellaProviderDiscovery(providerTarget, result);
+}
+
+export function buildFragellaProviderDiscovery(target, result) {
+  const base = {
+    provider: FRAGELLA_PROVIDER_NAME,
+    invoked: true,
+    ordered_before_official: true,
+    query_status: result?.status ?? "unknown",
+    query: result?.query ?? null,
+    http_status: result?.http_status ?? null,
+    official_registry_eligible: false,
+  };
+
+  if (!result?.ok) {
+    const rejected = result?.status === "provider_identity_rejected";
+    return {
+      ...base,
+      status: result?.status ?? "provider_query_failed",
+      identity_guard_result: rejected ? "rejected" : "not_accepted",
+      rejection_reason: rejected ? "wrong_name_or_brand" : result?.status ?? "provider_not_accepted",
+      fields_used: false,
+      provider_fields_available: null,
+      reason: result?.reason ?? "Fragella provider did not return usable identity-supported data.",
+    };
+  }
+
+  const normalized = normalizeFragellaProviderPayload(target, result.hit);
+  const flow = buildFragellaCandidateProfileFlow(normalized);
+  return {
+    ...base,
+    status: normalized.identity_supported ? "provider_identity_accepted" : "provider_identity_rejected",
+    identity_guard_result: normalized.identity_supported ? "accepted" : "rejected",
+    rejection_reason: normalized.identity_supported ? null : "wrong_name_or_brand",
+    fields_used: false,
+    provider_fields_available: flow.profile_fields_present,
+    provider_data_non_official: true,
+    exact_identity_supported: Boolean(normalized.identity_supported),
+    reason: normalized.identity_supported
+      ? "Fragella returned identity-supported provider intelligence; it remains non-official and excluded from official evidence."
+      : "Fragella returned a candidate, but the identity guard rejected it for this target.",
+  };
+}
+
+function identityDiscoveryFromBrandSuppliedProviderGuard(providerDiscovery) {
+  return {
+    status: providerDiscovery?.identity_guard_result === "rejected"
+      ? "provider_identity_rejected_brand_supplied"
+      : providerDiscovery?.identity_guard_result === "accepted"
+        ? "brand_supplied_provider_identity_accepted"
+        : "brand_supplied_provider_checked",
+    attempts: [],
+    candidates: [],
+    provider_status: providerDiscovery?.status ?? "not_run",
+    provider_identity_guard_result: providerDiscovery?.identity_guard_result ?? "not_run",
+    provider_rejection_reason: providerDiscovery?.rejection_reason ?? null,
+  };
+}
+
+function primaryMatchStatusLabel(value) {
+  return String(value || "skipped_not_missing_target");
 }
 
 function arrayFromJson(value) {
@@ -705,7 +858,7 @@ async function discoverIdentityCandidates(target) {
   };
 }
 
-export function classifyTarget(target, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery) {
+export function classifyTarget(target, catalogMatches, primaryMatch, identityDiscovery, sourceDiscovery, providerDiscovery = null) {
   const normalizedName = normalizeIdentity(target.submitted_name);
   const normalizedBrand = normalizeIdentity(target.submitted_brand);
   const existingCanonical = primaryMatch?.exact ? primaryMatch : null;
@@ -725,6 +878,7 @@ export function classifyTarget(target, catalogMatches, primaryMatch, identityDis
     next_action: null,
     identity_summary: identitySummary,
     source_summary: sourceSummary,
+    provider_summary: summarizeProviderDiscovery(providerDiscovery),
   };
 
   if (existingCanonical) {
@@ -1149,6 +1303,36 @@ function summarizeSourceDiscovery(sourceDiscovery) {
     best_url: sourceDiscovery.best?.url ?? null,
     best_source_type: sourceDiscovery.best?.source_type ?? null,
     best_identity_support: sourceDiscovery.best?.identity ?? null,
+  };
+}
+
+function summarizeProviderDiscovery(providerDiscovery) {
+  if (!providerDiscovery) {
+    return {
+      provider: FRAGELLA_PROVIDER_NAME,
+      invoked: false,
+      ordered_before_official: true,
+      status: "not_run",
+      identity_guard_result: "not_run",
+      rejection_reason: null,
+      fields_used: false,
+      official_registry_eligible: false,
+    };
+  }
+  return {
+    provider: providerDiscovery.provider ?? FRAGELLA_PROVIDER_NAME,
+    invoked: Boolean(providerDiscovery.invoked),
+    ordered_before_official: providerDiscovery.ordered_before_official !== false,
+    status: providerDiscovery.status ?? "unknown",
+    query_status: providerDiscovery.query_status ?? null,
+    http_status: providerDiscovery.http_status ?? null,
+    identity_guard_result: providerDiscovery.identity_guard_result ?? "unknown",
+    rejection_reason: providerDiscovery.rejection_reason ?? null,
+    fields_used: Boolean(providerDiscovery.fields_used),
+    provider_fields_available: providerDiscovery.provider_fields_available ?? null,
+    provider_data_non_official: providerDiscovery.provider_data_non_official ?? true,
+    official_registry_eligible: providerDiscovery.official_registry_eligible === true,
+    reason: providerDiscovery.reason ?? null,
   };
 }
 
