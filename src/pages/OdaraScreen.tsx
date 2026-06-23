@@ -21,8 +21,10 @@ import {
   DEFAULT_MISSING_SCENT_DESIRED_STATUS,
   MISSING_SCENT_DESIRED_STATUS_OPTIONS,
   getMissingScentDesiredStatusLabel,
+  isMissingScentIntakeResolved,
   normalizeMissingScentDesiredStatus,
   shouldAutoApplyCollectionForMatchedIntake,
+  shouldPollMissingScentIntake,
   shouldAutoApplyWishlistForMatchedIntake,
   type MissingScentDesiredStatus,
 } from "@/lib/missingScentCollectionSemantics";
@@ -4794,10 +4796,10 @@ const getProposedMissingFragranceIdentityCandidates = (card: MissingFragrancePro
 );
 
 const isResolvedMissingFragranceCard = (card: MissingFragranceProvisionalCard) => (
-  Boolean(card.canonical_fragrance_id)
-    || card.request_status === 'matched_existing'
-    || card.request_status === 'canonical_created'
-    || card.request_status === 'resolved'
+  isMissingScentIntakeResolved({
+    requestStatus: card.request_status,
+    canonicalFragranceId: card.canonical_fragrance_id,
+  })
 );
 
 const shouldShowMissingFragranceProvisionalCard = (card: MissingFragranceProvisionalCard) => (
@@ -12381,6 +12383,63 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  const hasOpenProvisionalIntakeCards = useMemo(() => (
+    provisionalIntakeCards.some((card) => shouldPollMissingScentIntake({
+      requestStatus: card.request_status,
+      canonicalFragranceId: card.canonical_fragrance_id,
+    }))
+  ), [provisionalIntakeCards]);
+
+  useEffect(() => {
+    if (!sessionResolved || !activeSessionUserId || !hasOpenProvisionalIntakeCards) return;
+
+    let cancelled = false;
+    const refreshVesperizingGraduationState = async () => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      const refreshResults = await Promise.allSettled([
+        loadCatalog(),
+        loadCollection(),
+        loadPersistedWishlists(),
+        loadProvisionalIntakeCards(),
+      ]);
+      for (const result of refreshResults) {
+        if (result.status === 'rejected' && !cancelled) {
+          console.error('[Odara] Vesperizing graduation refresh failed', result.reason);
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshVesperizingGraduationState();
+    }, 15_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshVesperizingGraduationState();
+      }
+    };
+    const onFocus = () => {
+      void refreshVesperizingGraduationState();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [
+    activeSessionUserId,
+    hasOpenProvisionalIntakeCards,
+    loadCatalog,
+    loadCollection,
+    loadPersistedWishlists,
+    loadProvisionalIntakeCards,
+    sessionResolved,
+  ]);
 
   useEffect(() => {
     void loadPersistedWearHistory();

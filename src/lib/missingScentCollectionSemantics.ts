@@ -1,5 +1,16 @@
 export type MissingScentDesiredStatus = 'owned' | 'wishlist' | 'tried' | 'liked';
 
+export type MissingScentIntakeStatus =
+  | 'pending'
+  | 'searching'
+  | 'investigating'
+  | 'source_found'
+  | 'needs_review'
+  | 'matched_existing'
+  | 'canonical_created'
+  | 'resolved'
+  | 'rejected';
+
 export const DEFAULT_MISSING_SCENT_DESIRED_STATUS: MissingScentDesiredStatus = 'owned';
 
 export const MISSING_SCENT_DESIRED_STATUS_OPTIONS: Array<{
@@ -61,4 +72,23 @@ export function shouldAutoApplyCollectionForMatchedIntake(input: {
     && input.isResolved
     && Boolean(input.canonicalFragranceId)
     && !input.alreadyOwned;
+}
+
+export function isMissingScentIntakeResolved(input: {
+  requestStatus?: MissingScentIntakeStatus | string | null;
+  canonicalFragranceId?: string | null;
+}) {
+  const status = normalizeStatusKey(input.requestStatus);
+  return Boolean(input.canonicalFragranceId)
+    || status === 'matched_existing'
+    || status === 'canonical_created'
+    || status === 'resolved';
+}
+
+export function shouldPollMissingScentIntake(input: {
+  requestStatus?: MissingScentIntakeStatus | string | null;
+  canonicalFragranceId?: string | null;
+}) {
+  const status = normalizeStatusKey(input.requestStatus);
+  return status !== 'rejected' && !isMissingScentIntakeResolved(input);
 }
