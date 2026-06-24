@@ -5,6 +5,10 @@ import {
   readPersistedOdaraAuthTrace,
   readSafeAuthStorageMode,
 } from './auth-debug-trace';
+import {
+  type OdaraReloadCrashEntry,
+  readSafeOdaraReloadCrashTrace,
+} from './page-reload-crash-recorder';
 
 export const ODARA_AUTH_DEBUG_QUERY_PARAM = 'odaraAuthDebug';
 export const ODARA_AUTH_DEBUG_STORAGE_KEY = 'odara_auth_debug_enabled_v1';
@@ -28,6 +32,7 @@ export type AuthDiagnosticSummaryInput = {
   packageVersion?: string;
   pathname: string;
   projectRef: string;
+  reloadCrashTrace: OdaraReloadCrashEntry[];
   storageKeyName: string;
   storageMode: 'local' | 'session';
   storagePresence: AuthDiagnosticStoragePresence;
@@ -142,7 +147,7 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     `access mode: ${input.accessMode}`,
     `guest override: ${input.guestOverride ? 'yes' : 'no'}`,
     `getSession confirms session: ${input.getSessionConfirmsSession == null ? 'unknown' : input.getSessionConfirmsSession ? 'yes' : 'no'}`,
-    'events:',
+    'auth events:',
   ];
 
   input.trace.slice(-20).forEach((entry, index) => {
@@ -172,6 +177,45 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     ].filter(Boolean).join(' '));
   });
 
+  lines.push('reload/crash events:');
+  input.reloadCrashTrace.slice(-20).forEach((entry, index) => {
+    lines.push([
+      `${index + 1}.`,
+      entry.timestamp,
+      `source=${entry.source}`,
+      `event=${entry.event ?? 'none'}`,
+      `decision=${entry.decision ?? 'none'}`,
+      entry.navigationType ? `navigation=${entry.navigationType}` : null,
+      entry.visibilityState ? `visibility=${entry.visibilityState}` : null,
+      entry.persisted == null ? null : `persisted=${entry.persisted ? 'yes' : 'no'}`,
+      entry.routePath ? `path=${entry.routePath}` : null,
+      entry.screen ? `screen=${entry.screen}` : null,
+      entry.accessMode ? `access=${entry.accessMode}` : null,
+      entry.storageMode ? `storage=${entry.storageMode}` : null,
+      entry.storageKeyName ? `storageKey=${entry.storageKeyName}` : null,
+      entry.localAuthKeyExists == null ? null : `localAuthKey=${entry.localAuthKeyExists ? 'yes' : 'no'}`,
+      entry.sessionAuthKeyExists == null ? null : `sessionAuthKey=${entry.sessionAuthKeyExists ? 'yes' : 'no'}`,
+      entry.authReady == null ? null : `authReady=${entry.authReady ? 'yes' : 'no'}`,
+      entry.userPresent == null ? null : `user=${entry.userPresent ? 'yes' : 'no'}`,
+      entry.selectedDate ? `selectedDate=${entry.selectedDate}` : null,
+      entry.contextKey ? `context=${entry.contextKey}` : null,
+      entry.menuOpen == null ? null : `menuOpen=${entry.menuOpen ? 'yes' : 'no'}`,
+      entry.menuPage ? `menuPage=${entry.menuPage}` : null,
+      entry.searchOpen == null ? null : `searchOpen=${entry.searchOpen ? 'yes' : 'no'}`,
+      entry.detailOpen == null ? null : `detailOpen=${entry.detailOpen ? 'yes' : 'no'}`,
+      entry.detailLabel ? `detail=${entry.detailLabel}` : null,
+      entry.bottomSheetOpen == null ? null : `sheetOpen=${entry.bottomSheetOpen ? 'yes' : 'no'}`,
+      entry.tagName ? `tag=${entry.tagName}` : null,
+      entry.role ? `role=${entry.role}` : null,
+      entry.actionLabel ? `action=${entry.actionLabel}` : null,
+      entry.closestControlLabel ? `control=${entry.closestControlLabel}` : null,
+      entry.href ? `href=${entry.href}` : null,
+      entry.errorName ? `error=${entry.errorName}` : null,
+      entry.errorMessage ? `message=${entry.errorMessage}` : null,
+      `reason=${entry.reason ?? 'none'}`,
+    ].filter(Boolean).join(' '));
+  });
+
   return lines.join('\n');
 }
 
@@ -184,6 +228,7 @@ export function getCurrentAuthDiagnosticBase(storageKeyName: string, projectRef:
     packageVersion: ODARA_BUILD_INFO.packageVersion,
     pathname: typeof window === 'undefined' ? 'unknown' : window.location.pathname,
     projectRef,
+    reloadCrashTrace: readSafeOdaraReloadCrashTrace(),
     storageKeyName,
     storageMode: readSafeAuthStorageMode(),
     storagePresence: readAuthStoragePresence(storageKeyName),

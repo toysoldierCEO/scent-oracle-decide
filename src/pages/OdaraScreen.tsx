@@ -37,6 +37,7 @@ import {
   ODARA_ALLOWED_SIGN_OUT_ACTION_ID,
   type OdaraSignOutRequest,
 } from "@/lib/auth-sign-out-guard";
+import { updateOdaraReloadCrashContext } from "@/lib/page-reload-crash-recorder";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
   resolveSignedInAddAsTodayDisabledReason,
@@ -15493,6 +15494,38 @@ const OdaraScreen = ({
   const scentIntelCacheRef = useRef<Map<string, ScentIntelPayload>>(new Map());
   const scentIntelInFlightRef = useRef<Map<string, Promise<ScentIntelPayload>>>(new Map());
   const [scentIntelSheet, setScentIntelSheet] = useState<ScentIntelSheetState | null>(null);
+
+  useEffect(() => {
+    updateOdaraReloadCrashContext({
+      accessMode: isGuestMode ? 'guest' : 'signed-in',
+      authReady: true,
+      bottomSheetOpen: Boolean(fragranceDetailSheet || scentIntelSheet),
+      contextKey: selectedContext,
+      detailLabel: fragranceDetailSheet
+        ? `${fragranceDetailSheet.name}${fragranceDetailSheet.brand ? ` / ${fragranceDetailSheet.brand}` : ''}`
+        : undefined,
+      detailOpen: Boolean(fragranceDetailSheet),
+      menuOpen,
+      menuPage,
+      missingIntakeOpen,
+      routePath: window.location.pathname,
+      screen: menuPage ? `menu:${menuPage}` : searchOpen ? 'search' : 'oracle',
+      searchOpen,
+      selectedDate,
+      userPresent: Boolean(userId),
+    });
+  }, [
+    fragranceDetailSheet,
+    isGuestMode,
+    menuOpen,
+    menuPage,
+    missingIntakeOpen,
+    scentIntelSheet,
+    searchOpen,
+    selectedContext,
+    selectedDate,
+    userId,
+  ]);
 
   const hasHistory = viewHistory.length > 0;
 

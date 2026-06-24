@@ -14,13 +14,20 @@ import {
 import {
   hasPersistedOdaraAuthTrace,
   readPersistedOdaraAuthTrace,
+  readSafeAuthStorageMode,
   recordOdaraAuthTrace,
   type OdaraAuthTraceAccessMode,
 } from '@/lib/auth-debug-trace';
+import { readAuthStoragePresence } from '@/lib/auth-diagnostic';
 import {
   resolveSignOutGuard,
   type OdaraSignOutRequest,
 } from '@/lib/auth-sign-out-guard';
+import {
+  installOdaraReloadCrashRecorder,
+  recordOdaraReloadCrashEvent,
+  updateOdaraReloadCrashContext,
+} from '@/lib/page-reload-crash-recorder';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -341,11 +348,39 @@ const Index = () => {
     diagnosticAccessModeRef.current = diagnosticAccessMode;
   }, [diagnosticAccessMode]);
 
+  useEffect(() => installOdaraReloadCrashRecorder(), []);
+
+  useEffect(() => {
+    const storagePresence = readAuthStoragePresence(ODARA_AUTH_STORAGE_KEY);
+    updateOdaraReloadCrashContext({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      contextKey: selectedContext,
+      localAuthKeyExists: storagePresence.localAuthKeyExists,
+      routePath: window.location.pathname,
+      screen: access.isSignedIn ? 'signed-in-home' : access.isGuestMode ? 'guest-home' : 'auth',
+      selectedDate,
+      sessionAuthKeyExists: storagePresence.sessionAuthKeyExists,
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      storageMode: readSafeAuthStorageMode(),
+      userPresent: Boolean(user),
+    });
+  }, [access.isGuestMode, access.isSignedIn, authReady, diagnosticAccessMode, selectedContext, selectedDate, user]);
+
   useEffect(() => {
     const persistedTrace = readPersistedOdaraAuthTrace();
     const previousOrigin = [...persistedTrace].reverse().find((entry) => entry.origin)?.origin ?? null;
     const originChanged = previousOrigin ? previousOrigin !== window.location.origin : false;
     const hadPersistedTrace = hadPersistedAuthTraceOnMountRef.current;
+    recordOdaraReloadCrashEvent({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      decision: hadPersistedTrace ? 'page_mount_after_reload' : 'loaded',
+      event: 'app_mount',
+      reason: 'app_mount',
+      source: 'page',
+      userPresent: Boolean(user),
+    });
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
       authReady,

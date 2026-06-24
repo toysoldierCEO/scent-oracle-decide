@@ -80,6 +80,32 @@ describe('auth-diagnostic', () => {
       packageVersion: '0.0.0',
       pathname: '/',
       projectRef: 'projectref',
+      reloadCrashTrace: [{
+        accessMode: 'signed-in',
+        authReady: true,
+        closestControlLabel: 'Open Collection',
+        contextKey: 'daily',
+        decision: 'pagehide',
+        detailLabel: 'Not For Sale / Alexandria Fragrances',
+        detailOpen: true,
+        event: 'pagehide',
+        localAuthKeyExists: true,
+        menuOpen: false,
+        navigationType: 'reload',
+        persisted: false,
+        reason: 'page_lifecycle',
+        routePath: '/',
+        screen: 'oracle',
+        searchOpen: false,
+        selectedDate: '2026-06-24',
+        sessionAuthKeyExists: false,
+        source: 'page',
+        storageKeyName: AUTH_KEY,
+        storageMode: 'local',
+        timestamp: '2026-06-22T00:00:01.000Z',
+        userPresent: true,
+        visibilityState: 'hidden',
+      }],
       storageKeyName: AUTH_KEY,
       storageMode: 'local',
       storagePresence: {
@@ -117,6 +143,13 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('supabase project ref: projectref');
     expect(summary).toContain('local auth key exists: yes');
     expect(summary).toContain('event=SIGNED_IN');
+    expect(summary).toContain('reload/crash events:');
+    expect(summary).toContain('navigation=reload');
+    expect(summary).toContain('storage=local');
+    expect(summary).toContain('storageKey=sb-test-auth-token');
+    expect(summary).toContain('localAuthKey=yes');
+    expect(summary).toContain('detail=Not For Sale / Alexandria Fragrances');
+    expect(summary).toContain('control=Open Collection');
     expect(summary).toContain('origin=https://example.test');
     expect(summary).toContain('originChanged=no');
     expect(summary).toContain('localAuthKey=yes');
