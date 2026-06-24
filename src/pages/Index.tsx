@@ -17,6 +17,10 @@ import {
   recordOdaraAuthTrace,
   type OdaraAuthTraceAccessMode,
 } from '@/lib/auth-debug-trace';
+import {
+  resolveSignOutGuard,
+  type OdaraSignOutRequest,
+} from '@/lib/auth-sign-out-guard';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -310,18 +314,24 @@ const Index = () => {
   const socialButtonLabel = isEditorPreview
     ? 'Open shared preview to sign in with Google'
     : 'Continue with Google';
-  const setGuestOverride = useCallback((enabled: boolean) => {
-    writeGuestOverride(enabled);
-    setGuestMode(enabled);
+  const setGuestOverride = useCallback((enabled: boolean, reason = 'guest_override_toggle') => {
+    const storedGuestMode = readGuestOverride();
+    const changed = guestMode !== enabled || storedGuestMode !== enabled;
+    if (storedGuestMode !== enabled) {
+      writeGuestOverride(enabled);
+    }
+    setGuestMode((current) => (current === enabled ? current : enabled));
     recordOdaraAuthTrace({
       accessMode: enabled ? 'guest' : (authUserRef.current ? 'signed-in' : 'signed-out'),
-      decision: enabled ? 'enabled' : 'disabled',
-      reason: 'guest_override_toggle',
+      decision: changed
+        ? (enabled ? 'enabled' : 'disabled')
+        : (enabled ? 'already_enabled' : 'already_disabled'),
+      reason,
       source: 'access-mode',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(authUserRef.current),
     });
-  }, []);
+  }, [guestMode]);
 
   useEffect(() => {
     authReadyRef.current = authReady;
@@ -873,7 +883,7 @@ const Index = () => {
       window.open(ODARA_SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
-    setGuestOverride(false);
+    setGuestOverride(false, 'google_sign_in_submit_clear_guest_override');
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
     primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
@@ -930,24 +940,57 @@ const Index = () => {
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = async (request?: OdaraSignOutRequest) => {
+    const guard = resolveSignOutGuard(request);
+    if (!guard.allowed) {
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        actionId: guard.actionId ?? undefined,
+        authReady: authReadyRef.current,
+        blocked: true,
+        caller: request?.caller ?? undefined,
+        decision: 'sign_out_blocked',
+        defaultPrevented: request?.defaultPrevented ?? undefined,
+        menuOpen: request?.menuOpen ?? undefined,
+        pointerType: request?.pointerType ?? undefined,
+        propagationStopped: request?.propagationStopped ?? undefined,
+        reason: guard.reason,
+        routePath: window.location.pathname,
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        targetLabel: request?.targetLabel ?? undefined,
+        userPresent: Boolean(authUserRef.current),
+      });
+      return;
+    }
+
     if (access.isGuestMode) {
       // Guest sign-out: just return to auth screen
-      setGuestOverride(false);
+      setGuestOverride(false, 'menu_auth_action_clear_guest_override');
       setOracle(null);
       setOracleError(null);
       oracleSuccessKeyRef.current = null;
       oracleInFlightKeyRef.current = null;
       return;
     }
-    setGuestOverride(false);
+    if (guestMode) {
+      setGuestOverride(false, 'menu_sign_out_clear_guest_override');
+    }
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
+      actionId: guard.actionId ?? undefined,
       authReady: authReadyRef.current,
+      caller: request?.caller ?? undefined,
       decision: 'sign_out_called',
-      reason: 'explicit_menu_action',
+      defaultPrevented: request?.defaultPrevented ?? undefined,
+      menuOpen: request?.menuOpen ?? undefined,
+      pointerType: request?.pointerType ?? undefined,
+      propagationStopped: request?.propagationStopped ?? undefined,
+      reason: guard.reason,
+      routePath: window.location.pathname,
       source: 'Index',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      targetLabel: request?.targetLabel ?? undefined,
       userPresent: Boolean(authUserRef.current),
     });
     await odaraSupabase.auth.signOut();
@@ -973,7 +1016,7 @@ const Index = () => {
     setLoading(true);
     try {
       const normalizedEmail = email.trim();
-      setGuestOverride(false);
+      setGuestOverride(false, 'email_auth_submit_clear_guest_override');
       recordOdaraAuthTrace({
         accessMode: diagnosticAccessMode,
         authReady: authReadyRef.current,

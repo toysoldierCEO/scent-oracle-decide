@@ -33,6 +33,10 @@ import {
   shouldApplySessionBootstrapResult,
 } from "@/lib/auth-session-hydration";
 import { recordOdaraAuthTrace } from "@/lib/auth-debug-trace";
+import {
+  ODARA_ALLOWED_SIGN_OUT_ACTION_ID,
+  type OdaraSignOutRequest,
+} from "@/lib/auth-sign-out-guard";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
   resolveSignedInAddAsTodayDisabledReason,
@@ -1664,7 +1668,7 @@ interface OdaraScreenProps {
   oracle: OracleResult | null;
   oracleLoading: boolean;
   oracleError: string | null;
-  onSignOut: () => void;
+  onSignOut: (request: OdaraSignOutRequest) => void;
   selectedContext: string;
   onContextChange: (ctx: string) => void;
   selectedDate: string;
@@ -20839,7 +20843,10 @@ const OdaraScreen = ({
                     key={item.key}
                     type="button"
                     disabled={disabled}
-                    onClick={() => {
+                    data-menu-action={`open-${item.key}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
                       setMenuOpen(false);
                       setCollectionPreset('all');
                       setMenuPage(item.key);
@@ -20865,9 +20872,37 @@ const OdaraScreen = ({
             <div className="relative z-[1] mx-3 border-t border-white/[0.06] pt-1.5 pb-2.5">
               <button
                 type="button"
-                onClick={() => {
+                data-menu-action="sign-out"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  recordOdaraAuthTrace({
+                    accessMode: isGuestMode ? 'guest' : 'signed-in',
+                    actionId: ODARA_ALLOWED_SIGN_OUT_ACTION_ID,
+                    authReady: true,
+                    caller: 'OdaraScreen.root_menu.auth_action',
+                    decision: 'menu_auth_action_tapped',
+                    defaultPrevented: event.defaultPrevented,
+                    menuOpen,
+                    pointerType: 'click',
+                    propagationStopped: true,
+                    reason: isGuestMode ? 'menu_guest_auth_button' : 'menu_sign_out_button',
+                    routePath: window.location.pathname,
+                    source: 'OdaraScreen',
+                    storageKeyName: ODARA_AUTH_STORAGE_KEY,
+                    targetLabel: shellAuthActionLabel,
+                    userPresent: Boolean(userId),
+                  });
                   setMenuOpen(false);
-                  onSignOut();
+                  onSignOut({
+                    actionId: ODARA_ALLOWED_SIGN_OUT_ACTION_ID,
+                    caller: 'OdaraScreen.root_menu.auth_action',
+                    defaultPrevented: event.defaultPrevented,
+                    menuOpen,
+                    pointerType: 'click',
+                    propagationStopped: true,
+                    targetLabel: shellAuthActionLabel,
+                  });
                 }}
                 className="flex w-full items-center justify-between rounded-[14px] px-3 py-3 text-left text-[13px] text-foreground/62 transition-colors hover:bg-white/[0.05] hover:text-foreground/85 active:bg-white/[0.06]"
                 style={{ WebkitTapHighlightColor: 'transparent' }}

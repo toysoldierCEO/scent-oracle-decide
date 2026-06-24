@@ -12,6 +12,19 @@ describe('Index auth storage tracing', () => {
     expect(source).toContain("decision: 'auth_key_exists_immediately_after_sign_in'");
   });
 
+  it('guards Supabase sign-out behind an explicit menu action id', () => {
+    expect(source).toContain('resolveSignOutGuard(request)');
+    expect(source).toContain("decision: 'sign_out_blocked'");
+    expect(source).toContain("reason: guard.reason");
+    expect(source).toContain('await odaraSupabase.auth.signOut()');
+    expect(source).not.toContain("reason: 'explicit_menu_action'");
+  });
+
+  it('does not log a guest override toggle when signed-in sign-out has no guest override to clear', () => {
+    expect(source).toContain("if (guestMode) {\n      setGuestOverride(false, 'menu_sign_out_clear_guest_override');\n    }");
+    expect(source).toContain("decision: changed\n        ? (enabled ? 'enabled' : 'disabled')\n        : (enabled ? 'already_enabled' : 'already_disabled')");
+  });
+
   it('records reload storage and session checks without raw session output', () => {
     expect(source).toContain("decision: hadPersistedTrace ? 'page_mount_after_reload' : 'loaded'");
     expect(source).toContain("decision: 'auth_key_exists_after_reload'");

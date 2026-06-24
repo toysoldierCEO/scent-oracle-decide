@@ -5,28 +5,37 @@ export type OdaraAuthTraceAccessMode = 'signed-in' | 'guest' | 'signed-out' | 'u
 
 export type OdaraAuthTraceEntry = {
   accessMode?: OdaraAuthTraceAccessMode;
+  actionId?: string;
   authReady?: boolean;
+  blocked?: boolean;
   buildCommit?: string;
+  caller?: string;
   contextKey?: string;
   decision?: string;
+  defaultPrevented?: boolean;
   event?: string;
   guestOverride?: boolean;
   host?: string;
   localAuthKeyExists?: boolean;
+  menuOpen?: boolean;
   nextDate?: string;
   oracleKeyPresent?: boolean;
   oracleSlotKeyPresent?: boolean;
   origin?: string;
   originChanged?: boolean;
   path?: string;
+  pointerType?: string;
   previousDate?: string;
+  propagationStopped?: boolean;
   reason?: string;
+  routePath?: string;
   selectedDate?: string;
   sessionPresent?: boolean;
   sessionAuthKeyExists?: boolean;
   source: 'Index' | 'OdaraScreen' | 'auth-debug' | 'day-selection' | 'oracle' | 'page' | 'storage' | 'access-mode';
   storageKeyName?: string;
   storageMode?: 'local' | 'session';
+  targetLabel?: string;
   targetDate?: string;
   timestamp: string;
   userPresent?: boolean;

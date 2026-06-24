@@ -22,25 +22,37 @@ describe('auth-debug-trace', () => {
     window.localStorage.setItem('vesper_auth_persistence_mode', 'local');
 
     recordOdaraAuthTrace({
+      actionId: 'menu_sign_out_button',
       authReady: true,
+      caller: 'OdaraScreen.root_menu.auth_action',
       decision: 'apply_session',
+      defaultPrevented: true,
       event: 'SIGNED_IN',
+      menuOpen: true,
+      pointerType: 'click',
+      propagationStopped: true,
       reason: 'unit_test',
+      routePath: '/',
       sessionPresent: true,
       source: 'Index',
       storageKeyName: 'sb-test-auth-token',
+      targetLabel: 'Sign out',
       userPresent: true,
     });
 
     expect(window.__ODARA_AUTH_TRACE__).toHaveLength(1);
     expect(window.__ODARA_AUTH_TRACE__?.[0]).toMatchObject({
+      actionId: 'menu_sign_out_button',
+      caller: 'OdaraScreen.root_menu.auth_action',
       decision: 'apply_session',
       event: 'SIGNED_IN',
       localAuthKeyExists: false,
+      propagationStopped: true,
       sessionPresent: true,
       sessionAuthKeyExists: false,
       storageKeyName: 'sb-test-auth-token',
       storageMode: 'local',
+      targetLabel: 'Sign out',
       userPresent: true,
     });
     expect(JSON.stringify(window.__ODARA_AUTH_TRACE__)).not.toContain('access_token');
