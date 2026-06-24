@@ -1,3 +1,5 @@
+import type { CommunityEvidenceDisplayModel } from './communityEvidenceLane';
+
 export type FragranceDisplayChip = {
   label: string;
   position: string;
@@ -19,6 +21,7 @@ export type FragranceDetailSectionId =
   | 'notes'
   | 'key_notes'
   | 'accords'
+  | 'community_signals'
   | 'performance'
   | 'source_provenance'
   | 'metadata'
@@ -33,6 +36,7 @@ type FragranceDetailDisplayModelInput = {
   baseNotes?: string[] | null;
   flatNotes?: string[] | null;
   descriptionText?: string | null;
+  communityEvidence?: CommunityEvidenceDisplayModel | null;
   maxHeroChips?: number;
   hasTrustedPerformance?: boolean;
 };
@@ -531,7 +535,11 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
   }
 
   const familyKey = normalizeDisplayKey(familyDisplayLabel);
-  const availableAccords = cleanStringList(input.accordLabels).filter((accord) => normalizeDisplayKey(accord) !== familyKey);
+  const communityEvidence = input.communityEvidence ?? null;
+  const availableAccords = cleanStringList([
+    ...cleanStringList(input.accordLabels),
+    ...(communityEvidence?.accords ?? []),
+  ]).filter((accord) => normalizeDisplayKey(accord) !== familyKey);
   const hasAccords = availableAccords.some((accord) => isScentProfileChip(accord));
   const priorityPatterns = [
     /\bleather|leathery\b/i,
@@ -566,6 +574,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     detailSectionOrder.push('key_notes');
   }
   if (hasAccords) detailSectionOrder.push('accords');
+  if (communityEvidence?.hasCommunitySignalsSection) detailSectionOrder.push('community_signals');
   if (input.hasTrustedPerformance) detailSectionOrder.push('performance');
   detailSectionOrder.push('metadata', 'source_provenance', 'actions');
 
@@ -587,9 +596,12 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     topLabels,
     middleLabels,
     baseLabels,
+    accordLabels: availableAccords,
     flatNoteLabels,
     hasStructuredNoteSections,
     structuredNoteSections,
+    communityEvidence,
+    hasCommunitySignalsSection: Boolean(communityEvidence?.hasCommunitySignalsSection),
     heroProfileChips: dedupeChips(chips).slice(0, input.maxHeroChips ?? 8),
   };
 }

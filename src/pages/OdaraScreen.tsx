@@ -18,6 +18,11 @@ import {
   isScentProfileChip,
 } from "@/lib/fragranceDetailDisplayContract";
 import {
+  buildCommunityEvidenceDisplayModel,
+  type CommunityEvidenceDisplayModel,
+  type CommunityEvidenceInput,
+} from "@/lib/communityEvidenceLane";
+import {
   DEFAULT_MISSING_SCENT_DESIRED_STATUS,
   MISSING_SCENT_DESIRED_STATUS_OPTIONS,
   getMissingScentDesiredStatusLabel,
@@ -1476,6 +1481,8 @@ type VesperMetadataAppliedFields = {
   concentration: boolean;
 };
 
+type VesperCommunityEvidenceRowsByFragranceId = Map<string, CommunityEvidenceInput[]>;
+
 interface FragranceDetail {
   id: string;
   name: string;
@@ -1521,6 +1528,7 @@ interface FragranceDetail {
   image_license_status?: string | null;
   image_last_checked_at?: string | null;
   vesper_intelligence?: VesperFragranceIntelligence | null;
+  vesper_community_evidence?: CommunityEvidenceDisplayModel | null;
   vesper_metadata?: VesperFragranceMetadata | null;
   vesper_metadata_applied?: VesperMetadataAppliedFields | null;
 }
@@ -5991,6 +5999,7 @@ type OdaraFragranceDetailSurfaceState = {
   detail_loading?: boolean;
   detail_error?: string | null;
   vesper_intelligence?: VesperFragranceIntelligence | null;
+  vesper_community_evidence?: CommunityEvidenceDisplayModel | null;
   vesper_metadata?: VesperFragranceMetadata | null;
   vesper_metadata_applied?: VesperMetadataAppliedFields | null;
 };
@@ -6048,6 +6057,34 @@ function normalizeVesperFragranceIntelligence(row: unknown): VesperFragranceInte
     usable_for_vesper_intelligence: normalizeDetailBoolean(record.usable_for_vesper_intelligence),
     limited_intel_reason: normalizeDetailText(record.limited_intel_reason),
     updated_at: normalizeDetailText(record.updated_at),
+  };
+}
+
+function normalizeVesperCommunityEvidenceRow(row: unknown): CommunityEvidenceInput | null {
+  if (!row || typeof row !== 'object') return null;
+  const record = row as Record<string, unknown>;
+  const fragranceId = normalizeDetailText(record.fragrance_id);
+  if (!fragranceId) return null;
+
+  return {
+    canonicalFragranceId: fragranceId,
+    sourceType: normalizeDetailText(record.source_type),
+    sourceTier: normalizeDetailText(record.source_tier),
+    sourceName: normalizeDetailText(record.source_name),
+    reviewStatus: normalizeDetailText(record.review_status),
+    evidenceStatus: normalizeDetailText(record.evidence_status),
+    usableForVesperIntelligence: record.usable_for_vesper_intelligence === true,
+    officialRegistryEligible: record.official_registry_eligible === false
+      ? false
+      : record.official_registry_eligible === true
+        ? true
+        : null,
+    patchSafeNow: record.patch_safe_now === true,
+    normalizedNotes: sanitizeTokenSource(record.normalized_notes),
+    normalizedPyramid: normalizeVesperPrimaryPyramid(record.normalized_pyramid),
+    normalizedAccords: sanitizeTokenSource(record.normalized_accords),
+    extractionConfidence: normalizeVesperDetailNumber(record.extraction_confidence),
+    extractionWarnings: sanitizeTokenSource(record.extraction_warnings),
   };
 }
 
@@ -6110,9 +6147,18 @@ function isLimitedVesperIntelligence(intelligence: VesperFragranceIntelligence |
 
 function isProviderVesperIntelligence(intelligence: VesperFragranceIntelligence | null | undefined) {
   if (!intelligence?.usable_for_vesper_intelligence || isLimitedVesperIntelligence(intelligence)) return false;
-  if (intelligence.intelligence_status === 'approved_provider_structured_notes') return true;
+  if (intelligence.intelligence_status?.startsWith('approved_provider_')) return true;
   if (intelligence.intelligence_source_tier === 'retailer_structured_notes') return true;
-  return ['retailer', 'professional', 'community'].includes(intelligence.intelligence_source_type ?? '');
+  return [
+    'retailer',
+    'retailer_provider',
+    'professional',
+    'professional_provider',
+    'community',
+    'community_provider',
+    'review_aggregate',
+    'provider_metadata',
+  ].includes(intelligence.intelligence_source_type ?? '');
 }
 
 function applyVesperIntelligenceToDetail(
@@ -6125,6 +6171,40 @@ function applyVesperIntelligenceToDetail(
 
   if (isLimitedVesperIntelligence(intelligence)) {
     return { ...detail, vesper_intelligence: intelligence };
+  }
+
+  if (isProviderVesperIntelligence(intelligence)) {
+    const providerEvidence = buildCommunityEvidenceDisplayModel([
+      {
+        canonicalFragranceId: detail.id,
+        sourceType: intelligence.intelligence_source_type,
+        sourceTier: intelligence.intelligence_source_tier,
+        sourceName: intelligence.intelligence_source_name,
+        reviewStatus: 'approved_for_internal_use',
+        evidenceStatus: 'usable_non_official_intelligence',
+        usableForVesperIntelligence: intelligence.usable_for_vesper_intelligence,
+        officialRegistryEligible: false,
+        patchSafeNow: false,
+        normalizedNotes: intelligence.primary_notes,
+        normalizedPyramid: intelligence.primary_pyramid,
+        normalizedAccords: intelligence.primary_accords,
+        extractionConfidence: intelligence.intelligence_confidence,
+        extractionWarnings: intelligence.intelligence_warnings,
+      },
+    ], {
+      flatNotes: detail.notes,
+      topNotes: detail.top_notes,
+      middleNotes: detail.middle_notes,
+      baseNotes: detail.base_notes,
+    });
+
+    return {
+      ...detail,
+      vesper_intelligence: intelligence,
+      vesper_community_evidence: providerEvidence.hasApprovedEvidence
+        ? providerEvidence
+        : detail.vesper_community_evidence ?? null,
+    };
   }
 
   const next: FragranceDetail = {
@@ -6148,6 +6228,34 @@ function applyVesperIntelligenceToDetail(
   }
 
   return next;
+}
+
+function getVesperCommunityEvidenceRows(
+  rowsById: VesperCommunityEvidenceRowsByFragranceId,
+  primaryId: string | null | undefined,
+  fallbackId?: string | null,
+) {
+  const ids = Array.from(new Set([primaryId, fallbackId].filter((id): id is string => Boolean(id))));
+  return ids.flatMap((id) => rowsById.get(id) ?? []);
+}
+
+function applyVesperCommunityEvidenceToDetail(
+  detail: FragranceDetail,
+  communityRows: CommunityEvidenceInput[] | null | undefined,
+): FragranceDetail {
+  const communityEvidence = buildCommunityEvidenceDisplayModel(communityRows, {
+    flatNotes: detail.notes,
+    topNotes: detail.top_notes,
+    middleNotes: detail.middle_notes,
+    baseNotes: detail.base_notes,
+  });
+
+  return {
+    ...detail,
+    vesper_community_evidence: communityEvidence.hasApprovedEvidence
+      ? communityEvidence
+      : detail.vesper_community_evidence ?? null,
+  };
 }
 
 function isKnownDetailConcentration(value: string | null | undefined) {
@@ -6302,6 +6410,7 @@ function isVesperResolverDetailComplete(detail: FragranceDetail | null | undefin
 type VesperFragranceResolverMaps = {
   intelligence: Map<string, VesperFragranceIntelligence>;
   metadata: Map<string, VesperFragranceMetadata>;
+  communityEvidence: VesperCommunityEvidenceRowsByFragranceId;
 };
 
 async function fetchVesperFragranceResolvers(
@@ -6311,7 +6420,8 @@ async function fetchVesperFragranceResolvers(
   const uniqueIds = Array.from(new Set(fragranceIds.filter(Boolean))).slice(0, 50);
   const intelligence = new Map<string, VesperFragranceIntelligence>();
   const metadata = new Map<string, VesperFragranceMetadata>();
-  if (disabled || uniqueIds.length === 0) return { intelligence, metadata };
+  const communityEvidence: VesperCommunityEvidenceRowsByFragranceId = new Map();
+  if (disabled || uniqueIds.length === 0) return { intelligence, metadata, communityEvidence };
 
   try {
     const { data, error } = await odaraSupabase.functions.invoke('get-vesper-intelligence', {
@@ -6356,12 +6466,28 @@ async function fetchVesperFragranceResolvers(
       if (!normalized) continue;
       metadata.set(normalized.fragrance_id, normalized);
     }
+
+    const communityEvidenceRows = (
+      responseData
+      && typeof responseData === 'object'
+      && Array.isArray((responseData as { community_evidence_rows?: unknown[] }).community_evidence_rows)
+        ? (responseData as { community_evidence_rows?: unknown[] }).community_evidence_rows
+        : []
+    );
+
+    for (const row of communityEvidenceRows) {
+      const normalized = normalizeVesperCommunityEvidenceRow(row);
+      if (!normalized?.canonicalFragranceId) continue;
+      const rows = communityEvidence.get(normalized.canonicalFragranceId) ?? [];
+      rows.push(normalized);
+      communityEvidence.set(normalized.canonicalFragranceId, rows);
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'unknown error';
     odaraDebugLog('[Odara] Vesper intelligence fetch skipped', message);
   }
 
-  return { intelligence, metadata };
+  return { intelligence, metadata, communityEvidence };
 }
 
 function normalizeDetailReleaseYear(value: unknown): number | null {
@@ -8384,6 +8510,7 @@ function mergeFragranceDetailSurfaceState(
     detail_loading: false,
     detail_error: null,
     vesper_intelligence: current.vesper_intelligence ?? detail.vesper_intelligence ?? null,
+    vesper_community_evidence: current.vesper_community_evidence ?? detail.vesper_community_evidence ?? null,
     vesper_metadata: current.vesper_metadata ?? detail.vesper_metadata ?? null,
     vesper_metadata_applied: current.vesper_metadata_applied ?? detail.vesper_metadata_applied ?? null,
   };
@@ -8455,6 +8582,7 @@ function mergeFragranceDetailSurfaceSeed(
     detail_loading: primary.detail_loading ?? fallback.detail_loading ?? false,
     detail_error: primary.detail_error ?? fallback.detail_error ?? null,
     vesper_intelligence: primary.vesper_intelligence ?? fallback.vesper_intelligence ?? null,
+    vesper_community_evidence: primary.vesper_community_evidence ?? fallback.vesper_community_evidence ?? null,
     vesper_metadata: primary.vesper_metadata ?? fallback.vesper_metadata ?? null,
     vesper_metadata_applied: primary.vesper_metadata_applied ?? fallback.vesper_metadata_applied ?? null,
   };
@@ -8554,7 +8682,10 @@ async function fetchOdaraFragranceDetailForSurface(
       ?? null;
 
     return finalizeFragranceDetail(applyVesperMetadataToDetail(
-      applyVesperIntelligenceToDetail(baseDetail, intelligence),
+      applyVesperCommunityEvidenceToDetail(
+        applyVesperIntelligenceToDetail(baseDetail, intelligence),
+        getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, baseDetail.id, fragranceId),
+      ),
       metadata,
     ));
   } catch {
@@ -10736,6 +10867,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   );
   const detailLiquidGlassStyle = getOdaraHeroLiquidGlassMaterialStyle(detailBaseTint, detailGlassVisual);
   const accordLabels = normalizeNotes(resolvedDetail.accords, 8);
+  const communityEvidence = resolvedDetail.vesper_community_evidence ?? null;
   const familyLabel = formatFragranceFamilyDisplayLabel({
     familyKey: resolvedDetail.family_key,
     familyLabel: resolvedDetail.family_label ?? (resolvedDetail.family_key ? getFamilyLabelText(resolvedDetail.family_key) : null),
@@ -10758,6 +10890,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     baseNotes: resolvedDetail.base_notes ?? [],
     flatNotes: resolvedDetail.notes ?? [],
     descriptionText: buildVesperizedDetailDescription(resolvedDetail),
+    communityEvidence,
     maxHeroChips: 8,
     hasTrustedPerformance: detailPerformanceBars.length > 0,
   });
@@ -10766,6 +10899,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   const middleLabels = detailDisplayModel.middleLabels;
   const baseLabels = detailDisplayModel.baseLabels;
   const flatNoteLabels = detailDisplayModel.flatNoteLabels;
+  const detailAccordLabels = detailDisplayModel.accordLabels;
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
@@ -10840,7 +10974,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     || officialSourceTier === 'official_notes_only'
   ) && orderedNoteChips.length > 0;
   const hasProviderNotes = Boolean(isProviderVesperIntelligence(resolvedDetail.vesper_intelligence));
-  const detailTrustLine = buildFragranceTrustLine({
+  const primaryTrustLine = buildFragranceTrustLine({
     kind: hasStructuredNoteSections && hasOfficialStructuredNoteSource
       ? 'official_pyramid'
       : hasOfficialKeyNotes
@@ -10853,6 +10987,10 @@ const OdaraFragranceDetailSheet: React.FC<{
     sourceName: officialStructuredNoteSourceName,
     fallbackBrand: resolvedDetail.brand,
   });
+  const detailTrustLine = [
+    primaryTrustLine,
+    communityEvidence?.trustLine ?? null,
+  ].filter((line): line is string => Boolean(line)).join(' · ') || null;
   const detailFactLine = metadataDisplay.factLine;
 
   return (
@@ -11009,12 +11147,12 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          {accordLabels.length > 0 ? (
+          {detailAccordLabels.length > 0 ? (
             <section>
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
               <div className="flex flex-wrap gap-2">
                 {expandAndDeduplicateScentIntelDisplayTerms(
-                  accordLabels.slice(0, 6).map((label) => ({ label, position: 'accord' })),
+                  detailAccordLabels.slice(0, 8).map((label) => ({ label, position: 'accord' })),
                 ).map((chip, index) => {
                   const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                   return (
@@ -11038,6 +11176,50 @@ const OdaraFragranceDetailSheet: React.FC<{
                   );
                 })}
               </div>
+            </section>
+          ) : null}
+
+          {communityEvidence?.hasCommunitySignalsSection ? (
+            <section>
+              <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Community Signals</div>
+              {communityEvidence.communityNotes.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] leading-none text-foreground/46">
+                    Community mentions{communityEvidence.sourceLabel ? ` · ${communityEvidence.sourceLabel}` : ''}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {expandAndDeduplicateScentIntelDisplayTerms(
+                      communityEvidence.communityNotes.slice(0, 8).map((label) => ({ label, position: 'community' })),
+                    ).map((chip, index) => {
+                      const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
+                      return (
+                        <ScentIntelChipButton
+                          key={`detail-community-${chip.position}-${chip.slug ?? chip.label}-${index}`}
+                          label={chip.label}
+                          slug={chip.slug ?? null}
+                          onOpen={onOpenScentIntel}
+                          fragranceId={resolvedDetail.fragrance_id}
+                          fragranceName={resolvedDetail.name}
+                          fragranceBrand={resolvedDetail.brand}
+                          position={chip.position ?? 'community'}
+                          className={getScentIntelChipClass()}
+                          style={{
+                            color: tone.color,
+                            border: `1px solid ${tone.border}`,
+                            background: tone.background,
+                            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {communityEvidence.conflictSummary ? (
+                <div className="mt-3 text-[11px] leading-[1.45] text-foreground/48">
+                  {communityEvidence.conflictSummary}
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -15749,9 +15931,12 @@ const OdaraScreen = ({
           image_last_checked_at: imageAsset?.updated_at ?? null,
         };
         const detail = finalizeFragranceDetail(applyVesperMetadataToDetail(
-          applyVesperIntelligenceToDetail(
-            baseDetail,
-            vesperResolverMaps.intelligence.get(row.id) ?? null,
+          applyVesperCommunityEvidenceToDetail(
+            applyVesperIntelligenceToDetail(
+              baseDetail,
+              vesperResolverMaps.intelligence.get(row.id) ?? null,
+            ),
+            getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, row.id),
           ),
           vesperResolverMaps.metadata.get(row.id) ?? null,
         ));
@@ -15945,7 +16130,10 @@ const OdaraScreen = ({
           ?? vesperResolverMaps.metadata.get(fragranceId)
           ?? null;
         const detail = finalizeFragranceDetail(applyVesperMetadataToDetail(
-          applyVesperIntelligenceToDetail(baseDetail, intelligence),
+          applyVesperCommunityEvidenceToDetail(
+            applyVesperIntelligenceToDetail(baseDetail, intelligence),
+            getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, baseDetail.id, fragranceId),
+          ),
           metadata,
         ));
 

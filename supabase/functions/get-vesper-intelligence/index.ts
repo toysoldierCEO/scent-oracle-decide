@@ -152,6 +152,33 @@ function sanitizeMetadataResolverRow(row: JsonRecord) {
   };
 }
 
+function sanitizeCommunityEvidenceRow(row: JsonRecord) {
+  return {
+    intelligence_id: normalizeText(row.intelligence_id),
+    fragrance_id: normalizeText(row.fragrance_id),
+    fragrance_name: normalizeText(row.fragrance_name),
+    brand: normalizeText(row.brand),
+    source_type: normalizeText(row.source_type),
+    source_tier: normalizeText(row.source_tier),
+    source_name: normalizeText(row.source_name),
+    evidence_type: normalizeText(row.evidence_type),
+    evidence_status: normalizeText(row.evidence_status),
+    review_status: normalizeText(row.review_status),
+    extraction_method: normalizeText(row.extraction_method),
+    extraction_confidence: normalizeConfidence(row.extraction_confidence),
+    extraction_warnings: normalizeWarnings(row.extraction_warnings),
+    normalized_notes: normalizeTextArray(row.normalized_notes),
+    normalized_pyramid: normalizePyramid(row.normalized_pyramid),
+    normalized_accords: normalizeTextArray(row.normalized_accords),
+    usable_for_vesper_intelligence: row.usable_for_vesper_intelligence === true,
+    official_registry_eligible: row.official_registry_eligible === true,
+    patch_safe_now: row.patch_safe_now === true,
+    source_disclaimer: normalizeText(row.source_disclaimer),
+    created_at: normalizeText(row.created_at),
+    updated_at: normalizeText(row.updated_at),
+  };
+}
+
 function readRequestedIds(body: JsonRecord): string[] {
   const rawIds = Array.isArray(body.fragrance_ids)
     ? body.fragrance_ids
@@ -232,6 +259,7 @@ serve(async (req) => {
     const [
       { data, error },
       { data: metadataData, error: metadataError },
+      { data: communityEvidenceData, error: communityEvidenceError },
     ] = await Promise.all([
       adminClient.rpc("get_fragrance_vesper_intelligence_v1", {
         p_fragrance_ids: fragranceIds,
@@ -240,6 +268,10 @@ serve(async (req) => {
       adminClient.rpc("get_fragrance_identity_metadata_resolver_v1", {
         p_fragrance_ids: fragranceIds,
         p_limit: limit,
+      }),
+      adminClient.rpc("get_approved_fragrance_provider_intelligence_v1", {
+        p_fragrance_ids: fragranceIds,
+        p_limit: Math.min(MAX_FRAGRANCE_IDS, fragranceIds.length * 4),
       }),
     ]);
 
@@ -255,12 +287,26 @@ serve(async (req) => {
       : (Array.isArray(metadataData) ? metadataData : [])
           .map((row) => sanitizeMetadataResolverRow(row as JsonRecord))
           .filter((row) => row.fragrance_id);
+    const communityEvidenceRows = communityEvidenceError
+      ? []
+      : (Array.isArray(communityEvidenceData) ? communityEvidenceData : [])
+          .map((row) => sanitizeCommunityEvidenceRow(row as JsonRecord))
+          .filter((row) => (
+            row.fragrance_id
+            && row.review_status === "approved_for_internal_use"
+            && row.evidence_status === "usable_non_official_intelligence"
+            && row.usable_for_vesper_intelligence
+            && !row.official_registry_eligible
+            && !row.patch_safe_now
+          ));
 
     return jsonResponse({
       rows,
       metadata_rows: metadataRows,
+      community_evidence_rows: communityEvidenceRows,
       count: rows.length,
       metadata_count: metadataRows.length,
+      community_evidence_count: communityEvidenceRows.length,
     }, 200, corsHeaders);
   } catch {
     return jsonResponse({ error: "Unexpected Vesper intelligence error." }, 500, corsHeaders);

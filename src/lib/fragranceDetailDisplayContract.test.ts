@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildCommunityEvidenceDisplayModel,
+  type CommunityEvidenceInput,
+} from './communityEvidenceLane';
+
+import {
   buildFragranceCardDisplayModel,
   buildFragranceDetailDisplayModel,
   buildFragranceMetadataDisplay,
@@ -160,13 +165,29 @@ describe('fragranceDetailDisplayContract', () => {
   });
 
   it('keeps official pyramid notes separate from conflicting community/provider notes', () => {
+    const communityEvidence = buildCommunityEvidenceDisplayModel([{
+      sourceType: 'community_provider',
+      sourceTier: 'community_provider_consensus',
+      sourceName: 'Fragrantica',
+      reviewStatus: 'approved_for_internal_use',
+      evidenceStatus: 'usable_non_official_intelligence',
+      usableForVesperIntelligence: true,
+      officialRegistryEligible: false,
+      patchSafeNow: false,
+      normalizedAccords: ['coconut', 'green', 'ozonic', 'aquatic', 'fresh spicy', 'woody', 'sweet', 'aromatic'],
+      normalizedNotes: ['Cucumber', 'Juniper Berry', 'White Pepper', 'Wood Resin', 'Amber'],
+    } satisfies CommunityEvidenceInput], {
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+    });
     const model = buildFragranceDetailDisplayModel({
       familyKey: 'fresh-blue',
       familyLabel: 'Fresh Aquatic',
       topNotes: ['Sea Air', 'Bergamot'],
       middleNotes: ['Soft Coconut', 'Cucumber'],
       baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
-      flatNotes: ['Cucumber', 'Juniper Berry', 'White Pepper', 'Wood Resin', 'Amber'],
+      communityEvidence,
     });
 
     expect(model.structuredNoteSections).toEqual([
@@ -176,6 +197,20 @@ describe('fragranceDetailDisplayContract', () => {
     ]);
     expect(model.structuredNoteSections[0]?.values).not.toContain('Cucumber');
     expect(model.structuredNoteSections[0]?.values).not.toContain('White Pepper');
+    expect(model.accordLabels).toContain('coconut');
+    expect(model.communityEvidence?.communityNotes).toContain('White Pepper');
+    expect(model.communityEvidence?.conflictsWithOfficialNotes).toBe(true);
+    expect(model.detailSectionOrder).toEqual([
+      'family',
+      'description',
+      'notes',
+      'accords',
+      'community_signals',
+      'metadata',
+      'source_provenance',
+      'actions',
+    ]);
+    expect(model.detailSectionOrder).not.toContain('performance');
   });
 
   it('uses one canonical header hierarchy for new and existing canonical details', () => {
