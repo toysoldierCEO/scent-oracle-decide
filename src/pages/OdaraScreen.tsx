@@ -44,6 +44,7 @@ import {
 } from "@/lib/auth-sign-out-guard";
 import { updateOdaraReloadCrashContext } from "@/lib/page-reload-crash-recorder";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
+import { isVesperResolverDetailCompleteForCache } from "@/lib/vesperResolverCompleteness";
 import {
   resolveSignedInAddAsTodayDisabledReason,
   resolveSignedInAddAsTodayLocked,
@@ -6399,12 +6400,6 @@ function getMetadataSourceLabel(
       : 'Official product-page metadata',
     helper: 'This metadata comes from approved official product-page evidence for display guidance, not a catalog patch authorization.',
   };
-}
-
-function isVesperResolverDetailComplete(detail: FragranceDetail | null | undefined, resolverDisabled: boolean) {
-  return resolverDisabled || !!detail
-    && Object.prototype.hasOwnProperty.call(detail, 'vesper_intelligence')
-    && Object.prototype.hasOwnProperty.call(detail, 'vesper_metadata');
 }
 
 type VesperFragranceResolverMaps = {
@@ -15854,7 +15849,7 @@ const OdaraScreen = ({
 
     for (const fragranceId of uniqueIds) {
       const cached = fragranceDetailCacheRef.current.get(fragranceId);
-      if (cached && isVesperResolverDetailComplete(cached, resolverDisabled)) {
+      if (cached && isVesperResolverDetailCompleteForCache(cached, resolverDisabled)) {
         details.set(fragranceId, cached);
       } else {
         missingIds.push(fragranceId);
@@ -16037,7 +16032,7 @@ const OdaraScreen = ({
     if (!fragranceId) return null;
     const cached = fragranceDetailCacheRef.current.get(fragranceId);
     const resolverDisabled = isGuestMode || !userId;
-    if (cached?.profile_loaded && isVesperResolverDetailComplete(cached, resolverDisabled)) {
+    if (cached?.profile_loaded && isVesperResolverDetailCompleteForCache(cached, resolverDisabled)) {
       return cached;
     }
 
@@ -16158,7 +16153,7 @@ const OdaraScreen = ({
       : null;
     const resolverDisabled = isGuestMode || !userId;
     const cachedDetailComplete = Boolean(
-      cachedDetail?.profile_loaded && isVesperResolverDetailComplete(cachedDetail, resolverDisabled),
+      cachedDetail?.profile_loaded && isVesperResolverDetailCompleteForCache(cachedDetail, resolverDisabled),
     );
     const initialState = seed.fragrance_id
       ? mergeFragranceDetailSurfaceState(
