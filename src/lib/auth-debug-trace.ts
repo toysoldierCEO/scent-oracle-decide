@@ -28,6 +28,7 @@ export type OdaraAuthTraceEntry = {
   previousDate?: string;
   propagationStopped?: boolean;
   reason?: string;
+  redirectOrigin?: string;
   routePath?: string;
   selectedDate?: string;
   sessionPresent?: boolean;
@@ -38,6 +39,7 @@ export type OdaraAuthTraceEntry = {
   targetLabel?: string;
   targetDate?: string;
   timestamp: string;
+  urlHasAuthParams?: boolean;
   userPresent?: boolean;
 };
 

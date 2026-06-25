@@ -6,10 +6,19 @@ const source = readFileSync('src/pages/Index.tsx', 'utf8');
 
 describe('Index auth storage tracing', () => {
   it('records sign-in submit, result, and immediate auth-key presence checks', () => {
+    expect(source).toContain("recordLoginTrace('login_form_rendered'");
+    expect(source).toContain("recordLoginTrace('login_submit_clicked'");
+    expect(source).toContain("recordLoginTrace('login_submit_prevent_default_applied'");
+    expect(source).toContain("recordLoginTrace('login_request_started'");
+    expect(source).toContain("recordLoginTrace('login_request_result_success'");
+    expect(source).toContain("recordLoginTrace('login_request_result_error'");
+    expect(source).toContain("recordLoginTrace('login_result_session_present'");
     expect(source).toContain("decision: 'sign_in_submit'");
     expect(source).toContain("decision: 'sign_in_result_success'");
     expect(source).toContain("decision: 'sign_in_result_error'");
     expect(source).toContain("decision: 'auth_key_exists_immediately_after_sign_in'");
+    expect(source).toContain("recordLoginTrace('auth_key_exists_immediately_after_login'");
+    expect(source).toContain("recordLoginTrace('getSession_immediately_after_login'");
   });
 
   it('guards Supabase sign-out behind an explicit menu action id', () => {
@@ -29,6 +38,9 @@ describe('Index auth storage tracing', () => {
     expect(source).toContain("decision: hadPersistedTrace ? 'page_mount_after_reload' : 'loaded'");
     expect(source).toContain("decision: 'auth_key_exists_after_reload'");
     expect(source).toContain("decision: 'getSession_after_reload'");
+    expect(source).toContain("decision: 'app_mount_after_login_reload'");
+    expect(source).toContain("decision: 'session_after_login_reload'");
+    expect(source).toContain("decision: 'url_has_auth_params'");
     expect(source).not.toContain('JSON.stringify(session)');
   });
 

@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ODARA_AUTH_DEBUG_STORAGE_KEY,
   buildAuthDiagnosticSummary,
+  dismissAuthDebugPanel,
   getNextAuthDebugTapCount,
   isAuthDebugSearchDisabled,
   isAuthDebugSearchEnabled,
   readAuthDebugEnabled,
   readAuthStoragePresence,
+  removeAuthDebugSearchParamFromCurrentUrl,
   setAuthDebugEnabled,
 } from './auth-diagnostic';
 
@@ -59,6 +61,23 @@ describe('auth-diagnostic', () => {
     expect(readAuthDebugEnabled()).toBe(false);
     expect(window.sessionStorage.getItem(ODARA_AUTH_DEBUG_STORAGE_KEY)).toBeNull();
     expect(events[events.length - 1]).toEqual({ enabled: false });
+  });
+
+  it('dismisses the diagnostic and removes the query flag so it does not stick after reload', () => {
+    window.history.replaceState(null, '', '/?odaraAuthDebug=1&keep=true#top');
+    expect(readAuthDebugEnabled()).toBe(true);
+
+    expect(removeAuthDebugSearchParamFromCurrentUrl()).toBe(true);
+    expect(window.location.search).toBe('?keep=true');
+    expect(window.location.hash).toBe('#top');
+
+    window.history.replaceState(null, '', '/?odaraAuthDebug=1');
+    setAuthDebugEnabled(true);
+    dismissAuthDebugPanel();
+
+    expect(window.sessionStorage.getItem(ODARA_AUTH_DEBUG_STORAGE_KEY)).toBeNull();
+    expect(window.location.search).toBe('');
+    expect(readAuthDebugEnabled()).toBe(false);
   });
 
   it('counts rapid logo taps and resets outside the gesture window', () => {
@@ -147,6 +166,7 @@ describe('auth-diagnostic', () => {
         oracleSlotKeyPresent: true,
         origin: 'https://example.test',
         originChanged: false,
+        redirectOrigin: 'https://example.test',
         previousDate: '2026-06-22',
         reason: 'unit_test',
         selectedDate: '2026-06-22',
@@ -157,6 +177,7 @@ describe('auth-diagnostic', () => {
         storageMode: 'local',
         targetDate: '2026-06-23',
         timestamp: '2026-06-22T00:00:00.000Z',
+        urlHasAuthParams: true,
         userPresent: true,
       }],
       userPresent: true,
@@ -184,6 +205,8 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('control=Open Collection');
     expect(summary).toContain('origin=https://example.test');
     expect(summary).toContain('originChanged=no');
+    expect(summary).toContain('redirectOrigin=https://example.test');
+    expect(summary).toContain('urlAuthParams=yes');
     expect(summary).toContain('localAuthKey=yes');
     expect(summary).toContain('sessionAuthKey=no');
     expect(summary).toContain('guestOverride=no');
@@ -195,5 +218,43 @@ describe('auth-diagnostic', () => {
     expect(summary).not.toContain('access_token');
     expect(summary).not.toContain('refresh_token');
     expect(summary).not.toContain('raw session');
+  });
+
+  it('explains a signed-out mount when no logout was observed', () => {
+    const summary = buildAuthDiagnosticSummary({
+      accessMode: 'signed-out',
+      authReady: true,
+      buildCommit: 'abc1234',
+      buildTime: '2026-06-22T00:00:00.000Z',
+      getSessionConfirmsSession: false,
+      guestOverride: false,
+      host: 'example.test',
+      origin: 'https://example.test',
+      packageVersion: '0.0.0',
+      pathname: '/',
+      projectRef: 'projectref',
+      detailCommunityEvidenceTrace: [],
+      reloadCrashTrace: [],
+      storageKeyName: AUTH_KEY,
+      storageMode: 'local',
+      storagePresence: {
+        localAuthKeyExists: false,
+        sessionAuthKeyExists: false,
+      },
+      trace: [{
+        authReady: true,
+        decision: 'loaded',
+        reason: 'app_mount',
+        sessionPresent: false,
+        source: 'page',
+        storageKeyName: AUTH_KEY,
+        storageMode: 'local',
+        timestamp: '2026-06-22T00:00:00.000Z',
+        userPresent: false,
+      }],
+      userPresent: false,
+    });
+
+    expect(summary).toContain('No session was present when the app mounted. This diagnostic did not observe a logout.');
   });
 });

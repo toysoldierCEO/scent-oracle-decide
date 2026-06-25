@@ -90,6 +90,25 @@ export function setAuthDebugEnabled(enabled: boolean) {
   window.dispatchEvent(new CustomEvent('odara-auth-debug-enabled', { detail: { enabled } }));
 }
 
+export function removeAuthDebugSearchParamFromCurrentUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM)) return false;
+    url.searchParams.delete(ODARA_AUTH_DEBUG_QUERY_PARAM);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(window.history.state, '', nextUrl || '/');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function dismissAuthDebugPanel() {
+  setAuthDebugEnabled(false);
+  removeAuthDebugSearchParamFromCurrentUrl();
+}
+
 export function getNextAuthDebugTapCount({
   lastTapAt,
   now,
@@ -134,6 +153,11 @@ export function readSafeAuthTrace(): OdaraAuthTraceEntry[] {
 }
 
 export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): string {
+  const observedLogout = input.trace.some((entry) => (
+    entry.event === 'SIGNED_OUT'
+    || entry.decision === 'sign_out_called'
+    || (entry.source === 'storage' && entry.decision === 'removed')
+  ));
   const lines = [
     'ODARA AUTH DIAGNOSTIC',
     `build commit: ${input.buildCommit ?? ODARA_BUILD_INFO.commit}`,
@@ -152,8 +176,19 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     `access mode: ${input.accessMode}`,
     `guest override: ${input.guestOverride ? 'yes' : 'no'}`,
     `getSession confirms session: ${input.getSessionConfirmsSession == null ? 'unknown' : input.getSessionConfirmsSession ? 'yes' : 'no'}`,
-    'auth events:',
   ];
+
+  if (
+    !input.userPresent
+    && input.getSessionConfirmsSession === false
+    && !input.storagePresence.localAuthKeyExists
+    && !input.storagePresence.sessionAuthKeyExists
+    && !observedLogout
+  ) {
+    lines.push('signed-out note: No session was present when the app mounted. This diagnostic did not observe a logout.');
+  }
+
+  lines.push('auth events:');
 
   input.trace.slice(-20).forEach((entry, index) => {
     lines.push([
@@ -164,6 +199,8 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
       `decision=${entry.decision ?? 'none'}`,
       entry.origin ? `origin=${entry.origin}` : null,
       entry.originChanged == null ? null : `originChanged=${entry.originChanged ? 'yes' : 'no'}`,
+      entry.redirectOrigin ? `redirectOrigin=${entry.redirectOrigin}` : null,
+      entry.urlHasAuthParams == null ? null : `urlAuthParams=${entry.urlHasAuthParams ? 'yes' : 'no'}`,
       entry.localAuthKeyExists == null ? null : `localAuthKey=${entry.localAuthKeyExists ? 'yes' : 'no'}`,
       entry.sessionAuthKeyExists == null ? null : `sessionAuthKey=${entry.sessionAuthKeyExists ? 'yes' : 'no'}`,
       `session=${entry.sessionPresent == null ? 'unknown' : entry.sessionPresent ? 'yes' : 'no'}`,

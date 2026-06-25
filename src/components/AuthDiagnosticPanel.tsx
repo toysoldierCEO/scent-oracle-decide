@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import type { OdaraAuthTraceAccessMode } from '@/lib/auth-debug-trace';
 import {
   buildAuthDiagnosticSummary,
+  dismissAuthDebugPanel,
   getNextAuthDebugTapCount,
   getCurrentAuthDiagnosticBase,
   readAuthDebugEnabled,
@@ -157,10 +158,28 @@ export function AuthDiagnosticPanel({
     }
   };
 
+  const closePanel = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissAuthDebugPanel();
+    setEnabled(false);
+    setCopied(false);
+    recordOdaraAuthTrace({
+      accessMode,
+      authReady,
+      decision: 'disabled',
+      reason: 'diagnostic_close_button',
+      source: 'auth-debug',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent,
+    });
+  };
+
   return (
     <section
       aria-label="Odara auth diagnostic"
-      className="fixed inset-x-3 bottom-3 z-[9999] max-h-[46vh] overflow-hidden rounded-lg border border-border/40 bg-background/95 p-3 text-left text-xs text-foreground shadow-2xl backdrop-blur"
+      className="fixed inset-x-3 bottom-3 z-[9999] max-h-[min(46vh,24rem)] overflow-hidden rounded-lg border border-border/40 bg-background/95 p-3 text-left text-xs text-foreground shadow-2xl backdrop-blur"
+      data-odara-auth-debug-ignore
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
@@ -171,13 +190,23 @@ export function AuthDiagnosticPanel({
             Safe summary only. No tokens, keys, headers, passwords, or sensitive auth values.
           </p>
         </div>
-        <button
-          className="shrink-0 rounded-md border border-border/40 px-2 py-1 text-[11px] font-medium text-foreground"
-          onClick={copySummary}
-          type="button"
-        >
-          {copied ? 'Copied' : 'Copy summary'}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            className="rounded-md border border-border/40 px-2 py-1 text-[11px] font-medium text-foreground"
+            onClick={copySummary}
+            type="button"
+          >
+            {copied ? 'Copied' : 'Copy summary'}
+          </button>
+          <button
+            aria-label="Close auth diagnostic"
+            className="rounded-md border border-border/40 px-2 py-1 text-[11px] font-medium text-foreground"
+            onClick={closePanel}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
       </div>
       <pre className="max-h-[34vh] overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 font-mono text-[10px] leading-4 text-muted-foreground">
         {summary}

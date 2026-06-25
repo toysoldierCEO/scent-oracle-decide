@@ -16,6 +16,7 @@ import {
   readPersistedOdaraAuthTrace,
   readSafeAuthStorageMode,
   recordOdaraAuthTrace,
+  type OdaraAuthTraceEntry,
   type OdaraAuthTraceAccessMode,
 } from '@/lib/auth-debug-trace';
 import { readAuthStoragePresence } from '@/lib/auth-diagnostic';
@@ -114,6 +115,44 @@ function persistRememberedEmail(remember: boolean, emailValue: string) {
   } catch {
     /* ignore storage failures */
   }
+}
+
+type SafeLoginTraceExtras = Partial<Pick<
+  OdaraAuthTraceEntry,
+  'event'
+  | 'origin'
+  | 'originChanged'
+  | 'redirectOrigin'
+  | 'sessionPresent'
+  | 'urlHasAuthParams'
+  | 'userPresent'
+>>;
+
+function hasAuthUrlParams(search: string, hash: string): boolean {
+  const authParamNames = [
+    'access_token',
+    'code',
+    'error',
+    'error_code',
+    'error_description',
+    'refresh_token',
+    'token_type',
+  ];
+  const searchParams = new URLSearchParams(search);
+  const hashParams = new URLSearchParams(hash.replace(/^[#?]/, ''));
+  return authParamNames.some((name) => searchParams.has(name) || hashParams.has(name));
+}
+
+function isLoginLifecycleDecision(decision: string | undefined): boolean {
+  if (!decision) return false;
+  return decision.startsWith('login_')
+    || decision === 'auth_callback_detected'
+    || decision === 'auth_key_exists_immediately_after_login'
+    || decision === 'current_origin_at_login'
+    || decision === 'getSession_immediately_after_login'
+    || decision === 'returned_origin_after_login'
+    || decision === 'session_after_login_reload'
+    || decision === 'url_has_auth_params';
 }
 
 type AuthView = 'signIn' | 'signUp' | 'checkEmail';
@@ -305,6 +344,9 @@ const Index = () => {
       : 'signed-out';
   const diagnosticAccessModeRef = useRef<OdaraAuthTraceAccessMode>(diagnosticAccessMode);
   const hadPersistedAuthTraceOnMountRef = useRef(hasPersistedOdaraAuthTrace());
+  const hadPersistedLoginTraceOnMountRef = useRef(
+    readPersistedOdaraAuthTrace().some((entry) => isLoginLifecycleDecision(entry.decision)),
+  );
   const authRedirectResolution = useMemo(
     () => resolveOdaraAuthRedirectOrigin(window.location.origin),
     [],
@@ -340,6 +382,48 @@ const Index = () => {
     });
   }, [guestMode]);
 
+  const recordLoginTrace = useCallback((
+    decision: string,
+    reason: string,
+    extras: SafeLoginTraceExtras = {},
+  ) => {
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessModeRef.current,
+      authReady: authReadyRef.current,
+      decision,
+      origin: window.location.origin,
+      redirectOrigin: authRedirectOrigin,
+      reason,
+      source: 'Index',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      urlHasAuthParams: hasAuthUrlParams(window.location.search, window.location.hash),
+      userPresent: Boolean(authUserRef.current),
+      ...extras,
+    });
+  }, [authRedirectOrigin]);
+
+  const probeImmediateLoginSession = useCallback(async (
+    reason: string,
+    requestSessionPresent: boolean,
+  ) => {
+    recordLoginTrace('auth_key_exists_immediately_after_login', `${reason}_storage_check`, {
+      sessionPresent: requestSessionPresent,
+    });
+
+    try {
+      const { data: { session } } = await odaraSupabase.auth.getSession();
+      const confirmedSession = Boolean(session?.user);
+      recordLoginTrace('getSession_immediately_after_login', reason, {
+        sessionPresent: confirmedSession,
+        userPresent: confirmedSession || Boolean(authUserRef.current),
+      });
+    } catch {
+      recordLoginTrace('getSession_immediately_after_login_error', reason, {
+        sessionPresent: false,
+      });
+    }
+  }, [recordLoginTrace]);
+
   useEffect(() => {
     authReadyRef.current = authReady;
   }, [authReady]);
@@ -347,6 +431,11 @@ const Index = () => {
   useEffect(() => {
     diagnosticAccessModeRef.current = diagnosticAccessMode;
   }, [diagnosticAccessMode]);
+
+  useEffect(() => {
+    if (!authReady || access.isSignedIn || access.isGuestMode) return;
+    recordLoginTrace('login_form_rendered', isCheckEmail ? 'check_email_screen_render' : 'auth_screen_render');
+  }, [access.isGuestMode, access.isSignedIn, authReady, isCheckEmail, recordLoginTrace]);
 
   useEffect(() => installOdaraReloadCrashRecorder(), []);
 
@@ -372,6 +461,8 @@ const Index = () => {
     const previousOrigin = [...persistedTrace].reverse().find((entry) => entry.origin)?.origin ?? null;
     const originChanged = previousOrigin ? previousOrigin !== window.location.origin : false;
     const hadPersistedTrace = hadPersistedAuthTraceOnMountRef.current;
+    const hadPersistedLoginTrace = hadPersistedLoginTraceOnMountRef.current;
+    const urlHasAuthParams = hasAuthUrlParams(window.location.search, window.location.hash);
     recordOdaraReloadCrashEvent({
       accessMode: diagnosticAccessMode,
       authReady,
@@ -401,6 +492,54 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(user),
     });
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      decision: 'url_has_auth_params',
+      originChanged,
+      reason: urlHasAuthParams ? 'auth_callback_detected' : 'auth_callback_absent',
+      source: 'Index',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      urlHasAuthParams,
+      userPresent: Boolean(user),
+    });
+    if (urlHasAuthParams) {
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        authReady,
+        decision: 'auth_callback_detected',
+        originChanged,
+        reason: 'safe_url_auth_params_present',
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams: true,
+        userPresent: Boolean(user),
+      });
+    }
+    if (hadPersistedLoginTrace) {
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        authReady,
+        decision: 'app_mount_after_login_reload',
+        originChanged,
+        reason: 'login_trace_present_on_mount',
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams,
+        userPresent: Boolean(user),
+      });
+      recordOdaraAuthTrace({
+        accessMode: diagnosticAccessMode,
+        authReady,
+        decision: 'returned_origin_after_login',
+        originChanged,
+        reason: 'login_trace_present_on_mount',
+        source: 'Index',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams,
+        userPresent: Boolean(user),
+      });
+    }
 
     const handleVisibilityChange = () => {
       recordOdaraAuthTrace({
@@ -576,6 +715,17 @@ const Index = () => {
           recordOdaraAuthTrace({
             authReady: authReadyRef.current,
             decision: 'getSession_after_reload',
+            reason: 'getSession_bootstrap',
+            sessionPresent: Boolean(session?.user),
+            source: 'Index',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userPresent: Boolean(authUserRef.current),
+          });
+        }
+        if (hadPersistedLoginTraceOnMountRef.current) {
+          recordOdaraAuthTrace({
+            authReady: authReadyRef.current,
+            decision: 'session_after_login_reload',
             reason: 'getSession_bootstrap',
             sessionPresent: Boolean(session?.user),
             source: 'Index',
@@ -915,6 +1065,11 @@ const Index = () => {
 
   const handleGoogle = async () => {
     if (isEditorPreview) {
+      recordLoginTrace('login_submit_clicked', 'google_oauth_editor_preview_open');
+      recordLoginTrace('login_redirect_origin', 'google_oauth_editor_preview_open', {
+        originChanged: window.location.origin !== ODARA_SHARED_PREVIEW_ORIGIN,
+        redirectOrigin: ODARA_SHARED_PREVIEW_ORIGIN,
+      });
       window.open(ODARA_SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
@@ -922,6 +1077,14 @@ const Index = () => {
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
     primeVesperAuthPersistence(rememberMe, ODARA_AUTH_STORAGE_KEY);
+    recordLoginTrace('login_submit_clicked', 'google_oauth_submit');
+    recordLoginTrace('current_origin_at_login', 'google_oauth_submit', {
+      originChanged: false,
+    });
+    recordLoginTrace('login_redirect_origin', 'google_oauth_submit', {
+      originChanged: window.location.origin !== authRedirectOrigin,
+    });
+    recordLoginTrace('login_request_started', 'google_oauth_request_started');
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
       authReady: authReadyRef.current,
@@ -938,6 +1101,9 @@ const Index = () => {
         options: { redirectTo: authRedirectOrigin },
       });
       if (err) {
+        recordLoginTrace('login_request_result_error', 'google_oauth_error', {
+          sessionPresent: false,
+        });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
@@ -949,6 +1115,13 @@ const Index = () => {
           userPresent: Boolean(authUserRef.current),
         });
         setAuthError(err.message);
+      } else {
+        recordLoginTrace('login_request_result_success', 'google_oauth_redirect_started', {
+          sessionPresent: false,
+        });
+        recordLoginTrace('login_result_session_present', 'google_oauth_redirect_started', {
+          sessionPresent: false,
+        });
       }
     } finally { setLoading(false); }
   };
@@ -1033,6 +1206,8 @@ const Index = () => {
 
   const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    recordLoginTrace('login_submit_clicked', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
+    recordLoginTrace('login_submit_prevent_default_applied', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     clearAuthMessages();
     setSubmitAttempted(true);
 
@@ -1041,6 +1216,9 @@ const Index = () => {
       : validateSignInFields(email, password);
 
     if (Object.keys(validationErrors).length > 0) {
+      recordLoginTrace('login_request_result_error', 'client_validation_error', {
+        sessionPresent: false,
+      });
       setTouchedFields((current) => ({
         ...current,
         ...Object.fromEntries(Object.keys(validationErrors).map((key) => [key, true])) as Partial<Record<AuthField, boolean>>,
@@ -1052,6 +1230,13 @@ const Index = () => {
     try {
       const normalizedEmail = email.trim();
       setGuestOverride(false, 'email_auth_submit_clear_guest_override');
+      recordLoginTrace('current_origin_at_login', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit', {
+        originChanged: false,
+      });
+      recordLoginTrace('login_redirect_origin', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit', {
+        originChanged: window.location.origin !== authRedirectOrigin,
+      });
+      recordLoginTrace('login_request_started', isSignUp ? 'email_signup_request_started' : 'password_sign_in_request_started');
       recordOdaraAuthTrace({
         accessMode: diagnosticAccessMode,
         authReady: authReadyRef.current,
@@ -1080,6 +1265,9 @@ const Index = () => {
         });
 
         if (err) {
+          recordLoginTrace('login_request_result_error', 'email_signup_error', {
+            sessionPresent: false,
+          });
           recordOdaraAuthTrace({
             accessMode: diagnosticAccessMode,
             authReady: authReadyRef.current,
@@ -1094,6 +1282,12 @@ const Index = () => {
           return;
         }
 
+        recordLoginTrace('login_request_result_success', 'email_signup_result', {
+          sessionPresent: Boolean(data.session?.user),
+        });
+        recordLoginTrace('login_result_session_present', 'email_signup_result', {
+          sessionPresent: Boolean(data.session?.user),
+        });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
@@ -1114,6 +1308,7 @@ const Index = () => {
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(data.session?.user ?? authUserRef.current),
         });
+        await probeImmediateLoginSession('email_signup_result', Boolean(data.session?.user));
 
         if (!data.session) {
           setPendingVerificationEmail(normalizedEmail);
@@ -1135,6 +1330,9 @@ const Index = () => {
       });
 
       if (err) {
+        recordLoginTrace('login_request_result_error', 'password_sign_in_error', {
+          sessionPresent: false,
+        });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
@@ -1147,6 +1345,12 @@ const Index = () => {
         });
         setAuthError(err.message);
       } else {
+        recordLoginTrace('login_request_result_success', 'password_sign_in_result', {
+          sessionPresent: Boolean(data.session?.user),
+        });
+        recordLoginTrace('login_result_session_present', 'password_sign_in_result', {
+          sessionPresent: Boolean(data.session?.user),
+        });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
@@ -1167,6 +1371,7 @@ const Index = () => {
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(data.session?.user ?? authUserRef.current),
         });
+        await probeImmediateLoginSession('password_sign_in_result', Boolean(data.session?.user));
         persistRememberedEmail(rememberMe, normalizedEmail);
       }
     } finally {
