@@ -5,6 +5,7 @@ type JsonRecord = Record<string, unknown>;
 
 const MAX_FRAGRANCE_IDS = 50;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LOVABLE_PROJECT_ID = "20427402-64b7-4dc9-80aa-727b1e4a3e69";
 
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:8080",
@@ -16,8 +17,24 @@ const ALLOWED_ORIGINS = new Set([
   "https://scent-oracle-decide.lovable.app",
 ]);
 
+function isAllowedLovablePreviewOrigin(origin: string | null) {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    if (url.hostname === `${LOVABLE_PROJECT_ID}.lovableproject.com`) return true;
+    if (url.hostname === `id-preview--${LOVABLE_PROJECT_ID}.lovable.app`) return true;
+    return new RegExp(`^id-preview-[a-z0-9-]+--${LOVABLE_PROJECT_ID}\\.lovable\\.app$`, "i")
+      .test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function buildCorsHeaders(origin: string | null) {
-  const allowOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : "null";
+  const allowOrigin = origin && (ALLOWED_ORIGINS.has(origin) || isAllowedLovablePreviewOrigin(origin))
+    ? origin
+    : "null";
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Vary": "Origin",
