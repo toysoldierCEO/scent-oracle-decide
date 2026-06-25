@@ -15,6 +15,7 @@ import {
 } from './detailCommunityEvidenceDiagnostic';
 
 export const ODARA_AUTH_DEBUG_QUERY_PARAM = 'odaraAuthDebug';
+export const ODARA_DETAIL_DEBUG_QUERY_PARAM = 'odaraDetailDebug';
 export const ODARA_AUTH_DEBUG_STORAGE_KEY = 'odara_auth_debug_enabled_v1';
 export const ODARA_AUTH_DEBUG_TAP_WINDOW_MS = 2500;
 export const ODARA_AUTH_DEBUG_REQUIRED_TAPS = 7;
@@ -47,15 +48,19 @@ export type AuthDiagnosticSummaryInput = {
 
 export function isAuthDebugSearchEnabled(search: string): boolean {
   const params = new URLSearchParams(search);
-  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)) return false;
-  const value = params.get(ODARA_AUTH_DEBUG_QUERY_PARAM);
+  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
+  const value = params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
   return value == null || value === '' || value === '1' || value.toLowerCase() === 'true';
 }
 
 export function isAuthDebugSearchDisabled(search: string): boolean {
   const params = new URLSearchParams(search);
-  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)) return false;
-  const value = params.get(ODARA_AUTH_DEBUG_QUERY_PARAM);
+  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
+  const value = params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
   return value === '0' || value?.toLowerCase() === 'false';
 }
 
@@ -94,8 +99,9 @@ export function removeAuthDebugSearchParamFromCurrentUrl(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM)) return false;
+    if (!url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !url.searchParams.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
     url.searchParams.delete(ODARA_AUTH_DEBUG_QUERY_PARAM);
+    url.searchParams.delete(ODARA_DETAIL_DEBUG_QUERY_PARAM);
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl || '/');
     return true;
@@ -267,26 +273,37 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
       `decision=${entry.decision}`,
       entry.fragranceId ? `fragranceId=${entry.fragranceId}` : null,
       entry.fragranceName ? `fragrance=${entry.fragranceName}` : null,
+      entry.fragranceBrand ? `brand=${entry.fragranceBrand}` : null,
+      entry.cacheKey ? `cacheKey=${entry.cacheKey}` : null,
       entry.cacheHit == null ? null : `cacheHit=${entry.cacheHit ? 'yes' : 'no'}`,
       entry.cacheComplete == null ? null : `cacheComplete=${entry.cacheComplete ? 'yes' : 'no'}`,
       entry.cacheVersion ? `cacheVersion=${entry.cacheVersion}` : null,
       entry.communityEvidenceChecked == null ? null : `communityChecked=${entry.communityEvidenceChecked ? 'yes' : 'no'}`,
       entry.detailOpenedFromCollection == null ? null : `fromCollection=${entry.detailOpenedFromCollection ? 'yes' : 'no'}`,
       entry.detailFetchAttempted == null ? null : `fetchAttempted=${entry.detailFetchAttempted ? 'yes' : 'no'}`,
+      entry.detailFetchStatus ? `fetchStatus=${entry.detailFetchStatus}` : null,
+      entry.intelligenceFetchAttempted == null ? null : `intelligenceFetch=${entry.intelligenceFetchAttempted ? 'yes' : 'no'}`,
+      entry.intelligenceFetchSuccess == null ? null : `intelligenceSuccess=${entry.intelligenceFetchSuccess ? 'yes' : 'no'}`,
+      entry.intelligenceFetchError == null ? null : `intelligenceError=${entry.intelligenceFetchError ? 'yes' : 'no'}`,
       entry.resolverCacheVersion ? `resolverVersion=${entry.resolverCacheVersion}` : null,
       entry.resolverDisabled == null ? null : `resolverDisabled=${entry.resolverDisabled ? 'yes' : 'no'}`,
       entry.collectionPreviewChipCount == null ? null : `previewChips=${entry.collectionPreviewChipCount}`,
       entry.collectionPreviewCommunityChipCount == null ? null : `previewCommunityChips=${entry.collectionPreviewCommunityChipCount}`,
       entry.collectionPreviewFamilyChipCount == null ? null : `previewFamilyChips=${entry.collectionPreviewFamilyChipCount}`,
+      entry.collectionPreviewChipSources?.length ? `previewSources=${entry.collectionPreviewChipSources.join(',')}` : null,
       entry.communityRowsReturnedCount == null ? null : `communityRows=${entry.communityRowsReturnedCount}`,
+      entry.approvedFragranticaRowPresent == null ? null : `fragranticaRow=${entry.approvedFragranticaRowPresent ? 'yes' : 'no'}`,
       entry.mappedCount == null ? null : `mapped=${entry.mappedCount}`,
       entry.communityEvidenceMappedCount == null ? null : `mappedEvidence=${entry.communityEvidenceMappedCount}`,
       entry.accordCount == null ? null : `accords=${entry.accordCount}`,
       entry.communitySignalsCount == null ? null : `signals=${entry.communitySignalsCount}`,
       entry.trustLabelCount == null ? null : `trustLabels=${entry.trustLabelCount}`,
       entry.renderedAccordCount == null ? null : `renderedAccords=${entry.renderedAccordCount}`,
+      entry.renderedAccordsSection == null ? null : `accordsSection=${entry.renderedAccordsSection ? 'yes' : 'no'}`,
       entry.renderedCommunitySignalCount == null ? null : `renderedSignals=${entry.renderedCommunitySignalCount}`,
+      entry.renderedCommunitySignalsSection == null ? null : `signalsSection=${entry.renderedCommunitySignalsSection ? 'yes' : 'no'}`,
       entry.renderedTrustLabelCount == null ? null : `renderedTrustLabels=${entry.renderedTrustLabelCount}`,
+      entry.renderedCommunitySourceLabel == null ? null : `communitySourceLabel=${entry.renderedCommunitySourceLabel ? 'yes' : 'no'}`,
     ].filter(Boolean).join(' '));
   });
 

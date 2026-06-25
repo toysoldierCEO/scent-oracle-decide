@@ -27,13 +27,16 @@ export function AuthDiagnosticPanel({
   const [enabled, setEnabled] = useState(false);
   const [getSessionConfirmsSession, setGetSessionConfirmsSession] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reopenAvailable, setReopenAvailable] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     setEnabled(readAuthDebugEnabled());
     const handleEnabled = (event: Event) => {
       const customEvent = event as CustomEvent<{ enabled?: boolean }>;
-      setEnabled(customEvent.detail?.enabled ?? readAuthDebugEnabled());
+      const nextEnabled = customEvent.detail?.enabled ?? readAuthDebugEnabled();
+      setEnabled(nextEnabled);
+      if (nextEnabled) setReopenAvailable(false);
     };
     window.addEventListener('odara-auth-debug-enabled', handleEnabled);
     return () => window.removeEventListener('odara-auth-debug-enabled', handleEnabled);
@@ -78,6 +81,7 @@ export function AuthDiagnosticPanel({
     const enableFromGesture = (reason: string) => {
       clearPressTimer();
       setAuthDebugEnabled(true);
+      setReopenAvailable(false);
       recordOdaraAuthTrace({
         accessMode,
         authReady,
@@ -146,8 +150,6 @@ export function AuthDiagnosticPanel({
     });
   }, [accessMode, authReady, enabled, getSessionConfirmsSession, guestOverride, tick, userPresent]);
 
-  if (!enabled) return null;
-
   const copySummary = async () => {
     setCopied(false);
     try {
@@ -164,6 +166,7 @@ export function AuthDiagnosticPanel({
     dismissAuthDebugPanel();
     setEnabled(false);
     setCopied(false);
+    setReopenAvailable(true);
     recordOdaraAuthTrace({
       accessMode,
       authReady,
@@ -174,6 +177,39 @@ export function AuthDiagnosticPanel({
       userPresent,
     });
   };
+
+  const reopenPanel = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAuthDebugEnabled(true);
+    setEnabled(true);
+    setReopenAvailable(false);
+    recordOdaraAuthTrace({
+      accessMode,
+      authReady,
+      decision: 'enabled',
+      reason: 'diagnostic_reopen_button',
+      source: 'auth-debug',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent,
+    });
+  };
+
+  if (!enabled && reopenAvailable) {
+    return (
+      <button
+        aria-label="Open Odara diagnostics"
+        className="fixed bottom-3 right-3 z-[9999] rounded-full border border-border/40 bg-background/90 px-3 py-2 text-[11px] font-medium text-foreground shadow-lg backdrop-blur"
+        data-odara-auth-debug-ignore
+        onClick={reopenPanel}
+        type="button"
+      >
+        Diagnostics
+      </button>
+    );
+  }
+
+  if (!enabled) return null;
 
   return (
     <section

@@ -26,6 +26,24 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).toContain('data-odara-auth-debug-ignore');
   });
 
+  it('keeps diagnostics reachable from menu and detail states when debug mode is enabled', () => {
+    expect(source).toContain('readAuthDebugEnabled');
+    expect(source).toContain('setAuthDebugEnabled(true)');
+    expect(source).toContain('root_menu_diagnostics_button');
+    expect(source).toContain('detail_footer_diagnostics_button');
+    expect(source).toContain('Open diagnostics');
+  });
+
+  it('records detail community counters that identify where Sienna evidence is lost', () => {
+    expect(source).toContain('approvedFragranticaRowPresent');
+    expect(source).toContain('cacheKey');
+    expect(source).toContain('detailFetchStatus');
+    expect(source).toContain('intelligenceFetchSuccess');
+    expect(source).toContain('renderedAccordsSection');
+    expect(source).toContain('renderedCommunitySignalsSection');
+    expect(source).toContain('renderedCommunitySourceLabel');
+  });
+
   it('records safe day-tap breadcrumbs before dispatching the selected date change', () => {
     const handlerSnippet = source.slice(
       source.indexOf('const selectNavigationDay'),

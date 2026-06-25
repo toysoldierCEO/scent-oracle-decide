@@ -25,8 +25,13 @@ describe('auth-diagnostic', () => {
   it('enables and disables the real-device diagnostic from a query param', () => {
     expect(isAuthDebugSearchEnabled('?odaraAuthDebug=1')).toBe(true);
     expect(isAuthDebugSearchEnabled('?odaraAuthDebug=true')).toBe(true);
+    expect(isAuthDebugSearchEnabled('?odaraDetailDebug=1')).toBe(true);
+    expect(isAuthDebugSearchEnabled('?odaraDetailDebug=true')).toBe(true);
+    expect(isAuthDebugSearchEnabled('?other=1')).toBe(false);
     expect(isAuthDebugSearchDisabled('?odaraAuthDebug=0')).toBe(true);
     expect(isAuthDebugSearchDisabled('?odaraAuthDebug=false')).toBe(true);
+    expect(isAuthDebugSearchDisabled('?odaraDetailDebug=0')).toBe(true);
+    expect(isAuthDebugSearchDisabled('?odaraDetailDebug=false')).toBe(true);
 
     window.history.replaceState(null, '', '/?odaraAuthDebug=1');
     expect(readAuthDebugEnabled()).toBe(true);
@@ -71,6 +76,12 @@ describe('auth-diagnostic', () => {
     expect(window.location.search).toBe('?keep=true');
     expect(window.location.hash).toBe('#top');
 
+    window.history.replaceState(null, '', '/?odaraDetailDebug=1&keep=true#top');
+    expect(readAuthDebugEnabled()).toBe(true);
+    expect(removeAuthDebugSearchParamFromCurrentUrl()).toBe(true);
+    expect(window.location.search).toBe('?keep=true');
+    expect(window.location.hash).toBe('#top');
+
     window.history.replaceState(null, '', '/?odaraAuthDebug=1');
     setAuthDebugEnabled(true);
     dismissAuthDebugPanel();
@@ -101,23 +112,34 @@ describe('auth-diagnostic', () => {
       projectRef: 'projectref',
       detailCommunityEvidenceTrace: [{
         accordCount: 10,
+        approvedFragranticaRowPresent: true,
         buildCommit: 'abc1234',
         cacheComplete: false,
         cacheHit: true,
+        cacheKey: 'sienna-id',
         cacheVersion: null,
+        collectionPreviewChipSources: ['family'],
         communityEvidenceChecked: true,
         communityEvidenceMappedCount: 1,
         communityRowsReturnedCount: 1,
         communitySignalsCount: 9,
         decision: 'detail_sheet_render_ready',
         detailFetchAttempted: true,
+        detailFetchStatus: 'success',
         detailOpen: true,
         detailOpenedFromCollection: true,
+        fragranceBrand: 'Mihan Aromatics',
         fragranceId: 'sienna-id',
         fragranceName: 'Sienna Brume',
+        intelligenceFetchAttempted: true,
+        intelligenceFetchError: false,
+        intelligenceFetchSuccess: true,
         mappedCount: 1,
         renderedAccordCount: 10,
+        renderedAccordsSection: true,
+        renderedCommunitySourceLabel: true,
         renderedCommunitySignalCount: 9,
+        renderedCommunitySignalsSection: true,
         renderedTrustLabelCount: 1,
         resolverCacheVersion: 'community-evidence-v3',
         resolverDisabled: false,
@@ -194,13 +216,22 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('navigation=reload');
     expect(summary).toContain('detail community evidence events:');
     expect(summary).toContain('fragrance=Sienna Brume');
+    expect(summary).toContain('brand=Mihan Aromatics');
+    expect(summary).toContain('cacheKey=sienna-id');
+    expect(summary).toContain('fetchStatus=success');
+    expect(summary).toContain('intelligenceFetch=yes');
+    expect(summary).toContain('intelligenceSuccess=yes');
     expect(summary).toContain('communityRows=1');
+    expect(summary).toContain('fragranticaRow=yes');
     expect(summary).toContain('mapped=1');
     expect(summary).toContain('accords=10');
     expect(summary).toContain('signals=9');
     expect(summary).toContain('renderedAccords=10');
+    expect(summary).toContain('accordsSection=yes');
     expect(summary).toContain('renderedSignals=9');
+    expect(summary).toContain('signalsSection=yes');
     expect(summary).toContain('renderedTrustLabels=1');
+    expect(summary).toContain('communitySourceLabel=yes');
     expect(summary).toContain('storage=local');
     expect(summary).toContain('storageKey=sb-test-auth-token');
     expect(summary).toContain('localAuthKey=yes');

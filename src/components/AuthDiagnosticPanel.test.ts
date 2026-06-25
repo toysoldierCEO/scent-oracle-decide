@@ -14,6 +14,13 @@ describe('AuthDiagnosticPanel', () => {
     expect(source).toContain('diagnostic_close_button');
   });
 
+  it('offers a same-page diagnostics reopen affordance after close', () => {
+    expect(source).toContain('reopenAvailable');
+    expect(source).toContain('aria-label="Open Odara diagnostics"');
+    expect(source).toContain('diagnostic_reopen_button');
+    expect(source).toContain('Diagnostics');
+  });
+
   it('keeps copy summary separate from the close behavior', () => {
     expect(source).toContain("await navigator.clipboard.writeText(summary)");
     expect(source).toContain("{copied ? 'Copied' : 'Copy summary'}");
