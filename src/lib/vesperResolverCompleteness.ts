@@ -2,10 +2,11 @@ type ResolverCompletenessDetail = {
   vesper_intelligence?: unknown;
   vesper_metadata?: unknown;
   vesper_community_evidence?: unknown;
+  vesper_community_evidence_checked?: unknown;
   vesper_resolver_cache_version?: unknown;
 } | null | undefined;
 
-export const ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION = 'community-evidence-v2';
+export const ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION = 'community-evidence-v3';
 
 function hasOwnField(detail: NonNullable<ResolverCompletenessDetail>, field: keyof NonNullable<ResolverCompletenessDetail>) {
   return Object.prototype.hasOwnProperty.call(detail, field);
@@ -19,5 +20,6 @@ export function isVesperResolverDetailCompleteForCache(
     && hasOwnField(detail, 'vesper_intelligence')
     && hasOwnField(detail, 'vesper_metadata')
     && hasOwnField(detail, 'vesper_community_evidence')
+    && detail.vesper_community_evidence_checked === true
     && detail.vesper_resolver_cache_version === ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION;
 }

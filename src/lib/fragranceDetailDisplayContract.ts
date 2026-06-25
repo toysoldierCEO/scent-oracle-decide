@@ -510,9 +510,6 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     ],
   });
   pushChip(familyDisplayLabel, 'family');
-  if (familyDisplayLabel === 'Fresh Aquatic' || normalizeDisplayKey(input.familyKey) === 'fresh blue') {
-    pushChip('Aromatic', 'style');
-  }
 
   const identityNoteLabels = hasStructuredNoteSections
     ? [...topLabels, ...middleLabels, ...baseLabels]
@@ -627,6 +624,7 @@ export function buildFragranceCardDisplayModel(input: FragranceCardDisplayModelI
   const previewChips = model.heroProfileChips
     .filter((chip) => chip.position !== 'family')
     .filter((chip) => chip.position !== 'note')
+    .filter((chip) => chip.position !== 'accord')
     .filter((chip) => normalizeDisplayKey(chip.label) !== familyKey)
     .filter((chip) => isScentProfileChip(chip.label))
     .slice(0, input.maxPreviewChips ?? 3);

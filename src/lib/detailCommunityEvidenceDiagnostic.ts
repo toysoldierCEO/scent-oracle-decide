@@ -10,11 +10,17 @@ export type OdaraDetailCommunityEvidenceTraceEntry = {
   cacheComplete?: boolean;
   cacheHit?: boolean;
   cacheVersion?: string | null;
+  collectionPreviewChipCount?: number;
+  collectionPreviewCommunityChipCount?: number;
+  collectionPreviewFamilyChipCount?: number;
+  communityEvidenceChecked?: boolean;
   communityEvidenceMappedCount?: number;
   communityRowsReturnedCount?: number;
   communitySignalsCount?: number;
   decision: string;
   detailOpen?: boolean;
+  detailOpenedFromCollection?: boolean;
+  detailFetchAttempted?: boolean;
   fragranceId?: string | null;
   fragranceName?: string | null;
   host?: string;

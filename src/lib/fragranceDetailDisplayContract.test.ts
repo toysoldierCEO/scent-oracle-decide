@@ -199,6 +199,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.structuredNoteSections[0]?.values).not.toContain('White Pepper');
     expect(model.accordLabels).toContain('coconut');
     expect(model.communityEvidence?.communityNotes).toContain('White Pepper');
+    expect(model.communityEvidence?.trustLine).toBe('Community/provider evidence · Fragrantica');
     expect(model.communityEvidence?.conflictsWithOfficialNotes).toBe(true);
     expect(model.detailSectionOrder).toEqual([
       'family',
@@ -513,7 +514,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(description).not.toContain('juniper Berry');
   });
 
-  it('builds collection card chips without raw family keys or repeated note chips', () => {
+  it('builds collection card chips without raw family keys, repeated notes, or loose accord previews', () => {
     const model = buildFragranceCardDisplayModel({
       familyKey: 'fresh-blue',
       familyLabel: 'FRESH-BLUE',
@@ -528,17 +529,18 @@ describe('fragranceDetailDisplayContract', () => {
     const previewLabels = model.previewChips.map((chip) => chip.label);
     expect(model.familyChipLabel).toBe('Fresh Aquatic');
     expect(model.familyChipLabel).not.toBe('FRESH-BLUE');
-    expect(previewLabels).toEqual(['Aromatic']);
+    expect(previewLabels).toEqual([]);
     expect(previewLabels).not.toContain('Italian Lemon');
     expect(previewLabels).not.toContain('Australian Coastal Moss');
     expect(previewLabels).not.toContain('Lemon Italy');
     expect(previewLabels).not.toContain('Sage France');
+    expect(previewLabels).not.toContain('Aromatic');
     expect(previewLabels).not.toContain('EDP');
     expect(previewLabels).not.toContain('Official Pyramid');
     expect(previewLabels.length).toBeLessThanOrEqual(3);
   });
 
-  it('keeps Sienna collection preview chips from repeating official notes', () => {
+  it('keeps Sienna collection preview chips from leaking community-only accord labels', () => {
     const model = buildFragranceCardDisplayModel({
       familyKey: 'fresh-blue',
       familyLabel: 'Fresh Aquatic',
@@ -551,7 +553,8 @@ describe('fragranceDetailDisplayContract', () => {
 
     const previewLabels = model.previewChips.map((chip) => chip.label);
     expect(model.familyChipLabel).toBe('Fresh Aquatic');
-    expect(previewLabels).toEqual(['Aromatic']);
+    expect(previewLabels).toEqual([]);
+    expect(previewLabels).not.toContain('Aromatic');
     expect(previewLabels).not.toContain('Sea Air');
     expect(previewLabels).not.toContain('Bergamot');
     expect(previewLabels).not.toContain('Soft Coconut');

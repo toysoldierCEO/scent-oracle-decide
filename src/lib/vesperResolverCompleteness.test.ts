@@ -23,6 +23,7 @@ describe('isVesperResolverDetailCompleteForCache', () => {
       vesper_intelligence: null,
       vesper_metadata: null,
       vesper_community_evidence: null,
+      vesper_community_evidence_checked: true,
       vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
     }, false)).toBe(true);
   });
@@ -43,7 +44,17 @@ describe('isVesperResolverDetailCompleteForCache', () => {
         hasApprovedEvidence: true,
         sourceLabel: 'Fragrantica',
       },
+      vesper_community_evidence_checked: true,
       vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
     }, false)).toBe(true);
+  });
+
+  it('invalidates same-version details that never positively checked community evidence', () => {
+    expect(isVesperResolverDetailCompleteForCache({
+      vesper_intelligence: { intelligence_source_type: 'official_brand' },
+      vesper_metadata: { resolved_concentration: 'PARFUM' },
+      vesper_community_evidence: null,
+      vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+    }, false)).toBe(false);
   });
 });

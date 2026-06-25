@@ -1534,6 +1534,7 @@ interface FragranceDetail {
   image_last_checked_at?: string | null;
   vesper_intelligence?: VesperFragranceIntelligence | null;
   vesper_community_evidence?: CommunityEvidenceDisplayModel | null;
+  vesper_community_evidence_checked?: boolean | null;
   vesper_resolver_cache_version?: string | null;
   vesper_metadata?: VesperFragranceMetadata | null;
   vesper_metadata_applied?: VesperMetadataAppliedFields | null;
@@ -6006,6 +6007,7 @@ type OdaraFragranceDetailSurfaceState = {
   detail_error?: string | null;
   vesper_intelligence?: VesperFragranceIntelligence | null;
   vesper_community_evidence?: CommunityEvidenceDisplayModel | null;
+  vesper_community_evidence_checked?: boolean | null;
   vesper_resolver_cache_version?: string | null;
   vesper_metadata?: VesperFragranceMetadata | null;
   vesper_metadata_applied?: VesperMetadataAppliedFields | null;
@@ -8554,6 +8556,7 @@ function mergeFragranceDetailSurfaceState(
     detail_error: null,
     vesper_intelligence: current.vesper_intelligence ?? detail.vesper_intelligence ?? null,
     vesper_community_evidence: current.vesper_community_evidence ?? detail.vesper_community_evidence ?? null,
+    vesper_community_evidence_checked: current.vesper_community_evidence_checked ?? detail.vesper_community_evidence_checked ?? null,
     vesper_resolver_cache_version: current.vesper_resolver_cache_version ?? detail.vesper_resolver_cache_version ?? null,
     vesper_metadata: current.vesper_metadata ?? detail.vesper_metadata ?? null,
     vesper_metadata_applied: current.vesper_metadata_applied ?? detail.vesper_metadata_applied ?? null,
@@ -8627,6 +8630,7 @@ function mergeFragranceDetailSurfaceSeed(
     detail_error: primary.detail_error ?? fallback.detail_error ?? null,
     vesper_intelligence: primary.vesper_intelligence ?? fallback.vesper_intelligence ?? null,
     vesper_community_evidence: primary.vesper_community_evidence ?? fallback.vesper_community_evidence ?? null,
+    vesper_community_evidence_checked: primary.vesper_community_evidence_checked ?? fallback.vesper_community_evidence_checked ?? null,
     vesper_resolver_cache_version: primary.vesper_resolver_cache_version ?? fallback.vesper_resolver_cache_version ?? null,
     vesper_metadata: primary.vesper_metadata ?? fallback.vesper_metadata ?? null,
     vesper_metadata_applied: primary.vesper_metadata_applied ?? fallback.vesper_metadata_applied ?? null,
@@ -8734,11 +8738,13 @@ async function fetchOdaraFragranceDetailForSurface(
       ),
       metadata,
       )),
+      vesper_community_evidence_checked: true,
       vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
     };
     recordOdaraDetailCommunityEvidenceTrace({
       accordCount: detail.vesper_community_evidence?.accords.length ?? 0,
       communityEvidenceMappedCount: getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, baseDetail.id, fragranceId).length,
+      communityEvidenceChecked: true,
       communitySignalsCount: detail.vesper_community_evidence?.communityNotes.length ?? 0,
       decision: 'surface_detail_model_built',
       fragranceId: baseDetail.id,
@@ -10915,6 +10921,7 @@ const OdaraFragranceDetailSheet: React.FC<{
     const communityEvidence = detail.vesper_community_evidence ?? null;
     recordOdaraDetailCommunityEvidenceTrace({
       accordCount: communityEvidence?.accords.length ?? 0,
+      communityEvidenceChecked: detail.vesper_community_evidence_checked === true,
       communitySignalsCount: communityEvidence?.communityNotes.length ?? 0,
       decision: 'detail_sheet_render_ready',
       detailOpen: true,
@@ -10930,6 +10937,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   }, [
     detail?.fragrance_id,
     detail?.name,
+    detail?.vesper_community_evidence_checked,
     detail?.vesper_community_evidence?.accords.length,
     detail?.vesper_community_evidence?.communityNotes.length,
     detail?.vesper_community_evidence?.trustLine,
@@ -12738,9 +12746,30 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   useEffect(() => {
     if (surface !== 'detail' || !selectedFragranceId || !activeSessionUserId) return;
     const existing = detailHydrationById[selectedFragranceId];
-    if (existing?.detail || existing?.loading || existing?.error) return;
+    const existingDetailComplete = Boolean(
+      existing?.detail && isVesperResolverDetailCompleteForCache(existing.detail, false),
+    );
+    if (existingDetailComplete || existing?.loading || existing?.error) return;
 
     let cancelled = false;
+    recordOdaraDetailCommunityEvidenceTrace({
+      accordCount: existing?.detail?.vesper_community_evidence?.accords.length ?? 0,
+      cacheComplete: existingDetailComplete,
+      cacheHit: Boolean(existing?.detail),
+      cacheVersion: existing?.detail?.vesper_resolver_cache_version ?? null,
+      communityEvidenceChecked: existing?.detail?.vesper_community_evidence_checked === true,
+      communitySignalsCount: existing?.detail?.vesper_community_evidence?.communityNotes.length ?? 0,
+      decision: 'wardrobe_detail_hydration_requested',
+      detailFetchAttempted: true,
+      detailOpen: true,
+      detailOpenedFromCollection: true,
+      fragranceId: selectedFragranceId,
+      fragranceName: existing?.detail?.name ?? null,
+      resolverCacheVersion: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+      resolverDisabled: false,
+      source: 'detail-cache',
+      trustLabelCount: existing?.detail?.vesper_community_evidence?.trustLine ? 1 : 0,
+    });
     setDetailHydrationById((current) => ({
       ...current,
       [selectedFragranceId]: {
@@ -14883,7 +14912,23 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                   key={card.fragrance_id}
                   data-collection-card
                   ariaLabel={`Open ${card.name} profile`}
-                  onOpen={() => openDetail(card.fragrance_id, 'wardrobe')}
+                  onOpen={() => {
+                    recordOdaraDetailCommunityEvidenceTrace({
+                      collectionPreviewChipCount: railChips.length,
+                      collectionPreviewCommunityChipCount: railChips.filter((chip) => (
+                        chip.position === 'community' || chip.position === 'accord'
+                      )).length,
+                      collectionPreviewFamilyChipCount: familyChipLabel ? 1 : 0,
+                      decision: 'collection_card_open_requested',
+                      detailFetchAttempted: true,
+                      detailOpenedFromCollection: true,
+                      fragranceId: card.fragrance_id,
+                      fragranceName: card.name,
+                      resolverCacheVersion: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+                      source: 'detail-cache',
+                    });
+                    openDetail(card.fragrance_id, 'wardrobe');
+                  }}
                   className="group relative block w-full cursor-pointer overflow-hidden rounded-[30px] p-[1px] text-left transition duration-200 hover:-translate-y-[1px] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/24"
                   style={{
                     ...cardVisual.surfaceStyle,
@@ -15946,6 +15991,7 @@ const OdaraScreen = ({
           cacheComplete: true,
           cacheHit: true,
           cacheVersion: cached.vesper_resolver_cache_version ?? null,
+          communityEvidenceChecked: cached.vesper_community_evidence_checked === true,
           communitySignalsCount: cached.vesper_community_evidence?.communityNotes.length ?? 0,
           decision: 'batch_detail_cache_hit',
           fragranceId,
@@ -15961,6 +16007,7 @@ const OdaraScreen = ({
           cacheComplete: Boolean(cached && isVesperResolverDetailCompleteForCache(cached, resolverDisabled)),
           cacheHit: Boolean(cached),
           cacheVersion: cached?.vesper_resolver_cache_version ?? null,
+          communityEvidenceChecked: cached?.vesper_community_evidence_checked === true,
           decision: 'batch_detail_cache_miss',
           fragranceId,
           fragranceName: cached?.name ?? null,
@@ -16052,10 +16099,12 @@ const OdaraScreen = ({
           ),
           vesperResolverMaps.metadata.get(row.id) ?? null,
           )),
+          vesper_community_evidence_checked: true,
           vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
         };
         recordOdaraDetailCommunityEvidenceTrace({
           accordCount: detail.vesper_community_evidence?.accords.length ?? 0,
+          communityEvidenceChecked: true,
           communityEvidenceMappedCount: getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, row.id).length,
           communitySignalsCount: detail.vesper_community_evidence?.communityNotes.length ?? 0,
           decision: 'batch_detail_model_built',
@@ -16168,6 +16217,7 @@ const OdaraScreen = ({
         cacheComplete: true,
         cacheHit: true,
         cacheVersion: cached.vesper_resolver_cache_version ?? null,
+        communityEvidenceChecked: cached.vesper_community_evidence_checked === true,
         communitySignalsCount: cached.vesper_community_evidence?.communityNotes.length ?? 0,
         decision: 'single_detail_cache_hit',
         fragranceId,
@@ -16183,6 +16233,7 @@ const OdaraScreen = ({
       cacheComplete: Boolean(cached?.profile_loaded && isVesperResolverDetailCompleteForCache(cached, resolverDisabled)),
       cacheHit: Boolean(cached),
       cacheVersion: cached?.vesper_resolver_cache_version ?? null,
+      communityEvidenceChecked: cached?.vesper_community_evidence_checked === true,
       decision: 'single_detail_cache_miss',
       fragranceId,
       fragranceName: cached?.name ?? null,
@@ -16287,10 +16338,12 @@ const OdaraScreen = ({
           ),
           metadata,
           )),
+          vesper_community_evidence_checked: true,
           vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
         };
         recordOdaraDetailCommunityEvidenceTrace({
           accordCount: detail.vesper_community_evidence?.accords.length ?? 0,
+          communityEvidenceChecked: true,
           communityEvidenceMappedCount: getVesperCommunityEvidenceRows(vesperResolverMaps.communityEvidence, baseDetail.id, fragranceId).length,
           communitySignalsCount: detail.vesper_community_evidence?.communityNotes.length ?? 0,
           decision: 'single_detail_model_built',
@@ -16330,6 +16383,29 @@ const OdaraScreen = ({
           cachedDetail,
         )
       : seed;
+    if (seed.fragrance_id) {
+      recordOdaraDetailCommunityEvidenceTrace({
+        accordCount: initialState.vesper_community_evidence?.accords.length ?? 0,
+        cacheComplete: cachedDetailComplete,
+        cacheHit: Boolean(cachedDetail),
+        cacheVersion: cachedDetail?.vesper_resolver_cache_version ?? null,
+        collectionPreviewChipCount: 0,
+        collectionPreviewCommunityChipCount: 0,
+        collectionPreviewFamilyChipCount: initialState.family_label ? 1 : 0,
+        communityEvidenceChecked: cachedDetail?.vesper_community_evidence_checked === true,
+        communitySignalsCount: initialState.vesper_community_evidence?.communityNotes.length ?? 0,
+        decision: 'detail_open_requested',
+        detailFetchAttempted: true,
+        detailOpen: true,
+        detailOpenedFromCollection: seed.source_label === 'Collection profile' || Boolean(seed.collection_status),
+        fragranceId: seed.fragrance_id,
+        fragranceName: seed.name ?? null,
+        resolverCacheVersion: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+        resolverDisabled,
+        source: 'detail-cache',
+        trustLabelCount: initialState.vesper_community_evidence?.trustLine ? 1 : 0,
+      });
+    }
     setFragranceDetailSheet({
       ...initialState,
       detail_loading: Boolean(seed.fragrance_id) && !cachedDetailComplete,
