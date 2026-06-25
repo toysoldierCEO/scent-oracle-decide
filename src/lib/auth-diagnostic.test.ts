@@ -80,6 +80,29 @@ describe('auth-diagnostic', () => {
       packageVersion: '0.0.0',
       pathname: '/',
       projectRef: 'projectref',
+      detailCommunityEvidenceTrace: [{
+        accordCount: 10,
+        buildCommit: 'abc1234',
+        cacheComplete: false,
+        cacheHit: true,
+        cacheVersion: null,
+        communityEvidenceMappedCount: 1,
+        communityRowsReturnedCount: 1,
+        communitySignalsCount: 9,
+        decision: 'detail_sheet_render_ready',
+        detailOpen: true,
+        fragranceId: 'sienna-id',
+        fragranceName: 'Sienna Brume',
+        mappedCount: 1,
+        renderedAccordCount: 10,
+        renderedCommunitySignalCount: 9,
+        renderedTrustLabelCount: 1,
+        resolverCacheVersion: 'community-evidence-v2',
+        resolverDisabled: false,
+        source: 'detail-render',
+        timestamp: '2026-06-22T00:00:02.000Z',
+        trustLabelCount: 1,
+      }],
       reloadCrashTrace: [{
         accessMode: 'signed-in',
         authReady: true,
@@ -145,6 +168,15 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('event=SIGNED_IN');
     expect(summary).toContain('reload/crash events:');
     expect(summary).toContain('navigation=reload');
+    expect(summary).toContain('detail community evidence events:');
+    expect(summary).toContain('fragrance=Sienna Brume');
+    expect(summary).toContain('communityRows=1');
+    expect(summary).toContain('mapped=1');
+    expect(summary).toContain('accords=10');
+    expect(summary).toContain('signals=9');
+    expect(summary).toContain('renderedAccords=10');
+    expect(summary).toContain('renderedSignals=9');
+    expect(summary).toContain('renderedTrustLabels=1');
     expect(summary).toContain('storage=local');
     expect(summary).toContain('storageKey=sb-test-auth-token');
     expect(summary).toContain('localAuthKey=yes');

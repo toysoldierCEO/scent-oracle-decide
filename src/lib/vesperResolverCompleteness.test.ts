@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { isVesperResolverDetailCompleteForCache } from './vesperResolverCompleteness';
+import {
+  ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+  isVesperResolverDetailCompleteForCache,
+} from './vesperResolverCompleteness';
 
 describe('isVesperResolverDetailCompleteForCache', () => {
   it('treats resolver-disabled details as complete without requiring resolver fields', () => {
@@ -20,7 +23,16 @@ describe('isVesperResolverDetailCompleteForCache', () => {
       vesper_intelligence: null,
       vesper_metadata: null,
       vesper_community_evidence: null,
+      vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
     }, false)).toBe(true);
+  });
+
+  it('invalidates old official-only details fetched before the community evidence cache generation', () => {
+    expect(isVesperResolverDetailCompleteForCache({
+      vesper_intelligence: null,
+      vesper_metadata: null,
+      vesper_community_evidence: null,
+    }, false)).toBe(false);
   });
 
   it('keeps Sienna-style details cacheable after approved community evidence attaches', () => {
@@ -31,6 +43,7 @@ describe('isVesperResolverDetailCompleteForCache', () => {
         hasApprovedEvidence: true,
         sourceLabel: 'Fragrantica',
       },
+      vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
     }, false)).toBe(true);
   });
 });

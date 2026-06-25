@@ -9,6 +9,10 @@ import {
   type OdaraReloadCrashEntry,
   readSafeOdaraReloadCrashTrace,
 } from './page-reload-crash-recorder';
+import {
+  type OdaraDetailCommunityEvidenceTraceEntry,
+  readSafeOdaraDetailCommunityEvidenceTrace,
+} from './detailCommunityEvidenceDiagnostic';
 
 export const ODARA_AUTH_DEBUG_QUERY_PARAM = 'odaraAuthDebug';
 export const ODARA_AUTH_DEBUG_STORAGE_KEY = 'odara_auth_debug_enabled_v1';
@@ -32,6 +36,7 @@ export type AuthDiagnosticSummaryInput = {
   packageVersion?: string;
   pathname: string;
   projectRef: string;
+  detailCommunityEvidenceTrace: OdaraDetailCommunityEvidenceTraceEntry[];
   reloadCrashTrace: OdaraReloadCrashEntry[];
   storageKeyName: string;
   storageMode: 'local' | 'session';
@@ -216,6 +221,32 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     ].filter(Boolean).join(' '));
   });
 
+  lines.push('detail community evidence events:');
+  input.detailCommunityEvidenceTrace.slice(-20).forEach((entry, index) => {
+    lines.push([
+      `${index + 1}.`,
+      entry.timestamp,
+      `source=${entry.source}`,
+      `decision=${entry.decision}`,
+      entry.fragranceId ? `fragranceId=${entry.fragranceId}` : null,
+      entry.fragranceName ? `fragrance=${entry.fragranceName}` : null,
+      entry.cacheHit == null ? null : `cacheHit=${entry.cacheHit ? 'yes' : 'no'}`,
+      entry.cacheComplete == null ? null : `cacheComplete=${entry.cacheComplete ? 'yes' : 'no'}`,
+      entry.cacheVersion ? `cacheVersion=${entry.cacheVersion}` : null,
+      entry.resolverCacheVersion ? `resolverVersion=${entry.resolverCacheVersion}` : null,
+      entry.resolverDisabled == null ? null : `resolverDisabled=${entry.resolverDisabled ? 'yes' : 'no'}`,
+      entry.communityRowsReturnedCount == null ? null : `communityRows=${entry.communityRowsReturnedCount}`,
+      entry.mappedCount == null ? null : `mapped=${entry.mappedCount}`,
+      entry.communityEvidenceMappedCount == null ? null : `mappedEvidence=${entry.communityEvidenceMappedCount}`,
+      entry.accordCount == null ? null : `accords=${entry.accordCount}`,
+      entry.communitySignalsCount == null ? null : `signals=${entry.communitySignalsCount}`,
+      entry.trustLabelCount == null ? null : `trustLabels=${entry.trustLabelCount}`,
+      entry.renderedAccordCount == null ? null : `renderedAccords=${entry.renderedAccordCount}`,
+      entry.renderedCommunitySignalCount == null ? null : `renderedSignals=${entry.renderedCommunitySignalCount}`,
+      entry.renderedTrustLabelCount == null ? null : `renderedTrustLabels=${entry.renderedTrustLabelCount}`,
+    ].filter(Boolean).join(' '));
+  });
+
   return lines.join('\n');
 }
 
@@ -228,6 +259,7 @@ export function getCurrentAuthDiagnosticBase(storageKeyName: string, projectRef:
     packageVersion: ODARA_BUILD_INFO.packageVersion,
     pathname: typeof window === 'undefined' ? 'unknown' : window.location.pathname,
     projectRef,
+    detailCommunityEvidenceTrace: readSafeOdaraDetailCommunityEvidenceTrace(),
     reloadCrashTrace: readSafeOdaraReloadCrashTrace(),
     storageKeyName,
     storageMode: readSafeAuthStorageMode(),
