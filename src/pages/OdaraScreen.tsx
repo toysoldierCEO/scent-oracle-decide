@@ -50,6 +50,7 @@ import {
   ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
   isVesperResolverDetailCompleteForCache,
 } from "@/lib/vesperResolverCompleteness";
+import { mergeVesperResolverSurfaceFields } from "@/lib/vesperResolverSurfaceMerge";
 import {
   resolveSignedInAddAsTodayDisabledReason,
   resolveSignedInAddAsTodayLocked,
@@ -8551,6 +8552,7 @@ function mergeFragranceDetailSurfaceState(
   if (!detail) return current;
   const roleFields = resolveDetailRoleFields(detail, current);
   const performanceFields = resolveDetailPerformanceFields(detail, current);
+  const resolverFields = mergeVesperResolverSurfaceFields(current, detail);
   return {
     ...current,
     fragrance_id: current.fragrance_id ?? detail.id,
@@ -8603,12 +8605,12 @@ function mergeFragranceDetailSurfaceState(
     rating: current.rating ?? normalizeCollectionRating(detail.rating),
     detail_loading: false,
     detail_error: null,
-    vesper_intelligence: current.vesper_intelligence ?? detail.vesper_intelligence ?? null,
-    vesper_community_evidence: current.vesper_community_evidence ?? detail.vesper_community_evidence ?? null,
-    vesper_community_evidence_checked: current.vesper_community_evidence_checked ?? detail.vesper_community_evidence_checked ?? null,
-    vesper_resolver_cache_version: current.vesper_resolver_cache_version ?? detail.vesper_resolver_cache_version ?? null,
-    vesper_metadata: current.vesper_metadata ?? detail.vesper_metadata ?? null,
-    vesper_metadata_applied: current.vesper_metadata_applied ?? detail.vesper_metadata_applied ?? null,
+    vesper_intelligence: resolverFields.vesper_intelligence as VesperFragranceIntelligence | null,
+    vesper_community_evidence: resolverFields.vesper_community_evidence as CommunityEvidenceDisplayModel | null,
+    vesper_community_evidence_checked: resolverFields.vesper_community_evidence_checked as boolean | null,
+    vesper_resolver_cache_version: resolverFields.vesper_resolver_cache_version as string | null,
+    vesper_metadata: resolverFields.vesper_metadata as VesperFragranceMetadata | null,
+    vesper_metadata_applied: resolverFields.vesper_metadata_applied as VesperMetadataAppliedFields | null,
   };
 }
 
@@ -8620,6 +8622,7 @@ function mergeFragranceDetailSurfaceSeed(
 
   const roleFields = resolveDetailRoleFields(primary, fallback);
   const performanceFields = resolveDetailPerformanceFields(primary, fallback);
+  const resolverFields = mergeVesperResolverSurfaceFields(primary, fallback);
 
   return {
     ...fallback,
@@ -8677,12 +8680,12 @@ function mergeFragranceDetailSurfaceSeed(
     source_label: primary.source_label ?? fallback.source_label ?? null,
     detail_loading: primary.detail_loading ?? fallback.detail_loading ?? false,
     detail_error: primary.detail_error ?? fallback.detail_error ?? null,
-    vesper_intelligence: primary.vesper_intelligence ?? fallback.vesper_intelligence ?? null,
-    vesper_community_evidence: primary.vesper_community_evidence ?? fallback.vesper_community_evidence ?? null,
-    vesper_community_evidence_checked: primary.vesper_community_evidence_checked ?? fallback.vesper_community_evidence_checked ?? null,
-    vesper_resolver_cache_version: primary.vesper_resolver_cache_version ?? fallback.vesper_resolver_cache_version ?? null,
-    vesper_metadata: primary.vesper_metadata ?? fallback.vesper_metadata ?? null,
-    vesper_metadata_applied: primary.vesper_metadata_applied ?? fallback.vesper_metadata_applied ?? null,
+    vesper_intelligence: resolverFields.vesper_intelligence as VesperFragranceIntelligence | null,
+    vesper_community_evidence: resolverFields.vesper_community_evidence as CommunityEvidenceDisplayModel | null,
+    vesper_community_evidence_checked: resolverFields.vesper_community_evidence_checked as boolean | null,
+    vesper_resolver_cache_version: resolverFields.vesper_resolver_cache_version as string | null,
+    vesper_metadata: resolverFields.vesper_metadata as VesperFragranceMetadata | null,
+    vesper_metadata_applied: resolverFields.vesper_metadata_applied as VesperMetadataAppliedFields | null,
   };
 }
 
@@ -11307,7 +11310,7 @@ const OdaraFragranceDetailSheet: React.FC<{
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
               <div className="flex flex-wrap gap-2">
                 {expandAndDeduplicateScentIntelDisplayTerms(
-                  detailAccordLabels.slice(0, 8).map((label) => ({ label, position: 'accord' })),
+                  detailAccordLabels.slice(0, 12).map((label) => ({ label, position: 'accord' })),
                 ).map((chip, index) => {
                   const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                   return (
@@ -11344,7 +11347,7 @@ const OdaraFragranceDetailSheet: React.FC<{
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {expandAndDeduplicateScentIntelDisplayTerms(
-                      communityEvidence.communityNotes.slice(0, 8).map((label) => ({ label, position: 'community' })),
+                      communityEvidence.communityNotes.slice(0, 12).map((label) => ({ label, position: 'community' })),
                     ).map((chip, index) => {
                       const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                       return (
@@ -12368,6 +12371,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     loading: boolean;
     error: string | null;
   }>>({});
+  const detailHydrationByIdRef = useRef(detailHydrationById);
   const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
   const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
   const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
@@ -12788,6 +12792,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, [loadPersistedWearHistory]);
 
   useEffect(() => {
+    detailHydrationByIdRef.current = detailHydrationById;
+  }, [detailHydrationById]);
+
+  useEffect(() => {
     setSessionSignals(readStoredWardrobeSessionSignals(activeSessionUserId));
     setOnboardingSeen(readStoredWardrobeOnboardingSeen(activeSessionUserId));
     setSurface('wardrobe');
@@ -12806,7 +12814,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
 
   useEffect(() => {
     if (surface !== 'detail' || !selectedFragranceId || !activeSessionUserId) return;
-    const existing = detailHydrationById[selectedFragranceId];
+    const existing = detailHydrationByIdRef.current[selectedFragranceId];
     const existingDetailComplete = Boolean(
       existing?.detail && isVesperResolverDetailCompleteForCache(existing.detail, false),
     );
@@ -12863,7 +12871,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [activeSessionUserId, detailHydrationById, selectedFragranceId, surface]);
+  }, [activeSessionUserId, selectedFragranceId, surface]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
