@@ -44,6 +44,13 @@ describe('Index auth storage tracing', () => {
     expect(source).not.toContain('JSON.stringify(session)');
   });
 
+  it('records crash-safe login recovery breadcrumbs and shows the recovery panel on signed-out boot', () => {
+    expect(source).toContain('recordOdaraLoginRecoveryEvent');
+    expect(source).toContain("decision: 'possible_login_persistence_failure'");
+    expect(source).toContain('shouldAutoShowOdaraRecoveryPanel');
+    expect(source).toContain('<LoginRecoveryPanel userPresent={Boolean(user)} />');
+  });
+
   it('uses resolved runtime redirect origin instead of hardcoding auth redirects to the shared preview', () => {
     expect(source).toContain('resolveOdaraAuthRedirectOrigin(window.location.origin)');
     expect(source).toContain('options: { redirectTo: authRedirectOrigin }');

@@ -20,6 +20,13 @@ describe('auth redirect origin resolution', () => {
     });
   });
 
+  it('keeps build-specific Lovable preview runtimes on their current origin', () => {
+    expect(resolveOdaraAuthRedirectOrigin('https://id-preview-35731936--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app')).toEqual({
+      isExternalPreviewRequired: false,
+      redirectOrigin: 'https://id-preview-35731936--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app',
+    });
+  });
+
   it('keeps local development on the local origin', () => {
     expect(resolveOdaraAuthRedirectOrigin('http://127.0.0.1:8080')).toEqual({
       isExternalPreviewRequired: false,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent, type HTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { AuthDiagnosticPanel } from '@/components/AuthDiagnosticPanel';
+import { LoginRecoveryPanel } from '@/components/LoginRecoveryPanel';
 import { ODARA_AUTH_STORAGE_KEY, odaraSupabase } from '@/lib/odara-client';
 import { primeVesperAuthPersistence } from '@/lib/auth-persistence';
 import {
@@ -29,6 +30,11 @@ import {
   recordOdaraReloadCrashEvent,
   updateOdaraReloadCrashContext,
 } from '@/lib/page-reload-crash-recorder';
+import {
+  readPersistedOdaraLoginRecoveryTrace,
+  recordOdaraLoginRecoveryEvent,
+  shouldAutoShowOdaraRecoveryPanel,
+} from '@/lib/login-recovery-diagnostics';
 import OdaraScreen from './OdaraScreen';
 import type { OracleResult } from './OdaraScreen';
 import { useWeather } from '@/hooks/useWeather';
@@ -345,8 +351,10 @@ const Index = () => {
   const diagnosticAccessModeRef = useRef<OdaraAuthTraceAccessMode>(diagnosticAccessMode);
   const hadPersistedAuthTraceOnMountRef = useRef(hasPersistedOdaraAuthTrace());
   const hadPersistedLoginTraceOnMountRef = useRef(
-    readPersistedOdaraAuthTrace().some((entry) => isLoginLifecycleDecision(entry.decision)),
+    readPersistedOdaraAuthTrace().some((entry) => isLoginLifecycleDecision(entry.decision))
+      || readPersistedOdaraLoginRecoveryTrace().some((entry) => isLoginLifecycleDecision(entry.decision)),
   );
+  const loginRecoveryFailureRecordedRef = useRef(false);
   const authRedirectResolution = useMemo(
     () => resolveOdaraAuthRedirectOrigin(window.location.origin),
     [],
@@ -400,6 +408,18 @@ const Index = () => {
       userPresent: Boolean(authUserRef.current),
       ...extras,
     });
+    recordOdaraLoginRecoveryEvent({
+      decision,
+      origin: window.location.origin,
+      originChanged: extras.originChanged,
+      redirectOrigin: extras.redirectOrigin ?? authRedirectOrigin,
+      reason,
+      returnedOrigin: window.location.origin,
+      sessionPresent: extras.sessionPresent,
+      source: decision.startsWith('login_') ? 'login' : decision.includes('auth_key') ? 'storage' : 'auth',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      urlHasAuthParams: extras.urlHasAuthParams ?? hasAuthUrlParams(window.location.search, window.location.hash),
+    });
   }, [authRedirectOrigin]);
 
   const probeImmediateLoginSession = useCallback(async (
@@ -436,6 +456,37 @@ const Index = () => {
     if (!authReady || access.isSignedIn || access.isGuestMode) return;
     recordLoginTrace('login_form_rendered', isCheckEmail ? 'check_email_screen_render' : 'auth_screen_render');
   }, [access.isGuestMode, access.isSignedIn, authReady, isCheckEmail, recordLoginTrace]);
+
+  useEffect(() => {
+    if (!authReady || access.isSignedIn || access.isGuestMode || loginRecoveryFailureRecordedRef.current) return;
+    const storagePresence = readAuthStoragePresence(ODARA_AUTH_STORAGE_KEY);
+    const shouldShowRecovery = shouldAutoShowOdaraRecoveryPanel({
+      localAuthKeyExists: storagePresence.localAuthKeyExists,
+      sessionAuthKeyExists: storagePresence.sessionAuthKeyExists,
+      userPresent: false,
+    });
+    if (!shouldShowRecovery) return;
+
+    loginRecoveryFailureRecordedRef.current = true;
+    recordOdaraLoginRecoveryEvent({
+      decision: 'possible_login_persistence_failure',
+      event: 'app_mount',
+      reason: 'signed_out_after_recent_login_attempt',
+      sessionPresent: false,
+      source: 'auth',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+    });
+    recordOdaraAuthTrace({
+      accessMode: diagnosticAccessMode,
+      authReady,
+      decision: 'possible_login_persistence_failure',
+      reason: 'signed_out_after_recent_login_attempt',
+      sessionPresent: false,
+      source: 'Index',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userPresent: false,
+    });
+  }, [access.isGuestMode, access.isSignedIn, authReady, diagnosticAccessMode]);
 
   useEffect(() => installOdaraReloadCrashRecorder(), []);
 
@@ -492,6 +543,19 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(user),
     });
+    if (hadPersistedLoginTrace) {
+      recordOdaraLoginRecoveryEvent({
+        decision: 'auth_key_after_login_reload',
+        event: 'app_mount',
+        originChanged,
+        reason: 'login_trace_present_on_mount',
+        returnedOrigin: window.location.origin,
+        sessionPresent: Boolean(user),
+        source: 'storage',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams,
+      });
+    }
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
       authReady,
@@ -502,6 +566,17 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       urlHasAuthParams,
       userPresent: Boolean(user),
+    });
+    recordOdaraLoginRecoveryEvent({
+      decision: 'url_has_auth_params',
+      event: 'app_mount',
+      originChanged,
+      reason: urlHasAuthParams ? 'auth_callback_detected' : 'auth_callback_absent',
+      returnedOrigin: window.location.origin,
+      sessionPresent: Boolean(user),
+      source: 'auth',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      urlHasAuthParams,
     });
     if (urlHasAuthParams) {
       recordOdaraAuthTrace({
@@ -515,8 +590,39 @@ const Index = () => {
         urlHasAuthParams: true,
         userPresent: Boolean(user),
       });
+      recordOdaraLoginRecoveryEvent({
+        decision: 'auth_callback_detected',
+        event: 'app_mount',
+        originChanged,
+        reason: 'safe_url_auth_params_present',
+        returnedOrigin: window.location.origin,
+        source: 'auth',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams: true,
+      });
     }
     if (hadPersistedLoginTrace) {
+      recordOdaraLoginRecoveryEvent({
+        decision: 'app_mount_after_login',
+        event: 'app_mount',
+        originChanged,
+        reason: 'login_trace_present_on_mount',
+        returnedOrigin: window.location.origin,
+        sessionPresent: Boolean(user),
+        source: 'boot',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams,
+      });
+      recordOdaraLoginRecoveryEvent({
+        decision: 'returned_origin_after_login',
+        event: 'app_mount',
+        originChanged,
+        reason: 'login_trace_present_on_mount',
+        returnedOrigin: window.location.origin,
+        source: 'auth',
+        storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        urlHasAuthParams,
+      });
       recordOdaraAuthTrace({
         accessMode: diagnosticAccessMode,
         authReady,
@@ -731,6 +837,14 @@ const Index = () => {
             source: 'Index',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
             userPresent: Boolean(authUserRef.current),
+          });
+          recordOdaraLoginRecoveryEvent({
+            decision: 'session_after_login_reload',
+            event: 'getSession',
+            reason: 'getSession_bootstrap',
+            sessionPresent: Boolean(session?.user),
+            source: 'auth',
+            storageKeyName: ODARA_AUTH_STORAGE_KEY,
           });
         }
         if (shouldApplyBootstrap) {
@@ -1426,6 +1540,8 @@ const Index = () => {
                   </>
                 ) : null}
               </div>
+
+              <LoginRecoveryPanel userPresent={Boolean(user)} />
 
               <div>
                 {isCheckEmail ? (
