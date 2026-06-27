@@ -1,0 +1,328 @@
+name: Apply Sienna community detail patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/odara-apply-c582064.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exported c582064 patch and remove workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/c582064.patch <<'PATCH'
+From c58206464cd2cc7d1d66e6632158744db6358ad5 Mon Sep 17 00:00:00 2001
+From: toysoldierCEO <32391149+toysoldierCEO@users.noreply.github.com>
+Date: Fri, 26 Jun 2026 00:07:41 -0400
+Subject: [PATCH] fix signed-in Sienna community detail rendering
+
+
+diff --git a/src/lib/vesperResolverSurfaceMerge.test.ts b/src/lib/vesperResolverSurfaceMerge.test.ts
+new file mode 100644
+index 0000000..f84e655
+--- /dev/null
++++ b/src/lib/vesperResolverSurfaceMerge.test.ts
+@@ -0,0 +1,69 @@
++import { describe, expect, it } from 'vitest';
++
++import { ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION } from './vesperResolverCompleteness';
++import {
++  hasCurrentVesperResolverSurfaceFields,
++  mergeVesperResolverSurfaceFields,
++} from './vesperResolverSurfaceMerge';
++
++describe('vesper resolver surface merge', () => {
++  it('treats current-version checked resolver fields as complete', () => {
++    expect(hasCurrentVesperResolverSurfaceFields({
++      vesper_community_evidence_checked: true,
++      vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
++    })).toBe(true);
++  });
++
++  it('lets hydrated community evidence replace an unchecked detail seed', () => {
++    const merged = mergeVesperResolverSurfaceFields(
++      {
++        vesper_intelligence: null,
++        vesper_community_evidence: null,
++        vesper_community_evidence_checked: false,
++        vesper_resolver_cache_version: null,
++      },
++      {
++        vesper_intelligence: { intelligence_source_type: 'official_brand' },
++        vesper_metadata: { resolved_concentration: 'PARFUM' },
++        vesper_community_evidence: {
++          accords: ['Coconut', 'Green'],
++          communityNotes: ['Cucumber'],
++          sourceNames: ['Fragrantica'],
++          trustLine: 'Community/provider evidence · Fragrantica',
++        },
++        vesper_community_evidence_checked: true,
++        vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
++      },
++    );
++
++    expect(merged.vesper_community_evidence_checked).toBe(true);
++    expect(merged.vesper_community_evidence).toMatchObject({
++      sourceNames: ['Fragrantica'],
++      accords: ['Coconut', 'Green'],
++    });
++    expect(merged.vesper_metadata).toEqual({ resolved_concentration: 'PARFUM' });
++  });
++
++  it('does not let stale incoming resolver fields replace a current checked surface', () => {
++    const merged = mergeVesperResolverSurfaceFields(
++      {
++        vesper_community_evidence: {
++          sourceNames: ['Fragrantica'],
++          trustLine: 'Community/provider evidence · Fragrantica',
++        },
++        vesper_community_evidence_checked: true,
++        vesper_resolver_cache_version: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
++      },
++      {
++        vesper_community_evidence: null,
++        vesper_community_evidence_checked: true,
++        vesper_resolver_cache_version: 'old-generation',
++      },
++    );
++
++    expect(merged.vesper_community_evidence).toMatchObject({
++      sourceNames: ['Fragrantica'],
++    });
++    expect(merged.vesper_resolver_cache_version).toBe(ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION);
++  });
++});
+diff --git a/src/lib/vesperResolverSurfaceMerge.ts b/src/lib/vesperResolverSurfaceMerge.ts
+new file mode 100644
+index 0000000..89c7cde
+--- /dev/null
++++ b/src/lib/vesperResolverSurfaceMerge.ts
+@@ -0,0 +1,45 @@
++import { ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION } from './vesperResolverCompleteness';
++
++export type VesperResolverSurfaceFields = {
++  vesper_intelligence?: unknown;
++  vesper_metadata?: unknown;
++  vesper_metadata_applied?: unknown;
++  vesper_community_evidence?: unknown;
++  vesper_community_evidence_checked?: unknown;
++  vesper_resolver_cache_version?: unknown;
++};
++
++export function hasCurrentVesperResolverSurfaceFields(
++  fields: VesperResolverSurfaceFields | null | undefined,
++) {
++  return Boolean(
++    fields
++    && fields.vesper_community_evidence_checked === true
++    && fields.vesper_resolver_cache_version === ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
++  );
++}
++
++export function mergeVesperResolverSurfaceFields(
++  current: VesperResolverSurfaceFields | null | undefined,
++  incoming: VesperResolverSurfaceFields | null | undefined,
++) {
++  if (hasCurrentVesperResolverSurfaceFields(incoming)) {
++    return {
++      vesper_intelligence: incoming?.vesper_intelligence ?? null,
++      vesper_metadata: incoming?.vesper_metadata ?? null,
++      vesper_metadata_applied: incoming?.vesper_metadata_applied ?? null,
++      vesper_community_evidence: incoming?.vesper_community_evidence ?? null,
++      vesper_community_evidence_checked: true,
++      vesper_resolver_cache_version: incoming?.vesper_resolver_cache_version ?? null,
++    };
++  }
++
++  return {
++    vesper_intelligence: current?.vesper_intelligence ?? incoming?.vesper_intelligence ?? null,
++    vesper_metadata: current?.vesper_metadata ?? incoming?.vesper_metadata ?? null,
++    vesper_metadata_applied: current?.vesper_metadata_applied ?? incoming?.vesper_metadata_applied ?? null,
++    vesper_community_evidence: current?.vesper_community_evidence ?? incoming?.vesper_community_evidence ?? null,
++    vesper_community_evidence_checked: current?.vesper_community_evidence_checked ?? incoming?.vesper_community_evidence_checked ?? null,
++    vesper_resolver_cache_version: current?.vesper_resolver_cache_version ?? incoming?.vesper_resolver_cache_version ?? null,
++  };
++}
+diff --git a/src/pages/OdaraScreen.day-selection.test.ts b/src/pages/OdaraScreen.day-selection.test.ts
+index ab463ca..003e672 100644
+--- a/src/pages/OdaraScreen.day-selection.test.ts
++++ b/src/pages/OdaraScreen.day-selection.test.ts
+@@ -44,6 +44,28 @@ describe('OdaraScreen day selection auth safety', () => {
+     expect(source).toContain('renderedCommunitySourceLabel');
+   });
+ 
++  it('renders the full Sienna community fixture instead of truncating it to eight chips', () => {
++    expect(source).toContain('detailAccordLabels.slice(0, 12)');
++    expect(source).toContain('communityEvidence.communityNotes.slice(0, 12)');
++    expect(source).not.toContain('detailAccordLabels.slice(0, 8)');
++    expect(source).not.toContain('communityEvidence.communityNotes.slice(0, 8)');
++  });
++
++  it('does not cancel wardrobe detail hydration when marking the selected fragrance loading', () => {
++    expect(source).toContain('const detailHydrationByIdRef = useRef(detailHydrationById)');
++    expect(source).toContain('detailHydrationByIdRef.current = detailHydrationById');
++    expect(source).toContain('const existing = detailHydrationByIdRef.current[selectedFragranceId]');
++
++    const hydrationEffectSnippet = source.slice(
++      source.indexOf("if (surface !== 'detail' || !selectedFragranceId || !activeSessionUserId) return;"),
++      source.indexOf('const timeoutId = window.setTimeout'),
++    );
++    expect(hydrationEffectSnippet).toContain('setDetailHydrationById');
++    expect(hydrationEffectSnippet).toContain('fetchOdaraFragranceDetailForSurface');
++    expect(hydrationEffectSnippet).toContain('}, [activeSessionUserId, selectedFragranceId, surface]);');
++    expect(hydrationEffectSnippet).not.toContain('detailHydrationById, selectedFragranceId');
++  });
++
+   it('records safe day-tap breadcrumbs before dispatching the selected date change', () => {
+     const handlerSnippet = source.slice(
+       source.indexOf('const selectNavigationDay'),
+diff --git a/src/pages/OdaraScreen.tsx b/src/pages/OdaraScreen.tsx
+index 4d238c0..f598152 100644
+--- a/src/pages/OdaraScreen.tsx
++++ b/src/pages/OdaraScreen.tsx
+@@ -50,6 +50,7 @@ import {
+   ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
+   isVesperResolverDetailCompleteForCache,
+ } from "@/lib/vesperResolverCompleteness";
++import { mergeVesperResolverSurfaceFields } from "@/lib/vesperResolverSurfaceMerge";
+ import {
+   resolveSignedInAddAsTodayDisabledReason,
+   resolveSignedInAddAsTodayLocked,
+@@ -8551,6 +8552,7 @@ function mergeFragranceDetailSurfaceState(
+   if (!detail) return current;
+   const roleFields = resolveDetailRoleFields(detail, current);
+   const performanceFields = resolveDetailPerformanceFields(detail, current);
++  const resolverFields = mergeVesperResolverSurfaceFields(current, detail);
+   return {
+     ...current,
+     fragrance_id: current.fragrance_id ?? detail.id,
+@@ -8603,12 +8605,12 @@ function mergeFragranceDetailSurfaceState(
+     rating: current.rating ?? normalizeCollectionRating(detail.rating),
+     detail_loading: false,
+     detail_error: null,
+-    vesper_intelligence: current.vesper_intelligence ?? detail.vesper_intelligence ?? null,
+-    vesper_community_evidence: current.vesper_community_evidence ?? detail.vesper_community_evidence ?? null,
+-    vesper_community_evidence_checked: current.vesper_community_evidence_checked ?? detail.vesper_community_evidence_checked ?? null,
+-    vesper_resolver_cache_version: current.vesper_resolver_cache_version ?? detail.vesper_resolver_cache_version ?? null,
+-    vesper_metadata: current.vesper_metadata ?? detail.vesper_metadata ?? null,
+-    vesper_metadata_applied: current.vesper_metadata_applied ?? detail.vesper_metadata_applied ?? null,
++    vesper_intelligence: resolverFields.vesper_intelligence as VesperFragranceIntelligence | null,
++    vesper_community_evidence: resolverFields.vesper_community_evidence as CommunityEvidenceDisplayModel | null,
++    vesper_community_evidence_checked: resolverFields.vesper_community_evidence_checked as boolean | null,
++    vesper_resolver_cache_version: resolverFields.vesper_resolver_cache_version as string | null,
++    vesper_metadata: resolverFields.vesper_metadata as VesperFragranceMetadata | null,
++    vesper_metadata_applied: resolverFields.vesper_metadata_applied as VesperMetadataAppliedFields | null,
+   };
+ }
+ 
+@@ -8620,6 +8622,7 @@ function mergeFragranceDetailSurfaceSeed(
+ 
+   const roleFields = resolveDetailRoleFields(primary, fallback);
+   const performanceFields = resolveDetailPerformanceFields(primary, fallback);
++  const resolverFields = mergeVesperResolverSurfaceFields(primary, fallback);
+ 
+   return {
+     ...fallback,
+@@ -8677,12 +8680,12 @@ function mergeFragranceDetailSurfaceSeed(
+     source_label: primary.source_label ?? fallback.source_label ?? null,
+     detail_loading: primary.detail_loading ?? fallback.detail_loading ?? false,
+     detail_error: primary.detail_error ?? fallback.detail_error ?? null,
+-    vesper_intelligence: primary.vesper_intelligence ?? fallback.vesper_intelligence ?? null,
+-    vesper_community_evidence: primary.vesper_community_evidence ?? fallback.vesper_community_evidence ?? null,
+-    vesper_community_evidence_checked: primary.vesper_community_evidence_checked ?? fallback.vesper_community_evidence_checked ?? null,
+-    vesper_resolver_cache_version: primary.vesper_resolver_cache_version ?? fallback.vesper_resolver_cache_version ?? null,
+-    vesper_metadata: primary.vesper_metadata ?? fallback.vesper_metadata ?? null,
+-    vesper_metadata_applied: primary.vesper_metadata_applied ?? fallback.vesper_metadata_applied ?? null,
++    vesper_intelligence: resolverFields.vesper_intelligence as VesperFragranceIntelligence | null,
++    vesper_community_evidence: resolverFields.vesper_community_evidence as CommunityEvidenceDisplayModel | null,
++    vesper_community_evidence_checked: resolverFields.vesper_community_evidence_checked as boolean | null,
++    vesper_resolver_cache_version: resolverFields.vesper_resolver_cache_version as string | null,
++    vesper_metadata: resolverFields.vesper_metadata as VesperFragranceMetadata | null,
++    vesper_metadata_applied: resolverFields.vesper_metadata_applied as VesperMetadataAppliedFields | null,
+   };
+ }
+ 
+@@ -11307,7 +11310,7 @@ const OdaraFragranceDetailSheet: React.FC<{
+               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Accords</div>
+               <div className="flex flex-wrap gap-2">
+                 {expandAndDeduplicateScentIntelDisplayTerms(
+-                  detailAccordLabels.slice(0, 8).map((label) => ({ label, position: 'accord' })),
++                  detailAccordLabels.slice(0, 12).map((label) => ({ label, position: 'accord' })),
+                 ).map((chip, index) => {
+                   const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
+                   return (
+@@ -11344,7 +11347,7 @@ const OdaraFragranceDetailSheet: React.FC<{
+                   </div>
+                   <div className="flex flex-wrap gap-2">
+                     {expandAndDeduplicateScentIntelDisplayTerms(
+-                      communityEvidence.communityNotes.slice(0, 8).map((label) => ({ label, position: 'community' })),
++                      communityEvidence.communityNotes.slice(0, 12).map((label) => ({ label, position: 'community' })),
+                     ).map((chip, index) => {
+                       const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
+                       return (
+@@ -12368,6 +12371,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
+     loading: boolean;
+     error: string | null;
+   }>>({});
++  const detailHydrationByIdRef = useRef(detailHydrationById);
+   const [provisionalIntakeCards, setProvisionalIntakeCards] = useState<MissingFragranceProvisionalCard[]>([]);
+   const [provisionalIntakeLoading, setProvisionalIntakeLoading] = useState(false);
+   const [provisionalIntakeError, setProvisionalIntakeError] = useState<string | null>(null);
+@@ -12787,6 +12791,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
+     void loadPersistedWearHistory();
+   }, [loadPersistedWearHistory]);
+ 
++  useEffect(() => {
++    detailHydrationByIdRef.current = detailHydrationById;
++  }, [detailHydrationById]);
++
+   useEffect(() => {
+     setSessionSignals(readStoredWardrobeSessionSignals(activeSessionUserId));
+     setOnboardingSeen(readStoredWardrobeOnboardingSeen(activeSessionUserId));
+@@ -12806,7 +12814,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
+ 
+   useEffect(() => {
+     if (surface !== 'detail' || !selectedFragranceId || !activeSessionUserId) return;
+-    const existing = detailHydrationById[selectedFragranceId];
++    const existing = detailHydrationByIdRef.current[selectedFragranceId];
+     const existingDetailComplete = Boolean(
+       existing?.detail && isVesperResolverDetailCompleteForCache(existing.detail, false),
+     );
+@@ -12863,7 +12871,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
+     return () => {
+       cancelled = true;
+     };
+-  }, [activeSessionUserId, detailHydrationById, selectedFragranceId, surface]);
++  }, [activeSessionUserId, selectedFragranceId, surface]);
+ 
+   useEffect(() => {
+     const timeoutId = window.setTimeout(() => {
+-- 
+2.53.0
+PATCH
+
+          git apply --check /tmp/c582064.patch
+          git apply /tmp/c582064.patch
+          rm -f .github/workflows/odara-apply-c582064.yml
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/lib/vesperResolverSurfaceMerge.test.ts \
+            src/lib/vesperResolverSurfaceMerge.ts \
+            src/pages/OdaraScreen.day-selection.test.ts \
+            src/pages/OdaraScreen.tsx \
+            .github/workflows/odara-apply-c582064.yml
+          git commit -m "fix signed-in Sienna community detail rendering"
+          git push origin HEAD:main
