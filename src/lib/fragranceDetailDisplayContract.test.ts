@@ -164,7 +164,7 @@ describe('fragranceDetailDisplayContract', () => {
     expect(model.detailSectionOrder).not.toContain('performance');
   });
 
-  it('keeps official pyramid notes separate from conflicting community/provider notes', () => {
+  it('keeps complete official pyramid details from showing community/provider evidence by default', () => {
     const communityEvidence = buildCommunityEvidenceDisplayModel([{
       sourceType: 'community_provider',
       sourceTier: 'community_provider_consensus',
@@ -197,13 +197,63 @@ describe('fragranceDetailDisplayContract', () => {
     ]);
     expect(model.structuredNoteSections[0]?.values).not.toContain('Cucumber');
     expect(model.structuredNoteSections[0]?.values).not.toContain('White Pepper');
-    expect(model.accordLabels).toContain('coconut');
-    expect(model.communityEvidence?.communityNotes).toContain('White Pepper');
-    expect(model.communityEvidence?.trustLine).toBe('Community/provider evidence · Fragrantica');
-    expect(model.communityEvidence?.conflictsWithOfficialNotes).toBe(true);
+    expect(communityEvidence.communityNotes).toContain('White Pepper');
+    expect(communityEvidence.trustLine).toBe('Community/provider evidence · Fragrantica');
+    expect(communityEvidence.conflictsWithOfficialNotes).toBe(true);
+    expect(model.accordLabels).toEqual([]);
+    expect(model.communityEvidence).toBeNull();
+    expect(model.communityEvidenceDisplayPolicy).toMatchObject({
+      officialNotesCompleteEnough: true,
+      reason: 'official_notes_complete_default_hidden',
+      showCommunityAccords: false,
+      showCommunitySignals: false,
+      showCommunitySourceTrust: false,
+    });
     expect(model.detailSectionOrder).toEqual([
       'family',
       'description',
+      'notes',
+      'metadata',
+      'source_provenance',
+      'actions',
+    ]);
+    expect(model.detailSectionOrder).not.toContain('performance');
+  });
+
+  it('renders community/provider evidence only when official notes are incomplete', () => {
+    const communityEvidence = buildCommunityEvidenceDisplayModel([{
+      sourceType: 'community_provider',
+      sourceTier: 'community_provider_consensus',
+      sourceName: 'Fragrantica',
+      reviewStatus: 'approved_for_internal_use',
+      evidenceStatus: 'usable_non_official_intelligence',
+      usableForVesperIntelligence: true,
+      officialRegistryEligible: false,
+      patchSafeNow: false,
+      normalizedAccords: ['coconut', 'green', 'ozonic', 'aquatic', 'fresh spicy', 'woody', 'sweet', 'aromatic'],
+      normalizedNotes: ['Cucumber', 'Juniper Berry', 'White Pepper', 'Wood Resin', 'Amber'],
+    } satisfies CommunityEvidenceInput], {
+      topNotes: ['Sea Air'],
+    });
+    const model = buildFragranceDetailDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      topNotes: ['Sea Air'],
+      communityEvidence,
+    });
+
+    expect(model.communityEvidenceDisplayPolicy).toMatchObject({
+      officialNotesCompleteEnough: false,
+      reason: 'official_notes_missing_or_incomplete',
+      showCommunityAccords: true,
+      showCommunitySignals: true,
+      showCommunitySourceTrust: true,
+    });
+    expect(model.accordLabels).toContain('coconut');
+    expect(model.communityEvidence?.communityNotes).toContain('White Pepper');
+    expect(model.communityEvidence?.trustLine).toBe('Community/provider evidence · Fragrantica');
+    expect(model.detailSectionOrder).toEqual([
+      'family',
       'notes',
       'accords',
       'community_signals',

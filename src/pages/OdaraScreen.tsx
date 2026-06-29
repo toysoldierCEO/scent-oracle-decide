@@ -11068,6 +11068,16 @@ const OdaraFragranceDetailSheet: React.FC<{
   useEffect(() => {
     if (!open || !detail?.fragrance_id) return;
     const communityEvidence = detail.vesper_community_evidence ?? null;
+    const visibleCommunityEvidence = buildFragranceDetailDisplayModel({
+      familyKey: detail.family_key,
+      familyLabel: detail.family_label ?? (detail.family_key ? getFamilyLabelText(detail.family_key) : null),
+      accordLabels: normalizeNotes(detail.accords, 8),
+      topNotes: detail.top_notes ?? [],
+      middleNotes: detail.middle_notes ?? [],
+      baseNotes: detail.base_notes ?? [],
+      flatNotes: detail.notes ?? [],
+      communityEvidence,
+    }).communityEvidence;
     recordOdaraDetailCommunityEvidenceTrace({
       accordCount: communityEvidence?.accords.length ?? 0,
       approvedFragranticaRowPresent: communityEvidence?.sourceNames.includes('Fragrantica') ?? false,
@@ -11079,12 +11089,12 @@ const OdaraFragranceDetailSheet: React.FC<{
       fragranceBrand: detail.brand ?? null,
       fragranceId: detail.fragrance_id,
       fragranceName: detail.name ?? null,
-      renderedAccordCount: communityEvidence?.accords.length ?? 0,
-      renderedAccordsSection: (communityEvidence?.accords.length ?? 0) > 0,
-      renderedCommunitySourceLabel: Boolean(communityEvidence?.trustLine),
-      renderedCommunitySignalCount: communityEvidence?.communityNotes.length ?? 0,
-      renderedCommunitySignalsSection: Boolean(communityEvidence?.hasCommunitySignalsSection),
-      renderedTrustLabelCount: communityEvidence?.trustLine ? 1 : 0,
+      renderedAccordCount: visibleCommunityEvidence?.accords.length ?? 0,
+      renderedAccordsSection: (visibleCommunityEvidence?.accords.length ?? 0) > 0,
+      renderedCommunitySourceLabel: Boolean(visibleCommunityEvidence?.trustLine),
+      renderedCommunitySignalCount: visibleCommunityEvidence?.communityNotes.length ?? 0,
+      renderedCommunitySignalsSection: Boolean(visibleCommunityEvidence?.hasCommunitySignalsSection),
+      renderedTrustLabelCount: visibleCommunityEvidence?.trustLine ? 1 : 0,
       resolverCacheVersion: ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
       source: 'detail-render',
       trustLabelCount: communityEvidence?.trustLine ? 1 : 0,
@@ -11093,6 +11103,13 @@ const OdaraFragranceDetailSheet: React.FC<{
     detail?.fragrance_id,
     detail?.brand,
     detail?.name,
+    detail?.family_key,
+    detail?.family_label,
+    detail?.accords,
+    detail?.top_notes,
+    detail?.middle_notes,
+    detail?.base_notes,
+    detail?.notes,
     detail?.vesper_community_evidence_checked,
     detail?.vesper_community_evidence?.accords.length,
     detail?.vesper_community_evidence?.communityNotes.length,
@@ -11152,6 +11169,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   const baseLabels = detailDisplayModel.baseLabels;
   const flatNoteLabels = detailDisplayModel.flatNoteLabels;
   const detailAccordLabels = detailDisplayModel.accordLabels;
+  const visibleCommunityEvidence = detailDisplayModel.communityEvidence;
   const hasStructuredNoteSections = topLabels.length > 0 || middleLabels.length > 0 || baseLabels.length > 0;
   const officialStructuredNoteSourceName = formatSourceDisplayName(
     resolvedDetail.vesper_intelligence?.intelligence_source_name,
@@ -11241,7 +11259,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   });
   const detailTrustLine = [
     primaryTrustLine,
-    communityEvidence?.trustLine ?? null,
+    visibleCommunityEvidence?.trustLine ?? null,
   ].filter((line): line is string => Boolean(line)).join(' · ') || null;
   const detailFactLine = metadataDisplay.factLine;
 
@@ -11431,17 +11449,17 @@ const OdaraFragranceDetailSheet: React.FC<{
             </section>
           ) : null}
 
-          {communityEvidence?.hasCommunitySignalsSection ? (
+          {visibleCommunityEvidence?.hasCommunitySignalsSection ? (
             <section>
               <div className="mb-3 text-[9px] uppercase tracking-[0.28em] text-foreground/42">Community Signals</div>
-              {communityEvidence.communityNotes.length > 0 ? (
+              {visibleCommunityEvidence.communityNotes.length > 0 ? (
                 <div className="space-y-2">
                   <div className="text-[11px] leading-none text-foreground/46">
-                    Community mentions{communityEvidence.sourceLabel ? ` · ${communityEvidence.sourceLabel}` : ''}
+                    Community mentions{visibleCommunityEvidence.sourceLabel ? ` · ${visibleCommunityEvidence.sourceLabel}` : ''}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {expandAndDeduplicateScentIntelDisplayTerms(
-                      communityEvidence.communityNotes.slice(0, 12).map((label) => ({ label, position: 'community' })),
+                      visibleCommunityEvidence.communityNotes.slice(0, 12).map((label) => ({ label, position: 'community' })),
                     ).map((chip, index) => {
                       const tone = getAccordChipTone(chip.label, resolvedDetail.family_key);
                       return (
@@ -11467,9 +11485,9 @@ const OdaraFragranceDetailSheet: React.FC<{
                   </div>
                 </div>
               ) : null}
-              {communityEvidence.conflictSummary ? (
+              {visibleCommunityEvidence.conflictSummary ? (
                 <div className="mt-3 text-[11px] leading-[1.45] text-foreground/48">
-                  {communityEvidence.conflictSummary}
+                  {visibleCommunityEvidence.conflictSummary}
                 </div>
               ) : null}
             </section>

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyCommunityEvidenceDisplayPolicy,
   buildCommunityEvidenceDisplayModel,
   isApprovedCommunityEvidenceInput,
+  resolveCommunityEvidenceDisplayPolicy,
   type CommunityEvidenceInput,
 } from './communityEvidenceLane';
 
@@ -94,6 +96,62 @@ describe('communityEvidenceLane', () => {
     expect(display.conflictSummary).toContain('official notes are preserved');
   });
 
+  it('hides community evidence by default when official notes are complete enough', () => {
+    const display = buildCommunityEvidenceDisplayModel(
+      [siennaCommunityEvidence],
+      siennaOfficialNotes,
+    );
+    const policy = resolveCommunityEvidenceDisplayPolicy({
+      communityEvidence: display,
+      officialNotes: siennaOfficialNotes,
+    });
+
+    expect(policy).toMatchObject({
+      officialNotesCompleteEnough: true,
+      reason: 'official_notes_complete_default_hidden',
+      showCommunityAccords: false,
+      showCommunitySignals: false,
+      showCommunitySourceTrust: false,
+      showCommunityWearEvidence: false,
+    });
+    expect(applyCommunityEvidenceDisplayPolicy(display, policy)).toBeNull();
+  });
+
+  it('allows community evidence as labeled support when official notes are missing or incomplete', () => {
+    const display = buildCommunityEvidenceDisplayModel(
+      [siennaCommunityEvidence],
+      { topNotes: ['Sea Air'] },
+    );
+    const policy = resolveCommunityEvidenceDisplayPolicy({
+      communityEvidence: display,
+      officialNotes: { topNotes: ['Sea Air'] },
+    });
+    const visibleDisplay = applyCommunityEvidenceDisplayPolicy(display, policy);
+
+    expect(policy).toMatchObject({
+      officialNotesCompleteEnough: false,
+      reason: 'official_notes_missing_or_incomplete',
+      showCommunityAccords: true,
+      showCommunitySignals: true,
+      showCommunitySourceTrust: true,
+    });
+    expect(visibleDisplay?.accords).toContain('aromatic');
+    expect(visibleDisplay?.communityNotes).toContain('White Pepper');
+    expect(visibleDisplay?.trustLine).toBe('Community/provider evidence · Fragrantica');
+  });
+
+  it('keeps community accords and mentions from surfacing performance without real wear evidence', () => {
+    const display = buildCommunityEvidenceDisplayModel([siennaCommunityEvidence], null);
+    const policy = resolveCommunityEvidenceDisplayPolicy({
+      communityEvidence: display,
+      officialNotes: null,
+    });
+
+    expect(policy.showCommunityAccords).toBe(true);
+    expect(policy.showCommunitySignals).toBe(true);
+    expect(policy.showCommunityWearEvidence).toBe(false);
+  });
+
   it('does not display proposed community evidence or let it drive recommendation signals', () => {
     const display = buildCommunityEvidenceDisplayModel([
       {
@@ -129,5 +187,14 @@ describe('communityEvidenceLane', () => {
 
     expect(withPerformance.hasCommunityPerformance).toBe(true);
     expect(withPerformance.recommendationSignals.communityPerformanceAvailable).toBe(true);
+
+    const performancePolicy = resolveCommunityEvidenceDisplayPolicy({
+      communityEvidence: withPerformance,
+      officialNotes: siennaOfficialNotes,
+    });
+    expect(performancePolicy).toMatchObject({
+      reason: 'community_performance_evidence',
+      showCommunityWearEvidence: true,
+    });
   });
 });

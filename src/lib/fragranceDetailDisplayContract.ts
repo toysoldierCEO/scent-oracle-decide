@@ -1,4 +1,8 @@
-import type { CommunityEvidenceDisplayModel } from './communityEvidenceLane';
+import {
+  applyCommunityEvidenceDisplayPolicy,
+  resolveCommunityEvidenceDisplayPolicy,
+  type CommunityEvidenceDisplayModel,
+} from './communityEvidenceLane';
 
 export type FragranceDisplayChip = {
   label: string;
@@ -532,7 +536,20 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
   }
 
   const familyKey = normalizeDisplayKey(familyDisplayLabel);
-  const communityEvidence = input.communityEvidence ?? null;
+  const rawCommunityEvidence = input.communityEvidence ?? null;
+  const communityEvidenceDisplayPolicy = resolveCommunityEvidenceDisplayPolicy({
+    communityEvidence: rawCommunityEvidence,
+    officialNotes: {
+      flatNotes: input.flatNotes,
+      topNotes: input.topNotes,
+      middleNotes: input.middleNotes,
+      baseNotes: input.baseNotes,
+    },
+  });
+  const communityEvidence = applyCommunityEvidenceDisplayPolicy(
+    rawCommunityEvidence,
+    communityEvidenceDisplayPolicy,
+  );
   const availableAccords = cleanStringList([
     ...cleanStringList(input.accordLabels),
     ...(communityEvidence?.accords ?? []),
@@ -599,6 +616,7 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     structuredNoteSections,
     communityEvidence,
     hasCommunitySignalsSection: Boolean(communityEvidence?.hasCommunitySignalsSection),
+    communityEvidenceDisplayPolicy,
     heroProfileChips: dedupeChips(chips).slice(0, input.maxHeroChips ?? 8),
   };
 }

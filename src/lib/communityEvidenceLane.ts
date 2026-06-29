@@ -80,6 +80,30 @@ export type CommunityEvidenceDisplayModel = {
   };
 };
 
+export type CommunityEvidenceDisplayPolicyReason =
+  | 'no_approved_community_evidence'
+  | 'official_notes_complete_default_hidden'
+  | 'official_notes_missing_or_incomplete'
+  | 'community_performance_evidence'
+  | 'recommendation_explanation_context'
+  | 'meaningful_conflict';
+
+export type CommunityEvidenceDisplayPolicyInput = {
+  communityEvidence?: CommunityEvidenceDisplayModel | null;
+  officialNotes?: CommunityEvidenceOfficialNotesInput | null;
+  recommendationExplanationContext?: boolean | null;
+  hasMeaningfulUserFacingConflict?: boolean | null;
+};
+
+export type CommunityEvidenceDisplayPolicy = {
+  showCommunityAccords: boolean;
+  showCommunitySignals: boolean;
+  showCommunitySourceTrust: boolean;
+  showCommunityWearEvidence: boolean;
+  officialNotesCompleteEnough: boolean;
+  reason: CommunityEvidenceDisplayPolicyReason;
+};
+
 const INTERNAL_SOURCE_NAME_KEYS = new Set([
   'public fragrances',
   'public.fragrances',
@@ -196,6 +220,18 @@ function buildOfficialNoteKeySet(officialNotes: CommunityEvidenceOfficialNotesIn
   return new Set(cleanList(values, normalizeNoteLabel).map(normalizeDisplayKey));
 }
 
+function countPopulatedOfficialNoteLayers(officialNotes: CommunityEvidenceOfficialNotesInput | null | undefined) {
+  return [
+    officialNotes?.topNotes,
+    officialNotes?.middleNotes,
+    officialNotes?.baseNotes,
+  ].filter((values) => cleanList(values, normalizeNoteLabel).length > 0).length;
+}
+
+function countMeaningfulOfficialNotes(officialNotes: CommunityEvidenceOfficialNotesInput | null | undefined) {
+  return buildOfficialNoteKeySet(officialNotes).size;
+}
+
 function buildSourceLabel(sourceNames: string[]) {
   if (sourceNames.length === 0) return null;
   if (sourceNames.length <= 2) return sourceNames.join(', ');
@@ -292,5 +328,115 @@ export function buildCommunityEvidenceDisplayModel(
       communityPerformanceAvailable: hasCommunityPerformance,
       canSupplementMatching,
     },
+  };
+}
+
+export function resolveCommunityEvidenceDisplayPolicy(
+  input: CommunityEvidenceDisplayPolicyInput,
+): CommunityEvidenceDisplayPolicy {
+  const communityEvidence = input.communityEvidence ?? null;
+  const baseHidden = {
+    showCommunityAccords: false,
+    showCommunitySignals: false,
+    showCommunitySourceTrust: false,
+    showCommunityWearEvidence: false,
+  };
+  const officialNotesCompleteEnough = countPopulatedOfficialNoteLayers(input.officialNotes) >= 2
+    || countMeaningfulOfficialNotes(input.officialNotes) >= 3;
+
+  if (!communityEvidence?.hasApprovedEvidence) {
+    return {
+      ...baseHidden,
+      officialNotesCompleteEnough,
+      reason: 'no_approved_community_evidence',
+    };
+  }
+
+  const showCommunityWearEvidence = communityEvidence.hasCommunityPerformance;
+  const hasCommunityAccords = communityEvidence.accords.length > 0;
+  const hasCommunitySignals = communityEvidence.communityNotes.length > 0
+    || communityEvidence.hasCommunitySignalsSection;
+
+  if (input.recommendationExplanationContext) {
+    const showCommunityAccords = hasCommunityAccords;
+    const showCommunitySignals = hasCommunitySignals;
+    return {
+      showCommunityAccords,
+      showCommunitySignals,
+      showCommunitySourceTrust: showCommunityAccords || showCommunitySignals || showCommunityWearEvidence,
+      showCommunityWearEvidence,
+      officialNotesCompleteEnough,
+      reason: 'recommendation_explanation_context',
+    };
+  }
+
+  if (showCommunityWearEvidence) {
+    return {
+      showCommunityAccords: false,
+      showCommunitySignals: false,
+      showCommunitySourceTrust: true,
+      showCommunityWearEvidence,
+      officialNotesCompleteEnough,
+      reason: 'community_performance_evidence',
+    };
+  }
+
+  if (input.hasMeaningfulUserFacingConflict) {
+    return {
+      showCommunityAccords: false,
+      showCommunitySignals: hasCommunitySignals,
+      showCommunitySourceTrust: hasCommunitySignals,
+      showCommunityWearEvidence,
+      officialNotesCompleteEnough,
+      reason: 'meaningful_conflict',
+    };
+  }
+
+  if (officialNotesCompleteEnough) {
+    return {
+      ...baseHidden,
+      officialNotesCompleteEnough,
+      reason: 'official_notes_complete_default_hidden',
+    };
+  }
+
+  const showCommunityAccords = hasCommunityAccords;
+  const showCommunitySignals = hasCommunitySignals;
+  return {
+    showCommunityAccords,
+    showCommunitySignals,
+    showCommunitySourceTrust: showCommunityAccords || showCommunitySignals,
+    showCommunityWearEvidence,
+    officialNotesCompleteEnough,
+    reason: 'official_notes_missing_or_incomplete',
+  };
+}
+
+export function applyCommunityEvidenceDisplayPolicy(
+  communityEvidence: CommunityEvidenceDisplayModel | null | undefined,
+  policy: CommunityEvidenceDisplayPolicy,
+): CommunityEvidenceDisplayModel | null {
+  if (!communityEvidence?.hasApprovedEvidence) return null;
+
+  const visibleAccords = policy.showCommunityAccords ? communityEvidence.accords : [];
+  const visibleNotes = policy.showCommunitySignals ? communityEvidence.communityNotes : [];
+  const showSignalsSection = policy.showCommunitySignals
+    && (visibleNotes.length > 0 || Boolean(communityEvidence.conflictSummary));
+  const hasCommunityPerformance = policy.showCommunityWearEvidence
+    && communityEvidence.hasCommunityPerformance;
+  const hasVisibleEvidence = visibleAccords.length > 0
+    || showSignalsSection
+    || hasCommunityPerformance;
+
+  if (!hasVisibleEvidence) return null;
+
+  return {
+    ...communityEvidence,
+    trustLine: policy.showCommunitySourceTrust ? communityEvidence.trustLine : null,
+    accords: visibleAccords,
+    communityNotes: visibleNotes,
+    hasCommunitySignalsSection: showSignalsSection,
+    communityPerformance: hasCommunityPerformance ? communityEvidence.communityPerformance : null,
+    hasCommunityPerformance,
   };
 }

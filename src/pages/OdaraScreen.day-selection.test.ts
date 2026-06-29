@@ -53,11 +53,11 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).toContain('renderedCommunitySourceLabel');
   });
 
-  it('renders the full Sienna community fixture instead of truncating it to eight chips', () => {
+  it('renders community signals from the policy-visible evidence model when they are allowed', () => {
     expect(source).toContain('detailAccordLabels.slice(0, 12)');
-    expect(source).toContain('communityEvidence.communityNotes.slice(0, 12)');
+    expect(source).toContain('visibleCommunityEvidence.communityNotes.slice(0, 12)');
     expect(source).not.toContain('detailAccordLabels.slice(0, 8)');
-    expect(source).not.toContain('communityEvidence.communityNotes.slice(0, 8)');
+    expect(source).not.toContain('visibleCommunityEvidence.communityNotes.slice(0, 8)');
   });
 
   it('does not cancel wardrobe detail hydration when marking the selected fragrance loading', () => {
