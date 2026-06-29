@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveAuthStateHydrationDecision,
+  shouldClearUserAfterGetUserConfirmation,
   shouldApplySessionBootstrapResult,
   shouldApplyAuthStateChangeDuringHydration,
 } from './auth-session-hydration';
@@ -96,5 +97,33 @@ describe('auth session hydration', () => {
       bootstrapHasSession: false,
       currentUserPresent: false,
     })).toBe(true);
+  });
+
+  it('keeps an established user when getUser still confirms a user after a null auth event', () => {
+    expect(shouldClearUserAfterGetUserConfirmation({
+      currentUserPresent: true,
+      getUserHasUser: true,
+    })).toBe(false);
+  });
+
+  it('clears an established user only when getUser confirms the session is invalid', () => {
+    expect(shouldClearUserAfterGetUserConfirmation({
+      currentUserPresent: true,
+      getUserHasUser: false,
+      getUserErrorName: 'AuthSessionMissingError',
+    })).toBe(true);
+    expect(shouldClearUserAfterGetUserConfirmation({
+      currentUserPresent: true,
+      getUserHasUser: false,
+      getUserErrorStatus: 401,
+    })).toBe(true);
+  });
+
+  it('does not clear an established user for an ambiguous getUser failure', () => {
+    expect(shouldClearUserAfterGetUserConfirmation({
+      currentUserPresent: true,
+      getUserHasUser: false,
+      getUserErrorMessage: 'Network request failed',
+    })).toBe(false);
   });
 });

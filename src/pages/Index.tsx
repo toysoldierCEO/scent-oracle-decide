@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth-redirect';
 import {
   resolveAuthStateHydrationDecision,
+  shouldClearUserAfterGetUserConfirmation,
   shouldApplySessionBootstrapResult,
 } from '@/lib/auth-session-hydration';
 import {
@@ -133,6 +134,24 @@ type SafeLoginTraceExtras = Partial<Pick<
   | 'urlHasAuthParams'
   | 'userPresent'
 >>;
+
+type LoginConsoleTracePayload = {
+  authEvent?: string;
+  decision?: string;
+  reason?: string;
+  routeDecision?: string;
+  rpcError?: string | null;
+  sessionPresent?: boolean | null;
+  sessionUserId?: string | null;
+  source?: string;
+};
+
+const LOGIN_CONSOLE_TRACE_WINDOW_MS = 5000;
+
+function sanitizeConsoleErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : error == null ? '' : String(error);
+  return message.replace(/\s+/g, ' ').trim().slice(0, 180) || null;
+}
 
 function hasAuthUrlParams(search: string, hash: string): boolean {
   const authParamNames = [
@@ -349,6 +368,7 @@ const Index = () => {
       ? 'guest'
       : 'signed-out';
   const diagnosticAccessModeRef = useRef<OdaraAuthTraceAccessMode>(diagnosticAccessMode);
+  const loginConsoleTraceUntilRef = useRef(0);
   const hadPersistedAuthTraceOnMountRef = useRef(hasPersistedOdaraAuthTrace());
   const hadPersistedLoginTraceOnMountRef = useRef(
     readPersistedOdaraAuthTrace().some((entry) => isLoginLifecycleDecision(entry.decision))
@@ -390,6 +410,37 @@ const Index = () => {
     });
   }, [guestMode]);
 
+  const emitLoginConsoleTrace = useCallback((label: string, payload: LoginConsoleTracePayload = {}) => {
+    if (typeof window === 'undefined' || Date.now() > loginConsoleTraceUntilRef.current) return;
+    const routeDecision = payload.routeDecision
+      ?? (!authReadyRef.current
+        ? 'auth-loading'
+        : diagnosticAccessModeRef.current === 'signed-in'
+          ? 'signed-in-app'
+          : diagnosticAccessModeRef.current === 'guest'
+            ? 'guest-app'
+            : 'auth-screen');
+    console.info('[Odara auth first-5s]', {
+      authEvent: payload.authEvent ?? null,
+      authReady: authReadyRef.current,
+      decision: payload.decision ?? label,
+      reason: payload.reason ?? null,
+      routeDecision,
+      rpcError: payload.rpcError ?? null,
+      sessionPresent: payload.sessionPresent ?? Boolean(authUserRef.current),
+      sessionUserId: payload.sessionUserId ?? authUserRef.current?.id ?? null,
+      source: payload.source ?? 'Index',
+    });
+  }, []);
+
+  const startLoginConsoleTrace = useCallback((reason: string) => {
+    loginConsoleTraceUntilRef.current = Date.now() + LOGIN_CONSOLE_TRACE_WINDOW_MS;
+    emitLoginConsoleTrace('login_console_trace_started', {
+      decision: 'login_console_trace_started',
+      reason,
+    });
+  }, [emitLoginConsoleTrace]);
+
   const recordLoginTrace = useCallback((
     decision: string,
     reason: string,
@@ -420,7 +471,14 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       urlHasAuthParams: extras.urlHasAuthParams ?? hasAuthUrlParams(window.location.search, window.location.hash),
     });
-  }, [authRedirectOrigin]);
+    emitLoginConsoleTrace(decision, {
+      authEvent: extras.event,
+      decision,
+      reason,
+      sessionPresent: extras.sessionPresent,
+      source: 'login',
+    });
+  }, [authRedirectOrigin, emitLoginConsoleTrace]);
 
   const probeImmediateLoginSession = useCallback(async (
     reason: string,
@@ -676,7 +734,7 @@ const Index = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, []);
+  }, [emitLoginConsoleTrace]);
 
   useEffect(() => {
     recordOdaraAuthTrace({
@@ -688,7 +746,21 @@ const Index = () => {
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       userPresent: Boolean(user),
     });
-  }, [authReady, diagnosticAccessMode, user]);
+    emitLoginConsoleTrace('route_decision', {
+      decision: 'route_decision',
+      reason: 'access_mode_render',
+      routeDecision: !authReady
+        ? 'auth-loading'
+        : access.isSignedIn
+          ? 'signed-in-app'
+          : access.isGuestMode
+            ? 'guest-app'
+            : 'auth-screen',
+      sessionPresent: Boolean(user),
+      sessionUserId: user?.id ?? null,
+      source: 'access-mode',
+    });
+  }, [access.isGuestMode, access.isSignedIn, authReady, diagnosticAccessMode, emitLoginConsoleTrace, user]);
 
   const oracleSlotKey =
     (authReady || access.isGuestMode) && access.resolvedUserId
@@ -729,6 +801,12 @@ const Index = () => {
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
         userPresent: Boolean(nextUser),
       });
+      emitLoginConsoleTrace('apply_session', {
+        decision: nextUser ? 'applied_session' : 'applied_signed_out',
+        reason: source,
+        sessionPresent: Boolean(session?.user),
+        sessionUserId: nextUser?.id ?? null,
+      });
       setUser(prev => {
         if (sameUser(prev, nextUser)) return prev;
         return nextUser;
@@ -737,20 +815,81 @@ const Index = () => {
 
     const confirmCurrentSessionBeforeClearing = (revision: number, sourceEvent: string) => {
       void odaraSupabase.auth.getSession()
-        .then(({ data: { session } }) => {
+        .then(async ({ data: { session } }) => {
           if (!active || revision !== authRevision) return;
           sessionBootstrapResolved = true;
+          if (session?.user) {
+            const confirmedUser = normalizeUser(session.user);
+            recordOdaraAuthTrace({
+              authReady: authReadyRef.current,
+              decision: 'confirmed-session-present',
+              event: sourceEvent,
+              reason: 'getSession_after_null_event',
+              sessionPresent: true,
+              source: 'Index',
+              storageKeyName: ODARA_AUTH_STORAGE_KEY,
+              userPresent: Boolean(confirmedUser),
+            });
+            emitLoginConsoleTrace('null_event_session_confirmed', {
+              authEvent: sourceEvent,
+              decision: 'confirmed-session-present',
+              reason: 'getSession_after_null_event',
+              sessionPresent: true,
+              sessionUserId: confirmedUser?.id ?? null,
+            });
+            applySession(session, `confirm:${sourceEvent}`);
+            if (active) setAuthReady(true);
+            return;
+          }
+
+          const currentUserWasPresent = Boolean(authUserRef.current);
+          let getUserHasUser = false;
+          let getUserErrorName: string | null = null;
+          let getUserErrorMessage: string | null = null;
+          let getUserErrorStatus: number | null = null;
+          if (currentUserWasPresent) {
+            try {
+              const { data: userData, error: userError } = await odaraSupabase.auth.getUser();
+              getUserHasUser = Boolean(userData?.user);
+              getUserErrorName = userError?.name ?? null;
+              getUserErrorMessage = userError?.message ?? null;
+              getUserErrorStatus = typeof (userError as { status?: unknown } | null)?.status === 'number'
+                ? (userError as { status: number }).status
+                : null;
+            } catch (error) {
+              getUserErrorName = error instanceof Error ? error.name : null;
+              getUserErrorMessage = sanitizeConsoleErrorMessage(error);
+            }
+          }
+
+          const shouldClear = shouldClearUserAfterGetUserConfirmation({
+            currentUserPresent: currentUserWasPresent,
+            getUserErrorMessage,
+            getUserErrorName,
+            getUserErrorStatus,
+            getUserHasUser,
+          });
           recordOdaraAuthTrace({
             authReady: authReadyRef.current,
-            decision: session?.user ? 'confirmed-session-present' : 'confirmed-signed-out',
+            decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained',
             event: sourceEvent,
-            reason: 'getSession_after_null_event',
-            sessionPresent: Boolean(session?.user),
+            reason: currentUserWasPresent ? 'getUser_after_null_event' : 'getSession_after_null_event',
+            sessionPresent: getUserHasUser,
             source: 'Index',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
             userPresent: Boolean(authUserRef.current),
           });
-          applySession(session, `confirm:${sourceEvent}`);
+          emitLoginConsoleTrace('null_event_getUser_confirmation', {
+            authEvent: sourceEvent,
+            decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained',
+            reason: currentUserWasPresent ? 'getUser_after_null_event' : 'getSession_after_null_event',
+            rpcError: getUserErrorMessage,
+            sessionPresent: getUserHasUser,
+            sessionUserId: authUserRef.current?.id ?? null,
+          });
+          if (shouldClear) {
+            applySession(null, `confirm:${sourceEvent}`);
+          }
           if (active) setAuthReady(true);
         })
         .catch(() => {
@@ -788,6 +927,13 @@ const Index = () => {
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
         userPresent: Boolean(authUserRef.current),
       });
+      emitLoginConsoleTrace('auth_state_event', {
+        authEvent: event,
+        decision,
+        reason: 'onAuthStateChange',
+        sessionPresent: Boolean(session?.user),
+        sessionUserId: session?.user?.id ?? authUserRef.current?.id ?? null,
+      });
 
       if (decision === 'ignore_transient_null') return;
 
@@ -816,6 +962,12 @@ const Index = () => {
           source: 'Index',
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(authUserRef.current),
+        });
+        emitLoginConsoleTrace('getSession_bootstrap', {
+          decision: shouldApplyBootstrap ? 'apply_bootstrap' : 'ignore_stale_bootstrap_null',
+          reason: 'getSession_bootstrap',
+          sessionPresent: Boolean(session?.user),
+          sessionUserId: session?.user?.id ?? authUserRef.current?.id ?? null,
         });
         if (hadPersistedAuthTraceOnMountRef.current) {
           recordOdaraAuthTrace({
@@ -943,6 +1095,13 @@ const Index = () => {
               });
               const { data: sessionData } = await odaraSupabase.auth.getSession();
               const session = sessionData?.session;
+              emitLoginConsoleTrace('oracle_getSession_result', {
+                decision: session ? 'getSession_result_session_present' : 'getSession_result_no_session',
+                reason: 'signed_in_oracle_preflight',
+                sessionPresent: Boolean(session?.user),
+                sessionUserId: session?.user?.id ?? authUserRef.current?.id ?? null,
+                source: 'oracle',
+              });
               recordOdaraAuthTrace({
                 accessMode: diagnosticAccessMode,
                 authReady: authReadyRef.current,
@@ -1027,6 +1186,13 @@ const Index = () => {
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
             userPresent: Boolean(authUserRef.current),
           });
+          emitLoginConsoleTrace('oracle_rpc_success', {
+            decision: 'oracle_rpc_success',
+            reason: 'fetch_home_oracle',
+            sessionPresent: Boolean(authUserRef.current),
+            sessionUserId: authUserRef.current?.id ?? null,
+            source: 'oracle',
+          });
         } catch (e: any) {
           if (cancelled || requestId !== oracleRequestIdRef.current) return;
 
@@ -1045,6 +1211,14 @@ const Index = () => {
             source: 'oracle',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
             userPresent: Boolean(authUserRef.current),
+          });
+          emitLoginConsoleTrace('oracle_rpc_error', {
+            decision: 'oracle_rpc_error',
+            reason: 'fetch_home_oracle',
+            rpcError: sanitizeConsoleErrorMessage(e),
+            sessionPresent: Boolean(authUserRef.current),
+            sessionUserId: authUserRef.current?.id ?? null,
+            source: 'oracle',
           });
         }
       })();
@@ -1067,6 +1241,7 @@ const Index = () => {
     shouldDelayOracleForWeather,
     access,
     diagnosticAccessMode,
+    emitLoginConsoleTrace,
     selectedContext,
     selectedDate,
   ]);
@@ -1179,6 +1354,7 @@ const Index = () => {
 
   const handleGoogle = async () => {
     if (isEditorPreview) {
+      startLoginConsoleTrace('google_oauth_editor_preview_open');
       recordLoginTrace('login_submit_clicked', 'google_oauth_editor_preview_open');
       recordLoginTrace('login_redirect_origin', 'google_oauth_editor_preview_open', {
         originChanged: window.location.origin !== ODARA_SHARED_PREVIEW_ORIGIN,
@@ -1187,6 +1363,7 @@ const Index = () => {
       window.open(ODARA_SHARED_PREVIEW_ORIGIN, '_blank');
       return;
     }
+    startLoginConsoleTrace('google_oauth_submit');
     setGuestOverride(false, 'google_sign_in_submit_clear_guest_override');
     clearAuthMessages();
     persistRememberedEmail(rememberMe, email.trim());
@@ -1320,6 +1497,7 @@ const Index = () => {
 
   const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    startLoginConsoleTrace(isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     recordLoginTrace('login_submit_clicked', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     recordLoginTrace('login_submit_prevent_default_applied', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     clearAuthMessages();

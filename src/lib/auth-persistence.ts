@@ -30,11 +30,12 @@ function safeGetItem(storage: Storage | null, key: string): string | null {
 }
 
 function safeSetItem(storage: Storage | null, key: string, value: string) {
-  if (!storage) return;
+  if (!storage) return false;
   try {
     storage.setItem(key, value);
+    return safeGetItem(storage, key) === value;
   } catch {
-    /* ignore storage failures */
+    return false;
   }
 }
 
@@ -84,11 +85,26 @@ export const vesperAuthStorage = {
   },
   setItem(key: string, value: string) {
     const mode = readVesperAuthPersistenceMode();
-    safeSetItem(getPreferredStorage(mode), key, value);
-    safeRemoveItem(getFallbackStorage(mode), key);
+    const preferredStorage = getPreferredStorage(mode);
+    const fallbackStorage = getFallbackStorage(mode);
+    const preferredWriteSucceeded = safeSetItem(preferredStorage, key, value);
+    if (preferredWriteSucceeded) {
+      safeRemoveItem(fallbackStorage, key);
+      recordOdaraAuthTrace({
+        decision: 'set',
+        reason: 'supabase_storage_set_item',
+        source: 'storage',
+        storageKeyName: key,
+      });
+      return;
+    }
+
+    const fallbackWriteSucceeded = safeSetItem(fallbackStorage, key, value);
     recordOdaraAuthTrace({
-      decision: 'set',
-      reason: 'supabase_storage_set_item',
+      decision: fallbackWriteSucceeded ? 'set_fallback' : 'set_failed',
+      reason: fallbackWriteSucceeded
+        ? 'supabase_storage_set_item_fallback_after_preferred_write_failed'
+        : 'supabase_storage_set_item_failed',
       source: 'storage',
       storageKeyName: key,
     });

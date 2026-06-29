@@ -40,3 +40,31 @@ export function shouldApplySessionBootstrapResult({
 }: AuthSessionBootstrapDecisionInput) {
   return bootstrapHasSession || !currentUserPresent;
 }
+
+export type ConfirmedInvalidUserInput = {
+  currentUserPresent: boolean;
+  getUserHasUser: boolean;
+  getUserErrorName?: string | null;
+  getUserErrorMessage?: string | null;
+  getUserErrorStatus?: number | null;
+};
+
+export function shouldClearUserAfterGetUserConfirmation({
+  currentUserPresent,
+  getUserHasUser,
+  getUserErrorName,
+  getUserErrorMessage,
+  getUserErrorStatus,
+}: ConfirmedInvalidUserInput) {
+  if (getUserHasUser) return false;
+  if (!currentUserPresent) return true;
+
+  const errorName = (getUserErrorName ?? '').toLowerCase();
+  const errorMessage = (getUserErrorMessage ?? '').toLowerCase();
+  if (getUserErrorStatus === 401 || getUserErrorStatus === 403) return true;
+  if (errorName.includes('authsessionmissing')) return true;
+  if (errorMessage.includes('auth session missing')) return true;
+  if (errorMessage.includes('jwt') && (errorMessage.includes('expired') || errorMessage.includes('invalid'))) return true;
+
+  return false;
+}
