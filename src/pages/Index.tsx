@@ -127,9 +127,11 @@ function persistRememberedEmail(remember: boolean, emailValue: string) {
 type SafeLoginTraceExtras = Partial<Pick<
   OdaraAuthTraceEntry,
   'event'
+  | 'getSessionResult'
   | 'origin'
   | 'originChanged'
   | 'redirectOrigin'
+  | 'redirectTarget'
   | 'sessionPresent'
   | 'urlHasAuthParams'
   | 'userPresent'
@@ -151,6 +153,23 @@ const LOGIN_CONSOLE_TRACE_WINDOW_MS = 5000;
 function sanitizeConsoleErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : error == null ? '' : String(error);
   return message.replace(/\s+/g, ' ').trim().slice(0, 180) || null;
+}
+
+function getShortAuthUserId(value: string | null | undefined) {
+  if (!value) return null;
+  return value.length <= 12 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`;
+}
+
+function getErrorCategory(error: unknown) {
+  const message = sanitizeConsoleErrorMessage(error)?.toLowerCase() ?? '';
+  if (!message) return 'unknown_error';
+  if (message.includes('timeout') || message.includes('longer than expected')) return 'timeout';
+  if (message.includes('jwt') && message.includes('expired')) return 'jwt_expired';
+  if (message.includes('jwt') && message.includes('invalid')) return 'jwt_invalid';
+  if (message.includes('permission') || message.includes('rls') || message.includes('403')) return 'permission_or_rls';
+  if (message.includes('401') || message.includes('unauthorized')) return 'unauthorized';
+  if (message.includes('network') || message.includes('failed to fetch')) return 'network';
+  return 'rpc_or_fetch_error';
 }
 
 function hasAuthUrlParams(search: string, hash: string): boolean {
@@ -428,7 +447,7 @@ const Index = () => {
       routeDecision,
       rpcError: payload.rpcError ?? null,
       sessionPresent: payload.sessionPresent ?? Boolean(authUserRef.current),
-      sessionUserId: payload.sessionUserId ?? authUserRef.current?.id ?? null,
+      sessionUserId: getShortAuthUserId(payload.sessionUserId ?? authUserRef.current?.id ?? null),
       source: payload.source ?? 'Index',
     });
   }, []);
@@ -452,10 +471,12 @@ const Index = () => {
       decision,
       origin: window.location.origin,
       redirectOrigin: authRedirectOrigin,
+      redirectTarget: authRedirectOrigin,
       reason,
       source: 'Index',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       urlHasAuthParams: hasAuthUrlParams(window.location.search, window.location.hash),
+      userIdHint: getShortAuthUserId(authUserRef.current?.id),
       userPresent: Boolean(authUserRef.current),
       ...extras,
     });
@@ -464,6 +485,7 @@ const Index = () => {
       origin: window.location.origin,
       originChanged: extras.originChanged,
       redirectOrigin: extras.redirectOrigin ?? authRedirectOrigin,
+      redirectTarget: extras.redirectTarget ?? extras.redirectOrigin ?? authRedirectOrigin,
       reason,
       returnedOrigin: window.location.origin,
       sessionPresent: extras.sessionPresent,
@@ -492,11 +514,13 @@ const Index = () => {
       const { data: { session } } = await odaraSupabase.auth.getSession();
       const confirmedSession = Boolean(session?.user);
       recordLoginTrace('getSession_immediately_after_login', reason, {
+        getSessionResult: confirmedSession ? 'present' : 'null',
         sessionPresent: confirmedSession,
         userPresent: confirmedSession || Boolean(authUserRef.current),
       });
     } catch {
       recordLoginTrace('getSession_immediately_after_login_error', reason, {
+        getSessionResult: 'error',
         sessionPresent: false,
       });
     }
@@ -737,25 +761,28 @@ const Index = () => {
   }, [emitLoginConsoleTrace]);
 
   useEffect(() => {
+    const routeDecision = !authReady
+      ? 'auth-loading'
+      : access.isSignedIn
+        ? 'signed-in-app'
+        : access.isGuestMode
+          ? 'guest-app'
+          : 'auth-screen';
     recordOdaraAuthTrace({
       accessMode: diagnosticAccessMode,
       authReady,
       decision: 'resolved',
       reason: 'access_mode_render',
+      routeDecision,
       source: 'access-mode',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
+      userIdHint: getShortAuthUserId(user?.id),
       userPresent: Boolean(user),
     });
     emitLoginConsoleTrace('route_decision', {
       decision: 'route_decision',
       reason: 'access_mode_render',
-      routeDecision: !authReady
-        ? 'auth-loading'
-        : access.isSignedIn
-          ? 'signed-in-app'
-          : access.isGuestMode
-            ? 'guest-app'
-            : 'auth-screen',
+      routeDecision,
       sessionPresent: Boolean(user),
       sessionUserId: user?.id ?? null,
       source: 'access-mode',
@@ -791,14 +818,18 @@ const Index = () => {
     const applySession = (session: any, source: string) => {
       if (!active) return;
       const nextUser = normalizeUser(session?.user);
+      const previousUserPresent = Boolean(authUserRef.current);
       authUserRef.current = nextUser;
       recordOdaraAuthTrace({
         authReady: authReadyRef.current,
+        clearCaller: !nextUser && previousUserPresent ? source : undefined,
         decision: nextUser ? 'applied_session' : 'applied_signed_out',
         reason: source,
         sessionPresent: Boolean(session),
+        sessionUserIdHint: getShortAuthUserId(nextUser?.id),
         source: 'Index',
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userIdHint: getShortAuthUserId(nextUser?.id),
         userPresent: Boolean(nextUser),
       });
       emitLoginConsoleTrace('apply_session', {
@@ -824,10 +855,13 @@ const Index = () => {
               authReady: authReadyRef.current,
               decision: 'confirmed-session-present',
               event: sourceEvent,
+              getSessionResult: 'present',
               reason: 'getSession_after_null_event',
               sessionPresent: true,
+              sessionUserIdHint: getShortAuthUserId(confirmedUser?.id),
               source: 'Index',
               storageKeyName: ODARA_AUTH_STORAGE_KEY,
+              userIdHint: getShortAuthUserId(confirmedUser?.id),
               userPresent: Boolean(confirmedUser),
             });
             emitLoginConsoleTrace('null_event_session_confirmed', {
@@ -871,12 +905,17 @@ const Index = () => {
           });
           recordOdaraAuthTrace({
             authReady: authReadyRef.current,
+            clearCaller: shouldClear ? `confirm:${sourceEvent}` : undefined,
             decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained',
             event: sourceEvent,
+            getSessionResult: 'null',
+            getUserResult: getUserHasUser ? 'valid' : getUserErrorMessage || getUserErrorName ? 'error' : 'null',
             reason: currentUserWasPresent ? 'getUser_after_null_event' : 'getSession_after_null_event',
             sessionPresent: getUserHasUser,
+            sessionUserIdHint: getShortAuthUserId(authUserRef.current?.id),
             source: 'Index',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userIdHint: getShortAuthUserId(authUserRef.current?.id),
             userPresent: Boolean(authUserRef.current),
           });
           emitLoginConsoleTrace('null_event_getUser_confirmation', {
@@ -898,6 +937,7 @@ const Index = () => {
             authReady: authReadyRef.current,
             decision: 'confirm_failed',
             event: sourceEvent,
+            getSessionResult: 'error',
             reason: 'getSession_after_null_event_error',
             sessionPresent: false,
             source: 'Index',
@@ -923,8 +963,10 @@ const Index = () => {
         event,
         reason: 'onAuthStateChange',
         sessionPresent: Boolean(session?.user),
+        sessionUserIdHint: getShortAuthUserId(session?.user?.id),
         source: 'Index',
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userIdHint: getShortAuthUserId(authUserRef.current?.id),
         userPresent: Boolean(authUserRef.current),
       });
       emitLoginConsoleTrace('auth_state_event', {
@@ -956,11 +998,15 @@ const Index = () => {
         });
         recordOdaraAuthTrace({
           authReady: authReadyRef.current,
+          clearCaller: shouldApplyBootstrap || session?.user ? undefined : 'getSession_bootstrap',
           decision: shouldApplyBootstrap ? 'apply_bootstrap' : 'ignore_stale_bootstrap_null',
+          getSessionResult: session?.user ? 'present' : 'null',
           reason: 'getSession_bootstrap',
           sessionPresent: Boolean(session?.user),
+          sessionUserIdHint: getShortAuthUserId(session?.user?.id),
           source: 'Index',
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
+          userIdHint: getShortAuthUserId(authUserRef.current?.id),
           userPresent: Boolean(authUserRef.current),
         });
         emitLoginConsoleTrace('getSession_bootstrap', {
@@ -1182,8 +1228,10 @@ const Index = () => {
             oracleSlotKeyPresent: Boolean(oracleSlotKey),
             reason: 'fetch_home_oracle',
             selectedDate,
+            sessionUserIdHint: getShortAuthUserId(authUserRef.current?.id),
             source: 'oracle',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userIdHint: getShortAuthUserId(authUserRef.current?.id),
             userPresent: Boolean(authUserRef.current),
           });
           emitLoginConsoleTrace('oracle_rpc_success', {
@@ -1204,12 +1252,15 @@ const Index = () => {
             authReady: authReadyRef.current,
             contextKey: selectedContext,
             decision: 'oracle_rpc_error',
+            errorCategory: getErrorCategory(e),
             oracleKeyPresent: Boolean(oracleKey),
             oracleSlotKeyPresent: Boolean(oracleSlotKey),
-            reason: e?.message || 'Unknown error',
+            reason: 'fetch_home_oracle',
             selectedDate,
+            sessionUserIdHint: getShortAuthUserId(authUserRef.current?.id),
             source: 'oracle',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
+            userIdHint: getShortAuthUserId(authUserRef.current?.id),
             userPresent: Boolean(authUserRef.current),
           });
           emitLoginConsoleTrace('oracle_rpc_error', {
@@ -1458,6 +1509,7 @@ const Index = () => {
         source: 'Index',
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
         targetLabel: request?.targetLabel ?? undefined,
+        userIdHint: getShortAuthUserId(authUserRef.current?.id),
         userPresent: Boolean(authUserRef.current),
       });
       return;
@@ -1480,6 +1532,7 @@ const Index = () => {
       actionId: guard.actionId ?? undefined,
       authReady: authReadyRef.current,
       caller: request?.caller ?? undefined,
+      clearCaller: request?.caller ?? 'handleSignOut',
       decision: 'sign_out_called',
       defaultPrevented: request?.defaultPrevented ?? undefined,
       menuOpen: request?.menuOpen ?? undefined,
@@ -1490,6 +1543,7 @@ const Index = () => {
       source: 'Index',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
       targetLabel: request?.targetLabel ?? undefined,
+      userIdHint: getShortAuthUserId(authUserRef.current?.id),
       userPresent: Boolean(authUserRef.current),
     });
     await odaraSupabase.auth.signOut();

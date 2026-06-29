@@ -15,6 +15,7 @@ import {
 } from './detailCommunityEvidenceDiagnostic';
 
 export const ODARA_AUTH_DEBUG_QUERY_PARAM = 'odaraAuthDebug';
+export const ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS = 'auth_debug';
 export const ODARA_DETAIL_DEBUG_QUERY_PARAM = 'odaraDetailDebug';
 export const ODARA_AUTH_DEBUG_STORAGE_KEY = 'odara_auth_debug_enabled_v1';
 export const ODARA_AUTH_DEBUG_TAP_WINDOW_MS = 2500;
@@ -48,19 +49,31 @@ export type AuthDiagnosticSummaryInput = {
 
 export function isAuthDebugSearchEnabled(search: string): boolean {
   const params = new URLSearchParams(search);
-  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
+  if (
+    !params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    && !params.has(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+    && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)
+  ) return false;
   const value = params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
     ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM)
-    : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
+    : params.has(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+      ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+      : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
   return value == null || value === '' || value === '1' || value.toLowerCase() === 'true';
 }
 
 export function isAuthDebugSearchDisabled(search: string): boolean {
   const params = new URLSearchParams(search);
-  if (!params.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
+  if (
+    !params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
+    && !params.has(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+    && !params.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)
+  ) return false;
   const value = params.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
     ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM)
-    : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
+    : params.has(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+      ? params.get(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+      : params.get(ODARA_DETAIL_DEBUG_QUERY_PARAM);
   return value === '0' || value?.toLowerCase() === 'false';
 }
 
@@ -99,8 +112,13 @@ export function removeAuthDebugSearchParamFromCurrentUrl(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM) && !url.searchParams.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)) return false;
+    if (
+      !url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM)
+      && !url.searchParams.has(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS)
+      && !url.searchParams.has(ODARA_DETAIL_DEBUG_QUERY_PARAM)
+    ) return false;
     url.searchParams.delete(ODARA_AUTH_DEBUG_QUERY_PARAM);
+    url.searchParams.delete(ODARA_AUTH_DEBUG_QUERY_PARAM_ALIAS);
     url.searchParams.delete(ODARA_DETAIL_DEBUG_QUERY_PARAM);
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl || '/');
@@ -164,6 +182,19 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     || entry.decision === 'sign_out_called'
     || (entry.source === 'storage' && entry.decision === 'removed')
   ));
+  const latestAuthEvent = [...input.trace].reverse().find((entry) => entry.event)?.event ?? 'none';
+  const latestRouteDecision = [...input.trace].reverse().find((entry) => entry.routeDecision)?.routeDecision ?? 'unknown';
+  const latestGetSessionResult = [...input.trace].reverse().find((entry) => entry.getSessionResult)?.getSessionResult ?? 'unknown';
+  const latestGetUserResult = [...input.trace].reverse().find((entry) => entry.getUserResult)?.getUserResult ?? 'unknown';
+  const latestRedirectTarget = [...input.trace].reverse().find((entry) => entry.redirectTarget || entry.redirectOrigin)?.redirectTarget
+    ?? [...input.trace].reverse().find((entry) => entry.redirectOrigin)?.redirectOrigin
+    ?? 'none';
+  const latestClearCaller = [...input.trace].reverse().find((entry) => entry.clearCaller)?.clearCaller ?? 'none';
+  const latestStorageRead = [...input.trace].reverse().find((entry) => entry.source === 'storage' && entry.storageOperation === 'getItem');
+  const latestRpcError = [...input.trace].reverse().find((entry) => entry.errorCategory)?.errorCategory ?? 'none';
+  const latestUserIdHint = [...input.trace].reverse().find((entry) => entry.sessionUserIdHint || entry.userIdHint)?.sessionUserIdHint
+    ?? [...input.trace].reverse().find((entry) => entry.userIdHint)?.userIdHint
+    ?? 'none';
   const lines = [
     'ODARA AUTH DIAGNOSTIC',
     `build commit: ${input.buildCommit ?? ODARA_BUILD_INFO.commit}`,
@@ -182,6 +213,15 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
     `access mode: ${input.accessMode}`,
     `guest override: ${input.guestOverride ? 'yes' : 'no'}`,
     `getSession confirms session: ${input.getSessionConfirmsSession == null ? 'unknown' : input.getSessionConfirmsSession ? 'yes' : 'no'}`,
+    `last auth event: ${latestAuthEvent}`,
+    `last route decision: ${latestRouteDecision}`,
+    `last getSession result: ${latestGetSessionResult}`,
+    `last getUser result: ${latestGetUserResult}`,
+    `last redirect target: ${latestRedirectTarget}`,
+    `last clear caller: ${latestClearCaller}`,
+    `short user id: ${latestUserIdHint}`,
+    `last storage read: ${latestStorageRead ? `${latestStorageRead.storageOutcome ?? latestStorageRead.decision ?? 'unknown'} via ${latestStorageRead.storageBackendUsed ?? 'unknown'}` : 'unknown'}`,
+    `last RPC/profile error category: ${latestRpcError}`,
   ];
 
   if (
@@ -206,9 +246,20 @@ export function buildAuthDiagnosticSummary(input: AuthDiagnosticSummaryInput): s
       entry.origin ? `origin=${entry.origin}` : null,
       entry.originChanged == null ? null : `originChanged=${entry.originChanged ? 'yes' : 'no'}`,
       entry.redirectOrigin ? `redirectOrigin=${entry.redirectOrigin}` : null,
+      entry.redirectTarget ? `redirectTarget=${entry.redirectTarget}` : null,
       entry.urlHasAuthParams == null ? null : `urlAuthParams=${entry.urlHasAuthParams ? 'yes' : 'no'}`,
       entry.localAuthKeyExists == null ? null : `localAuthKey=${entry.localAuthKeyExists ? 'yes' : 'no'}`,
       entry.sessionAuthKeyExists == null ? null : `sessionAuthKey=${entry.sessionAuthKeyExists ? 'yes' : 'no'}`,
+      entry.storageOperation ? `storageOp=${entry.storageOperation}` : null,
+      entry.storageBackendUsed ? `storageBackend=${entry.storageBackendUsed}` : null,
+      entry.storageOutcome ? `storageOutcome=${entry.storageOutcome}` : null,
+      entry.getSessionResult ? `getSession=${entry.getSessionResult}` : null,
+      entry.getUserResult ? `getUser=${entry.getUserResult}` : null,
+      entry.routeDecision ? `routeDecision=${entry.routeDecision}` : null,
+      entry.clearCaller ? `clearCaller=${entry.clearCaller}` : null,
+      entry.sessionUserIdHint ? `sessionUser=${entry.sessionUserIdHint}` : null,
+      entry.userIdHint ? `userId=${entry.userIdHint}` : null,
+      entry.errorCategory ? `errorCategory=${entry.errorCategory}` : null,
       `session=${entry.sessionPresent == null ? 'unknown' : entry.sessionPresent ? 'yes' : 'no'}`,
       `user=${entry.userPresent == null ? 'unknown' : entry.userPresent ? 'yes' : 'no'}`,
       `authReady=${entry.authReady == null ? 'unknown' : entry.authReady ? 'yes' : 'no'}`,

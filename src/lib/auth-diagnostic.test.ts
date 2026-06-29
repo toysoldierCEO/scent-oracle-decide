@@ -25,11 +25,15 @@ describe('auth-diagnostic', () => {
   it('enables and disables the real-device diagnostic from a query param', () => {
     expect(isAuthDebugSearchEnabled('?odaraAuthDebug=1')).toBe(true);
     expect(isAuthDebugSearchEnabled('?odaraAuthDebug=true')).toBe(true);
+    expect(isAuthDebugSearchEnabled('?auth_debug=1')).toBe(true);
+    expect(isAuthDebugSearchEnabled('?auth_debug=true')).toBe(true);
     expect(isAuthDebugSearchEnabled('?odaraDetailDebug=1')).toBe(true);
     expect(isAuthDebugSearchEnabled('?odaraDetailDebug=true')).toBe(true);
     expect(isAuthDebugSearchEnabled('?other=1')).toBe(false);
     expect(isAuthDebugSearchDisabled('?odaraAuthDebug=0')).toBe(true);
     expect(isAuthDebugSearchDisabled('?odaraAuthDebug=false')).toBe(true);
+    expect(isAuthDebugSearchDisabled('?auth_debug=0')).toBe(true);
+    expect(isAuthDebugSearchDisabled('?auth_debug=false')).toBe(true);
     expect(isAuthDebugSearchDisabled('?odaraDetailDebug=0')).toBe(true);
     expect(isAuthDebugSearchDisabled('?odaraDetailDebug=false')).toBe(true);
 
@@ -40,6 +44,10 @@ describe('auth-diagnostic', () => {
     window.history.replaceState(null, '', '/?odaraAuthDebug=0');
     expect(readAuthDebugEnabled()).toBe(false);
     expect(window.sessionStorage.getItem(ODARA_AUTH_DEBUG_STORAGE_KEY)).toBeNull();
+
+    window.history.replaceState(null, '', '/?auth_debug=1');
+    expect(readAuthDebugEnabled()).toBe(true);
+    expect(window.sessionStorage.getItem(ODARA_AUTH_DEBUG_STORAGE_KEY)).toBe('1');
   });
 
   it('reports only auth key presence, never stored auth values', () => {
@@ -184,6 +192,8 @@ describe('auth-diagnostic', () => {
         contextKey: 'work',
         decision: 'applied_session',
         event: 'SIGNED_IN',
+        getSessionResult: 'present',
+        getUserResult: 'valid',
         guestOverride: false,
         localAuthKeyExists: true,
         nextDate: '2026-06-23',
@@ -192,17 +202,38 @@ describe('auth-diagnostic', () => {
         origin: 'https://example.test',
         originChanged: false,
         redirectOrigin: 'https://example.test',
+        redirectTarget: 'https://example.test',
         previousDate: '2026-06-22',
         reason: 'unit_test',
+        routeDecision: 'signed-in-app',
         selectedDate: '2026-06-22',
         sessionPresent: true,
         sessionAuthKeyExists: false,
+        sessionUserIdHint: 'abcd1234…wxyz',
         source: 'Index',
+        storageBackendUsed: 'local',
         storageKeyName: AUTH_KEY,
         storageMode: 'local',
+        storageOperation: 'getItem',
+        storageOutcome: 'preferred_hit',
         targetDate: '2026-06-23',
         timestamp: '2026-06-22T00:00:00.000Z',
         urlHasAuthParams: true,
+        userIdHint: 'abcd1234…wxyz',
+        userPresent: true,
+      }, {
+        authReady: true,
+        decision: 'get_preferred',
+        localAuthKeyExists: true,
+        reason: 'supabase_storage_get_item_preferred_hit',
+        sessionPresent: true,
+        source: 'storage',
+        storageBackendUsed: 'local',
+        storageKeyName: AUTH_KEY,
+        storageMode: 'local',
+        storageOperation: 'getItem',
+        storageOutcome: 'preferred_hit',
+        timestamp: '2026-06-22T00:00:00.500Z',
         userPresent: true,
       }],
       userPresent: true,
@@ -211,6 +242,14 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('build commit: abc1234');
     expect(summary).toContain('supabase project ref: projectref');
     expect(summary).toContain('local auth key exists: yes');
+    expect(summary).toContain('last auth event: SIGNED_IN');
+    expect(summary).toContain('last route decision: signed-in-app');
+    expect(summary).toContain('last getSession result: present');
+    expect(summary).toContain('last getUser result: valid');
+    expect(summary).toContain('last redirect target: https://example.test');
+    expect(summary).toContain('last clear caller: none');
+    expect(summary).toContain('short user id: abcd1234…wxyz');
+    expect(summary).toContain('last storage read: preferred_hit via local');
     expect(summary).toContain('event=SIGNED_IN');
     expect(summary).toContain('reload/crash events:');
     expect(summary).toContain('navigation=reload');
@@ -240,7 +279,16 @@ describe('auth-diagnostic', () => {
     expect(summary).toContain('origin=https://example.test');
     expect(summary).toContain('originChanged=no');
     expect(summary).toContain('redirectOrigin=https://example.test');
+    expect(summary).toContain('redirectTarget=https://example.test');
     expect(summary).toContain('urlAuthParams=yes');
+    expect(summary).toContain('storageOp=getItem');
+    expect(summary).toContain('storageBackend=local');
+    expect(summary).toContain('storageOutcome=preferred_hit');
+    expect(summary).toContain('getSession=present');
+    expect(summary).toContain('getUser=valid');
+    expect(summary).toContain('routeDecision=signed-in-app');
+    expect(summary).toContain('sessionUser=abcd1234…wxyz');
+    expect(summary).toContain('userId=abcd1234…wxyz');
     expect(summary).toContain('localAuthKey=yes');
     expect(summary).toContain('sessionAuthKey=no');
     expect(summary).toContain('guestOverride=no');

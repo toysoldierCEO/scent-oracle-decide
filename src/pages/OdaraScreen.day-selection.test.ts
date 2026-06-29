@@ -34,6 +34,15 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).toContain('Open diagnostics');
   });
 
+  it('does not clear an established Index user from the secondary auth hook on getSession null alone', () => {
+    expect(source).toContain('shouldClearUserAfterGetUserConfirmation');
+    expect(source).toContain('const propUserId = normalizeOdaraAuthUserId(userId);');
+    expect(source).toContain('Boolean(activeSessionUserRef.current) || Boolean(propUserId)');
+    expect(source).toContain('await odaraSupabase.auth.getUser()');
+    expect(source).toContain("decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained'");
+    expect(source).toContain('normalizeOdaraAuthUserId(activeSessionUser?.id) ?? (!isGuestMode ? propUserId : null)');
+  });
+
   it('records detail community counters that identify where Sienna evidence is lost', () => {
     expect(source).toContain('approvedFragranticaRowPresent');
     expect(source).toContain('cacheKey');

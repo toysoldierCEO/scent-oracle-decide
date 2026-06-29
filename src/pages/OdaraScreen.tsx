@@ -35,6 +35,7 @@ import {
 } from "@/lib/missingScentCollectionSemantics";
 import {
   resolveAuthStateHydrationDecision,
+  shouldClearUserAfterGetUserConfirmation,
   shouldApplySessionBootstrapResult,
 } from "@/lib/auth-session-hydration";
 import { recordOdaraAuthTrace } from "@/lib/auth-debug-trace";
@@ -215,6 +216,16 @@ function normalizeOdaraAuthUserId(value: unknown) {
   return normalized || null;
 }
 
+function getShortOdaraAuthUserId(value: string | null | undefined) {
+  if (!value) return null;
+  return value.length <= 12 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`;
+}
+
+function sanitizeOdaraAuthErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : error == null ? "" : String(error);
+  return message.replace(/\s+/g, " ").trim().slice(0, 180) || null;
+}
+
 function useOdaraActiveSessionUser({
   userId,
   isGuestMode,
@@ -227,6 +238,7 @@ function useOdaraActiveSessionUser({
   const [activeSessionUser, setActiveSessionUser] = useState<User | null>(null);
   const [sessionResolved, setSessionResolved] = useState<boolean>(isGuestMode);
   const activeSessionUserRef = useRef<User | null>(null);
+  const propUserId = normalizeOdaraAuthUserId(userId);
 
   useEffect(() => {
     let active = true;
@@ -235,13 +247,17 @@ function useOdaraActiveSessionUser({
 
     const applySessionUser = (nextUser: User | null) => {
       if (!active) return;
+      const previousUserPresent = Boolean(activeSessionUserRef.current) || Boolean(propUserId);
       activeSessionUserRef.current = nextUser;
       recordOdaraAuthTrace({
+        clearCaller: !nextUser && previousUserPresent ? `OdaraScreen:${scope}` : undefined,
         decision: nextUser ? 'applied_session' : 'applied_signed_out',
         reason: 'active_session_user',
         sessionPresent: Boolean(nextUser),
+        sessionUserIdHint: getShortOdaraAuthUserId(nextUser?.id),
         source: 'OdaraScreen',
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
+        userIdHint: getShortOdaraAuthUserId(nextUser?.id ?? propUserId),
         userPresent: Boolean(nextUser),
       });
       setActiveSessionUser(nextUser);
@@ -257,30 +273,103 @@ function useOdaraActiveSessionUser({
 
     setSessionResolved(false);
 
-    const confirmCurrentSessionBeforeClearing = (revision: number) => {
+    const confirmCurrentSessionBeforeClearing = (revision: number, sourceEvent: string) => {
       void odaraSupabase.auth.getSession()
-        .then(({ data }) => {
+        .then(async ({ data }) => {
           if (!active || revision !== authRevision) return;
           sessionBootstrapResolved = true;
+          if (data?.session?.user) {
+            recordOdaraAuthTrace({
+              decision: 'confirmed-session-present',
+              event: sourceEvent,
+              getSessionResult: 'present',
+              reason: 'getSession_after_null_event',
+              sessionPresent: true,
+              sessionUserIdHint: getShortOdaraAuthUserId(data.session.user.id),
+              source: 'OdaraScreen',
+              storageKeyName: ODARA_AUTH_STORAGE_KEY,
+              userIdHint: getShortOdaraAuthUserId(data.session.user.id),
+              userPresent: true,
+            });
+            applySessionUser(data.session.user);
+            return;
+          }
+
+          const currentUserWasPresent = Boolean(activeSessionUserRef.current) || Boolean(propUserId);
+          let getUserHasUser = false;
+          let getUserErrorName: string | null = null;
+          let getUserErrorMessage: string | null = null;
+          let getUserErrorStatus: number | null = null;
+          if (currentUserWasPresent) {
+            try {
+              const { data: userData, error: userError } = await odaraSupabase.auth.getUser();
+              getUserHasUser = Boolean(userData?.user);
+              getUserErrorName = userError?.name ?? null;
+              getUserErrorMessage = userError?.message ?? null;
+              getUserErrorStatus = typeof (userError as { status?: unknown } | null)?.status === 'number'
+                ? (userError as { status: number }).status
+                : null;
+              if (userData?.user) {
+                recordOdaraAuthTrace({
+                  decision: 'confirmed-user-retained',
+                  event: sourceEvent,
+                  getSessionResult: 'null',
+                  getUserResult: 'valid',
+                  reason: 'getUser_after_null_event',
+                  sessionPresent: true,
+                  sessionUserIdHint: getShortOdaraAuthUserId(userData.user.id),
+                  source: 'OdaraScreen',
+                  storageKeyName: ODARA_AUTH_STORAGE_KEY,
+                  userIdHint: getShortOdaraAuthUserId(userData.user.id),
+                  userPresent: true,
+                });
+                applySessionUser(userData.user);
+                return;
+              }
+            } catch (error) {
+              getUserErrorName = error instanceof Error ? error.name : null;
+              getUserErrorMessage = sanitizeOdaraAuthErrorMessage(error);
+            }
+          }
+
+          const shouldClear = shouldClearUserAfterGetUserConfirmation({
+            currentUserPresent: currentUserWasPresent,
+            getUserErrorMessage,
+            getUserErrorName,
+            getUserErrorStatus,
+            getUserHasUser,
+          });
           recordOdaraAuthTrace({
-            decision: data?.session?.user ? 'confirmed-session-present' : 'confirmed-signed-out',
-            reason: 'getSession_after_null_event',
-            sessionPresent: Boolean(data?.session?.user),
+            clearCaller: shouldClear ? `OdaraScreen:${scope}:confirm:${sourceEvent}` : undefined,
+            decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained',
+            event: sourceEvent,
+            getSessionResult: 'null',
+            getUserResult: getUserHasUser ? 'valid' : getUserErrorMessage || getUserErrorName ? 'error' : 'null',
+            reason: currentUserWasPresent ? 'getUser_after_null_event' : 'getSession_after_null_event',
+            sessionPresent: getUserHasUser,
+            sessionUserIdHint: getShortOdaraAuthUserId(activeSessionUserRef.current?.id ?? propUserId),
             source: 'OdaraScreen',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
-            userPresent: Boolean(activeSessionUserRef.current),
+            userIdHint: getShortOdaraAuthUserId(activeSessionUserRef.current?.id ?? propUserId),
+            userPresent: currentUserWasPresent,
           });
-          applySessionUser(data?.session?.user ?? null);
+          if (shouldClear) {
+            applySessionUser(null);
+            return;
+          }
+          if (active) setSessionResolved(true);
         })
         .catch(() => {
           if (!active || revision !== authRevision) return;
           recordOdaraAuthTrace({
             decision: 'confirm_failed',
+            getSessionResult: 'error',
             reason: 'getSession_after_null_event_error',
             sessionPresent: false,
             source: 'OdaraScreen',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
-            userPresent: Boolean(activeSessionUserRef.current),
+            userIdHint: getShortOdaraAuthUserId(activeSessionUserRef.current?.id ?? propUserId),
+            userPresent: Boolean(activeSessionUserRef.current) || Boolean(propUserId),
           });
           if (active) setSessionResolved(true);
         });
@@ -293,22 +382,24 @@ function useOdaraActiveSessionUser({
         event,
         sessionBootstrapResolved,
         eventHasSession: Boolean(session?.user),
-        currentUserPresent: Boolean(activeSessionUserRef.current),
+        currentUserPresent: Boolean(activeSessionUserRef.current) || Boolean(propUserId),
       });
       recordOdaraAuthTrace({
         decision,
         event,
         reason: 'onAuthStateChange',
         sessionPresent: Boolean(session?.user),
+        sessionUserIdHint: getShortOdaraAuthUserId(session?.user?.id),
         source: 'OdaraScreen',
         storageKeyName: ODARA_AUTH_STORAGE_KEY,
-        userPresent: Boolean(activeSessionUserRef.current),
+        userIdHint: getShortOdaraAuthUserId(activeSessionUserRef.current?.id ?? propUserId),
+        userPresent: Boolean(activeSessionUserRef.current) || Boolean(propUserId),
       });
 
       if (decision === 'ignore_transient_null') return;
 
       if (decision === 'confirm_signed_out') {
-        confirmCurrentSessionBeforeClearing(revision);
+        confirmCurrentSessionBeforeClearing(revision, event);
         return;
       }
 
@@ -321,15 +412,19 @@ function useOdaraActiveSessionUser({
         sessionBootstrapResolved = true;
         const shouldApplyBootstrap = shouldApplySessionBootstrapResult({
           bootstrapHasSession: Boolean(data?.session?.user),
-          currentUserPresent: Boolean(activeSessionUserRef.current),
+          currentUserPresent: Boolean(activeSessionUserRef.current) || Boolean(propUserId),
         });
         recordOdaraAuthTrace({
+          clearCaller: shouldApplyBootstrap || data?.session?.user ? undefined : `OdaraScreen:${scope}:getSession_bootstrap`,
           decision: shouldApplyBootstrap ? 'apply_bootstrap' : 'ignore_stale_bootstrap_null',
+          getSessionResult: data?.session?.user ? 'present' : 'null',
           reason: 'getSession_bootstrap',
           sessionPresent: Boolean(data?.session?.user),
+          sessionUserIdHint: getShortOdaraAuthUserId(data?.session?.user?.id),
           source: 'OdaraScreen',
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
-          userPresent: Boolean(activeSessionUserRef.current),
+          userIdHint: getShortOdaraAuthUserId(activeSessionUserRef.current?.id ?? propUserId),
+          userPresent: Boolean(activeSessionUserRef.current) || Boolean(propUserId),
         });
         if (shouldApplyBootstrap) {
           applySessionUser(data?.session?.user ?? null);
@@ -344,10 +439,9 @@ function useOdaraActiveSessionUser({
       active = false;
       subscription.unsubscribe();
     };
-  }, [isGuestMode]);
+  }, [isGuestMode, propUserId, scope]);
 
-  const activeSessionUserId = normalizeOdaraAuthUserId(activeSessionUser?.id);
-  const propUserId = normalizeOdaraAuthUserId(userId);
+  const activeSessionUserId = normalizeOdaraAuthUserId(activeSessionUser?.id) ?? (!isGuestMode ? propUserId : null);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;

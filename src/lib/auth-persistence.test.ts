@@ -6,6 +6,7 @@ import {
   readVesperAuthPersistenceMode,
   vesperAuthStorage,
 } from './auth-persistence';
+import { readPersistedOdaraAuthTrace } from './auth-debug-trace';
 
 const AUTH_KEY = 'sb-test-auth-token';
 
@@ -47,6 +48,13 @@ describe('auth-persistence', () => {
     window.localStorage.setItem(AUTH_KEY, 'existing-session');
 
     expect(vesperAuthStorage.getItem(AUTH_KEY)).toBe('existing-session');
+    expect(readPersistedOdaraAuthTrace().at(-1)).toMatchObject({
+      decision: 'get_preferred',
+      source: 'storage',
+      storageBackendUsed: 'local',
+      storageOperation: 'getItem',
+      storageOutcome: 'preferred_hit',
+    });
   });
 
   it('does not remove an existing auth token while only priming a mode switch', () => {
@@ -73,6 +81,12 @@ describe('auth-persistence', () => {
     expect(window.sessionStorage.getItem(AUTH_KEY)).toBeNull();
     expect(window.localStorage.getItem(AUTH_KEY)).toBe('mobile-session');
     expect(vesperAuthStorage.getItem(AUTH_KEY)).toBe('mobile-session');
+    expect(readPersistedOdaraAuthTrace().at(-1)).toMatchObject({
+      decision: 'get_fallback',
+      source: 'storage',
+      storageBackendUsed: 'local',
+      storageOperation: 'getItem',
+    });
   });
 
   it('falls back to sessionStorage when localStorage rejects a remembered session write', () => {

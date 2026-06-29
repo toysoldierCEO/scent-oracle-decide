@@ -24,6 +24,7 @@ describe('Index auth storage tracing', () => {
   it('emits temporary first-five-second login console breadcrumbs', () => {
     expect(source).toContain('LOGIN_CONSOLE_TRACE_WINDOW_MS = 5000');
     expect(source).toContain("console.info('[Odara auth first-5s]'");
+    expect(source).toContain('getShortAuthUserId(payload.sessionUserId');
     expect(source).toContain("startLoginConsoleTrace(isSignUp ? 'email_signup_submit' : 'password_sign_in_submit')");
     expect(source).toContain("startLoginConsoleTrace('google_oauth_submit')");
     expect(source).toContain("emitLoginConsoleTrace('auth_state_event'");
@@ -58,6 +59,9 @@ describe('Index auth storage tracing', () => {
     expect(source).toContain('shouldClearUserAfterGetUserConfirmation');
     expect(source).toContain('await odaraSupabase.auth.getUser()');
     expect(source).toContain("decision: shouldClear ? 'confirmed-signed-out' : 'confirmed-user-retained'");
+    expect(source).toContain("clearCaller: shouldClear ? `confirm:${sourceEvent}` : undefined");
+    expect(source).toContain("getSessionResult: 'null'");
+    expect(source).toContain("getUserResult: getUserHasUser ? 'valid'");
   });
 
   it('records crash-safe login recovery breadcrumbs and shows the recovery panel on signed-out boot', () => {
