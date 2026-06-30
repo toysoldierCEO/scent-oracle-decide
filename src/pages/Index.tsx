@@ -26,6 +26,7 @@ import {
   resolveSignOutGuard,
   type OdaraSignOutRequest,
 } from '@/lib/auth-sign-out-guard';
+import { summarizeSafeAuthError } from '@/lib/auth-error-summary';
 import {
   installOdaraReloadCrashRecorder,
   recordOdaraReloadCrashEvent,
@@ -127,6 +128,10 @@ function persistRememberedEmail(remember: boolean, emailValue: string) {
 type SafeLoginTraceExtras = Partial<Pick<
   OdaraAuthTraceEntry,
   'event'
+  | 'errorCategory'
+  | 'errorCode'
+  | 'errorName'
+  | 'errorStatus'
   | 'getSessionResult'
   | 'origin'
   | 'originChanged'
@@ -135,11 +140,14 @@ type SafeLoginTraceExtras = Partial<Pick<
   | 'sessionPresent'
   | 'urlHasAuthParams'
   | 'userPresent'
->>;
+>> & {
+  safeDisplayMessage?: string;
+};
 
 type LoginConsoleTracePayload = {
   authEvent?: string;
   decision?: string;
+  errorCategory?: string | null;
   reason?: string;
   routeDecision?: string;
   rpcError?: string | null;
@@ -197,6 +205,10 @@ function isLoginLifecycleDecision(decision: string | undefined): boolean {
     || decision === 'returned_origin_after_login'
     || decision === 'session_after_login_reload'
     || decision === 'url_has_auth_params';
+}
+
+function toSafeLoginRecoveryReasonLabel(reason: string) {
+  return reason.replace(/password/gi, 'credential');
 }
 
 type AuthView = 'signIn' | 'signUp' | 'checkEmail';
@@ -443,6 +455,7 @@ const Index = () => {
       authEvent: payload.authEvent ?? null,
       authReady: authReadyRef.current,
       decision: payload.decision ?? label,
+      errorCategory: payload.errorCategory ?? null,
       reason: payload.reason ?? null,
       routeDecision,
       rpcError: payload.rpcError ?? null,
@@ -469,6 +482,10 @@ const Index = () => {
       accessMode: diagnosticAccessModeRef.current,
       authReady: authReadyRef.current,
       decision,
+      errorCategory: extras.errorCategory,
+      errorCode: extras.errorCode,
+      errorName: extras.errorName,
+      errorStatus: extras.errorStatus,
       origin: window.location.origin,
       redirectOrigin: authRedirectOrigin,
       redirectTarget: authRedirectOrigin,
@@ -482,12 +499,17 @@ const Index = () => {
     });
     recordOdaraLoginRecoveryEvent({
       decision,
+      errorCategory: extras.errorCategory,
+      errorCode: extras.errorCode,
+      errorName: extras.errorName,
+      errorStatus: extras.errorStatus,
       origin: window.location.origin,
       originChanged: extras.originChanged,
       redirectOrigin: extras.redirectOrigin ?? authRedirectOrigin,
       redirectTarget: extras.redirectTarget ?? extras.redirectOrigin ?? authRedirectOrigin,
-      reason,
+      reason: toSafeLoginRecoveryReasonLabel(reason),
       returnedOrigin: window.location.origin,
+      safeDisplayMessage: extras.safeDisplayMessage,
       sessionPresent: extras.sessionPresent,
       source: decision.startsWith('login_') ? 'login' : decision.includes('auth_key') ? 'storage' : 'auth',
       storageKeyName: ODARA_AUTH_STORAGE_KEY,
@@ -496,6 +518,7 @@ const Index = () => {
     emitLoginConsoleTrace(decision, {
       authEvent: extras.event,
       decision,
+      errorCategory: extras.errorCategory ?? null,
       reason,
       sessionPresent: extras.sessionPresent,
       source: 'login',
@@ -1443,20 +1466,47 @@ const Index = () => {
         options: { redirectTo: authRedirectOrigin },
       });
       if (err) {
+        const safeError = summarizeSafeAuthError(err);
         recordLoginTrace('login_request_result_error', 'google_oauth_error', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
           sessionPresent: false,
         });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
           decision: 'sign_in_result_error',
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
           reason: 'google_oauth_error',
+          safeDisplayMessage: safeError.displayMessage,
           sessionPresent: false,
           source: 'Index',
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(authUserRef.current),
         });
-        setAuthError(err.message);
+        setAuthError(safeError.displayMessage);
+        recordLoginTrace('after_error_ui_rendered', 'google_oauth_error_ui_rendered', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
+          sessionPresent: false,
+        });
+        recordLoginTrace('after_error_no_reload_scheduled', 'google_oauth_error_stable_auth_screen', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
+          sessionPresent: false,
+        });
       } else {
         recordLoginTrace('login_request_result_success', 'google_oauth_redirect_started', {
           sessionPresent: false,
@@ -1481,7 +1531,7 @@ const Index = () => {
         },
       });
       if (err) {
-        setAuthError(err.message);
+        setAuthError(summarizeSafeAuthError(err).displayMessage);
       } else {
         setAuthNotice(`Verification email resent to ${pendingEmail}.`);
       }
@@ -1551,9 +1601,11 @@ const Index = () => {
 
   const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     startLoginConsoleTrace(isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     recordLoginTrace('login_submit_clicked', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     recordLoginTrace('login_submit_prevent_default_applied', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
+    recordLoginTrace('login_submit_propagation_stopped', isSignUp ? 'email_signup_submit' : 'password_sign_in_submit');
     clearAuthMessages();
     setSubmitAttempted(true);
 
@@ -1611,20 +1663,47 @@ const Index = () => {
         });
 
         if (err) {
+          const safeError = summarizeSafeAuthError(err);
           recordLoginTrace('login_request_result_error', 'email_signup_error', {
+            errorCategory: safeError.category,
+            errorCode: safeError.code,
+            errorName: safeError.errorClass,
+            errorStatus: safeError.status,
+            safeDisplayMessage: safeError.displayMessage,
             sessionPresent: false,
           });
           recordOdaraAuthTrace({
             accessMode: diagnosticAccessMode,
             authReady: authReadyRef.current,
             decision: 'sign_in_result_error',
+            errorCategory: safeError.category,
+            errorCode: safeError.code,
+            errorName: safeError.errorClass,
+            errorStatus: safeError.status,
             reason: 'email_signup_error',
+            safeDisplayMessage: safeError.displayMessage,
             sessionPresent: false,
             source: 'Index',
             storageKeyName: ODARA_AUTH_STORAGE_KEY,
             userPresent: Boolean(authUserRef.current),
           });
-          setAuthError(err.message);
+          setAuthError(safeError.displayMessage);
+          recordLoginTrace('after_error_ui_rendered', 'email_signup_error_ui_rendered', {
+            errorCategory: safeError.category,
+            errorCode: safeError.code,
+            errorName: safeError.errorClass,
+            errorStatus: safeError.status,
+            safeDisplayMessage: safeError.displayMessage,
+            sessionPresent: false,
+          });
+          recordLoginTrace('after_error_no_reload_scheduled', 'email_signup_error_stable_auth_screen', {
+            errorCategory: safeError.category,
+            errorCode: safeError.code,
+            errorName: safeError.errorClass,
+            errorStatus: safeError.status,
+            safeDisplayMessage: safeError.displayMessage,
+            sessionPresent: false,
+          });
           return;
         }
 
@@ -1676,20 +1755,47 @@ const Index = () => {
       });
 
       if (err) {
+        const safeError = summarizeSafeAuthError(err);
         recordLoginTrace('login_request_result_error', 'password_sign_in_error', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
           sessionPresent: false,
         });
         recordOdaraAuthTrace({
           accessMode: diagnosticAccessMode,
           authReady: authReadyRef.current,
           decision: 'sign_in_result_error',
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
           reason: 'password_sign_in_error',
+          safeDisplayMessage: safeError.displayMessage,
           sessionPresent: false,
           source: 'Index',
           storageKeyName: ODARA_AUTH_STORAGE_KEY,
           userPresent: Boolean(authUserRef.current),
         });
-        setAuthError(err.message);
+        setAuthError(safeError.displayMessage);
+        recordLoginTrace('after_error_ui_rendered', 'password_sign_in_error_ui_rendered', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
+          sessionPresent: false,
+        });
+        recordLoginTrace('after_error_no_reload_scheduled', 'password_sign_in_error_stable_auth_screen', {
+          errorCategory: safeError.category,
+          errorCode: safeError.code,
+          errorName: safeError.errorClass,
+          errorStatus: safeError.status,
+          safeDisplayMessage: safeError.displayMessage,
+          sessionPresent: false,
+        });
       } else {
         recordLoginTrace('login_request_result_success', 'password_sign_in_result', {
           sessionPresent: Boolean(data.session?.user),

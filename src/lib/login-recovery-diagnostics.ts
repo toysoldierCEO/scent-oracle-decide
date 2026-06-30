@@ -27,8 +27,11 @@ export type OdaraLoginRecoveryEntry = {
   authKeyExists?: boolean;
   buildCommit?: string;
   decision: string;
+  errorCategory?: string;
+  errorCode?: string | null;
   errorMessage?: string;
   errorName?: string;
+  errorStatus?: number | null;
   event?: string;
   localAuthKeyExists?: boolean;
   navigationType?: string;
@@ -38,6 +41,7 @@ export type OdaraLoginRecoveryEntry = {
   reason?: string;
   redirectOrigin?: string;
   returnedOrigin?: string;
+  safeDisplayMessage?: string;
   sessionAuthKeyExists?: boolean;
   sessionPresent?: boolean;
   source: OdaraLoginRecoverySource;
@@ -194,8 +198,11 @@ export function recordOdaraLoginRecoveryEvent(entry: Omit<OdaraLoginRecoveryEntr
     ...entry,
     buildCommit: ODARA_BUILD_INFO.commit,
     decision: sanitizeText(entry.decision, 80) ?? 'unknown',
+    errorCategory: sanitizeText(entry.errorCategory, 80),
+    errorCode: sanitizeText(entry.errorCode, 80),
     errorMessage: sanitizeText(entry.errorMessage, 160),
     errorName: sanitizeText(entry.errorName, 80),
+    errorStatus: typeof entry.errorStatus === 'number' && Number.isFinite(entry.errorStatus) ? entry.errorStatus : null,
     event: sanitizeText(entry.event, 80),
     navigationType: sanitizeText(entry.navigationType ?? readNavigationType(), 32),
     origin: sanitizeText(entry.origin ?? window.location.origin, 160),
@@ -203,6 +210,7 @@ export function recordOdaraLoginRecoveryEvent(entry: Omit<OdaraLoginRecoveryEntr
     reason: sanitizeText(entry.reason, 120),
     redirectOrigin: sanitizeText(entry.redirectOrigin, 160),
     returnedOrigin: sanitizeText(entry.returnedOrigin, 160),
+    safeDisplayMessage: sanitizeText(entry.safeDisplayMessage, 160),
     storageKeyName: sanitizeText(entry.storageKeyName ?? ODARA_AUTH_STORAGE_KEY, 120),
     timestamp: new Date().toISOString(),
     visibilityState: typeof document === 'undefined' ? undefined : document.visibilityState,
@@ -450,8 +458,12 @@ export function buildOdaraRecoveryReport({
       entry.sessionPresent == null ? null : `session=${entry.sessionPresent ? 'yes' : 'no'}`,
       entry.navigationType ? `navigation=${entry.navigationType}` : null,
       entry.visibilityState ? `visibility=${entry.visibilityState}` : null,
-      entry.errorName ? `error=${entry.errorName}` : null,
+      entry.errorName ? `errorClass=${entry.errorName}` : null,
+      entry.errorStatus == null ? null : `errorStatus=${entry.errorStatus}`,
+      entry.errorCategory ? `errorCategory=${entry.errorCategory}` : null,
+      entry.errorCode ? `errorCode=${entry.errorCode}` : null,
       entry.errorMessage ? `message=${entry.errorMessage}` : null,
+      entry.safeDisplayMessage ? `safeMessage=${entry.safeDisplayMessage}` : null,
       `reason=${entry.reason ?? 'none'}`,
     ].filter(Boolean).join(' '));
   });

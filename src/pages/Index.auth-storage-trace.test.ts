@@ -9,6 +9,7 @@ describe('Index auth storage tracing', () => {
     expect(source).toContain("recordLoginTrace('login_form_rendered'");
     expect(source).toContain("recordLoginTrace('login_submit_clicked'");
     expect(source).toContain("recordLoginTrace('login_submit_prevent_default_applied'");
+    expect(source).toContain("recordLoginTrace('login_submit_propagation_stopped'");
     expect(source).toContain("recordLoginTrace('login_request_started'");
     expect(source).toContain("recordLoginTrace('login_request_result_success'");
     expect(source).toContain("recordLoginTrace('login_request_result_error'");
@@ -69,6 +70,24 @@ describe('Index auth storage tracing', () => {
     expect(source).toContain("decision: 'possible_login_persistence_failure'");
     expect(source).toContain('shouldAutoShowOdaraRecoveryPanel');
     expect(source).toContain('<LoginRecoveryPanel userPresent={Boolean(user)} />');
+  });
+
+  it('records safe failed-login errors without signing out or scheduling reload', () => {
+    expect(source).toContain('summarizeSafeAuthError(err)');
+    expect(source).toContain("setAuthError(safeError.displayMessage)");
+    expect(source).toContain("recordLoginTrace('after_error_ui_rendered'");
+    expect(source).toContain("recordLoginTrace('after_error_no_reload_scheduled'");
+    expect(source).toContain('errorCategory: safeError.category');
+    expect(source).toContain('errorStatus: safeError.status');
+    expect(source).toContain('toSafeLoginRecoveryReasonLabel(reason)');
+
+    const passwordErrorSnippet = source.slice(
+      source.indexOf("recordLoginTrace('login_request_result_error', 'password_sign_in_error'"),
+      source.indexOf("} else {\n        recordLoginTrace('login_request_result_success', 'password_sign_in_result'"),
+    );
+    expect(passwordErrorSnippet).not.toContain('signOut');
+    expect(passwordErrorSnippet).not.toContain('removeItem');
+    expect(passwordErrorSnippet).not.toContain('window.location');
   });
 
   it('uses resolved runtime redirect origin instead of hardcoding auth redirects to the shared preview', () => {

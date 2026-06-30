@@ -15,6 +15,9 @@ export type OdaraAuthTraceEntry = {
   decision?: string;
   defaultPrevented?: boolean;
   errorCategory?: string;
+  errorCode?: string | null;
+  errorName?: string;
+  errorStatus?: number | null;
   event?: string;
   getSessionResult?: 'present' | 'null' | 'error';
   getUserResult?: 'valid' | 'null' | 'error';
@@ -36,6 +39,7 @@ export type OdaraAuthTraceEntry = {
   redirectTarget?: string;
   routePath?: string;
   routeDecision?: string;
+  safeDisplayMessage?: string;
   selectedDate?: string;
   sessionPresent?: boolean;
   sessionAuthKeyExists?: boolean;

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ODARA_AUTH_TRACE_STORAGE_KEY } from './auth-debug-trace';
 import {
   ODARA_LOGIN_RECOVERY_TRACE_STORAGE_KEY,
+  buildOdaraRecoveryReport,
   clearOdaraRecoveryLogs,
   hasRecentLoginAttempt,
   installOdaraEarlyBootRecorder,
@@ -56,6 +57,30 @@ describe('login recovery diagnostics', () => {
 
     delete window.__ODARA_LOGIN_RECOVERY_TRACE__;
     expect(readPersistedOdaraLoginRecoveryTrace()).toHaveLength(1);
+  });
+
+  it('includes safe auth error summaries in recovery reports without raw secrets', () => {
+    recordOdaraLoginRecoveryEvent({
+      decision: 'login_request_result_error',
+      errorCategory: 'invalid_credentials',
+      errorCode: 'invalid_credentials',
+      errorMessage: 'password=swordfish user@example.test',
+      errorName: 'AuthApiError',
+      errorStatus: 400,
+      reason: 'password_sign_in_error',
+      safeDisplayMessage: 'Sign-in failed. Check your credentials or try again.',
+      source: 'login',
+      storageKeyName: ODARA_AUTH_STORAGE_KEY,
+    });
+
+    const report = buildOdaraRecoveryReport();
+    expect(report).toContain('errorClass=AuthApiError');
+    expect(report).toContain('errorStatus=400');
+    expect(report).toContain('errorCategory=invalid_credentials');
+    expect(report).toContain('errorCode=invalid_credentials');
+    expect(report).toContain('safeMessage=Sign-in failed. Check your credentials or try again.');
+    expect(report).not.toContain('swordfish');
+    expect(report).not.toContain('user@example.test');
   });
 
   it('auto-shows recovery after a recent login attempt signed-out boot with no auth key', () => {
