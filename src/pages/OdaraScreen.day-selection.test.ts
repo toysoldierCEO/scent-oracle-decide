@@ -74,6 +74,16 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).toContain('projectionEvidenceBacked');
   });
 
+  it('reranks signed-in Today pick candidates with safe scoring trace outside manual and locked states', () => {
+    expect(source).toContain('scoreTodaysPickCandidates');
+    expect(source).toContain('recordTodaysPickScoringTrace');
+    expect(source).toContain('buildTodaysPickProfileFromDisplayCard');
+    expect(source).toContain("if (signedInResolvedDayDecisionSource !== 'oracle') return;");
+    expect(source).toContain("if (lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;");
+    expect(source).toContain('signedInDayState.manualHeroCard || signedInDayState.manualLayerCard');
+    expect(source).toContain('setQueuePointer(0)');
+  });
+
   it('does not cancel wardrobe detail hydration when marking the selected fragrance loading', () => {
     expect(source).toContain('const detailHydrationByIdRef = useRef(detailHydrationById)');
     expect(source).toContain('detailHydrationByIdRef.current = detailHydrationById');

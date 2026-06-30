@@ -52,6 +52,13 @@ import {
   type LayerCombinationProfile,
 } from "@/lib/layerCombinationScoring";
 import {
+  recordTodaysPickScoringTrace,
+  scoreTodaysPickCandidates,
+  type TodaysPickCandidateScore,
+  type TodaysPickProfile,
+  type TodaysPickScoringContext,
+} from "@/lib/todaysPickScoring";
+import {
   ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
   isVesperResolverDetailCompleteForCache,
 } from "@/lib/vesperResolverCompleteness";
@@ -2990,6 +2997,76 @@ function applyLayerCombinationScoreToMode(
     spray_guidance: result.sprayGuidance,
     anchor_sprays: restrained ? 1 : (heroIsAnchor ? 2 : 1),
     layer_sprays: restrained ? 1 : (heroIsAnchor ? 1 : 2),
+  };
+}
+
+function isTodaysPickPerformanceEvidenceBacked(source: FragrancePerformanceSource | null | undefined) {
+  return source === 'direct' || source === 'derived';
+}
+
+function normalizeTodaysPickPerformanceScore(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (value > 1) return Math.max(0, Math.min(1, value / 10));
+  return Math.max(0, Math.min(1, value));
+}
+
+function buildTodaysPickProfileFromDisplayCard(
+  card: DisplayCard,
+  detail: FragranceDetail | null | undefined,
+  sourceRank: number,
+): TodaysPickProfile {
+  const longevityScore = normalizeTodaysPickPerformanceScore(detail?.longevity_score);
+  const projectionScore = normalizeTodaysPickPerformanceScore(detail?.projection_score);
+  const communityEvidence = detail?.vesper_community_evidence ?? null;
+  const officialSourceBacked = Boolean(
+    detail?.source_confidence === 'high'
+    || detail?.source_confidence === 'official'
+    || detail?.description_source === 'official'
+    || isLikelyOfficialBrandSourceUrl(detail?.source_page_url ?? null),
+  );
+  return {
+    id: card.fragrance_id,
+    name: detail?.name || card.name,
+    brand: detail?.brand ?? card.brand ?? null,
+    familyKey: detail?.family_key ?? card.family ?? null,
+    collectionStatus: (detail as any)?.collection_status ?? (card.isHero ? 'today_pick' : 'queue'),
+    owned: true,
+    retired: detail?.retired === true,
+    disliked: false,
+    wishlistOnly: false,
+    unresolved: false,
+    profileReady: detail ? true : Boolean(card.fragrance_id && card.name),
+    officialSourceBacked,
+    sourceConfidence: detail?.source_confidence ?? null,
+    notes: sanitizeTokenSource(detail?.notes?.length ? detail.notes : card.notes),
+    topNotes: sanitizeTokenSource(detail?.top_notes),
+    heartNotes: sanitizeTokenSource(detail?.middle_notes),
+    baseNotes: sanitizeTokenSource(detail?.base_notes),
+    accords: sanitizeTokenSource(detail?.accords?.length ? detail.accords : card.accords),
+    providerStructuredAccords: sanitizeTokenSource(communityEvidence?.structuredProviderAccords),
+    providerStructuredAccordsApproved: true,
+    communityAccords: sanitizeTokenSource(communityEvidence?.recommendationSignals?.styleAccords ?? communityEvidence?.accords),
+    communityNotes: sanitizeTokenSource(communityEvidence?.communityNotes),
+    performance: {
+      longevityScore,
+      longevityEvidenceBacked: longevityScore != null && isTodaysPickPerformanceEvidenceBacked(detail?.longevity_source),
+      projectionScore,
+      projectionEvidenceBacked: projectionScore != null && isTodaysPickPerformanceEvidenceBacked(detail?.projection_source),
+    },
+    sourceRank,
+  };
+}
+
+function applyTodaysPickScoreToDisplayCard(
+  card: DisplayCard,
+  score: TodaysPickCandidateScore | null | undefined,
+): DisplayCard {
+  if (!score) return card;
+  return {
+    ...card,
+    reason_chip_label: score.reasonChipLabel ?? card.reason_chip_label ?? null,
+    reason_chip_explanation: score.reasonChipExplanation ?? card.reason_chip_explanation ?? null,
+    reason: score.reasonChipExplanation ?? card.reason,
   };
 }
 
@@ -16129,6 +16206,7 @@ const OdaraScreen = ({
   const fragranceDetailInFlightRef = useRef<Map<string, Promise<FragranceDetail | null>>>(new Map());
   const queueFetchInFlightRef = useRef<Map<string, Promise<DisplayCard[]>>>(new Map());
   const signedInQueuedHeroRef = useRef<Map<string, DisplayCard>>(new Map());
+  const todaysPickScoringSignatureRef = useRef<string | null>(null);
   const [signedInQueuedHeroVersion, setSignedInQueuedHeroVersion] = useState(0);
   const [fragranceDetailVersion, setFragranceDetailVersion] = useState(0);
   const [fragranceDetailSheet, setFragranceDetailSheet] = useState<OdaraFragranceDetailSurfaceState | null>(null);
@@ -19222,6 +19300,120 @@ const OdaraScreen = ({
     return { message };
   }, [isGuestMode, v6Payload, signedInResolvedOracle]);
   const signedInHeroId = v6Payload?.hero?.fragrance_id ?? (signedInResolvedOracle as any)?.today_pick?.fragrance_id ?? null;
+
+  useEffect(() => {
+    if (isGuestMode || !signedInResolvedOracle?.today_pick || !visibleCard) return;
+    if (signedInResolvedDayDecisionSource !== 'oracle') return;
+    if (lockState === 'locked' || signedInIsReadOnlyHistoryCard) return;
+    if (signedInDayState.manualHeroCard || signedInDayState.manualLayerCard) return;
+
+    const candidateCards: DisplayCard[] = [];
+    const seen = new Set<string>();
+    const appendCandidate = (card: DisplayCard | null | undefined) => {
+      if (!card?.fragrance_id || seen.has(card.fragrance_id)) return;
+      const settled = signedInQueuedHeroRef.current.get(card.fragrance_id) ?? null;
+      const merged = mergeQueuedHeroCardSources(settled, card) ?? card;
+      seen.add(merged.fragrance_id);
+      candidateCards.push(merged);
+    };
+
+    appendCandidate(visibleCard);
+    queue.forEach(appendCandidate);
+
+    if (candidateCards.length === 0) return;
+
+    const recentCards = [
+      ...viewHistory.map((entry) => entry.card),
+      signedInVerifiedPredecessorBaton?.excludedPreviousCard ?? null,
+      signedInVerifiedPredecessorBaton?.carriedCard ?? null,
+    ].filter(Boolean) as DisplayCard[];
+    const scoringContext: TodaysPickScoringContext = {
+      occasion: selectedContext,
+      temperatureF: resolvedTemperature,
+      recentFragranceIds: recentCards.map((card) => card.fragrance_id).filter(Boolean),
+      recentFamilyKeys: recentCards.map((card) => card.family).filter(Boolean),
+      recentBrandNames: recentCards.map((card) => card.brand).filter(Boolean),
+    };
+    const profiles = candidateCards.map((card, index) => buildTodaysPickProfileFromDisplayCard(
+      card,
+      fragranceDetailCacheRef.current.get(card.fragrance_id) ?? null,
+      index,
+    ));
+    const scoring = scoreTodaysPickCandidates(profiles, scoringContext);
+    const trace = recordTodaysPickScoringTrace(scoring, scoringContext);
+    odaraDebugLog('[Odara][Today scoring]', trace);
+
+    const winner = scoring.winner;
+    if (!winner) return;
+
+    const visibleScore = [...scoring.candidates, ...scoring.excluded]
+      .find((candidate) => candidate.id === visibleCard.fragrance_id) ?? null;
+    const signature = [
+      stateKey,
+      candidateCards.map((card) => card.fragrance_id).join(','),
+      winner.id,
+      visibleScore?.finalScore ?? 'none',
+      winner.finalScore,
+      fragranceDetailVersion,
+    ].join('|');
+    if (todaysPickScoringSignatureRef.current === signature) return;
+    todaysPickScoringSignatureRef.current = signature;
+
+    const winnerCard = candidateCards.find((card) => card.fragrance_id === winner.id) ?? null;
+    if (!winnerCard) return;
+    const currentEligible = visibleScore?.eligible === true;
+    const winnerBeatsVisible = !currentEligible
+      || !visibleScore
+      || winner.finalScore >= visibleScore.finalScore + 4;
+    const visibleIsWinner = winner.id === visibleCard.fragrance_id;
+    const enrichedWinner = applyTodaysPickScoreToDisplayCard(winnerCard, winner);
+
+    if (visibleIsWinner) {
+      if (!areSameDisplayCards(visibleCard, enrichedWinner)) {
+        setVisibleCard(enrichedWinner);
+      }
+      return;
+    }
+
+    if (!winnerBeatsVisible) return;
+
+    const visibleAsQueueCandidate = visibleCard.fragrance_id !== winner.id
+      ? applyTodaysPickScoreToDisplayCard(visibleCard, visibleScore)
+      : null;
+    setVisibleCard(enrichedWinner);
+    setQueue((current) => {
+      const withoutWinner = current.filter((card) => card.fragrance_id !== winner.id);
+      const nextQueue = visibleAsQueueCandidate
+        ? [
+            visibleAsQueueCandidate,
+            ...withoutWinner.filter((card) => card.fragrance_id !== visibleAsQueueCandidate.fragrance_id),
+          ]
+        : withoutWinner;
+      return areSameDisplayCardLists(current, nextQueue) ? current : nextQueue;
+    });
+    setQueuePointer(0);
+    setPromotedAltId(null);
+    setSelectedMood('balance');
+    setSignedInLayerIdxByMood(DEFAULT_LAYER_INDEX_MAP);
+    setLayerExpanded(false);
+  }, [
+    isGuestMode,
+    signedInResolvedOracle,
+    visibleCard,
+    queue,
+    signedInResolvedDayDecisionSource,
+    lockState,
+    signedInIsReadOnlyHistoryCard,
+    signedInDayState.manualHeroCard,
+    signedInDayState.manualLayerCard,
+    selectedContext,
+    resolvedTemperature,
+    viewHistory,
+    signedInVerifiedPredecessorBaton,
+    stateKey,
+    fragranceDetailVersion,
+  ]);
+
   const signedInVisibleIsHeroCard = !!visibleCard && !!signedInHeroId && visibleCard.fragrance_id === signedInHeroId;
   const signedInPayloadAlternates = useMemo(() => {
     if (isGuestMode) return [];
@@ -19612,6 +19804,7 @@ const OdaraScreen = ({
     const reasonChip = duplicateResolution.kind === 'replace-main'
       ? readReasonChipFromSources(finalHeroSource, finalHero)
       : readReasonChipFromSources(
+          isHeroCard ? finalHeroSource : null,
           isHeroCard ? v6?.hero : null,
           isHeroCard ? o?.today_pick : null,
           !isHeroCard ? queuedHeroSource : null,
