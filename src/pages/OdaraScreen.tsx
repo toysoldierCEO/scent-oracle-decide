@@ -48,6 +48,10 @@ import {
 import { updateOdaraReloadCrashContext } from "@/lib/page-reload-crash-recorder";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
+  scoreLayerCombination,
+  type LayerCombinationProfile,
+} from "@/lib/layerCombinationScoring";
+import {
   ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
   isVesperResolverDetailCompleteForCache,
 } from "@/lib/vesperResolverCompleteness";
@@ -1898,9 +1902,13 @@ function backendModeEntryToLayerMode(
     image_url: entry.image_url ?? null,
     notes: Array.isArray(entry.layer_notes) ? entry.layer_notes : [],
     accords: Array.isArray(entry.layer_accords) ? entry.layer_accords : [],
+    top_notes: sanitizeTokenSource((entry as any).top_notes ?? (entry as any).layer_top_notes),
+    middle_notes: sanitizeTokenSource((entry as any).middle_notes ?? (entry as any).heart_notes ?? (entry as any).layer_middle_notes ?? (entry as any).layer_heart_notes),
+    base_notes: sanitizeTokenSource((entry as any).base_notes ?? (entry as any).layer_base_notes),
     interactionType: (entry.interaction_type as InteractionType) || 'balance',
     reason: entry.reason || '',
     why_it_works: entry.why_it_works || '',
+    layer_score: typeof entry.layer_score === 'number' ? entry.layer_score : null,
     projection: null,
     ratio_hint: entry.ratio_hint || '',
     application_style: entry.application_style || '',
@@ -2016,9 +2024,13 @@ function v6LayerToLayerMode(
     image_url: resolveBottleImageUrl(layer),
     notes: Array.isArray(layer.notes) ? layer.notes : Array.isArray(layer.layer_notes) ? layer.layer_notes : [],
     accords: Array.isArray(layer.accords) ? layer.accords : Array.isArray(layer.layer_accords) ? layer.layer_accords : [],
+    top_notes: sanitizeTokenSource(layer.top_notes ?? layer.topNotes ?? layer.layer_top_notes ?? layer.layerTopNotes),
+    middle_notes: sanitizeTokenSource(layer.middle_notes ?? layer.middleNotes ?? layer.heart_notes ?? layer.heartNotes ?? layer.layer_middle_notes ?? layer.layer_heart_notes),
+    base_notes: sanitizeTokenSource(layer.base_notes ?? layer.baseNotes ?? layer.layer_base_notes ?? layer.layerBaseNotes),
     interactionType: ((layer.interaction_type ?? layer.interactionType ?? layer.layer_mode ?? layer.mode ?? mood) as InteractionType) || mood,
     reason: teaching.reason,
     why_it_works: teaching.why_it_works,
+    layer_score: typeof layer.layer_score === 'number' ? layer.layer_score : null,
     projection: layer.projection ?? null,
     ratio_hint: teaching.ratio_hint,
     application_style: teaching.application_style,
@@ -2876,6 +2888,108 @@ function resolveLayerModeWithDetails(
     top_notes: sanitizeTokenSource(detail.top_notes),
     middle_notes: sanitizeTokenSource(detail.middle_notes),
     base_notes: sanitizeTokenSource(detail.base_notes),
+  };
+}
+
+function isLayerCombinationPerformanceEvidenceBacked(source: FragrancePerformanceSource | null | undefined) {
+  return source === 'direct' || source === 'derived';
+}
+
+function normalizeLayerCombinationProjection(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (value > 1) return Math.max(0, Math.min(1, value / 10));
+  return Math.max(0, Math.min(1, value));
+}
+
+function buildLayerCombinationProfileFromDisplayCard(
+  card: DisplayCard,
+  detail: FragranceDetail | null | undefined,
+): LayerCombinationProfile {
+  const projectionScore = normalizeLayerCombinationProjection(detail?.projection_score);
+  return {
+    id: card.fragrance_id,
+    name: detail?.name || card.name,
+    brand: detail?.brand ?? card.brand ?? null,
+    familyKey: detail?.family_key ?? card.family ?? null,
+    notes: sanitizeTokenSource(detail?.notes?.length ? detail.notes : card.notes),
+    topNotes: sanitizeTokenSource(detail?.top_notes),
+    heartNotes: sanitizeTokenSource(detail?.middle_notes),
+    baseNotes: sanitizeTokenSource(detail?.base_notes),
+    accords: sanitizeTokenSource(detail?.accords?.length ? detail.accords : card.accords),
+    performance: {
+      projectionScore,
+      projectionEvidenceBacked: projectionScore != null && isLayerCombinationPerformanceEvidenceBacked(detail?.projection_source),
+    },
+    owned: true,
+    retired: detail?.retired === true,
+  };
+}
+
+function buildLayerCombinationProfileFromLayerMode(
+  layer: NonNullable<LayerModes[LayerMood]>,
+  detail: FragranceDetail | null | undefined,
+): LayerCombinationProfile {
+  const projectionScore = normalizeLayerCombinationProjection(detail?.projection_score ?? layer.projection);
+  return {
+    id: layer.id,
+    name: detail?.name || layer.name,
+    brand: detail?.brand ?? layer.brand ?? null,
+    familyKey: detail?.family_key ?? layer.family_key ?? null,
+    notes: sanitizeTokenSource(detail?.notes?.length ? detail.notes : layer.notes),
+    topNotes: sanitizeTokenSource(detail?.top_notes?.length ? detail.top_notes : layer.top_notes),
+    heartNotes: sanitizeTokenSource(detail?.middle_notes?.length ? detail.middle_notes : layer.middle_notes),
+    baseNotes: sanitizeTokenSource(detail?.base_notes?.length ? detail.base_notes : layer.base_notes),
+    accords: sanitizeTokenSource(detail?.accords?.length ? detail.accords : layer.accords),
+    performance: {
+      projectionScore,
+      projectionEvidenceBacked: projectionScore != null && isLayerCombinationPerformanceEvidenceBacked(detail?.projection_source),
+    },
+    owned: true,
+    retired: detail?.retired === true,
+  };
+}
+
+function mapLayerPairingModeToInteractionType(
+  mode: ReturnType<typeof scoreLayerCombination>['pairingMode'],
+): InteractionType {
+  if (mode === 'contrast') return 'contrast';
+  if (mode === 'reinforce' || mode === 'deepen') return 'amplify';
+  return 'balance';
+}
+
+function applyLayerCombinationScoreToMode(
+  hero: DisplayCard,
+  heroDetail: FragranceDetail | null | undefined,
+  layer: NonNullable<LayerModes[LayerMood]>,
+  layerDetail: FragranceDetail | null | undefined,
+  mood: LayerMood,
+): NonNullable<LayerModes[LayerMood]> {
+  const result = scoreLayerCombination({
+    fragranceA: buildLayerCombinationProfileFromDisplayCard(hero, heroDetail),
+    fragranceB: buildLayerCombinationProfileFromLayerMode(layer, layerDetail),
+    context: { mode: mood },
+  });
+
+  if (!result.eligible) {
+    return {
+      ...layer,
+      layer_score: 0,
+    };
+  }
+
+  const heroIsAnchor = result.anchor === 'a';
+  const restrained = result.reasonCodes.includes('performance_balance_caution');
+  return {
+    ...layer,
+    interactionType: mapLayerPairingModeToInteractionType(result.pairingMode),
+    reason: result.whyItWorks,
+    why_it_works: result.whyItWorks,
+    layer_score: result.score,
+    ratio_hint: heroIsAnchor ? 'Anchor-led · light companion' : 'Companion-led · light top-up',
+    placement_hint: result.placement,
+    spray_guidance: result.sprayGuidance,
+    anchor_sprays: restrained ? 1 : (heroIsAnchor ? 2 : 1),
+    layer_sprays: restrained ? 1 : (heroIsAnchor ? 1 : 2),
   };
 }
 
@@ -19516,9 +19630,21 @@ const OdaraScreen = ({
   const heroFamilyLabelForDisplay = heroFamilyKey
       ? getFamilyLabelText(heroFamilyKey)
       : '';
+    const finalHeroDetail = finalHero.fragrance_id === heroSourceCard.fragrance_id
+      ? heroDetail
+      : (fragranceDetailCacheRef.current.get(finalHero.fragrance_id) ?? heroDetail);
     const finalLayerDetail = finalLayer?.id
       ? (fragranceDetailCacheRef.current.get(finalLayer.id) ?? null)
       : null;
+    if (finalLayer) {
+      finalLayer = applyLayerCombinationScoreToMode(
+        finalHero,
+        finalHeroDetail,
+        finalLayer,
+        finalLayerDetail,
+        betaSafeSignedInMood,
+      );
+    }
     const sharedHeroLayerKeys = buildSharedTokenKeySet(
       finalHero.notes,
       finalHero.accords,

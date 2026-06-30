@@ -65,6 +65,15 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).toContain('visibleCommunityEvidence?.trustLine');
   });
 
+  it('enriches signed-in layer cards with pair-scored combination reasoning', () => {
+    expect(source).toContain('scoreLayerCombination');
+    expect(source).toContain('applyLayerCombinationScoreToMode');
+    expect(source).toContain('buildLayerCombinationProfileFromDisplayCard');
+    expect(source).toContain('buildLayerCombinationProfileFromLayerMode');
+    expect(source).toContain('finalLayer = applyLayerCombinationScoreToMode');
+    expect(source).toContain('projectionEvidenceBacked');
+  });
+
   it('does not cancel wardrobe detail hydration when marking the selected fragrance loading', () => {
     expect(source).toContain('const detailHydrationByIdRef = useRef(detailHydrationById)');
     expect(source).toContain('detailHydrationByIdRef.current = detailHydrationById');

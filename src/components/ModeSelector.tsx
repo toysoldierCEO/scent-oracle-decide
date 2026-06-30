@@ -38,6 +38,7 @@ export interface LayerModeEntry {
   interactionType: InteractionType;
   reason: string;
   why_it_works: string;
+  layer_score?: number | null;
   projection: number | null;
   ratio_hint?: string;
   application_style?: string;
