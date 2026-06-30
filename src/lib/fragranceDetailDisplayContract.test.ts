@@ -19,6 +19,7 @@ import {
   isGroundedWearContextLabel,
   isLayerToolActionLabel,
   isLikelyOfficialBrandSourceUrl,
+  resolveAccordDisplayPolicy,
   isScentProfileChip,
   shouldShowVesperizingNotice,
 } from './fragranceDetailDisplayContract';
@@ -209,6 +210,11 @@ describe('fragranceDetailDisplayContract', () => {
       showCommunitySignals: false,
       showCommunitySourceTrust: false,
     });
+    expect(model.accordDisplayPolicy).toMatchObject({
+      source: 'none',
+      reason: 'no_approved_visible_accord_source',
+    });
+    expect(model.accordSourceTrustLine).toBeNull();
     expect(model.detailSectionOrder).toEqual([
       'family',
       'description',
@@ -218,6 +224,51 @@ describe('fragranceDetailDisplayContract', () => {
       'actions',
     ]);
     expect(model.detailSectionOrder).not.toContain('performance');
+  });
+
+  it('renders approved Fragella/provider structured accords without calling them official', () => {
+    const providerEvidence = buildCommunityEvidenceDisplayModel([{
+      sourceType: 'retailer',
+      sourceTier: 'retailer_structured_notes',
+      sourceName: 'Fragella',
+      reviewStatus: 'approved_for_internal_use',
+      evidenceStatus: 'usable_non_official_intelligence',
+      usableForVesperIntelligence: true,
+      officialRegistryEligible: false,
+      patchSafeNow: false,
+      normalizedAccords: ['amber', 'floral'],
+      normalizedNotes: [],
+    } satisfies CommunityEvidenceInput], {
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+    });
+    const model = buildFragranceDetailDisplayModel({
+      familyKey: 'fresh-blue',
+      familyLabel: 'Fresh Aquatic',
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+      communityEvidence: providerEvidence,
+    });
+
+    expect(model.accordLabels).toEqual(['amber', 'floral']);
+    expect(model.accordDisplayPolicy).toMatchObject({
+      source: 'provider_structured',
+      reason: 'approved_structured_provider_accords',
+    });
+    expect(model.accordSourceTrustLine).toBe('Provider accords · Fragella');
+    expect(model.accordSourceTrustLine).not.toContain('Official');
+    expect(model.communityEvidence).toBeNull();
+    expect(model.detailSectionOrder).toEqual([
+      'family',
+      'description',
+      'notes',
+      'accords',
+      'metadata',
+      'source_provenance',
+      'actions',
+    ]);
   });
 
   it('renders community/provider evidence only when official notes are incomplete', () => {
@@ -262,6 +313,42 @@ describe('fragranceDetailDisplayContract', () => {
       'actions',
     ]);
     expect(model.detailSectionOrder).not.toContain('performance');
+  });
+
+  it('resolves accord sources without backfilling from community evidence when policy hides it', () => {
+    const communityEvidence = buildCommunityEvidenceDisplayModel([{
+      sourceType: 'community_provider',
+      sourceTier: 'community_provider_consensus',
+      sourceName: 'Fragrantica',
+      reviewStatus: 'approved_for_internal_use',
+      evidenceStatus: 'usable_non_official_intelligence',
+      usableForVesperIntelligence: true,
+      officialRegistryEligible: false,
+      patchSafeNow: false,
+      normalizedAccords: ['aromatic'],
+      normalizedNotes: ['Cucumber'],
+    } satisfies CommunityEvidenceInput], {
+      topNotes: ['Sea Air', 'Bergamot'],
+      middleNotes: ['Soft Coconut', 'Cucumber'],
+      baseNotes: ['Vanilla', 'Copaiba', 'Juniper Berry'],
+    });
+
+    expect(resolveAccordDisplayPolicy({
+      catalogAccordLabels: null,
+      communityEvidence,
+      communityEvidenceDisplayPolicy: {
+        reason: 'official_notes_complete_default_hidden',
+        officialNotesCompleteEnough: true,
+        showCommunityAccords: false,
+        showCommunitySignals: false,
+        showCommunitySourceTrust: false,
+        showCommunityWearEvidence: false,
+      },
+    })).toMatchObject({
+      visibleAccords: [],
+      visibleSourceTrustLine: null,
+      source: 'none',
+    });
   });
 
   it('uses one canonical header hierarchy for new and existing canonical details', () => {

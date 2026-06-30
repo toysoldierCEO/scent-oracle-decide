@@ -66,6 +66,10 @@ export type CommunityEvidenceDisplayModel = {
   sourceLabel: string | null;
   trustLine: string | null;
   accords: string[];
+  structuredProviderAccords: string[];
+  structuredProviderSourceNames: string[];
+  structuredProviderSourceLabel: string | null;
+  structuredProviderTrustLine: string | null;
   communityNotes: string[];
   hasCommunitySignalsSection: boolean;
   communityPerformance: CommunityPerformanceEvidence | null;
@@ -185,6 +189,28 @@ function isOfficialSourceType(value: string | null | undefined) {
   return key === 'official brand' || key === 'official source' || key === 'official_brand';
 }
 
+function isStructuredProviderAccordSource(input: CommunityEvidenceInput) {
+  const sourceType = normalizeDisplayKey(input.sourceType);
+  const sourceTier = normalizeDisplayKey(input.sourceTier);
+  const sourceName = normalizeDisplayKey(input.sourceName);
+  if (!input.normalizedAccords || input.normalizedAccords.length === 0) return false;
+  if (sourceName === 'fragrantica') return false;
+  if (sourceType === 'community provider' || sourceType === 'review aggregate') return false;
+  if (sourceTier.includes('community provider') || sourceTier.includes('community consensus')) return false;
+  if (sourceName === 'fragella') return true;
+  return [
+    'provider metadata',
+    'retailer provider',
+    'professional provider',
+    'retailer',
+    'professional',
+  ].includes(sourceType)
+    || sourceTier.includes('provider structured')
+    || sourceTier.includes('structured accords')
+    || sourceTier.includes('structured notes')
+    || sourceTier === 'fragella provider';
+}
+
 export function isApprovedCommunityEvidenceInput(input: CommunityEvidenceInput) {
   if (input.reviewStatus !== 'approved_for_internal_use') return false;
   if (input.evidenceStatus && input.evidenceStatus !== 'usable_non_official_intelligence') return false;
@@ -247,6 +273,10 @@ export function buildEmptyCommunityEvidenceDisplayModel(): CommunityEvidenceDisp
     sourceLabel: null,
     trustLine: null,
     accords: [],
+    structuredProviderAccords: [],
+    structuredProviderSourceNames: [],
+    structuredProviderSourceLabel: null,
+    structuredProviderTrustLine: null,
     communityNotes: [],
     hasCommunitySignalsSection: false,
     communityPerformance: null,
@@ -278,6 +308,18 @@ export function buildCommunityEvidenceDisplayModel(
   const sourceLabel = buildSourceLabel(sourceNames);
   const accordLabels = mergeUnique(
     approvedInputs.flatMap((input) => cleanList(input.normalizedAccords, normalizeAccordLabel)),
+    12,
+  );
+  const structuredProviderInputs = approvedInputs.filter(isStructuredProviderAccordSource);
+  const structuredProviderSourceNames = mergeUnique(
+    structuredProviderInputs
+      .map((input) => normalizeSourceName(input.sourceName))
+      .filter((source): source is string => Boolean(source)),
+    4,
+  );
+  const structuredProviderSourceLabel = buildSourceLabel(structuredProviderSourceNames);
+  const structuredProviderAccords = mergeUnique(
+    structuredProviderInputs.flatMap((input) => cleanList(input.normalizedAccords, normalizeAccordLabel)),
     12,
   );
   const communityNotes = mergeUnique(
@@ -316,6 +358,12 @@ export function buildCommunityEvidenceDisplayModel(
       ? `Community/provider evidence · ${sourceLabel}`
       : null,
     accords: accordLabels,
+    structuredProviderAccords,
+    structuredProviderSourceNames,
+    structuredProviderSourceLabel,
+    structuredProviderTrustLine: structuredProviderAccords.length > 0 && structuredProviderSourceLabel
+      ? `Provider accords · ${structuredProviderSourceLabel}`
+      : null,
     communityNotes,
     hasCommunitySignalsSection: communityNotes.length > 0 || conflictsWithOfficialNotes,
     communityPerformance,
@@ -434,6 +482,10 @@ export function applyCommunityEvidenceDisplayPolicy(
     ...communityEvidence,
     trustLine: policy.showCommunitySourceTrust ? communityEvidence.trustLine : null,
     accords: visibleAccords,
+    structuredProviderAccords: [],
+    structuredProviderSourceNames: [],
+    structuredProviderSourceLabel: null,
+    structuredProviderTrustLine: null,
     communityNotes: visibleNotes,
     hasCommunitySignalsSection: showSignalsSection,
     communityPerformance: hasCommunityPerformance ? communityEvidence.communityPerformance : null,

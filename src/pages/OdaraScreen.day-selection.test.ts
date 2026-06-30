@@ -60,6 +60,11 @@ describe('OdaraScreen day selection auth safety', () => {
     expect(source).not.toContain('visibleCommunityEvidence.communityNotes.slice(0, 8)');
   });
 
+  it('uses policy-approved provider accord provenance in the visible detail trust line', () => {
+    expect(source).toContain('detailDisplayModel.accordSourceTrustLine');
+    expect(source).toContain('visibleCommunityEvidence?.trustLine');
+  });
+
   it('does not cancel wardrobe detail hydration when marking the selected fragrance loading', () => {
     expect(source).toContain('const detailHydrationByIdRef = useRef(detailHydrationById)');
     expect(source).toContain('detailHydrationByIdRef.current = detailHydrationById');

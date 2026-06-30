@@ -45,6 +45,23 @@ type FragranceDetailDisplayModelInput = {
   hasTrustedPerformance?: boolean;
 };
 
+type AccordDisplayPolicyInput = {
+  catalogAccordLabels?: string[] | null;
+  communityEvidence?: CommunityEvidenceDisplayModel | null;
+  communityEvidenceDisplayPolicy?: ReturnType<typeof resolveCommunityEvidenceDisplayPolicy>;
+};
+
+export type AccordDisplayPolicy = {
+  visibleAccords: string[];
+  visibleSourceTrustLine: string | null;
+  source: 'catalog_or_official' | 'provider_structured' | 'community_support' | 'none';
+  reason:
+    | 'trusted_catalog_or_official_accords'
+    | 'approved_structured_provider_accords'
+    | 'community_support_allowed'
+    | 'no_approved_visible_accord_source';
+};
+
 type FragranceCardDisplayModelInput = FragranceDetailDisplayModelInput & {
   maxPreviewChips?: number;
 };
@@ -343,6 +360,52 @@ export function buildFragranceTrustLine(input: FragranceTrustLineInput) {
   return null;
 }
 
+export function resolveAccordDisplayPolicy(input: AccordDisplayPolicyInput): AccordDisplayPolicy {
+  const catalogAccords = cleanStringList(input.catalogAccordLabels)
+    .filter((accord) => isScentProfileChip(accord));
+  if (catalogAccords.length > 0) {
+    return {
+      visibleAccords: catalogAccords,
+      visibleSourceTrustLine: null,
+      source: 'catalog_or_official',
+      reason: 'trusted_catalog_or_official_accords',
+    };
+  }
+
+  const structuredProviderAccords = cleanStringList(input.communityEvidence?.structuredProviderAccords)
+    .filter((accord) => isScentProfileChip(accord));
+  if (structuredProviderAccords.length > 0) {
+    return {
+      visibleAccords: structuredProviderAccords,
+      visibleSourceTrustLine: input.communityEvidence?.structuredProviderTrustLine ?? null,
+      source: 'provider_structured',
+      reason: 'approved_structured_provider_accords',
+    };
+  }
+
+  if (input.communityEvidenceDisplayPolicy?.showCommunityAccords) {
+    const communityAccords = cleanStringList(input.communityEvidence?.accords)
+      .filter((accord) => isScentProfileChip(accord));
+    if (communityAccords.length > 0) {
+      return {
+        visibleAccords: communityAccords,
+        visibleSourceTrustLine: input.communityEvidenceDisplayPolicy.showCommunitySourceTrust
+          ? input.communityEvidence?.trustLine ?? null
+          : null,
+        source: 'community_support',
+        reason: 'community_support_allowed',
+      };
+    }
+  }
+
+  return {
+    visibleAccords: [],
+    visibleSourceTrustLine: null,
+    source: 'none',
+    reason: 'no_approved_visible_accord_source',
+  };
+}
+
 export function isLayerToolActionLabel(value: string | null | undefined) {
   const key = normalizeDisplayKey(value);
   return !!key && LAYER_TOOL_LABELS.has(key);
@@ -550,10 +613,13 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     rawCommunityEvidence,
     communityEvidenceDisplayPolicy,
   );
-  const availableAccords = cleanStringList([
-    ...cleanStringList(input.accordLabels),
-    ...(communityEvidence?.accords ?? []),
-  ]).filter((accord) => normalizeDisplayKey(accord) !== familyKey);
+  const accordDisplayPolicy = resolveAccordDisplayPolicy({
+    catalogAccordLabels: input.accordLabels,
+    communityEvidence: rawCommunityEvidence,
+    communityEvidenceDisplayPolicy,
+  });
+  const availableAccords = cleanStringList(accordDisplayPolicy.visibleAccords)
+    .filter((accord) => normalizeDisplayKey(accord) !== familyKey);
   const hasAccords = availableAccords.some((accord) => isScentProfileChip(accord));
   const priorityPatterns = [
     /\bleather|leathery\b/i,
@@ -617,6 +683,8 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
     communityEvidence,
     hasCommunitySignalsSection: Boolean(communityEvidence?.hasCommunitySignalsSection),
     communityEvidenceDisplayPolicy,
+    accordDisplayPolicy,
+    accordSourceTrustLine: accordDisplayPolicy.visibleSourceTrustLine,
     heroProfileChips: dedupeChips(chips).slice(0, input.maxHeroChips ?? 8),
   };
 }

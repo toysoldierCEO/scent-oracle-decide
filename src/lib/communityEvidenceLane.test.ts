@@ -77,6 +77,8 @@ describe('communityEvidenceLane', () => {
     expect(display.officialNotesPreserved).toBe(true);
     expect(display.sourceNames).toEqual(['Fragrantica']);
     expect(display.trustLine).toBe('Community/provider evidence · Fragrantica');
+    expect(display.structuredProviderAccords).toEqual([]);
+    expect(display.structuredProviderTrustLine).toBeNull();
     expect(display.accords).toEqual([
       'coconut',
       'green',
@@ -94,6 +96,26 @@ describe('communityEvidenceLane', () => {
     expect(display.communityNotes).not.toEqual(siennaOfficialNotes.topNotes);
     expect(display.conflictsWithOfficialNotes).toBe(true);
     expect(display.conflictSummary).toContain('official notes are preserved');
+  });
+
+  it('keeps Fragella-style structured provider accords separate from raw community accords', () => {
+    const display = buildCommunityEvidenceDisplayModel([
+      siennaCommunityEvidence,
+      {
+        ...siennaCommunityEvidence,
+        sourceType: 'retailer',
+        sourceTier: 'retailer_structured_notes',
+        sourceName: 'Fragella',
+        normalizedAccords: ['amber', 'floral'],
+        normalizedNotes: [],
+      },
+    ], siennaOfficialNotes);
+
+    expect(display.accords).toContain('coconut');
+    expect(display.accords).toContain('amber');
+    expect(display.structuredProviderAccords).toEqual(['amber', 'floral']);
+    expect(display.structuredProviderSourceNames).toEqual(['Fragella']);
+    expect(display.structuredProviderTrustLine).toBe('Provider accords · Fragella');
   });
 
   it('hides community evidence by default when official notes are complete enough', () => {

@@ -11259,6 +11259,7 @@ const OdaraFragranceDetailSheet: React.FC<{
   });
   const detailTrustLine = [
     primaryTrustLine,
+    detailDisplayModel.accordSourceTrustLine ?? null,
     visibleCommunityEvidence?.trustLine ?? null,
   ].filter((line): line is string => Boolean(line)).join(' · ') || null;
   const detailFactLine = metadataDisplay.factLine;
