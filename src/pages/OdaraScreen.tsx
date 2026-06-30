@@ -59,6 +59,13 @@ import {
   type TodaysPickScoringContext,
 } from "@/lib/todaysPickScoring";
 import {
+  getCollectionSortLabel,
+  sortCollectionItems,
+  toggleCollectionSortDirection,
+  type CollectionSortDirection as OdaraWardrobeSortDirection,
+  type CollectionSortKey as OdaraWardrobeSortKey,
+} from "@/lib/collectionSorting";
+import {
   ODARA_VESPER_RESOLVER_DETAIL_CACHE_VERSION,
   isVesperResolverDetailCompleteForCache,
 } from "@/lib/vesperResolverCompleteness";
@@ -5230,8 +5237,6 @@ const missingFragranceMatchesQuery = (card: MissingFragranceProvisionalCard, nor
 type OdaraWardrobeRailSource = 'live_database' | 'safe_local_list';
 type OdaraWardrobePrimaryStatus = 'owned' | 'wishlist' | 'liked' | 'loved' | 'not_for_me' | 'disliked';
 type OdaraCollectionEntryPreset = 'all' | 'saved' | 'liked' | 'favorites' | 'retired' | 'wishlist';
-type OdaraWardrobeSortKey = 'az' | 'newest' | 'last_worn';
-type OdaraWardrobeSortDirection = 'asc' | 'desc';
 type OdaraWardrobeSeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'all_year';
 type OdaraWardrobeSeasonFilterKey = Exclude<OdaraWardrobeSeasonKey, 'all_year'>;
 type OdaraNegativeState = 0 | 1 | 2;
@@ -5342,6 +5347,7 @@ type OdaraWardrobeCard = {
   item: OdaraWardrobeCatalogItem;
   primary_status: OdaraWardrobePrimaryStatus;
   favorite: boolean;
+  rating: number | null;
   retired: boolean;
   collection_created_at: number;
   collection_updated_at: number;
@@ -5401,9 +5407,13 @@ const ODARA_WARDROBE_SORT_OPTIONS: Array<{
   value: OdaraWardrobeSortKey;
   defaultDirection: OdaraWardrobeSortDirection;
 }> = [
-  { value: 'az', defaultDirection: 'asc' },
+  { value: 'name', defaultDirection: 'asc' },
+  { value: 'brand', defaultDirection: 'asc' },
   { value: 'newest', defaultDirection: 'desc' },
+  { value: 'status', defaultDirection: 'asc' },
   { value: 'last_worn', defaultDirection: 'desc' },
+  { value: 'rating', defaultDirection: 'desc' },
+  { value: 'favorite', defaultDirection: 'desc' },
 ];
 
 function normalizeNegativeState(value: unknown): OdaraNegativeState {
@@ -5448,16 +5458,6 @@ function matchesWardrobeSeason(
   return primarySeason === selectedSeason;
 }
 
-function getWardrobeSortLabel(
-  sortKey: OdaraWardrobeSortKey | null,
-  direction: OdaraWardrobeSortDirection,
-) {
-  if (sortKey === 'az') return direction === 'asc' ? 'A–Z' : 'Z–A';
-  if (sortKey === 'newest') return direction === 'desc' ? 'Newest to Oldest' : 'Oldest to Newest';
-  if (sortKey === 'last_worn') return direction === 'desc' ? 'Last Worn' : 'Least Recently Worn';
-  return null;
-}
-
 function formatWardrobeLastWornLabel(lastWornAt: number | null | undefined) {
   if (typeof lastWornAt !== 'number' || lastWornAt <= 0) return null;
   const diffDays = Math.max(0, Math.floor((Date.now() - lastWornAt) / 86400000));
@@ -5476,10 +5476,6 @@ function formatWardrobeSourceConfidenceLabel(sourceConfidence: string | null | u
   if (normalized === 'medium') return 'Medium confidence';
   if (normalized === 'low') return 'Low confidence';
   return null;
-}
-
-function toggleWardrobeSortDirection(direction: OdaraWardrobeSortDirection): OdaraWardrobeSortDirection {
-  return direction === 'asc' ? 'desc' : 'asc';
 }
 
 function compareOptionalWardrobeTimestamps(
@@ -12657,7 +12653,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   const [wardrobeRetiredOnly, setWardrobeRetiredOnly] = useState(false);
   const [wardrobeFavoriteOnly, setWardrobeFavoriteOnly] = useState(false);
   const [wardrobeUnwornOnly, setWardrobeUnwornOnly] = useState(false);
-  const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>('az');
+  const [wardrobeSortKey, setWardrobeSortKey] = useState<OdaraWardrobeSortKey | null>('name');
   const [wardrobeSortDirection, setWardrobeSortDirection] = useState<OdaraWardrobeSortDirection>('asc');
   const [wardrobeMenu, setWardrobeMenu] = useState<'filter' | 'sort' | null>(null);
   const [wardrobeSearchOpen, setWardrobeSearchOpen] = useState(false);
@@ -13112,7 +13108,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     setWardrobeWishlistOnly(false);
     setWardrobeFavoriteOnly(false);
     setWardrobeUnwornOnly(false);
-    setWardrobeSortKey('az');
+    setWardrobeSortKey('name');
     setWardrobeSortDirection('asc');
   }, [activeSessionUserId]);
 
@@ -13406,6 +13402,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
           item: resolvedItem,
           primary_status: primaryStatus,
           favorite: Boolean(collectionItem?.favorite ?? collectionItem?.wear_more),
+          rating: normalizeCollectionRating(collectionItem?.rating),
           retired: Boolean(collectionItem?.retired),
           collection_created_at: collectionCreatedAt,
           collection_updated_at: collectionUpdatedAt,
@@ -13489,8 +13486,26 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     }
   }, [wardrobeFamilyFilter, wardrobeFamilyOptions]);
 
-  const activeWardrobeSortLabel = getWardrobeSortLabel(wardrobeSortKey, wardrobeSortDirection);
-  const hasNonDefaultWardrobeSort = wardrobeSortKey !== 'az' || wardrobeSortDirection !== 'asc';
+  const wardrobeHasLastWornData = wardrobeCards.some((card) => typeof card.last_worn_at === 'number' && card.last_worn_at > 0);
+  const wardrobeHasRatingData = wardrobeCards.some((card) => normalizeCollectionRating(card.rating) !== null);
+  const wardrobeHasFavoriteData = wardrobeCards.some((card) => card.favorite);
+  const wardrobeSortOptions = useMemo(() => (
+    ODARA_WARDROBE_SORT_OPTIONS.filter((option) => {
+      if (option.value === 'last_worn') return wardrobeHasLastWornData;
+      if (option.value === 'rating') return wardrobeHasRatingData;
+      if (option.value === 'favorite') return wardrobeHasFavoriteData;
+      return true;
+    })
+  ), [wardrobeHasFavoriteData, wardrobeHasLastWornData, wardrobeHasRatingData]);
+  const activeWardrobeSortLabel = getCollectionSortLabel(wardrobeSortKey, wardrobeSortDirection);
+  const hasNonDefaultWardrobeSort = wardrobeSortKey !== 'name' || wardrobeSortDirection !== 'asc';
+
+  useEffect(() => {
+    if (!wardrobeSortKey) return;
+    if (wardrobeSortOptions.some((option) => option.value === wardrobeSortKey)) return;
+    setWardrobeSortKey('name');
+    setWardrobeSortDirection('asc');
+  }, [wardrobeSortKey, wardrobeSortOptions]);
 
   const visibleWardrobeCards = useMemo(() => {
     let cards = [...brandFilteredWardrobeCards];
@@ -13517,33 +13532,19 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
       cards = cards.filter((card) => card.is_unworn);
     }
 
-    cards.sort((a, b) => {
-      if (wardrobeSortKey === 'az') {
-        const nameDelta = wardrobeSortDirection === 'asc'
-          ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-          : b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
-        if (nameDelta !== 0) return nameDelta;
-      } else if (wardrobeSortKey === 'newest') {
-        const newestDelta = compareOptionalWardrobeTimestamps(a.sort_newest_at, b.sort_newest_at, wardrobeSortDirection);
-        if (newestDelta !== 0) return newestDelta;
-      } else if (wardrobeSortKey === 'last_worn') {
-        const aWorn = typeof a.last_worn_at === 'number' && a.last_worn_at > 0;
-        const bWorn = typeof b.last_worn_at === 'number' && b.last_worn_at > 0;
-        if (aWorn && bWorn) {
-          const wornDelta = compareOptionalWardrobeTimestamps(a.last_worn_at, b.last_worn_at, wardrobeSortDirection);
-          if (wornDelta !== 0) return wornDelta;
-        } else if (aWorn !== bWorn) {
-          return aWorn ? -1 : 1;
-        }
-      }
-
-      return compareWardrobeCardsDefault(a, b);
-    });
-
-    return cards;
+    return sortCollectionItems(cards, wardrobeSortKey ?? 'name', wardrobeSortDirection, (card) => ({
+      id: card.fragrance_id,
+      name: card.name,
+      brand: getWardrobeBrandLabel(card.brand),
+      status: card.primary_status,
+      statusRank: getWardrobeStatusRank(card.primary_status),
+      addedAt: card.sort_newest_at,
+      lastWornAt: card.last_worn_at,
+      rating: card.rating,
+      favorite: card.favorite,
+    }));
   }, [
     brandFilteredWardrobeCards,
-    compareWardrobeCardsDefault,
     wardrobeFavoriteOnly,
     wardrobeFamilyFilter,
     wardrobeLikedOnly,
@@ -13767,7 +13768,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
   }, []);
 
   const clearWardrobeSort = useCallback(() => {
-    setWardrobeSortKey('az');
+    setWardrobeSortKey('name');
     setWardrobeSortDirection('asc');
   }, []);
 
@@ -14970,9 +14971,29 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                         WebkitBackdropFilter: 'blur(14px)',
                       }}
                     >
-                      {ODARA_WARDROBE_SORT_OPTIONS.map((option) => {
+                      <button
+                        type="button"
+                        aria-label="Reverse collection sort order"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setWardrobeSortDirection((current) => toggleCollectionSortDirection(current));
+                        }}
+                        className="mb-2 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition-colors"
+                        style={{
+                          border: '1px solid rgba(218,188,124,0.2)',
+                          background: 'rgba(218,188,124,0.08)',
+                          color: 'rgba(248,229,185,0.92)',
+                        }}
+                      >
+                        <span>Reverse order</span>
+                        <span className="text-[10px] tracking-[0.14em] text-foreground/58">
+                          {wardrobeSortDirection === 'asc' ? 'Asc' : 'Desc'}
+                        </span>
+                      </button>
+                      {wardrobeSortOptions.map((option) => {
                         const active = wardrobeSortKey === option.value;
-                        const optionLabel = getWardrobeSortLabel(
+                        const optionLabel = getCollectionSortLabel(
                           option.value,
                           active ? wardrobeSortDirection : option.defaultDirection,
                         );
@@ -14982,13 +15003,11 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                             type="button"
                             role="menuitemradio"
                             aria-checked={active}
-                            onClick={() => {
-                              if (active) {
-                                setWardrobeSortDirection((current) => toggleWardrobeSortDirection(current));
-                              } else {
-                                setWardrobeSortKey(option.value);
-                                setWardrobeSortDirection(option.defaultDirection);
-                              }
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setWardrobeSortKey(option.value);
+                              if (!active) setWardrobeSortDirection(option.defaultDirection);
                               setWardrobeMenu(null);
                             }}
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12px] transition-colors"
@@ -15012,7 +15031,9 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                       {hasNonDefaultWardrobeSort ? (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
                             clearWardrobeSort();
                             setWardrobeMenu(null);
                           }}
@@ -15022,7 +15043,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                             background: 'rgba(255,255,255,0.02)',
                           }}
                         >
-                          Reset to A–Z
+                          Reset to Name A-Z
                         </button>
                       ) : null}
                     </div>
