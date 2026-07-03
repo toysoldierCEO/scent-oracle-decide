@@ -35,4 +35,11 @@ describe('OdaraScreen collection sort controls', () => {
     expect(source).toContain('event.stopPropagation();');
     expect(source).toContain('Reset to Name A-Z');
   });
+
+  it('keeps mobile filter/sort dropdowns above the outside-close overlay', () => {
+    expect(source).toContain('overflow-visible px-0.5 pb-0.5');
+    expect(source).toContain("wardrobeMenu === 'filter' ? 'z-[90]' : 'z-[1]'");
+    expect(source).toContain("wardrobeMenu === 'sort' ? 'z-[90]' : 'z-[1]'");
+    expect(source).toContain('className="fixed inset-0 z-[60] cursor-default"');
+  });
 });

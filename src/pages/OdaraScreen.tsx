@@ -14779,10 +14779,10 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
         <div className="relative px-1">
           {!wardrobeSearchOpen ? (
             <div>
-              <div className="flex items-center gap-2 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex items-center gap-2 overflow-visible px-0.5 pb-0.5">
 
                 {/* Filter pill + anchored dropdown */}
-                <div className="relative">
+                <div className={`relative ${wardrobeMenu === 'filter' ? 'z-[90]' : 'z-[1]'}`}>
                   <button
                     type="button"
                     onClick={() => setWardrobeMenu(wardrobeMenu === 'filter' ? null : 'filter')}
@@ -14938,7 +14938,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                 </div>
 
                 {/* Sort pill + anchored dropdown */}
-                <div className="relative">
+                <div className={`relative ${wardrobeMenu === 'sort' ? 'z-[90]' : 'z-[1]'}`}>
                   <button
                     type="button"
                     onClick={() => setWardrobeMenu(wardrobeMenu === 'sort' ? null : 'sort')}
@@ -15136,7 +15136,7 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
               type="button"
               aria-label="Close menu"
               onClick={() => setWardrobeMenu(null)}
-              className="fixed inset-0 z-[75] cursor-default"
+              className="fixed inset-0 z-[60] cursor-default"
               style={{ background: 'transparent' }}
             />
           ) : null}
