@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "odara-mcp",
+      "version": "0.1.0",
+      "title": "Odara Fragrance MCP"
+    },
+    "tools": [
+      {
+        "name": "echo",
+        "title": "Echo",
+        "description": "Echo the input text back to the caller to verify connectivity.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Text to echo back."
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_fragrance_context",
+        "title": "Get fragrance context",
+        "description": "Return recommended fragrance families and wear guidance for a given weather condition, temperature, and occasion.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "weather": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Current weather, e.g. 'sunny', 'rainy', 'cold', 'humid'."
+            },
+            "occasion": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Occasion or context, e.g. 'work', 'date', 'gym', 'evening'."
+            },
+            "temperatureF": {
+              "type": "number",
+              "description": "Ambient temperature in Fahrenheit. Defaults to 75."
+            }
+          },
+          "required": [
+            "weather",
+            "occasion"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
