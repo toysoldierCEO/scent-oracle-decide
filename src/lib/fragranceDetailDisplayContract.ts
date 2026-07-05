@@ -551,11 +551,11 @@ export function buildFragranceDetailDisplayModel(input: FragranceDetailDisplayMo
   const middleLabels = formatFragranceNoteDisplayLabels(input.middleNotes, 6);
   const baseLabels = formatFragranceNoteDisplayLabels(input.baseNotes, 6);
   const flatNoteLabels = formatFragranceNoteDisplayLabels(input.flatNotes, 8);
-  const structuredNoteSections: FragranceDisplayNoteSection[] = [
+  const structuredNoteSections: FragranceDisplayNoteSection[] = ([
     { title: 'Top', position: 'top', values: topLabels },
     { title: 'Heart', position: 'heart', values: middleLabels },
     { title: 'Base', position: 'base', values: baseLabels },
-  ].filter((section) => section.values.length > 0);
+  ] as FragranceDisplayNoteSection[]).filter((section) => section.values.length > 0);
   const hasStructuredNoteSections = structuredNoteSections.length > 0;
   const chips: FragranceDisplayChip[] = [];
 

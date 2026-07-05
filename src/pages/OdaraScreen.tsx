@@ -3029,7 +3029,7 @@ function buildTodaysPickProfileFromDisplayCard(
     detail?.source_confidence === 'high'
     || detail?.source_confidence === 'official'
     || detail?.description_source === 'official'
-    || isLikelyOfficialBrandSourceUrl(detail?.source_page_url ?? null),
+    || isLikelyOfficialBrandSourceUrl(detail?.source_page_url ?? null, detail?.brand ?? card.brand ?? null),
   );
   return {
     id: card.fragrance_id,
@@ -14343,8 +14343,8 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
                     onOpenCanonical={card.canonical_fragrance_id && catalogById.has(card.canonical_fragrance_id)
                       ? (fragranceId) => openDetail(fragranceId)
                       : undefined}
-                    onSelectIdentityCandidate={handleSelectSearchIdentityCandidate}
-                    selectingIdentityCandidateId={searchSelectingIdentityCandidateId}
+                    onSelectIdentityCandidate={handleSelectIdentityCandidate}
+                    selectingIdentityCandidateId={selectingIdentityCandidateId}
                   />
                 ))}
               </div>

@@ -464,7 +464,7 @@ function officialProfileComponent(profile: TodaysPickProfile, groups: ReturnType
   if (groups.officialDepth >= 2) score += 7;
   if (groups.heart.length > 0) score += 3;
   if (groups.base.length > 0) score += 3;
-  if (profile.officialSourceBacked || normalizeTerm(profile.sourceConfidence).includes('official')) {
+  if (profile.officialSourceBacked || normalizeTerm(String(profile.sourceConfidence)).includes('official')) {
     score += 4;
     reasonCodes.push('source_backed_profile');
   }

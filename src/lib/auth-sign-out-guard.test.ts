@@ -18,7 +18,7 @@ describe('auth sign-out guard', () => {
   });
 
   it('blocks missing action ids before Supabase signOut can run', () => {
-    expect(resolveSignOutGuard()).toMatchObject({
+    expect(resolveSignOutGuard(null)).toMatchObject({
       allowed: false,
       reason: 'missing_action_id',
     });

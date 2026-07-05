@@ -113,7 +113,7 @@ export function AuthDiagnosticPanel({
       clearPressTimer();
     };
 
-    const handleClick = (event: MouseEvent) => {
+    const handleClick = (event: Event) => {
       if (!isTrigger(event.target)) return;
       const now = Date.now();
       tapCount = getNextAuthDebugTapCount({ lastTapAt, now, previousCount: tapCount });

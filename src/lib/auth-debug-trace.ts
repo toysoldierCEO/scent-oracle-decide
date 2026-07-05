@@ -67,7 +67,7 @@ declare global {
   }
 }
 
-export function readSafeAuthStorageMode() {
+export function readSafeAuthStorageMode(): 'local' | 'session' {
   if (typeof window === 'undefined') return 'local';
   try {
     return window.localStorage.getItem('vesper_auth_persistence_mode') === 'session' ? 'session' : 'local';
