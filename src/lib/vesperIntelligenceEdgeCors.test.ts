@@ -15,5 +15,6 @@ describe('get-vesper-intelligence CORS policy', () => {
   it('keeps the production Lovable project origin explicitly covered', () => {
     expect(source).toContain('https://20427402-64b7-4dc9-80aa-727b1e4a3e69.lovableproject.com');
     expect(source).toContain('https://scent-oracle-decide.lovable.app');
+    expect(source).toContain('https://vesperize.lovable.app');
   });
 });

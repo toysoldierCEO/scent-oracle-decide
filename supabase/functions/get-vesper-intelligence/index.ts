@@ -15,6 +15,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://id-preview--20427402-64b7-4dc9-80aa-727b1e4a3e69.lovable.app",
   "https://20427402-64b7-4dc9-80aa-727b1e4a3e69.lovableproject.com",
   "https://scent-oracle-decide.lovable.app",
+  "https://vesperize.lovable.app",
 ]);
 
 function isAllowedLovablePreviewOrigin(origin: string | null) {
