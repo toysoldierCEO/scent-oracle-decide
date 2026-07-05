@@ -40,6 +40,7 @@ export type OdaraLoginRecoveryEntry = {
   path?: string;
   reason?: string;
   redirectOrigin?: string;
+  redirectTarget?: string;
   returnedOrigin?: string;
   safeDisplayMessage?: string;
   sessionAuthKeyExists?: boolean;

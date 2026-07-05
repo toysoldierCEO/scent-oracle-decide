@@ -301,7 +301,7 @@ function recordPointerEvent(event: PointerEvent | MouseEvent) {
 
 function recordResourceError(event: Event) {
   const target = event.target instanceof Element ? event.target : null;
-  if (!target || target === window) return;
+  if (!target) return;
   const url = target.getAttribute('src') ?? target.getAttribute('href');
   recordOdaraReloadCrashEvent({
     ...getElementControlLabel(target),
