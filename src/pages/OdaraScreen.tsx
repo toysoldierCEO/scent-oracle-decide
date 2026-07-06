@@ -59,6 +59,11 @@ import {
   type TodaysPickScoringContext,
 } from "@/lib/todaysPickScoring";
 import {
+  LAYERING_UNLOCK_COUNT,
+  resolveLayeringEligibility,
+  type LayeringEligibilityInput,
+} from "@/lib/wearModeEligibility";
+import {
   getCollectionSortLabel,
   sortCollectionItems,
   toggleCollectionSortDirection,
@@ -109,7 +114,9 @@ import {
 // accord_tokens). Do NOT reintroduce frontend curation here.
 
 type GuestModeKey = 'balance' | 'bold' | 'smooth' | 'wild';
+type WearMode = 'solo' | 'layered';
 const GUEST_DEFAULT_MODE_ORDER: GuestModeKey[] = ['balance', 'bold', 'smooth', 'wild'];
+const ODARA_WEAR_MODE_STORAGE_KEY = 'odara-wear-mode-v1';
 const LAYER_MOOD_ALIASES: Record<string, LayerMood> = {
   balance: 'balance',
   balanced: 'balance',
@@ -117,6 +124,26 @@ const LAYER_MOOD_ALIASES: Record<string, LayerMood> = {
   smooth: 'smooth',
   wild: 'wild',
 };
+
+function readStoredWearModePreference(): WearMode {
+  if (typeof window === 'undefined') return 'solo';
+  try {
+    return window.localStorage.getItem(ODARA_WEAR_MODE_STORAGE_KEY) === 'layered'
+      ? 'layered'
+      : 'solo';
+  } catch {
+    return 'solo';
+  }
+}
+
+function writeStoredWearModePreference(mode: WearMode) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ODARA_WEAR_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Wear mode is a lightweight UI preference; storage failure should not affect recommendations.
+  }
+}
 
 const REASON_CHIP_LABELS = [
   'Signature',
@@ -13426,6 +13453,13 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
     persistedWearById,
     persistedWishlistsById,
   ]);
+  const wardrobeLayeringEligibility = useMemo(
+    () => resolveLayeringEligibility(wardrobeCards),
+    [wardrobeCards],
+  );
+  const wardrobeLayeringUnlockCopy = wardrobeLayeringEligibility.isLayeringUnlocked
+    ? null
+    : `${wardrobeLayeringEligibility.eligibleCount} / ${LAYERING_UNLOCK_COUNT} scents toward layering · Add ${wardrobeLayeringEligibility.remainingToUnlock} more ${wardrobeLayeringEligibility.remainingToUnlock === 1 ? 'scent' : 'scents'} to unlock layering.`;
 
   // Dynamic brand bar — built only from the current user's visible collection.
   // Null-safe: trims labels, ignores empty brands, dedupes case-insensitively,
@@ -15141,6 +15175,20 @@ const OdaraSignedInWardrobeOnboardingPage: React.FC<{
             />
           ) : null}
         </div>
+
+        {wardrobeLayeringUnlockCopy ? (
+          <div
+            data-layering-unlock-note
+            className="mx-1 rounded-[18px] border px-4 py-3 text-[11px] leading-[1.45] text-foreground/52"
+            style={{
+              borderColor: 'rgba(255,255,255,0.07)',
+              background: 'rgba(255,255,255,0.025)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+            }}
+          >
+            {wardrobeLayeringUnlockCopy}
+          </div>
+        ) : null}
 
 
         {wardrobeBrandOptions.length > 0 ? (
@@ -17195,10 +17243,18 @@ const OdaraScreen = ({
   }, [searchOpen, searchQuery, runFragranceSearch]);
 
   // Interactive state
+  const [wearMode, setWearMode] = useState<WearMode>(() => readStoredWearModePreference());
   const [selectedMood, setSelectedMood] = useState<LayerMood>('balance');
   const [selectedRatio, setSelectedRatio] = useState('1:1');
   const [layerExpanded, setLayerExpanded] = useState(false);
   const [signedInModeHistory, setSignedInModeHistory] = useState<LocalModeHistoryEntry<LayerMood>[]>([]);
+  const [signedInWearModeCollectionItems, setSignedInWearModeCollectionItems] = useState<LayeringEligibilityInput[]>([]);
+  const signedInLayeringEligibility = useMemo(
+    () => resolveLayeringEligibility(signedInWearModeCollectionItems),
+    [signedInWearModeCollectionItems],
+  );
+  const isWearModeLayeringUnlocked = !isGuestMode && signedInLayeringEligibility.isLayeringUnlocked;
+  const effectiveWearMode: WearMode = isWearModeLayeringUnlocked ? wearMode : 'solo';
   const signedInModeHistoryRef = useRef<LocalModeHistoryEntry<LayerMood>[]>([]);
   const getBetaSafeLayerMood = useCallback((mood: LayerMood | null | undefined): LayerMood => {
     const normalized = normalizeLayerMoodKey(mood) ?? 'balance';
@@ -17227,6 +17283,23 @@ const OdaraScreen = ({
       signedInLayerIdxByMood,
     );
   }, [betaSafeSignedInMood, persistSignedInMoodCycleMemory, visibleCard?.fragrance_id, selectedDate, selectedContext, signedInLayerIdxByMood]);
+
+  useEffect(() => {
+    if (!isWearModeLayeringUnlocked && wearMode !== 'solo') {
+      setWearMode('solo');
+    }
+  }, [isWearModeLayeringUnlocked, wearMode]);
+
+  useEffect(() => {
+    if (!isWearModeLayeringUnlocked) return;
+    writeStoredWearModePreference(wearMode);
+  }, [isWearModeLayeringUnlocked, wearMode]);
+
+  useEffect(() => {
+    if (effectiveWearMode === 'solo' && layerExpanded) {
+      setLayerExpanded(false);
+    }
+  }, [effectiveWearMode, layerExpanded]);
 
   useEffect(() => {
     if (isGuestMode || selectedMood !== 'wild') return;
@@ -17927,6 +18000,7 @@ const OdaraScreen = ({
       setSignedInHeartStateByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
       setFavoriteWritePendingByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
       setHeartWritePendingByFragranceId((current) => (Object.keys(current).length === 0 ? current : {}));
+      setSignedInWearModeCollectionItems((current) => (current.length === 0 ? current : []));
       return;
     }
 
@@ -17953,6 +18027,10 @@ const OdaraScreen = ({
 
         setSignedInFavoriteByFragranceId(nextFavorites);
         setSignedInHeartStateByFragranceId(nextHeartStates);
+        setSignedInWearModeCollectionItems((normalized?.items ?? []).map((item) => ({
+          ...item,
+          owned: item.collection_status ? undefined : true,
+        })));
       } catch (error) {
         if (!cancelled) {
           console.error('[Odara] signed-in action-state hydrate failed', error);
@@ -21234,6 +21312,9 @@ const OdaraScreen = ({
   const visibleResolvedLayer = isGuestMode
     ? (guestResolvedCurrentCard?.layer ?? null)
     : signedInVisibleLayer;
+  const showWearModeToggle = !isGuestMode && isWearModeLayeringUnlocked;
+  const showSoloWearGuide = !!visibleResolvedCurrentCard && effectiveWearMode === 'solo';
+  const showLayeredWearGuide = !!visibleResolvedLayer && effectiveWearMode === 'layered' && isWearModeLayeringUnlocked;
   const visibleResolvedSelectedMood = getBetaSafeLayerMood(
     (visibleResolvedCurrentCard?.selectedMode ?? selectedMood) as LayerMood | null | undefined,
   );
@@ -23109,8 +23190,89 @@ const OdaraScreen = ({
               </div>
             </div>
 
+            {showWearModeToggle ? (
+              <div
+                data-wear-mode-toggle
+                className="mt-1.5 flex items-center justify-between gap-3 rounded-full border px-2 py-2"
+                style={{
+                  borderColor: 'rgba(255,255,255,0.08)',
+                  background: 'rgba(255,255,255,0.025)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span className="pl-2 text-[9px] uppercase tracking-[0.22em] text-foreground/42">
+                  Wear Mode
+                </span>
+                <div className="flex shrink-0 items-center gap-1 rounded-full p-1" style={{ background: 'rgba(0,0,0,0.22)' }}>
+                  {(['solo', 'layered'] as const).map((mode) => {
+                    const active = effectiveWearMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setWearMode(mode);
+                        }}
+                        className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] transition-all"
+                        style={{
+                          color: active ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.46)',
+                          border: active ? '1px solid rgba(218,188,124,0.32)' : '1px solid transparent',
+                          background: active ? 'rgba(218,188,124,0.13)' : 'transparent',
+                          boxShadow: active ? '0 0 18px rgba(218,188,124,0.08), inset 0 1px 0 rgba(255,255,255,0.06)' : 'none',
+                        }}
+                      >
+                        {mode === 'solo' ? 'Solo' : 'Layered'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {showSoloWearGuide ? (
+              <div
+                data-solo-wear-guide
+                className="relative z-10 mb-[14px] mt-1.5 w-full rounded-xl px-5 py-4 text-left"
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018)), rgba(6,6,8,0.82)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  backdropFilter: 'blur(22px)',
+                }}
+              >
+                <div className="text-[9px] uppercase tracking-[0.24em] text-foreground/44">Wear Solo</div>
+                <div className="mt-2 text-[17px] font-serif leading-tight tracking-wide text-foreground/92">
+                  {visibleResolvedCurrentCard?.name}
+                </div>
+                {visibleResolvedCurrentCard?.brand ? (
+                  <div className="mt-0.5 text-[10px] text-foreground/50">
+                    {visibleResolvedCurrentCard.brand}
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-3 text-[13px] leading-relaxed text-foreground/76">
+                  <div>
+                    <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-foreground/40">Placement</div>
+                    <div>2 sprays chest • 1 spray back neck</div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-foreground/40">Why it works</div>
+                    <div>
+                      {visibleHeroFamilyLabel
+                        ? `Let the ${formatPlainFamilyStyleLabel(visibleHeroFamilyLabel)?.toLowerCase() ?? visibleHeroFamilyLabel.toLowerCase()} profile stay focused and wearable on its own.`
+                        : 'Keep it focused and wearable on its own.'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* ── Layer card — shared layout contract for signed-in and guest. ── */}
-            {visibleResolvedLayer ? (
+            {showLayeredWearGuide ? (
               <div
                 data-layer-section
                 className="rounded-[22px] transition-all duration-300"
