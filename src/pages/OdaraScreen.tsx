@@ -63,6 +63,7 @@ import {
   resolveLayeringEligibility,
   type LayeringEligibilityInput,
 } from "@/lib/wearModeEligibility";
+import { resolveSoloWearGuide } from "@/lib/soloWearGuide";
 import {
   getCollectionSortLabel,
   sortCollectionItems,
@@ -21602,6 +21603,37 @@ const OdaraScreen = ({
     visibleResolvedCurrentCard?.notes,
     visibleResolvedHeroRail?.tokens,
   ]);
+  const soloWearGuide = useMemo(() => resolveSoloWearGuide({
+    name: visibleResolvedCurrentCard?.name ?? null,
+    brand: visibleResolvedCurrentCard?.brand ?? null,
+    family: visibleResolvedCurrentCard?.family ?? null,
+    family_key: visibleHeroDetail?.family_key ?? visibleResolvedCurrentCard?.family ?? null,
+    family_label: visibleHeroFamilyLabel || null,
+    accords: (visibleHeroDetail?.accords?.length ?? 0) > 0
+      ? visibleHeroDetail?.accords
+      : visibleResolvedCurrentCard?.accords,
+    notes: (visibleHeroDetail?.notes?.length ?? 0) > 0
+      ? visibleHeroDetail?.notes
+      : visibleResolvedCurrentCard?.notes,
+    top_notes: visibleHeroDetail?.top_notes ?? null,
+    middle_notes: visibleHeroDetail?.middle_notes ?? null,
+    base_notes: visibleHeroDetail?.base_notes ?? null,
+    profileChips: heroCardChips.map((chip) => chip.label),
+  }), [
+    heroCardChips,
+    visibleHeroDetail?.accords,
+    visibleHeroDetail?.base_notes,
+    visibleHeroDetail?.family_key,
+    visibleHeroDetail?.middle_notes,
+    visibleHeroDetail?.notes,
+    visibleHeroDetail?.top_notes,
+    visibleHeroFamilyLabel,
+    visibleResolvedCurrentCard?.accords,
+    visibleResolvedCurrentCard?.brand,
+    visibleResolvedCurrentCard?.family,
+    visibleResolvedCurrentCard?.name,
+    visibleResolvedCurrentCard?.notes,
+  ]);
   const signedInCarryoverSelectedCard = signedInResolvedSequelState.selectedCard;
   const signedInHeroCarryColor = signedInCarryoverSelectedCard?.family
     ? (FAMILY_COLORS[signedInCarryoverSelectedCard.family] ?? '#888')
@@ -23257,15 +23289,14 @@ const OdaraScreen = ({
                 <div className="mt-4 grid gap-3 text-[13px] leading-relaxed text-foreground/76">
                   <div>
                     <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-foreground/40">Placement</div>
-                    <div>2 sprays chest • 1 spray back neck</div>
+                    <div>{soloWearGuide.placement}</div>
                   </div>
                   <div>
                     <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-foreground/40">Why it works</div>
-                    <div>
-                      {visibleHeroFamilyLabel
-                        ? `Let the ${formatPlainFamilyStyleLabel(visibleHeroFamilyLabel)?.toLowerCase() ?? visibleHeroFamilyLabel.toLowerCase()} profile stay focused and wearable on its own.`
-                        : 'Keep it focused and wearable on its own.'}
-                    </div>
+                    <div>{soloWearGuide.whyItWorks}</div>
+                    {soloWearGuide.caution ? (
+                      <div className="mt-2 text-foreground/58">{soloWearGuide.caution}</div>
+                    ) : null}
                   </div>
                 </div>
               </div>

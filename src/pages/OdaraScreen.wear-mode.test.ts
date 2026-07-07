@@ -7,6 +7,7 @@ const source = fs.readFileSync(path.resolve(__dirname, './OdaraScreen.tsx'), 'ut
 describe('OdaraScreen wear mode gating', () => {
   it('uses the shared seven-scent layering eligibility policy', () => {
     expect(source).toContain("from \"@/lib/wearModeEligibility\"");
+    expect(source).toContain("from \"@/lib/soloWearGuide\"");
     expect(source).toContain('resolveLayeringEligibility(signedInWearModeCollectionItems)');
     expect(source).toContain('resolveLayeringEligibility(wardrobeCards)');
     expect(source).toContain('LAYERING_UNLOCK_COUNT');
@@ -26,8 +27,17 @@ describe('OdaraScreen wear mode gating', () => {
     expect(source).toContain('data-wear-mode-toggle');
     expect(source).toContain('data-solo-wear-guide');
     expect(source).toContain('Wear Solo');
-    expect(source).toContain('2 sprays chest • 1 spray back neck');
-    expect(source).toContain('Keep it focused and wearable on its own.');
+    expect(source).toContain('const soloWearGuide = useMemo(() => resolveSoloWearGuide');
+    expect(source).toContain('soloWearGuide.placement');
+    expect(source).toContain('soloWearGuide.whyItWorks');
+  });
+
+  it('derives the Solo guide from the currently selected scent so alternates update it', () => {
+    expect(source).toContain('name: visibleResolvedCurrentCard?.name ?? null');
+    expect(source).toContain('brand: visibleResolvedCurrentCard?.brand ?? null');
+    expect(source).toContain('family: visibleResolvedCurrentCard?.family ?? null');
+    expect(source).toContain('visibleResolvedCurrentCard?.accords');
+    expect(source).toContain('visibleResolvedCurrentCard?.notes');
   });
 
   it('shows Collection progress only while layering is locked', () => {
@@ -41,4 +51,3 @@ describe('OdaraScreen wear mode gating', () => {
     expect(source.toLowerCase()).not.toContain('performance pending');
   });
 });
-
