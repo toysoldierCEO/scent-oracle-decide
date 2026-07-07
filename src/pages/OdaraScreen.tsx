@@ -3179,7 +3179,7 @@ type SignedInResolvedDayDecision = {
   forcedLayerCarryCard: DisplayCard | null;
   selectedMood: LayerMood;
   promotedAltId: string | null;
-  source: 'locked' | 'manual' | 'carryover-main' | 'carryover-layer' | 'oracle';
+  source: 'locked' | 'manual' | 'carryover-main' | 'carryover-layer' | 'oracle' | 'alternate';
 };
 
 type SignedInSearchPreviewSnapshot = {
@@ -20879,7 +20879,7 @@ const OdaraScreen = ({
     // 3. Set new card state BEFORE fetch
     setVisibleCard(promoted);
     setPromotedAltId(alt.fragrance_id);
-    setSignedInResolvedDayDecisionSource('oracle');
+    setSignedInResolvedDayDecisionSource('alternate');
     setSelectedMood('balance');
     setSignedInLayerIdxByMood({ balance: 0, bold: 0, smooth: 0, wild: 0 });
 
