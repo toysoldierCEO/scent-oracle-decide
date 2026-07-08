@@ -1,6 +1,7 @@
 import React from "react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
+import { resolveLayerRatioGuide } from "@/lib/layerRatioIntelligence";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { expandAndDeduplicateScentIntelDisplayTerms } from "@/lib/scentIntelChipTerms";
 
@@ -827,12 +828,39 @@ const LayerCard = ({
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
+  const layerRatioGuide = activeModeEntry
+    ? resolveLayerRatioGuide(
+        {
+          name: mainName,
+          brand: mainBrand,
+          family_key: mainFamily,
+          notes: mainNotes,
+          top_notes: mainTopNotes,
+          middle_notes: mainMiddleNotes,
+          base_notes: mainBaseNotes,
+          projection: mainProjection,
+        },
+        {
+          name: activeModeEntry.name,
+          brand: activeModeEntry.brand,
+          family_key: activeModeEntry.family_key,
+          notes: activeModeEntry.notes,
+          top_notes: activeModeEntry.top_notes,
+          middle_notes: activeModeEntry.middle_notes,
+          base_notes: activeModeEntry.base_notes,
+          accords: activeModeEntry.accords,
+          projection: activeModeEntry.projection,
+        },
+      )
+    : null;
 
   // Ratio system — recommended ratio for visual hint
-  const recommendedRatio = computeRecommendedRatio(
-    mainFamily, mainProjection,
-    activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
-  );
+  const recommendedRatio: RatioOption = layerRatioGuide
+    ? (layerRatioGuide.ratioValue === '1:1' ? '1:1' : '2:1')
+    : computeRecommendedRatio(
+        mainFamily, mainProjection,
+        activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
+      );
   // Sync to recommended when mood changes (if parent hasn't overridden)
   React.useEffect(() => {
     onSelectRatio(recommendedRatio);
@@ -949,8 +977,8 @@ const LayerCard = ({
     activeModeEntry?.brand,
   );
   const derivedSprayCounts = deriveSprayCountsFromLayerMode(activeModeEntry as any);
-  const resolvedMainSprayCount = mainSprayCount ?? derivedSprayCounts.main;
-  const resolvedLayerSprayCount = layerSprayCount ?? derivedSprayCounts.layer;
+  const resolvedMainSprayCount = layerRatioGuide?.anchorSprays ?? mainSprayCount ?? derivedSprayCounts.main;
+  const resolvedLayerSprayCount = layerRatioGuide?.companionSprays ?? layerSprayCount ?? derivedSprayCounts.layer;
   const fallbackPlacementText = resolvedMainSprayCount || resolvedLayerSprayCount
     ? [
         resolvedMainSprayCount ? `Anchor: ${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : null,
@@ -986,11 +1014,13 @@ const LayerCard = ({
     : null;
   const parsedPlacementRows = parsePlacementRowsFromText(sanitizedPlacementText);
   const placementRows = {
-    anchor: placementRowsFromPattern?.anchor
+    anchor: layerRatioGuide?.anchorPlacement
+      || placementRowsFromPattern?.anchor
       || parsedPlacementRows.anchor
       || (resolvedMainSprayCount ? `${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : '')
       || (cfg ? `${cfg.baseLabel} · ${cfg.baseZones}` : ''),
-    layer: placementRowsFromPattern?.layer
+    layer: layerRatioGuide?.companionPlacement
+      || placementRowsFromPattern?.layer
       || parsedPlacementRows.layer
       || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : '')
       || (cfg ? `${cfg.topLabel} · ${cfg.topZones}` : ''),
@@ -1005,8 +1035,9 @@ const LayerCard = ({
     activeModeEntry?.name,
     activeModeEntry?.brand,
   );
-  const ratioDisplayText = sprayPatternDisplay || sanitizedRatioText;
-  const sprayGuidanceCandidate = sanitizedSprayGuidanceText || fallbackSprayGuidanceText;
+  const ratioDisplayText = layerRatioGuide?.ratioLabel || sprayPatternDisplay || sanitizedRatioText;
+  const whyRatioText = layerRatioGuide?.whyRatio || '';
+  const sprayGuidanceCandidate = layerRatioGuide?.sprayGuidance || sanitizedSprayGuidanceText || fallbackSprayGuidanceText;
   const sprayGuidanceText = areDetailTextsEquivalent(sprayGuidanceCandidate, resolvedWhyText)
     || areDetailTextsEquivalent(sprayGuidanceCandidate, placementFallbackText)
     || areDetailTextsEquivalent(sprayGuidanceCandidate, ratioDisplayText)
@@ -1024,7 +1055,7 @@ const LayerCard = ({
   const activeLayerImageUrl = layerImageCandidates[layerImageCandidateIndex] ?? null;
   const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(activeLayerImageUrl);
   const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
-  const placementSubline = ratioDisplayText || '';
+  const placementSubline = layerRatioGuide ? '' : (ratioDisplayText || '');
   const generatedEffectText = activeModeEntry
     ? buildEffectText(
         selectedMood,
@@ -1045,7 +1076,7 @@ const LayerCard = ({
     || areDetailTextsEquivalent(sanitizedWearText, ratioDisplayText)
     ? ''
     : sanitizedWearText;
-  const ratioOnlyText = hasPlacement || !ratioDisplayText || areDetailTextsEquivalent(ratioDisplayText, wearText)
+  const ratioOnlyText = !ratioDisplayText || areDetailTextsEquivalent(ratioDisplayText, wearText)
     ? ''
     : ratioDisplayText;
   const detailSections = [
@@ -1054,6 +1085,12 @@ const LayerCard = ({
       : null,
     effectText
       ? { label: 'Effect', value: effectText }
+      : null,
+    ratioOnlyText
+      ? { label: 'Ratio', value: ratioOnlyText }
+      : null,
+    whyRatioText
+      ? { label: 'Why this ratio', value: whyRatioText }
       : null,
     wearText
       ? { label: 'How to wear it', value: wearText }
@@ -1068,9 +1105,6 @@ const LayerCard = ({
           value: placementFallbackText,
           subline: placementSubline,
         }
-      : null,
-    ratioOnlyText
-      ? { label: 'Ratio', value: ratioOnlyText }
       : null,
   ].filter((section): section is NonNullable<typeof section> => !!section);
   const hasLayerDetailContent = detailSections.length > 0;

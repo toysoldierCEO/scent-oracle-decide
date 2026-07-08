@@ -17,7 +17,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const balanceLayer = {
+type TestLayerMode = NonNullable<LayerModes['balance']>;
+
+const balanceLayer: TestLayerMode = {
   id: 'reflection-man-layer',
   name: 'Reflection Man',
   brand: 'Amouage',
@@ -27,7 +29,7 @@ const balanceLayer = {
   top_notes: ['Neroli'],
   middle_notes: ['Jasmine'],
   base_notes: ['Sandalwood', 'Musk'],
-  interactionType: 'balance' as const,
+  interactionType: 'balance',
   reason: 'It softens the anchor with clean musk and a woody bridge.',
   why_it_works: 'Musk and woods connect the anchor to the layer without making the pair too sweet.',
   projection: null,
@@ -35,7 +37,7 @@ const balanceLayer = {
   layer_sprays: 1,
 };
 
-function renderExpandedLayerCard(overrides: Partial<typeof balanceLayer> = {}) {
+function renderExpandedLayerCard(overrides: Partial<TestLayerMode> = {}) {
   const layer = { ...balanceLayer, ...overrides };
   const layerModes: LayerModes = {
     balance: layer,
@@ -74,7 +76,7 @@ function renderExpandedLayerCard(overrides: Partial<typeof balanceLayer> = {}) {
 }
 
 describe('LayerCard expanded guidance', () => {
-  it('renders why, effect, spray guidance, and placement text for expanded layered mode', () => {
+  it('renders why, effect, ratio, spray guidance, and placement text for expanded layered mode', () => {
     renderExpandedLayerCard();
     const text = document.body.textContent ?? '';
 
@@ -82,20 +84,51 @@ describe('LayerCard expanded guidance', () => {
     expect(text).toContain('Musk and woods connect the anchor');
     expect(text).toContain('Effect');
     expect(text).toContain('softens the anchor with clean musk');
+    expect(text).toContain('Ratio');
+    expect(text).toContain('2 Dark Pleasure : 1 Reflection Man');
+    expect(text).toContain('Why this ratio');
+    expect(text).toContain('Dark Pleasure has enough body to lead');
     expect(text).toContain('Spray guidance');
-    expect(text).toContain('Start with 2 anchor sprays, then add 1 layer spray.');
+    expect(text).toContain('Let Dark Pleasure lead with 2 sprays; keep Reflection Man to 1 spray.');
     expect(text).toContain('Placement');
     expect(text).toContain('Anchor:');
+    expect(text).toContain('Dark Pleasure - 2 sprays chest / close to body');
     expect(text).toContain('Layer:');
+    expect(text).toContain('Reflection Man - 1 spray back neck or outer layer');
   });
 
-  it('uses explicit spray guidance when the layer payload provides it', () => {
+  it('keeps ratio intelligence visible when the layer payload provides older generic spray copy', () => {
     renderExpandedLayerCard({
       spray_guidance: 'Use the anchor close to the chest and keep the layer as a light neck accent.',
     });
     const text = document.body.textContent ?? '';
 
+    expect(text).toContain('Ratio');
+    expect(text).toContain('2 Dark Pleasure : 1 Reflection Man');
     expect(text).toContain('Spray guidance');
-    expect(text).toContain('keep the layer as a light neck accent');
+    expect(text).toContain('Let Dark Pleasure lead with 2 sprays; keep Reflection Man to 1 spray.');
+  });
+
+  it('renders the Dark Pleasure and California Winter 2018 correction as lead and accent rows', () => {
+    renderExpandedLayerCard({
+      name: 'California Winter 2018',
+      brand: 'Alexandria Fragrances',
+      family_key: 'fresh-blue',
+      notes: ['Citrus', 'Clean Air', 'Musk'],
+      accords: ['Fresh', 'Airy Musk'],
+      projection: 8,
+      reason: 'It brightens the dark anchor with cold air.',
+      why_it_works: 'California Winter 2018 adds air around the dark base.',
+      anchor_sprays: 1,
+      layer_sprays: 2,
+      ratio_hint: 'Companion-led',
+    });
+    const text = document.body.textContent ?? '';
+
+    expect(text).toContain('Ratio');
+    expect(text).toContain('2 Dark Pleasure : 1 California Winter 2018');
+    expect(text).toContain('Dark Pleasure - 2 sprays chest / close to body');
+    expect(text).toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
+    expect(text).toContain('California Winter 2018 adds lift and air');
   });
 });
