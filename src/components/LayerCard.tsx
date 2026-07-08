@@ -957,6 +957,13 @@ const LayerCard = ({
         resolvedLayerSprayCount ? `Layer: ${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : null,
       ].filter(Boolean).join(' · ')
     : '';
+  const fallbackSprayGuidanceText = resolvedMainSprayCount && resolvedLayerSprayCount
+    ? `Start with ${resolvedMainSprayCount} anchor spray${resolvedMainSprayCount === 1 ? '' : 's'}, then add ${resolvedLayerSprayCount} layer spray${resolvedLayerSprayCount === 1 ? '' : 's'}.`
+    : resolvedMainSprayCount
+      ? `Use ${resolvedMainSprayCount} anchor spray${resolvedMainSprayCount === 1 ? '' : 's'} as the base.`
+      : resolvedLayerSprayCount
+        ? `Use ${resolvedLayerSprayCount} layer spray${resolvedLayerSprayCount === 1 ? '' : 's'} as the accent.`
+        : '';
   const rawPatternName = sprayPattern?.name
     || sanitizeLayerDetailCopy(
       activeModeEntry?.spray_pattern_name?.trim()
@@ -999,11 +1006,12 @@ const LayerCard = ({
     activeModeEntry?.brand,
   );
   const ratioDisplayText = sprayPatternDisplay || sanitizedRatioText;
-  const sprayGuidanceText = areDetailTextsEquivalent(sanitizedSprayGuidanceText, resolvedWhyText)
-    || areDetailTextsEquivalent(sanitizedSprayGuidanceText, placementFallbackText)
-    || areDetailTextsEquivalent(sanitizedSprayGuidanceText, ratioDisplayText)
+  const sprayGuidanceCandidate = sanitizedSprayGuidanceText || fallbackSprayGuidanceText;
+  const sprayGuidanceText = areDetailTextsEquivalent(sprayGuidanceCandidate, resolvedWhyText)
+    || areDetailTextsEquivalent(sprayGuidanceCandidate, placementFallbackText)
+    || areDetailTextsEquivalent(sprayGuidanceCandidate, ratioDisplayText)
     ? ''
-    : sanitizedSprayGuidanceText;
+    : sprayGuidanceCandidate;
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);

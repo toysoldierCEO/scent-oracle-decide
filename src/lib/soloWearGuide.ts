@@ -37,6 +37,7 @@ export type SoloWearGuide = {
 
 type LaneDefinition = {
   lane: SoloWearGuideLane;
+  priority: number;
   terms: string[];
   placement: string;
   whyItWorks: string;
@@ -52,6 +53,7 @@ const FALLBACK_GUIDE: SoloWearGuide = {
 const LANE_DEFINITIONS: LaneDefinition[] = [
   {
     lane: 'sweet_gourmand',
+    priority: 2,
     terms: [
       'sweet',
       'gourmand',
@@ -73,6 +75,7 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
   },
   {
     lane: 'fresh_aquatic',
+    priority: 5,
     terms: [
       'fresh',
       'citrus',
@@ -96,7 +99,9 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
   },
   {
     lane: 'woody_oud',
+    priority: 1,
     terms: [
+      'dark',
       'woody',
       'wood',
       'woods',
@@ -106,12 +111,18 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
       'oud',
       'agarwood',
       'resin',
+      'resinous',
       'leather',
       'suede',
       'incense',
       'smoky',
       'smoke',
       'patchouli',
+      'tobacco',
+      'earthy',
+      'charred',
+      'tar',
+      'smoldering',
       'labdanum',
       'copaiba',
       'birch tar',
@@ -121,6 +132,7 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
   },
   {
     lane: 'musk_skin',
+    priority: 3,
     terms: [
       'musk',
       'musky',
@@ -138,6 +150,7 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
   },
   {
     lane: 'aromatic_spicy',
+    priority: 4,
     terms: [
       'spicy',
       'spice',
@@ -161,6 +174,7 @@ const LANE_DEFINITIONS: LaneDefinition[] = [
   },
   {
     lane: 'floral',
+    priority: 6,
     terms: [
       'floral',
       'flower',
@@ -247,35 +261,64 @@ function collectSignals(input: SoloWearGuideInput | null | undefined) {
   return signals;
 }
 
+function scoreLane(
+  laneDefinition: LaneDefinition,
+  signals: Array<{ value: string; weight: number }>,
+) {
+  const matchedTermWeights = new Map<string, number>();
+
+  for (const signal of signals) {
+    for (const term of laneDefinition.terms) {
+      if (!hasTerm(signal.value, term)) continue;
+
+      const termKey = normalizeText(term);
+      const currentWeight = matchedTermWeights.get(termKey) ?? 0;
+      matchedTermWeights.set(termKey, Math.max(currentWeight, signal.weight));
+    }
+  }
+
+  const score = [...matchedTermWeights.values()].reduce((sum, weight) => sum + weight, 0);
+  return {
+    laneDefinition,
+    score,
+    matchedTerms: matchedTermWeights.size,
+  };
+}
+
 export function resolveSoloWearGuide(input: SoloWearGuideInput | null | undefined): SoloWearGuide {
   const signals = collectSignals(input);
   if (signals.length === 0) {
     return { ...FALLBACK_GUIDE };
   }
 
-  let bestLane: LaneDefinition | null = null;
-  let bestScore = 0;
+  let bestLaneScore: ReturnType<typeof scoreLane> | null = null;
 
   for (const laneDefinition of LANE_DEFINITIONS) {
-    let score = 0;
-    for (const signal of signals) {
-      for (const term of laneDefinition.terms) {
-        if (hasTerm(signal.value, term)) {
-          score += signal.weight;
-        }
-      }
-    }
+    const laneScore = scoreLane(laneDefinition, signals);
+    if (laneScore.score <= 0) continue;
 
-    if (score > bestScore) {
-      bestScore = score;
-      bestLane = laneDefinition;
+    if (
+      !bestLaneScore
+      || laneScore.score > bestLaneScore.score
+      || (
+        laneScore.score === bestLaneScore.score
+        && laneScore.laneDefinition.priority < bestLaneScore.laneDefinition.priority
+      )
+      || (
+        laneScore.score === bestLaneScore.score
+        && laneScore.laneDefinition.priority === bestLaneScore.laneDefinition.priority
+        && laneScore.matchedTerms > bestLaneScore.matchedTerms
+      )
+    ) {
+      bestLaneScore = laneScore;
     }
   }
 
-  if (!bestLane) {
+  if (!bestLaneScore) {
     return { ...FALLBACK_GUIDE };
   }
 
+  const bestLane = bestLaneScore.laneDefinition;
   return {
     title: 'Wear Solo',
     placement: bestLane.placement,

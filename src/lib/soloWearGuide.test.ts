@@ -4,6 +4,45 @@ import { resolveSoloWearGuide } from './soloWearGuide';
 const FORBIDDEN_PERFORMANCE_COPY = /performance pending|projection|longevity|all day|long lasting|projects well/i;
 
 describe('resolveSoloWearGuide', () => {
+  it('does not let a rose note beat multiple dark and gourmand signals', () => {
+    const guide = resolveSoloWearGuide({
+      middle_notes: ['Rose'],
+      base_notes: ['Coffee', 'Patchouli', 'Incense'],
+    });
+
+    expect(guide.matchedLane).not.toBe('floral');
+    expect(guide.matchedLane).toBe('woody_oud');
+    expect(guide.whyItWorks).toContain('Darker materials');
+  });
+
+  it('treats repeated rose variants as one floral signal when heavier materials are present', () => {
+    const guide = resolveSoloWearGuide({
+      family_label: 'Dark Leather',
+      profileChips: ['May Rose', 'Turkish Rose', 'Bulgarian Rose', 'Coffee', 'Patchouli', 'Incense'],
+    });
+
+    expect(guide.matchedLane).toBe('woody_oud');
+    expect(guide.placement).toBe('1 spray chest • 1 spray back neck • optional wrist');
+  });
+
+  it('still returns floral guidance for rose when no heavier signal dominates', () => {
+    const guide = resolveSoloWearGuide({
+      middle_notes: ['Rose'],
+    });
+
+    expect(guide.matchedLane).toBe('floral');
+    expect(guide.whyItWorks).toContain('Florals carry best');
+  });
+
+  it('returns floral guidance for iris and floral family when heavy signals are absent', () => {
+    const guide = resolveSoloWearGuide({
+      family_label: 'Floral Musk',
+      middle_notes: ['Iris', 'Violet'],
+    });
+
+    expect(guide.matchedLane).toBe('floral');
+  });
+
   it('returns dense warm guidance for sweet, gourmand, amber, or vanilla profiles', () => {
     const guide = resolveSoloWearGuide({
       family_label: 'Amber Gourmand',
@@ -12,6 +51,15 @@ describe('resolveSoloWearGuide', () => {
 
     expect(guide.matchedLane).toBe('sweet_gourmand');
     expect(guide.placement).toBe('2 sprays chest • 1 spray back neck');
+    expect(guide.whyItWorks).toContain('Already rich enough');
+  });
+
+  it('returns gourmand guidance for coffee, amber, and vanilla profiles', () => {
+    const guide = resolveSoloWearGuide({
+      accords: ['Coffee', 'Amber', 'Vanilla'],
+    });
+
+    expect(guide.matchedLane).toBe('sweet_gourmand');
     expect(guide.whyItWorks).toContain('Already rich enough');
   });
 
@@ -36,6 +84,24 @@ describe('resolveSoloWearGuide', () => {
     expect(guide.matchedLane).toBe('woody_oud');
     expect(guide.placement).toBe('1 spray chest • 1 spray back neck • optional wrist');
     expect(guide.whyItWorks).toContain('Darker materials');
+  });
+
+  it('returns darker guidance for oud, leather, and incense profiles', () => {
+    const guide = resolveSoloWearGuide({
+      accords: ['Oud', 'Leather', 'Incense'],
+    });
+
+    expect(guide.matchedLane).toBe('woody_oud');
+    expect(guide.whyItWorks).toContain('Darker materials');
+  });
+
+  it('chooses the darker lane when fresh and oud signals are mixed but dark signals are stronger', () => {
+    const guide = resolveSoloWearGuide({
+      top_notes: ['Bergamot'],
+      base_notes: ['Oud', 'Leather', 'Incense'],
+    });
+
+    expect(guide.matchedLane).toBe('woody_oud');
   });
 
   it('returns warmth and pulse-point guidance for musk, molecule, or skin scent profiles', () => {
