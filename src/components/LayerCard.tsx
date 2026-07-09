@@ -856,7 +856,7 @@ const LayerCard = ({
 
   // Ratio system — recommended ratio for visual hint
   const recommendedRatio: RatioOption = layerRatioGuide
-    ? (layerRatioGuide.ratioValue === '1:1' ? '1:1' : '2:1')
+    ? (layerRatioGuide.ratioValue === '1:1' || layerRatioGuide.ratioValue === '1:2' ? layerRatioGuide.ratioValue : '2:1')
     : computeRecommendedRatio(
         mainFamily, mainProjection,
         activeModeEntry?.family_key ?? null, activeModeEntry?.projection ?? null,
@@ -1026,7 +1026,7 @@ const LayerCard = ({
       || (cfg ? `${cfg.topLabel} · ${cfg.topZones}` : ''),
   };
   const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
-  const resolvedWhyText = sprayPattern?.why_it_works || whyText;
+  const resolvedWhyText = layerRatioGuide?.combinedExplanation || sprayPattern?.why_it_works || whyText;
   const rawSprayGuidanceText = activeModeEntry?.spray_guidance?.trim() || '';
   const sanitizedSprayGuidanceText = sanitizeLayerDetailCopy(
     rawSprayGuidanceText,

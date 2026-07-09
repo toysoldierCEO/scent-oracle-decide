@@ -28,7 +28,13 @@ describe('resolveLayerRatioGuide', () => {
     expect(guide.ratioLabel).toBe('2 Dark Pleasure : 1 California Winter 2018');
     expect(guide.anchorPlacement).toContain('2 sprays chest');
     expect(guide.companionPlacement).toContain('1 spray back neck');
-    expect(guide.whyRatio).toContain('adds lift and air');
+    expect(guide.leadEffect).toContain('dark coffee, rose, and patchouli body');
+    expect(guide.companionEffect).toContain('adds lift and air');
+    expect(guide.airEffect).toContain('warm dark core');
+    expect(guide.expectedSmell).toContain('opening the edges');
+    expect(guide.combinedExplanation).toContain('California Winter 2018 adds lift and air');
+    expect(guide.whyRatio).toContain('strong and airy');
+    expect(guide.whyRatio).toContain('one spray keeps that lift controlled');
     expect(guide.matchedRule).toBe('user_override_dark_pleasure_california_winter_2018');
   });
 
@@ -60,16 +66,17 @@ describe('resolveLayerRatioGuide', () => {
         base_notes: ['Oud', 'Leather', 'Incense'],
       },
       {
-        name: 'Soft Musk',
-        family_key: 'floral-musk',
-        notes: ['Musk', 'Neroli'],
+        name: 'Resin Spice',
+        family_key: 'spicy-warm',
+        notes: ['Amber', 'Cedar', 'Pepper'],
       },
     );
 
     expect(guide.ratioValue).toBe('2:1');
     expect(guide.anchorPlacement).toContain('Dense Oud');
-    expect(guide.companionPlacement).toContain('Soft Musk');
+    expect(guide.companionPlacement).toContain('Resin Spice');
     expect(guide.matchedRule).toBe('dense_anchor_2_to_1');
+    expect(guide.leadEffect).toContain('dark, textured body');
   });
 
   it('allows equal soft compatible scents to share a 1:1 ratio', () => {
@@ -97,6 +104,52 @@ describe('resolveLayerRatioGuide', () => {
     expect(guide.matchedRule).toBe('very_strong_companion_3_to_1');
   });
 
+  it('allows a strong lead to use fewer sprays while remaining the lead', () => {
+    const guide = resolveLayerRatioGuide(
+      {
+        name: 'Hafez 1984',
+        family_key: 'tobacco-boozy',
+        notes: ['Tobacco', 'Amber', 'Vanilla', 'Cinnamon'],
+        projection: 9,
+      },
+      {
+        name: 'Quiet Musk',
+        family_key: 'floral-musk',
+        notes: ['Musk', 'Tea', 'Soft Powder'],
+      },
+    );
+
+    expect(guide.anchorRole).toBe('Lead');
+    expect(guide.ratioValue).toBe('1:2');
+    expect(guide.anchorSprays).toBe(1);
+    expect(guide.companionSprays).toBe(2);
+    expect(guide.sprayGuidance).toContain('stays the lead at 1 spray');
+    expect(guide.sprayGuidance).toContain('so it can register around it');
+    expect(guide.whyRatio).toContain('stays the lead because it defines the blend');
+    expect(guide.whyRatio).toContain('gets more air and height');
+    expect(guide.matchedRule).toBe('strong_lead_support_needs_space_1_to_2');
+  });
+
+  it('gives weak support more spray or higher placement so it can register', () => {
+    const guide = resolveLayerRatioGuide(
+      {
+        name: 'Dark Tobacco',
+        family_key: 'tobacco-boozy',
+        base_notes: ['Tobacco', 'Patchouli', 'Incense', 'Leather'],
+      },
+      {
+        name: 'Soft Tea Musk',
+        family_key: 'floral-musk',
+        notes: ['Tea', 'Musk'],
+      },
+    );
+
+    expect(guide.ratioValue).toBe('1:2');
+    expect(guide.anchorPlacement).toContain('1 spray chest');
+    expect(guide.companionPlacement).toContain('2 light sprays');
+    expect(guide.whyRatio).toContain('support can register');
+  });
+
   it('uses evidence-backed projection to reduce companion sprays', () => {
     const guide = resolveLayerRatioGuide(
       { name: 'Warm Lead', notes: ['Amber', 'Vanilla'] },
@@ -118,6 +171,7 @@ describe('resolveLayerRatioGuide', () => {
     expect(guide.ratioValue).toBe('2:1');
     expect(guide.companionRole).toBe('Lift');
     expect(guide.whyRatio).not.toMatch(/projection|performance/i);
+    expect(guide.combinedExplanation).toContain('In the air');
   });
 
   it('returns a safe 2:1 default when all scent data is missing', () => {
@@ -130,6 +184,8 @@ describe('resolveLayerRatioGuide', () => {
     expect(guide.anchorSprays).toBe(2);
     expect(guide.companionSprays).toBe(1);
     expect(guide.matchedRule).toBe('safe_default_2_to_1');
+    expect(guide.leadEffect).toContain('sets the identity');
+    expect(guide.companionEffect).toContain('supporting dimension');
   });
 
   it('does not mutate inputs', () => {
@@ -159,6 +215,7 @@ describe('resolveLayerRatioGuide', () => {
 
     for (const guide of guides) {
       expect(`${guide.sprayGuidance} ${guide.whyRatio} ${guide.caution ?? ''}`).not.toMatch(FORBIDDEN_FAKE_PERFORMANCE_COPY);
+      expect(`${guide.combinedExplanation} ${guide.leadEffect} ${guide.companionEffect}`).not.toMatch(FORBIDDEN_FAKE_PERFORMANCE_COPY);
     }
   });
 });

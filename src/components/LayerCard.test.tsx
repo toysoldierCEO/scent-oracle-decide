@@ -81,20 +81,24 @@ describe('LayerCard expanded guidance', () => {
     const text = document.body.textContent ?? '';
 
     expect(text).toContain('Why it works');
-    expect(text).toContain('Musk and woods connect the anchor');
+    expect(text).toContain('Dark Pleasure gives the blend its dark, textured body');
+    expect(text).toContain('Reflection Man smooths the blend');
+    expect(text).toContain('In the air');
+    expect(text).toContain('People should');
     expect(text).toContain('Effect');
     expect(text).toContain('softens the anchor with clean musk');
     expect(text).toContain('Ratio');
-    expect(text).toContain('2 Dark Pleasure : 1 Reflection Man');
+    expect(text).toContain('1 Dark Pleasure : 2 Reflection Man');
     expect(text).toContain('Why this ratio');
-    expect(text).toContain('Dark Pleasure has enough body to lead');
+    expect(text).toContain('Dark Pleasure stays the lead because it defines the blend');
     expect(text).toContain('Spray guidance');
-    expect(text).toContain('Let Dark Pleasure lead with 2 sprays; keep Reflection Man to 1 spray.');
+    expect(text).toContain('Dark Pleasure stays the lead at 1 spray');
+    expect(text).toContain('give Reflection Man 2 sprays');
     expect(text).toContain('Placement');
     expect(text).toContain('Anchor:');
-    expect(text).toContain('Dark Pleasure - 2 sprays chest / close to body');
+    expect(text).toContain('Dark Pleasure - 1 spray chest / close to body');
     expect(text).toContain('Layer:');
-    expect(text).toContain('Reflection Man - 1 spray back neck or outer layer');
+    expect(text).toContain('Reflection Man - 2 light sprays back neck and upper shirt');
   });
 
   it('keeps ratio intelligence visible when the layer payload provides older generic spray copy', () => {
@@ -104,9 +108,9 @@ describe('LayerCard expanded guidance', () => {
     const text = document.body.textContent ?? '';
 
     expect(text).toContain('Ratio');
-    expect(text).toContain('2 Dark Pleasure : 1 Reflection Man');
+    expect(text).toContain('1 Dark Pleasure : 2 Reflection Man');
     expect(text).toContain('Spray guidance');
-    expect(text).toContain('Let Dark Pleasure lead with 2 sprays; keep Reflection Man to 1 spray.');
+    expect(text).toContain('Dark Pleasure stays the lead at 1 spray');
   });
 
   it('renders the Dark Pleasure and California Winter 2018 correction as lead and accent rows', () => {
@@ -130,5 +134,6 @@ describe('LayerCard expanded guidance', () => {
     expect(text).toContain('Dark Pleasure - 2 sprays chest / close to body');
     expect(text).toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
     expect(text).toContain('California Winter 2018 adds lift and air');
+    expect(text).toContain('one spray keeps that lift controlled');
   });
 });
