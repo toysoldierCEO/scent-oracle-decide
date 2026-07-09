@@ -3,7 +3,7 @@
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
 // src/lib/mcp/index.ts
-import { defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 
 // src/lib/mcp/tools/echo.ts
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
@@ -64,11 +64,17 @@ var get_fragrance_context_default = defineTool2({
 });
 
 // src/lib/mcp/index.ts
+var ODARA_MCP_SUPABASE_URL = "https://yysmhqxmnhfugwnojfag.supabase.co";
 var mcp_default = defineMcp({
   name: "odara-mcp",
   title: "Odara Fragrance MCP",
   version: "0.1.0",
   instructions: "Tools for the Odara fragrance oracle. Use `echo` to verify connectivity and `get_fragrance_context` to get recommended scent families for a given weather, temperature, and occasion.",
+  auth: auth.oauth.issuer({
+    issuer: `${ODARA_MCP_SUPABASE_URL}/auth/v1`,
+    acceptedAudiences: "authenticated",
+    jwksUri: `${ODARA_MCP_SUPABASE_URL}/auth/v1/.well-known/jwks.json`
+  }),
   tools: [echo_default, get_fragrance_context_default]
 });
 
