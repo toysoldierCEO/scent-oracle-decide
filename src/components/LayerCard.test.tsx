@@ -99,6 +99,11 @@ describe('LayerCard expanded guidance', () => {
     expect(text).toContain('Dark Pleasure - 1 spray chest / close to body');
     expect(text).toContain('Layer:');
     expect(text).toContain('Reflection Man - 2 light sprays back neck and upper shirt');
+
+    const placementMaps = document.querySelectorAll('[data-spray-placement-map]');
+    expect(placementMaps).toHaveLength(2);
+    expect(document.querySelector('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).toHaveLength(2);
   });
 
   it('keeps ratio intelligence visible when the layer payload provides older generic spray copy', () => {
@@ -135,5 +140,7 @@ describe('LayerCard expanded guidance', () => {
     expect(text).toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
     expect(text).toContain('California Winter 2018 adds lift and air');
     expect(text).toContain('one spray keeps that lift controlled');
+    expect(document.querySelectorAll('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).toHaveLength(2);
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).not.toBeNull();
   });
 });

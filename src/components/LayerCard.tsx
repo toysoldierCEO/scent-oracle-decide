@@ -1,9 +1,11 @@
 import React from "react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
+import SprayPlacementMap from "@/components/SprayPlacementMap";
 import { resolveLayerRatioGuide } from "@/lib/layerRatioIntelligence";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { expandAndDeduplicateScentIntelDisplayTerms } from "@/lib/scentIntelChipTerms";
+import { buildPlacementGuide } from "@/lib/sprayPlacement";
 
 /* ── Color maps (shared reference, same as OdaraScreen) ── */
 export const FAMILY_COLORS: Record<string, string> = {
@@ -867,6 +869,7 @@ const LayerCard = ({
   }, [recommendedRatio, selectedMood]);
 
   // COLOR: derived solely from the selected layer fragrance's family_key
+  const anchorColor = mainFamily ? (FAMILY_COLORS[mainFamily] ?? '#888') : '#888';
   const layerColor = activeModeEntry ? (FAMILY_COLORS[activeModeEntry.family_key] ?? '#888') : '#888';
   const layerTint = activeModeEntry ? (FAMILY_TINTS[activeModeEntry.family_key] ?? DEFAULT_TINT) : DEFAULT_TINT;
   const interactionType = (
@@ -1025,6 +1028,24 @@ const LayerCard = ({
       || (resolvedLayerSprayCount ? `${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : '')
       || (cfg ? `${cfg.topLabel} · ${cfg.topZones}` : ''),
   };
+  const anchorPlacementGuide = buildPlacementGuide({
+    fragrance: getDisplayName(mainName, mainBrand),
+    role: 'Anchor',
+    familyKey: mainFamily,
+    colorToken: anchorColor,
+    placementText: placementRows.anchor,
+  });
+  const layerPlacementGuide = activeModeEntry
+    ? buildPlacementGuide({
+        fragrance: getDisplayName(activeModeEntry.name, activeModeEntry.brand),
+        role: 'Layer',
+        familyKey: activeModeEntry.family_key,
+        colorToken: layerColor,
+        placementText: placementRows.layer,
+      })
+    : null;
+  const hasPlacementMap = anchorPlacementGuide.placements.length > 0
+    || (layerPlacementGuide?.placements.length ?? 0) > 0;
   const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
   const resolvedWhyText = layerRatioGuide?.combinedExplanation || sprayPattern?.why_it_works || whyText;
   const rawSprayGuidanceText = activeModeEntry?.spray_guidance?.trim() || '';
@@ -1434,6 +1455,27 @@ const LayerCard = ({
                       <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-[13px] leading-relaxed text-white/80">
                         {section.subline && (
                           <p className="text-left text-white/90">{section.subline}</p>
+                        )}
+                        {hasPlacementMap && (
+                          <div
+                            className="grid gap-2 pb-2 sm:grid-cols-2"
+                            data-layer-placement-maps
+                          >
+                            {anchorPlacementGuide.placements.length > 0 && (
+                              <SprayPlacementMap
+                                guide={anchorPlacementGuide}
+                                familyColor={anchorColor}
+                                compact
+                              />
+                            )}
+                            {layerPlacementGuide && layerPlacementGuide.placements.length > 0 && (
+                              <SprayPlacementMap
+                                guide={layerPlacementGuide}
+                                familyColor={layerColor}
+                                compact
+                              />
+                            )}
+                          </div>
                         )}
                         {section.placementRows.anchor && (
                           <p className="text-left">
