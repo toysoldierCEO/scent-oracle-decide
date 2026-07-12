@@ -76,49 +76,82 @@ function renderExpandedLayerCard(overrides: Partial<TestLayerMode> = {}) {
 }
 
 describe('LayerCard expanded guidance', () => {
-  it('renders why, effect, ratio, spray guidance, and placement text for expanded layered mode', () => {
+  it('renders compressed ratio, placement maps, air text, and feedback menu', () => {
     renderExpandedLayerCard();
     const text = document.body.textContent ?? '';
 
-    expect(text).toContain('Why it works');
+    expect(text).toContain('Layered');
+    expect(text).toContain('Ratio');
+    expect(document.querySelector('[data-layer-ratio-visual]')?.getAttribute('aria-label')).toContain('1 Dark Pleasure : 2 Reflection Man');
+    expect(document.querySelector('[data-layer-ratio-item="anchor"]')?.textContent).toContain('Dark Pleasure');
+    expect(document.querySelector('[data-layer-ratio-item="anchor"]')?.textContent).toContain('x1');
+    expect(document.querySelector('[data-layer-ratio-item="layer"]')?.textContent).toContain('Reflection Man');
+    expect(document.querySelector('[data-layer-ratio-item="layer"]')?.textContent).toContain('x2');
+    expect(text).toContain('Placement');
+    expect(text).toContain('What happens in the air');
     expect(text).toContain('Dark Pleasure gives the blend its dark, textured body');
     expect(text).toContain('Reflection Man smooths the blend');
     expect(text).toContain('In the air');
-    expect(text).toContain('People should');
-    expect(text).toContain('Effect');
-    expect(text).toContain('softens the anchor with clean musk');
-    expect(text).toContain('Ratio');
-    expect(text).toContain('1 Dark Pleasure : 2 Reflection Man');
-    expect(text).toContain('Why this ratio');
-    expect(text).toContain('Dark Pleasure stays the lead because it defines the blend');
-    expect(text).toContain('Spray guidance');
-    expect(text).toContain('Dark Pleasure stays the lead at 1 spray');
-    expect(text).toContain('give Reflection Man 2 sprays');
-    expect(text).toContain('Placement');
-    expect(text).toContain('Anchor:');
-    expect(text).toContain('Dark Pleasure - 1 spray chest / close to body');
-    expect(text).toContain('Layer:');
-    expect(text).toContain('Reflection Man - 2 light sprays back neck and upper shirt');
+    expect(text).not.toContain('Effect');
+    expect(text).not.toContain('Why this ratio');
+    expect(text).not.toContain('Spray guidance');
+    expect(text).not.toContain('Anchor:');
+    expect(text).not.toContain('Layer:');
+    expect(text).not.toContain('Dark Pleasure - 1 spray chest / close to body');
+    expect(text).not.toContain('Reflection Man - 2 light sprays back neck and upper shirt');
 
     const placementMaps = document.querySelectorAll('[data-spray-placement-map]');
     expect(placementMaps).toHaveLength(2);
     expect(document.querySelector('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).not.toBeNull();
     expect(document.querySelectorAll('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).toHaveLength(2);
+    expect(document.querySelector('[data-layer-feedback-button]')?.getAttribute('aria-label')).toBe('More options for this pairing');
   });
 
-  it('keeps ratio intelligence visible when the layer payload provides older generic spray copy', () => {
+  it('opens and closes the pairing feedback popover without persistence', () => {
     renderExpandedLayerCard({
       spray_guidance: 'Use the anchor close to the chest and keep the layer as a light neck accent.',
     });
-    const text = document.body.textContent ?? '';
+    const button = document.querySelector('[data-layer-feedback-button]') as HTMLButtonElement;
 
-    expect(text).toContain('Ratio');
-    expect(text).toContain('1 Dark Pleasure : 2 Reflection Man');
-    expect(text).toContain('Spray guidance');
-    expect(text).toContain('Dark Pleasure stays the lead at 1 spray');
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(document.querySelector('[data-layer-feedback-menu]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Too strong');
+    expect(document.body.textContent).toContain('Too weak');
+    expect(document.body.textContent).toContain('Doesn’t work');
+
+    const tooWeak = document.querySelector('[data-layer-feedback-option="Too weak"]') as HTMLButtonElement;
+    act(() => {
+      tooWeak.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(document.querySelector('[data-layer-feedback-menu]')).toBeNull();
+    expect(document.querySelector('[data-layer-feedback-ack]')?.textContent).toContain('Too weak noted for this pairing');
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    expect(document.querySelector('[data-layer-feedback-menu]')).not.toBeNull();
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[data-layer-feedback-menu]')).toBeNull();
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    expect(document.querySelector('[data-layer-feedback-menu]')).not.toBeNull();
+
+    act(() => {
+      document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
+    expect(document.querySelector('[data-layer-feedback-menu]')).toBeNull();
   });
 
-  it('renders the Dark Pleasure and California Winter 2018 correction as lead and accent rows', () => {
+  it('keeps the Dark Pleasure and California Winter 2018 ratio and map correction visible without redundant prose', () => {
     renderExpandedLayerCard({
       name: 'California Winter 2018',
       brand: 'Alexandria Fragrances',
@@ -135,11 +168,14 @@ describe('LayerCard expanded guidance', () => {
     const text = document.body.textContent ?? '';
 
     expect(text).toContain('Ratio');
-    expect(text).toContain('2 Dark Pleasure : 1 California Winter 2018');
-    expect(text).toContain('Dark Pleasure - 2 sprays chest / close to body');
-    expect(text).toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
+    expect(document.querySelector('[data-layer-ratio-visual]')?.getAttribute('aria-label')).toContain('2 Dark Pleasure : 1 California Winter 2018');
+    expect(document.querySelector('[data-layer-ratio-item="anchor"]')?.textContent).toContain('x2');
+    expect(document.querySelector('[data-layer-ratio-item="layer"]')?.textContent).toContain('x1');
     expect(text).toContain('California Winter 2018 adds lift and air');
-    expect(text).toContain('one spray keeps that lift controlled');
+    expect(text).not.toContain('Why this ratio');
+    expect(text).not.toContain('one spray keeps that lift controlled');
+    expect(text).not.toContain('Dark Pleasure - 2 sprays chest / close to body');
+    expect(text).not.toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
     expect(document.querySelectorAll('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).toHaveLength(2);
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).not.toBeNull();
   });

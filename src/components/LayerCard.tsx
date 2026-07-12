@@ -1,4 +1,5 @@
 import React from "react";
+import { MoreHorizontal } from "lucide-react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import SprayPlacementMap from "@/components/SprayPlacementMap";
@@ -96,6 +97,35 @@ function isNearDuplicateFlankerPair(
   if (!mainCore || !layerCore) return false;
 
   return mainCore === layerCore || mainCore.includes(layerCore) || layerCore.includes(mainCore);
+}
+
+function splitIntoSentences(value: string) {
+  return value
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function resolveConciseAirText(value: string | null | undefined) {
+  const sentences = splitIntoSentences(value ?? '');
+  if (sentences.length === 0) return '';
+
+  const picked: string[] = [];
+  const addSentence = (matcher: (sentence: string) => boolean) => {
+    const sentence = sentences.find((candidate) => matcher(candidate) && !picked.includes(candidate));
+    if (sentence) picked.push(sentence);
+  };
+
+  addSentence((sentence) => /gives|carries|sets|keeps|adds/.test(sentence.toLowerCase()));
+  addSentence((sentence) => /adds|rounds|deepens|smooths|cuts|lifts/.test(sentence.toLowerCase()));
+  addSentence((sentence) => /in the air|expect|people should/.test(sentence.toLowerCase()));
+
+  for (const sentence of sentences) {
+    if (picked.length >= 3) break;
+    if (!picked.includes(sentence)) picked.push(sentence);
+  }
+
+  return picked.slice(0, 3).join(' ');
 }
 
 function buildFallbackLayerTokens(
@@ -827,6 +857,9 @@ const LayerCard = ({
     startX: number;
     startY: number;
   } | null>(null);
+  const feedbackMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const [feedbackMenuOpen, setFeedbackMenuOpen] = React.useState(false);
+  const [feedbackAcknowledgement, setFeedbackAcknowledgement] = React.useState('');
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
@@ -877,9 +910,6 @@ const LayerCard = ({
     ?? (activeModeEntry as any)?.interactionType
     ?? selectedMood
   ) as InteractionType;
-  const resolvedRatioOption: RatioOption = selectedRatio === '2:1' || selectedRatio === '1:1' || selectedRatio === '1:2'
-    ? selectedRatio
-    : recommendedRatio;
   const cfg = activeModeEntry
     ? buildMoodConfig(
         selectedMood,
@@ -904,8 +934,6 @@ const LayerCard = ({
       )
     : false;
   const rawWhyText = activeModeEntry?.why_it_works?.trim() || activeModeEntry?.reason?.trim() || '';
-  const rawReasonText = activeModeEntry?.reason?.trim() || '';
-  const rawWearText = activeModeEntry?.application_style?.trim() || '';
   const sanitizedWhyText = sanitizeLayerDetailCopy(
     rawWhyText,
     mainName,
@@ -958,20 +986,6 @@ const LayerCard = ({
     activeModeEntry?.name,
     activeModeEntry?.brand,
   );
-  const sanitizedReasonText = sanitizeLayerDetailCopy(
-    rawReasonText,
-    mainName,
-    mainBrand,
-    activeModeEntry?.name,
-    activeModeEntry?.brand,
-  );
-  const sanitizedWearText = sanitizeLayerDetailCopy(
-    rawWearText,
-    mainName,
-    mainBrand,
-    activeModeEntry?.name,
-    activeModeEntry?.brand,
-  );
   const sprayPattern = normalizeSprayPatternForDisplay(
     activeModeEntry?.spray_pattern ?? null,
     mainName,
@@ -982,19 +996,6 @@ const LayerCard = ({
   const derivedSprayCounts = deriveSprayCountsFromLayerMode(activeModeEntry as any);
   const resolvedMainSprayCount = layerRatioGuide?.anchorSprays ?? mainSprayCount ?? derivedSprayCounts.main;
   const resolvedLayerSprayCount = layerRatioGuide?.companionSprays ?? layerSprayCount ?? derivedSprayCounts.layer;
-  const fallbackPlacementText = resolvedMainSprayCount || resolvedLayerSprayCount
-    ? [
-        resolvedMainSprayCount ? `Anchor: ${resolvedMainSprayCount} spray${resolvedMainSprayCount === 1 ? '' : 's'}` : null,
-        resolvedLayerSprayCount ? `Layer: ${resolvedLayerSprayCount} spray${resolvedLayerSprayCount === 1 ? '' : 's'}` : null,
-      ].filter(Boolean).join(' · ')
-    : '';
-  const fallbackSprayGuidanceText = resolvedMainSprayCount && resolvedLayerSprayCount
-    ? `Start with ${resolvedMainSprayCount} anchor spray${resolvedMainSprayCount === 1 ? '' : 's'}, then add ${resolvedLayerSprayCount} layer spray${resolvedLayerSprayCount === 1 ? '' : 's'}.`
-    : resolvedMainSprayCount
-      ? `Use ${resolvedMainSprayCount} anchor spray${resolvedMainSprayCount === 1 ? '' : 's'} as the base.`
-      : resolvedLayerSprayCount
-        ? `Use ${resolvedLayerSprayCount} layer spray${resolvedLayerSprayCount === 1 ? '' : 's'} as the accent.`
-        : '';
   const rawPatternName = sprayPattern?.name
     || sanitizeLayerDetailCopy(
       activeModeEntry?.spray_pattern_name?.trim()
@@ -1046,24 +1047,8 @@ const LayerCard = ({
     : null;
   const hasPlacementMap = anchorPlacementGuide.placements.length > 0
     || (layerPlacementGuide?.placements.length ?? 0) > 0;
-  const placementFallbackText = parsedPlacementRows.remainder || fallbackPlacementText;
   const resolvedWhyText = layerRatioGuide?.combinedExplanation || sprayPattern?.why_it_works || whyText;
-  const rawSprayGuidanceText = activeModeEntry?.spray_guidance?.trim() || '';
-  const sanitizedSprayGuidanceText = sanitizeLayerDetailCopy(
-    rawSprayGuidanceText,
-    mainName,
-    mainBrand,
-    activeModeEntry?.name,
-    activeModeEntry?.brand,
-  );
   const ratioDisplayText = layerRatioGuide?.ratioLabel || sprayPatternDisplay || sanitizedRatioText;
-  const whyRatioText = layerRatioGuide?.whyRatio || '';
-  const sprayGuidanceCandidate = layerRatioGuide?.sprayGuidance || sanitizedSprayGuidanceText || fallbackSprayGuidanceText;
-  const sprayGuidanceText = areDetailTextsEquivalent(sprayGuidanceCandidate, resolvedWhyText)
-    || areDetailTextsEquivalent(sprayGuidanceCandidate, placementFallbackText)
-    || areDetailTextsEquivalent(sprayGuidanceCandidate, ratioDisplayText)
-    ? ''
-    : sprayGuidanceCandidate;
   const resolvedLayerTokens = Array.isArray(layerTokens) && layerTokens.length > 0
     ? layerTokens
     : buildFallbackLayerTokens(activeModeEntry?.notes, activeModeEntry?.accords, layerColor);
@@ -1075,60 +1060,21 @@ const LayerCard = ({
   }, [layerImageCandidateKey]);
   const activeLayerImageUrl = layerImageCandidates[layerImageCandidateIndex] ?? null;
   const likelyTransparentLayerImage = isLikelyTransparentBottleImageUrl(activeLayerImageUrl);
-  const hasPlacement = !!(placementRows.anchor || placementRows.layer || placementFallbackText || sprayPatternDisplay);
-  const placementSubline = layerRatioGuide ? '' : (ratioDisplayText || '');
-  const generatedEffectText = activeModeEntry
-    ? buildEffectText(
-        selectedMood,
-        mainName,
-        activeModeEntry.name,
-        mainNotes ?? [],
-        activeModeEntry.notes ?? [],
-        interactionType,
-        resolvedRatioOption,
-      )
+  const conciseAirText = resolveConciseAirText(resolvedWhyText);
+  const ratioAccessibilityText = ratioDisplayText
+    || `${getDisplayName(mainName, mainBrand)} ${resolvedMainSprayCount ?? 0} spray${resolvedMainSprayCount === 1 ? '' : 's'} and ${getDisplayName(activeModeEntry?.name, activeModeEntry?.brand)} ${resolvedLayerSprayCount ?? 0} spray${resolvedLayerSprayCount === 1 ? '' : 's'}`;
+  const shortCautionText = layerRatioGuide?.caution
+    && !areDetailTextsEquivalent(layerRatioGuide.caution, conciseAirText)
+    ? layerRatioGuide.caution
     : '';
-  const effectTextCandidate = sanitizedReasonText || generatedEffectText;
-  const effectText = areDetailTextsEquivalent(effectTextCandidate, resolvedWhyText)
-    ? ''
-    : effectTextCandidate;
-  const wearText = areDetailTextsEquivalent(sanitizedWearText, resolvedWhyText)
-    || areDetailTextsEquivalent(sanitizedWearText, effectText)
-    || areDetailTextsEquivalent(sanitizedWearText, ratioDisplayText)
-    ? ''
-    : sanitizedWearText;
-  const ratioOnlyText = !ratioDisplayText || areDetailTextsEquivalent(ratioDisplayText, wearText)
-    ? ''
-    : ratioDisplayText;
-  const detailSections = [
-    resolvedWhyText
-      ? { label: 'Why it works', value: resolvedWhyText }
-      : null,
-    effectText
-      ? { label: 'Effect', value: effectText }
-      : null,
-    ratioOnlyText
-      ? { label: 'Ratio', value: ratioOnlyText }
-      : null,
-    whyRatioText
-      ? { label: 'Why this ratio', value: whyRatioText }
-      : null,
-    wearText
-      ? { label: 'How to wear it', value: wearText }
-      : null,
-    sprayGuidanceText
-      ? { label: 'Spray guidance', value: sprayGuidanceText }
-      : null,
-    hasPlacement
-      ? {
-          label: 'Placement',
-          placementRows,
-          value: placementFallbackText,
-          subline: placementSubline,
-        }
-      : null,
-  ].filter((section): section is NonNullable<typeof section> => !!section);
-  const hasLayerDetailContent = detailSections.length > 0;
+  const hasLayerDetailContent = !!(
+    ratioDisplayText
+    || resolvedMainSprayCount
+    || resolvedLayerSprayCount
+    || hasPlacementMap
+    || conciseAirText
+    || shortCautionText
+  );
   const layerChipFamilyKey = activeModeEntry?.family_key ?? mainFamily ?? null;
 
   const resolveFallbackTokenTone = React.useCallback((label: string, colorHex?: string | null) => {
@@ -1216,6 +1162,38 @@ const LayerCard = ({
     onOpenFragranceDetail?.();
   };
 
+  const handleFeedbackSelect = (label: string) => {
+    setFeedbackAcknowledgement(`${label} noted for this pairing`);
+    setFeedbackMenuOpen(false);
+  };
+
+  React.useEffect(() => {
+    if (!feedbackMenuOpen) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!feedbackMenuRef.current?.contains(event.target as Node)) {
+        setFeedbackMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFeedbackMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [feedbackMenuOpen]);
+
+  React.useEffect(() => {
+    setFeedbackMenuOpen(false);
+    setFeedbackAcknowledgement('');
+  }, [mainName, activeModeEntry?.name, selectedMood]);
+
   return (
     <div
       className="relative z-10 mb-[14px] flex w-full cursor-pointer select-none flex-col rounded-xl px-5 py-[12px]"
@@ -1233,11 +1211,75 @@ const LayerCard = ({
         pointerEvents: 'auto',
       }}
     >
+      {activeModeEntry && (
+        <div
+          ref={feedbackMenuRef}
+          className="absolute right-3 top-3 z-30"
+          data-layer-feedback
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            aria-label="More options for this pairing"
+            aria-haspopup="menu"
+            aria-expanded={feedbackMenuOpen}
+            data-layer-feedback-button
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/25 text-white/62 shadow-[0_10px_24px_rgba(0,0,0,0.24)] transition hover:border-white/20 hover:text-white/86"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setFeedbackMenuOpen((open) => !open);
+            }}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
+          {feedbackMenuOpen && (
+            <div
+              role="menu"
+              aria-label="Pairing feedback"
+              data-layer-feedback-menu
+              className="absolute right-0 top-9 w-36 overflow-hidden rounded-[14px] border border-white/12 bg-[#111015]/95 p-1 text-left shadow-[0_18px_42px_rgba(0,0,0,0.38)] backdrop-blur-xl"
+            >
+              {['Too strong', 'Too weak', "Doesn’t work"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="menuitem"
+                  data-layer-feedback-option={label}
+                  className="block w-full rounded-[10px] px-3 py-2 text-left text-[12px] text-white/78 transition hover:bg-white/10 hover:text-white"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleFeedbackSelect(label);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {feedbackAcknowledgement && !feedbackMenuOpen && (
+            <div
+              data-layer-feedback-ack
+              className="absolute right-0 top-9 w-40 rounded-[12px] border border-white/10 bg-black/70 px-3 py-2 text-left text-[11px] text-white/70 shadow-[0_14px_34px_rgba(0,0,0,0.34)]"
+            >
+              {feedbackAcknowledgement}
+            </div>
+          )}
+        </div>
+      )}
       {activeModeEntry ? (
         <>
           <div className="flex w-full items-start justify-between gap-4">
             <div className="min-w-0 flex-1 text-left">
-            <button
+              <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[8px] uppercase tracking-[0.18em] text-white/38">
+                <span>Layered</span>
+                <span aria-hidden="true">/</span>
+                <span className="normal-case tracking-[0.08em] text-white/46">
+                  with {getDisplayName(mainName, mainBrand)}
+                </span>
+              </div>
+              <button
               type="button"
               data-odara-layer-title-button
               data-card-swipe-allow
@@ -1443,63 +1485,88 @@ const LayerCard = ({
             <div
               className="mt-3 w-full border-t pt-3"
               style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              data-layercard-compressed
             >
               <div
                 key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
-                className="space-y-3"
+                className="space-y-3.5"
               >
-                {detailSections.map((section) => (
-                  <div key={section.label} className="space-y-1">
-                    <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">{section.label}</span>
-                    {section.label === 'Placement' && section.placementRows ? (
-                      <div className="mx-auto flex max-w-[24rem] flex-col gap-1 text-[13px] leading-relaxed text-white/80">
-                        {section.subline && (
-                          <p className="text-left text-white/90">{section.subline}</p>
-                        )}
-                        {hasPlacementMap && (
-                          <div
-                            className="grid gap-2 pb-2 sm:grid-cols-2"
-                            data-layer-placement-maps
-                          >
-                            {anchorPlacementGuide.placements.length > 0 && (
-                              <SprayPlacementMap
-                                guide={anchorPlacementGuide}
-                                familyColor={anchorColor}
-                                compact
-                              />
-                            )}
-                            {layerPlacementGuide && layerPlacementGuide.placements.length > 0 && (
-                              <SprayPlacementMap
-                                guide={layerPlacementGuide}
-                                familyColor={layerColor}
-                                compact
-                              />
-                            )}
-                          </div>
-                        )}
-                        {section.placementRows.anchor && (
-                          <p className="text-left">
-                            <span className="font-medium text-white/90">Anchor:</span>{' '}
-                            {section.placementRows.anchor}
-                          </p>
-                        )}
-                        {section.placementRows.layer && (
-                          <p className="text-left">
-                            <span className="font-medium text-white/90">Layer:</span>{' '}
-                            {section.placementRows.layer}
-                          </p>
-                        )}
-                        {section.value && !section.placementRows.anchor && !section.placementRows.layer && (
-                          <p className="text-left">{section.value}</p>
-                        )}
+                <section className="space-y-2" data-layer-ratio-section>
+                  <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">Ratio</span>
+                  <div
+                    className="mx-auto flex max-w-[24rem] flex-wrap items-center justify-center gap-2"
+                    data-layer-ratio-visual
+                    aria-label={ratioAccessibilityText}
+                  >
+                    <div
+                      className="inline-flex min-w-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] text-white/82"
+                      data-layer-ratio-item="anchor"
+                      style={{ borderColor: `${anchorColor}55`, background: `${anchorColor}12` }}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: anchorColor, boxShadow: `0 0 12px ${anchorColor}88` }}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{getDisplayName(mainName, mainBrand)}</span>
+                      <span className="font-semibold text-white">x{resolvedMainSprayCount ?? 0}</span>
+                    </div>
+                    {activeModeEntry && (
+                      <div
+                        className="inline-flex min-w-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] text-white/82"
+                        data-layer-ratio-item="layer"
+                        style={{ borderColor: `${layerColor}55`, background: `${layerColor}12` }}
+                      >
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: layerColor, boxShadow: `0 0 12px ${layerColor}88` }}
+                          aria-hidden="true"
+                        />
+                        <span className="truncate">{getDisplayName(activeModeEntry.name, activeModeEntry.brand)}</span>
+                        <span className="font-semibold text-white">x{resolvedLayerSprayCount ?? 0}</span>
                       </div>
-                    ) : (
-                      <p className="mx-auto max-w-[24rem] text-left text-[13px] leading-relaxed text-white/80">
-                        {section.value}
-                      </p>
                     )}
                   </div>
-                ))}
+                  {shortCautionText && (
+                    <p className="mx-auto max-w-[22rem] text-center text-[11px] leading-relaxed text-white/54">
+                      {shortCautionText}
+                    </p>
+                  )}
+                </section>
+
+                {hasPlacementMap && (
+                  <section className="space-y-2" data-layer-placement-section>
+                    <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">Placement</span>
+                    <div
+                      className="grid gap-2 sm:grid-cols-2"
+                      data-layer-placement-maps
+                    >
+                      {anchorPlacementGuide.placements.length > 0 && (
+                        <SprayPlacementMap
+                          guide={anchorPlacementGuide}
+                          familyColor={anchorColor}
+                          compact
+                        />
+                      )}
+                      {layerPlacementGuide && layerPlacementGuide.placements.length > 0 && (
+                        <SprayPlacementMap
+                          guide={layerPlacementGuide}
+                          familyColor={layerColor}
+                          compact
+                        />
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {conciseAirText && (
+                  <section className="space-y-1.5" data-layer-air-section>
+                    <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">What happens in the air</span>
+                    <p className="mx-auto max-w-[24rem] text-left text-[13px] leading-relaxed text-white/80">
+                      {conciseAirText}
+                    </p>
+                  </section>
+                )}
               </div>
             </div>
           )}
