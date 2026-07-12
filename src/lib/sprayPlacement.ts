@@ -41,6 +41,8 @@ const LOCATION_PATTERNS: Array<[SprayPlacementLocation, RegExp]> = [
   ['HAIR', /\bhair\b/],
 ];
 
+const CLOTHING_LOCATIONS = new Set<SprayPlacementLocation>(['SHIRT', 'UPPER_SHIRT', 'OUTER_LAYER']);
+
 function normalizePlacementText(value: string) {
   return value
     .normalize('NFKD')
@@ -99,6 +101,7 @@ function combinePlacements(placements: SprayPlacement[]) {
 export function parseSprayPlacementText(value: string | null | undefined): SprayPlacement[] {
   if (!value?.trim()) return [];
 
+  const normalized = normalizePlacementText(value);
   const placements: SprayPlacement[] = [];
   for (const segment of splitPlacementSegments(value)) {
     const location = readLocation(segment);
@@ -114,6 +117,33 @@ export function parseSprayPlacementText(value: string | null | undefined): Spray
       optional,
       sourceText: segment,
     });
+  }
+
+  const hasClothingTerm = /\b(?:shirt|upper\s+shirt|outer\s+layer)\b/.test(normalized);
+  const hasParsedClothing = placements.some((placement) => CLOTHING_LOCATIONS.has(placement.location));
+  const firstCount = readSprayCount(normalized);
+
+  if (hasClothingTerm && !hasParsedClothing && firstCount) {
+    const hasOrChoice = /\bor\b/.test(normalized);
+    const hasAndChoice = /\band\b/.test(normalized);
+    const clothingPlacement: SprayPlacement = {
+      location: 'SHIRT',
+      count: hasAndChoice && !hasOrChoice && firstCount > 1 ? 1 : firstCount,
+      optional: false,
+      sourceText: 'shirt surface',
+    };
+
+    if (hasOrChoice) {
+      return combinePlacements([clothingPlacement]);
+    }
+
+    if (hasAndChoice && placements.length > 0 && firstCount > 1) {
+      placements[0] = {
+        ...placements[0],
+        count: Math.max(1, firstCount - 1),
+      };
+      placements.push(clothingPlacement);
+    }
   }
 
   return combinePlacements(placements);
@@ -149,7 +179,7 @@ export function formatPlacementSummary(placements: SprayPlacement[]) {
   return placements
     .map((placement) => {
       const countLabel = `${placement.count} spray${placement.count === 1 ? '' : 's'}`;
-      return `${countLabel} ${formatPlacementLocation(placement.location)}${placement.optional ? ' optional' : ''}`;
+      return `${countLabel} on ${formatPlacementLocation(placement.location)}${placement.optional ? ' optional' : ''}`;
     })
     .join(', ');
 }

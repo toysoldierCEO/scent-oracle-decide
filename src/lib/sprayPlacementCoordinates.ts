@@ -26,7 +26,7 @@ export type SprayPlacementCoordinate = {
 
 export const SPRAY_PLACEMENT_COORDINATES: Record<SprayPlacementLocation, SprayPlacementCoordinate> = {
   CHEST: { side: 'front', x: 0.5, y: 0.43, label: 'chest' },
-  UPPER_CHEST: { side: 'front', x: 0.5, y: 0.36, label: 'upper chest' },
+  UPPER_CHEST: { side: 'front', x: 0.5, y: 0.36, label: 'collarbone' },
   NECK: { side: 'front', x: 0.5, y: 0.25, label: 'neck' },
   BACK_NECK: { side: 'back', x: 0.5, y: 0.25, label: 'back neck' },
   LEFT_WRIST: { side: 'front', x: 0.27, y: 0.72, label: 'left wrist' },
@@ -34,8 +34,8 @@ export const SPRAY_PLACEMENT_COORDINATES: Record<SprayPlacementLocation, SprayPl
   WRISTS: { side: 'front', x: 0.5, y: 0.72, label: 'wrists' },
   INNER_ELBOW: { side: 'front', x: 0.32, y: 0.53, label: 'inner elbow' },
   SHIRT: { side: 'front', x: 0.5, y: 0.43, label: 'shirt' },
-  UPPER_SHIRT: { side: 'front', x: 0.5, y: 0.36, label: 'upper shirt' },
-  OUTER_LAYER: { side: 'front', x: 0.5, y: 0.47, label: 'outer layer' },
+  UPPER_SHIRT: { side: 'front', x: 0.5, y: 0.36, label: 'shirt' },
+  OUTER_LAYER: { side: 'front', x: 0.5, y: 0.47, label: 'shirt' },
   HAIR: { side: 'back', x: 0.5, y: 0.16, label: 'hair' },
   BACK_OF_HEAD: { side: 'back', x: 0.5, y: 0.18, label: 'back of head' },
 };

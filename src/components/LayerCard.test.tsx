@@ -103,7 +103,10 @@ describe('LayerCard expanded guidance', () => {
     const placementMaps = document.querySelectorAll('[data-spray-placement-map]');
     expect(placementMaps).toHaveLength(2);
     expect(document.querySelector('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).not.toBeNull();
-    expect(document.querySelectorAll('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).toHaveLength(2);
+    expect(document.querySelector('[data-spray-placement-role="Anchor"] [data-spray-placement-icon="body"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="SHIRT"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-spray-placement-icon="shirt"]')).not.toBeNull();
     expect(document.querySelector('[data-layer-feedback-button]')?.getAttribute('aria-label')).toBe('More options for this pairing');
   });
 
@@ -177,6 +180,8 @@ describe('LayerCard expanded guidance', () => {
     expect(text).not.toContain('Dark Pleasure - 2 sprays chest / close to body');
     expect(text).not.toContain('California Winter 2018 - 1 spray back neck, upper shirt, or outer layer');
     expect(document.querySelectorAll('[data-spray-placement-role="Anchor"] [data-location="CHEST"]')).toHaveLength(2);
-    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="SHIRT"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-role="Layer"] [data-spray-placement-icon="shirt"]')).not.toBeNull();
   });
 });

@@ -43,18 +43,33 @@ describe('SprayPlacementMap', () => {
     const map = document.querySelector('[data-spray-placement-map]');
     const dots = document.querySelectorAll('[data-spray-placement-dot][data-location="CHEST"]');
 
-    expect(map?.getAttribute('aria-label')).toContain('Anchor Tomcat: 2 sprays chest');
+    expect(map?.getAttribute('aria-label')).toContain('Anchor Tomcat: 2 sprays on chest');
+    expect(document.querySelector('[data-spray-placement-icon="body"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-icon="shirt"]')).toBeNull();
     expect(dots).toHaveLength(2);
     dots.forEach((dot) => {
       expect(dot.getAttribute('fill')).toBe('#5A3A2E');
     });
   });
 
-  it('renders back-side placements separately from front-side placements', () => {
+  it('renders back neck as a skin body placement', () => {
     renderMap('1 spray back neck');
 
-    expect(document.querySelector('[data-spray-placement-side="back"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-icon="body"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-icon="shirt"]')).toBeNull();
     expect(document.querySelector('[data-location="BACK_NECK"]')).not.toBeNull();
+  });
+
+  it('renders shirt placements on a shirt icon instead of the body icon', () => {
+    renderMap('1 spray upper shirt');
+
+    const shirtDot = document.querySelector('[data-spray-placement-dot][data-location="SHIRT"]');
+
+    expect(document.querySelector('[data-spray-placement-icon="shirt"]')).not.toBeNull();
+    expect(document.querySelector('[data-spray-placement-icon="body"]')).toBeNull();
+    expect(shirtDot?.getAttribute('data-semantic-location')).toBe('UPPER_SHIRT');
+    expect(shirtDot?.getAttribute('fill')).toBe('#5A3A2E');
+    expect(document.querySelector('[data-spray-placement-map]')?.getAttribute('aria-label')).toContain('1 spray on shirt');
   });
 
   it('marks optional placements distinctly for accessibility and visual styling', () => {
