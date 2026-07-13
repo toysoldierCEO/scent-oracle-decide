@@ -48,6 +48,11 @@ import {
 import { updateOdaraReloadCrashContext } from "@/lib/page-reload-crash-recorder";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
+  buildLayerFeedbackRpcParams,
+  type LayerFeedbackDisplayInput,
+  type LayerFeedbackType,
+} from "@/lib/layerFeedbackMemory";
+import {
   scoreLayerCombination,
   type LayerCombinationProfile,
 } from "@/lib/layerCombinationScoring";
@@ -16264,6 +16269,11 @@ const OdaraScreen = ({
   const moodInFlightRef = useRef<Map<string, Promise<BackendModeEntry | null>>>(new Map());
   const moodLaneStackRef = useRef<Map<string, BackendModeEntry[]>>(new Map());
   const moodLaneInFlightRef = useRef<Map<string, Promise<BackendModeEntry[]>>>(new Map());
+  const layerFeedbackImmediateExclusionsRef = useRef<Array<{
+    anchorId: string;
+    companionId: string;
+    feedbackType: LayerFeedbackType;
+  }>>([]);
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [modeLoading, setModeLoading] = useState<Record<LayerMood, boolean>>({ balance: false, bold: false, smooth: false, wild: false });
   const [modeErrors, setModeErrors] = useState<Record<LayerMood, string | null>>({ balance: null, bold: null, smooth: null, wild: null });
@@ -18341,6 +18351,22 @@ const OdaraScreen = ({
     signedInDayStateMap,
   ]);
 
+  const collectLayerFeedbackImmediateExclusionIds = useCallback((anchorId: string | null | undefined) => {
+    if (!anchorId) return [];
+    const excluded = new Set<string>();
+
+    for (const event of layerFeedbackImmediateExclusionsRef.current) {
+      if (event.anchorId === anchorId) {
+        excluded.add(event.companionId);
+      }
+      if (event.feedbackType === 'doesnt_work' && event.companionId === anchorId) {
+        excluded.add(event.anchorId);
+      }
+    }
+
+    return Array.from(excluded);
+  }, []);
+
   // Hoisted above lazy mood fetcher and signed-in resolvers to avoid TDZ on
   // `signedInResolvedOracle` (previously declared later in render but read in
   // useCallback dependency arrays evaluated earlier).
@@ -18397,6 +18423,11 @@ const OdaraScreen = ({
         readMoodLaneStack,
         extraExcludeIds,
       });
+      for (const feedbackExcludedId of collectLayerFeedbackImmediateExclusionIds(fragranceId)) {
+        if (!excludeIds.includes(feedbackExcludedId)) {
+          excludeIds.push(feedbackExcludedId);
+        }
+      }
       for (const existing of readMoodLaneStack(moodKey)) {
         if (existing?.layer_fragrance_id && !excludeIds.includes(existing.layer_fragrance_id)) {
           excludeIds.push(existing.layer_fragrance_id);
@@ -18475,7 +18506,10 @@ const OdaraScreen = ({
           const seed: any = heroIdHp === fragranceId
             ? getNormalizedLayerModeBlock(hp?.layer_modes ?? null, mood)
             : null;
-          const fbEntry = modeValueToBackendModeEntry(seed, mood);
+          let fbEntry = modeValueToBackendModeEntry(seed, mood);
+          if (fbEntry?.layer_fragrance_id && excludeIds.includes(fbEntry.layer_fragrance_id)) {
+            fbEntry = null;
+          }
           if (fbEntry) {
             if (!isRetry) {
               const seededStack = appendUniqueBackendModeEntries(readMoodLaneStack(moodKey), [fbEntry]);
@@ -18565,7 +18599,7 @@ const OdaraScreen = ({
 
     moodInFlightRef.current.set(moodKey, fetchPromise);
     return fetchPromise;
-  }, [userId, selectedContext, selectedDate, resolvedTemperature, signedInResolvedOracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack]);
+  }, [userId, selectedContext, selectedDate, resolvedTemperature, signedInResolvedOracle, stateKey, isGuestMode, fetchFragranceDetail, readMoodLaneStack, collectLayerFeedbackImmediateExclusionIds]);
 
   const ensureMoodLaneDepth = useCallback(async (
     fragranceId: string,
@@ -19643,10 +19677,14 @@ const OdaraScreen = ({
     const lm: any = v6Payload?.layer_modes ?? (signedInResolvedOracle as any)?.layer_modes ?? null;
     const resolveMood = (mood: LayerMood) => {
       const moodKey = buildMoodLaneKey(slotPrefix, cardId, mood);
+      const feedbackExcludedIds = collectLayerFeedbackImmediateExclusionIds(cardId);
       const stack = readMoodLaneStack(moodKey);
       const idx = signedInLayerIdxByMood[mood] ?? 0;
-      const laneEntry = stack.length > 0
-        ? backendModeEntryToLayerMode(stack[Math.min(Math.max(idx, 0), stack.length - 1)] ?? stack[0] ?? null)
+      const allowedStack = stack.filter((entry) => (
+        entry?.layer_fragrance_id && !feedbackExcludedIds.includes(entry.layer_fragrance_id)
+      ));
+      const laneEntry = allowedStack.length > 0
+        ? backendModeEntryToLayerMode(allowedStack[Math.min(Math.max(idx, 0), allowedStack.length - 1)] ?? allowedStack[0] ?? null)
         : null;
 
       if (!signedInVisibleIsHeroCard) return laneEntry;
@@ -19654,16 +19692,20 @@ const OdaraScreen = ({
       const block = getNormalizedLayerModeBlock(lm, mood);
       if (!block) return laneEntry;
       const v6Stack = Array.isArray(block.layers) ? block.layers : [];
-      const pickedV6 = v6Stack.length > 0
-        ? v6Stack[Math.min(Math.max(idx, 0), v6Stack.length - 1)] ?? v6Stack[0]
-        : block;
+      const v6Candidates = (v6Stack.length > 0 ? v6Stack : [block]).filter((candidate: any) => {
+        const candidateId = candidate?.fragrance_id ?? candidate?.layer_fragrance_id ?? candidate?.id ?? '';
+        return candidateId && !feedbackExcludedIds.includes(candidateId);
+      });
+      const pickedV6 = v6Candidates.length > 0
+        ? v6Candidates[Math.min(Math.max(idx, 0), v6Candidates.length - 1)] ?? v6Candidates[0]
+        : null;
       const v6Entry = v6LayerToLayerMode(pickedV6, mood);
 
       // Hero cards can already ship deeper real candidates in v6 even before
       // the signed-in lane cache has fetched or re-seeded to the same depth.
       // When the selected index points beyond the current lane cache, prefer
       // the payload-backed candidate instead of clamping back to lane index 0.
-      if (v6Stack.length > stack.length && idx >= stack.length) {
+      if (v6Candidates.length > allowedStack.length && idx >= allowedStack.length) {
         return v6Entry ?? laneEntry;
       }
 
@@ -19677,7 +19719,7 @@ const OdaraScreen = ({
     };
     // moodCacheVersion read above keeps this fresh when cache changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v6Payload, signedInResolvedOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack]);
+  }, [v6Payload, signedInResolvedOracle, signedInLayerIdxByMood, slotPrefix, cardId, moodCacheVersion, signedInVisibleIsHeroCard, readMoodLaneStack, collectLayerFeedbackImmediateExclusionIds]);
   const visibleModeEntry = modeResults[betaSafeSignedInMood] ?? null;
   useEffect(() => {
     if (isGuestMode || !visibleCard?.fragrance_id || signedInVisibleIsHeroCard) return;
@@ -21346,6 +21388,101 @@ const OdaraScreen = ({
     isGuestMode,
     selectedAlternateIdx,
     promotedAltId,
+  ]);
+  const handleLayerFeedback = useCallback(async (input: LayerFeedbackDisplayInput) => {
+    if (isGuestMode || signedInIsReadOnlyHistoryCard || !userId) {
+      throw new Error('Layer feedback requires an authenticated user.');
+    }
+    if (!input.anchorFragranceId || !input.companionFragranceId) {
+      throw new Error('Layer feedback requires a complete layered recommendation.');
+    }
+
+    const rpcParams = buildLayerFeedbackRpcParams(userId, input);
+    const { error } = await odaraSupabase.rpc(
+      'submit_layer_recommendation_feedback_v1' as any,
+      rpcParams as any,
+    );
+    if (error) throw error;
+
+    const anchorId = input.anchorFragranceId;
+    const companionId = input.companionFragranceId;
+    const mood = getBetaSafeLayerMood(input.layerMode as LayerMood | null | undefined);
+    const moodKey = buildMoodLaneKey(`${selectedDate}|${selectedContext}`, anchorId, mood);
+
+    layerFeedbackImmediateExclusionsRef.current = [
+      ...layerFeedbackImmediateExclusionsRef.current.filter((event) => !(
+        event.anchorId === anchorId
+        && event.companionId === companionId
+        && event.feedbackType === input.feedbackType
+      )),
+      {
+        anchorId,
+        companionId,
+        feedbackType: input.feedbackType,
+      },
+    ].slice(-60);
+
+    const feedbackExcludedIds = collectLayerFeedbackImmediateExclusionIds(anchorId);
+    const remainingStack = readMoodLaneStack(moodKey)
+      .filter((entry) => (
+        entry?.layer_fragrance_id && !feedbackExcludedIds.includes(entry.layer_fragrance_id)
+      ));
+    const activateStack = (stack: BackendModeEntry[]) => {
+      writeMoodLaneStack(moodKey, stack, 0);
+      setSignedInLayerIdxByMood((prev) => (
+        prev[mood] === 0 ? prev : { ...prev, [mood]: 0 }
+      ));
+      setModeErrors((prev) => (
+        prev[mood] ? { ...prev, [mood]: null } : prev
+      ));
+      setLayerExpanded(true);
+      setMoodCacheVersion((version) => version + 1);
+    };
+
+    if (remainingStack.length > 0) {
+      activateStack(remainingStack);
+      return;
+    }
+
+    moodLaneStackRef.current.delete(moodKey);
+    moodCacheRef.current.delete(moodKey);
+    moodInFlightRef.current.delete(moodKey);
+    moodLaneInFlightRef.current.delete(moodKey);
+    setSignedInLayerIdxByMood((prev) => (
+      prev[mood] === 0 ? prev : { ...prev, [mood]: 0 }
+    ));
+    setMoodCacheVersion((version) => version + 1);
+
+    const fetchedStack = await ensureMoodLaneDepth(anchorId, mood, 0, feedbackExcludedIds);
+    const allowedFetchedStack = fetchedStack
+      .filter((entry) => (
+        entry?.layer_fragrance_id && !feedbackExcludedIds.includes(entry.layer_fragrance_id)
+      ));
+
+    if (allowedFetchedStack.length > 0) {
+      activateStack(allowedFetchedStack);
+      return;
+    }
+
+    moodLaneStackRef.current.delete(moodKey);
+    moodCacheRef.current.delete(moodKey);
+    setModeErrors((prev) => ({
+      ...prev,
+      [mood]: 'No alternate layer is available for this mode right now.',
+    }));
+    setLayerExpanded(true);
+    setMoodCacheVersion((version) => version + 1);
+  }, [
+    isGuestMode,
+    signedInIsReadOnlyHistoryCard,
+    userId,
+    getBetaSafeLayerMood,
+    selectedDate,
+    selectedContext,
+    collectLayerFeedbackImmediateExclusionIds,
+    readMoodLaneStack,
+    writeMoodLaneStack,
+    ensureMoodLaneDepth,
   ]);
   const openVisibleHeroDetail = useCallback(() => {
     if (!visibleResolvedCurrentCard) return;
@@ -23310,6 +23447,7 @@ const OdaraScreen = ({
                 style={!isGuestMode ? signedInLayerCarrySurfaceStyle : undefined}
               >
                 <LayerCard
+                  mainFragranceId={visibleResolvedCurrentCard?.fragrance_id ?? null}
                   mainName={visibleResolvedCurrentCard?.name ?? ''}
                   mainBrand={visibleResolvedCurrentCard?.brand ?? null}
                   mainNotes={visibleResolvedCurrentCard?.notes ?? []}
@@ -23359,6 +23497,12 @@ const OdaraScreen = ({
                   layerSprayCount={visibleLayerSprayCount}
                   detailIdentityKey={layerDetailIdentityKey}
                   showLegacyAccordsText={false}
+                  feedbackContext={{
+                    context: selectedContext,
+                    temperature: resolvedTemperature,
+                    wearDate: selectedDate,
+                  }}
+                  onLayerFeedback={!isGuestMode && !isReadOnlyHistoryCard ? handleLayerFeedback : undefined}
                   onOpenFragranceDetail={openVisibleLayerDetail}
                   onOpenScentIntel={isReadOnlyHistoryCard ? undefined : openScentIntelSheet}
                   resolveScentChipTone={getAccordChipTone}

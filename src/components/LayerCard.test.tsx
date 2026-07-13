@@ -1,9 +1,11 @@
 import { createRoot, type Root } from 'react-dom/client';
+import type { ComponentProps } from 'react';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import LayerCard from './LayerCard';
 import type { LayerModes } from './ModeSelector';
+import type { LayerFeedbackDisplayInput } from '@/lib/layerFeedbackMemory';
 
 let root: Root | null = null;
 
@@ -37,7 +39,10 @@ const balanceLayer: TestLayerMode = {
   layer_sprays: 1,
 };
 
-function renderExpandedLayerCard(overrides: Partial<TestLayerMode> = {}) {
+function renderExpandedLayerCard(
+  overrides: Partial<TestLayerMode> = {},
+  propOverrides: Partial<ComponentProps<typeof LayerCard>> = {},
+) {
   const layer = { ...balanceLayer, ...overrides };
   const layerModes: LayerModes = {
     balance: layer,
@@ -52,6 +57,7 @@ function renderExpandedLayerCard(overrides: Partial<TestLayerMode> = {}) {
   act(() => {
     root?.render(
       <LayerCard
+        mainFragranceId="dark-pleasure-id"
         mainName="Dark Pleasure"
         mainBrand="The House"
         mainNotes={['Rose', 'Coffee', 'Patchouli', 'Incense']}
@@ -68,6 +74,12 @@ function renderExpandedLayerCard(overrides: Partial<TestLayerMode> = {}) {
         onSelectRatio={vi.fn()}
         isExpanded
         onToggleExpand={vi.fn()}
+        feedbackContext={{
+          context: 'evening',
+          temperature: 74,
+          wearDate: '2026-07-13',
+        }}
+        {...propOverrides}
       />,
     );
   });
@@ -110,7 +122,7 @@ describe('LayerCard expanded guidance', () => {
     expect(document.querySelector('[data-layer-feedback-button]')?.getAttribute('aria-label')).toBe('More options for this pairing');
   });
 
-  it('opens and closes the pairing feedback popover without persistence', () => {
+  it('opens, closes, and acknowledges the pairing feedback popover when no persistence callback is supplied', async () => {
     renderExpandedLayerCard({
       spray_guidance: 'Use the anchor close to the chest and keep the layer as a light neck accent.',
     });
@@ -126,12 +138,13 @@ describe('LayerCard expanded guidance', () => {
     expect(document.body.textContent).toContain('Doesn’t work');
 
     const tooWeak = document.querySelector('[data-layer-feedback-option="Too weak"]') as HTMLButtonElement;
-    act(() => {
+    await act(async () => {
       tooWeak.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
     });
 
     expect(document.querySelector('[data-layer-feedback-menu]')).toBeNull();
-    expect(document.querySelector('[data-layer-feedback-ack]')?.textContent).toContain('Too weak noted for this pairing');
+    expect(document.querySelector('[data-layer-feedback-ack]')?.textContent).toContain('Too weak noted');
 
     act(() => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -183,5 +196,79 @@ describe('LayerCard expanded guidance', () => {
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="BACK_NECK"]')).toBeNull();
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="SHIRT"]')).not.toBeNull();
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-spray-placement-icon="shirt"]')).not.toBeNull();
+  });
+
+  it('submits factual pairing feedback once and prevents duplicate rapid taps', async () => {
+    let resolveSubmit: (() => void) | null = null;
+    const onLayerFeedback = vi.fn(() => new Promise<void>((resolve) => {
+      resolveSubmit = resolve;
+    }));
+
+    renderExpandedLayerCard({}, { onLayerFeedback });
+    const button = document.querySelector('[data-layer-feedback-button]') as HTMLButtonElement;
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    const tooStrong = document.querySelector('[data-layer-feedback-option="Too strong"]') as HTMLButtonElement;
+    await act(async () => {
+      tooStrong.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      tooStrong.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(onLayerFeedback).toHaveBeenCalledTimes(1);
+    const payload = onLayerFeedback.mock.calls[0][0] as LayerFeedbackDisplayInput;
+    expect(payload).toMatchObject({
+      feedbackType: 'too_strong',
+      anchorFragranceId: 'dark-pleasure-id',
+      companionFragranceId: 'reflection-man-layer',
+      layerMode: 'balance',
+      leadRole: 'Lead',
+      context: 'evening',
+      temperature: 74,
+      wearDate: '2026-07-13',
+    });
+    expect(payload.ratioLabel).toContain('Dark Pleasure');
+    expect(payload.ratioLabel).toContain('Reflection Man');
+    expect(payload.presentation).toMatchObject({
+      anchorName: 'Dark Pleasure',
+      companionName: 'Reflection Man',
+      selectedMood: 'balance',
+    });
+    expect(document.body.textContent).toContain('Saving…');
+
+    await act(async () => {
+      resolveSubmit?.();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[data-layer-feedback-menu]')).toBeNull();
+    expect(document.querySelector('[data-layer-feedback-ack]')?.textContent).toContain('Too strong noted');
+  });
+
+  it('keeps the current recommendation visible and retryable when feedback persistence fails', async () => {
+    const onLayerFeedback = vi.fn().mockRejectedValue(new Error('network'));
+
+    renderExpandedLayerCard({}, { onLayerFeedback });
+    const button = document.querySelector('[data-layer-feedback-button]') as HTMLButtonElement;
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    const doesntWork = document.querySelector('[data-layer-feedback-option="Doesn’t work"]') as HTMLButtonElement;
+    await act(async () => {
+      doesntWork.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onLayerFeedback).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-layer-feedback-menu]')).not.toBeNull();
+    expect(document.querySelector('[data-layer-feedback-error]')?.textContent).toContain('Couldn’t save. Try again.');
+    expect(document.querySelector('[data-layer-feedback-ack]')).toBeNull();
+    expect(document.body.textContent).toContain('Reflection Man');
   });
 });

@@ -3,6 +3,11 @@ import { MoreHorizontal } from "lucide-react";
 import ModeSelector, { type LayerMood, type LayerModes, type InteractionType, type SprayPattern, LAYER_MOODS } from "./ModeSelector";
 import { SprayDots, deriveSprayCountsFromLayerMode } from "@/components/card-system/SprayDots";
 import SprayPlacementMap from "@/components/SprayPlacementMap";
+import {
+  normalizeLayerFeedbackType,
+  type LayerFeedbackDisplayInput,
+  type LayerFeedbackType,
+} from "@/lib/layerFeedbackMemory";
 import { resolveLayerRatioGuide } from "@/lib/layerRatioIntelligence";
 import { normalizeNotes } from "@/lib/normalizeNotes";
 import { expandAndDeduplicateScentIntelDisplayTerms } from "@/lib/scentIntelChipTerms";
@@ -763,6 +768,7 @@ function computeRecommendedRatio(
 
 /* ── Props ── */
 interface LayerCardProps {
+  mainFragranceId?: string | null;
   mainName: string;
   mainBrand: string | null;
   mainNotes: string[] | null;
@@ -796,6 +802,12 @@ interface LayerCardProps {
   layerSprayCount?: number | null;
   detailIdentityKey?: string;
   showLegacyAccordsText?: boolean;
+  feedbackContext?: {
+    context?: string | null;
+    temperature?: number | null;
+    wearDate?: string | null;
+  };
+  onLayerFeedback?: (input: LayerFeedbackDisplayInput) => Promise<void>;
   onOpenFragranceDetail?: () => void;
   onOpenScentIntel?: (input: {
     label: string;
@@ -817,6 +829,7 @@ interface LayerCardProps {
 }
 
 const LayerCard = ({
+  mainFragranceId = null,
   mainName,
   mainBrand,
   mainNotes,
@@ -847,6 +860,8 @@ const LayerCard = ({
   layerSprayCount = null,
   detailIdentityKey = '',
   showLegacyAccordsText = true,
+  feedbackContext,
+  onLayerFeedback,
   onOpenFragranceDetail,
   onOpenScentIntel,
   resolveScentChipTone,
@@ -860,6 +875,9 @@ const LayerCard = ({
   const feedbackMenuRef = React.useRef<HTMLDivElement | null>(null);
   const [feedbackMenuOpen, setFeedbackMenuOpen] = React.useState(false);
   const [feedbackAcknowledgement, setFeedbackAcknowledgement] = React.useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = React.useState<LayerFeedbackType | null>(null);
+  const [feedbackError, setFeedbackError] = React.useState('');
+  const feedbackSubmittingRef = React.useRef(false);
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
@@ -1162,9 +1180,59 @@ const LayerCard = ({
     onOpenFragranceDetail?.();
   };
 
-  const handleFeedbackSelect = (label: string) => {
-    setFeedbackAcknowledgement(`${label} noted for this pairing`);
-    setFeedbackMenuOpen(false);
+  const handleFeedbackSelect = async (label: string) => {
+    const feedbackType = normalizeLayerFeedbackType(label);
+    if (!feedbackType || feedbackSubmittingRef.current) return;
+
+    feedbackSubmittingRef.current = true;
+    setFeedbackError('');
+    setFeedbackAcknowledgement('');
+    setFeedbackSubmitting(feedbackType);
+
+    try {
+      if (onLayerFeedback && activeModeEntry && mainFragranceId) {
+        await onLayerFeedback({
+          feedbackType,
+          anchorFragranceId: mainFragranceId,
+          companionFragranceId: activeModeEntry.id,
+          recommendationIdentity: detailIdentityKey || `${mainFragranceId}:${activeModeEntry.id}:${selectedMood}`,
+          layerMode: selectedMood,
+          leadRole: layerRatioGuide?.anchorRole ?? 'Lead',
+          companionRole: layerRatioGuide?.companionRole ?? null,
+          ratioLabel: layerRatioGuide?.ratioLabel ?? ratioDisplayText ?? null,
+          anchorSprays: resolvedMainSprayCount ?? null,
+          companionSprays: resolvedLayerSprayCount ?? null,
+          context: feedbackContext?.context ?? null,
+          temperature: feedbackContext?.temperature ?? null,
+          wearDate: feedbackContext?.wearDate ?? null,
+          presentation: {
+            anchorName: getDisplayName(mainName, mainBrand),
+            anchorBrand: mainBrand ?? null,
+            companionName: getDisplayName(activeModeEntry.name, activeModeEntry.brand),
+            companionBrand: activeModeEntry.brand ?? null,
+            selectedMood,
+            ratioValue: layerRatioGuide?.ratioValue ?? null,
+            ratioLabel: layerRatioGuide?.ratioLabel ?? ratioDisplayText ?? null,
+            leadRole: layerRatioGuide?.anchorRole ?? 'Lead',
+            companionRole: layerRatioGuide?.companionRole ?? null,
+            anchorSprays: resolvedMainSprayCount ?? null,
+            companionSprays: resolvedLayerSprayCount ?? null,
+            anchorPlacement: layerRatioGuide?.anchorPlacement ?? null,
+            companionPlacement: layerRatioGuide?.companionPlacement ?? null,
+            matchedRule: layerRatioGuide?.matchedRule ?? null,
+            dominanceReason: layerRatioGuide?.dominanceReason ?? null,
+          },
+        });
+      }
+
+      setFeedbackAcknowledgement(`${label} noted`);
+      setFeedbackMenuOpen(false);
+    } catch {
+      setFeedbackError('Couldn’t save. Try again.');
+    } finally {
+      feedbackSubmittingRef.current = false;
+      setFeedbackSubmitting(null);
+    }
   };
 
   React.useEffect(() => {
@@ -1192,6 +1260,9 @@ const LayerCard = ({
   React.useEffect(() => {
     setFeedbackMenuOpen(false);
     setFeedbackAcknowledgement('');
+    setFeedbackError('');
+    feedbackSubmittingRef.current = false;
+    setFeedbackSubmitting(null);
   }, [mainName, activeModeEntry?.name, selectedMood]);
 
   return (
@@ -1228,6 +1299,7 @@ const LayerCard = ({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              setFeedbackError('');
               setFeedbackMenuOpen((open) => !open);
             }}
           >
@@ -1246,16 +1318,26 @@ const LayerCard = ({
                   type="button"
                   role="menuitem"
                   data-layer-feedback-option={label}
-                  className="block w-full rounded-[10px] px-3 py-2 text-left text-[12px] text-white/78 transition hover:bg-white/10 hover:text-white"
+                  disabled={!!feedbackSubmitting}
+                  aria-disabled={!!feedbackSubmitting || undefined}
+                  className="block w-full rounded-[10px] px-3 py-2 text-left text-[12px] text-white/78 transition hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-45"
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    handleFeedbackSelect(label);
+                    void handleFeedbackSelect(label);
                   }}
                 >
-                  {label}
+                  {feedbackSubmitting === normalizeLayerFeedbackType(label) ? 'Saving…' : label}
                 </button>
               ))}
+              {feedbackError ? (
+                <div
+                  data-layer-feedback-error
+                  className="px-3 pb-2 pt-1 text-[11px] leading-snug text-red-200/80"
+                >
+                  {feedbackError}
+                </div>
+              ) : null}
             </div>
           )}
           {feedbackAcknowledgement && !feedbackMenuOpen && (
