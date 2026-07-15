@@ -23,7 +23,7 @@ describe('OdaraScreen wear mode gating', () => {
   it('hides Layered UI below threshold and renders Solo as a first-class guide', () => {
     expect(source).toContain('const showWearModeToggle = !isGuestMode && isWearModeLayeringUnlocked');
     expect(source).toContain("const showSoloWearGuide = !!visibleResolvedCurrentCard && effectiveWearMode === 'solo'");
-    expect(source).toContain("const showLayeredWearGuide = !!visibleResolvedLayer && effectiveWearMode === 'layered' && isWearModeLayeringUnlocked");
+    expect(source).toContain("const showLayeredWearGuide = !!visibleResolvedCurrentCard && effectiveWearMode === 'layered' && isWearModeLayeringUnlocked");
     expect(source).toContain('data-wear-mode-toggle');
     expect(source).toContain('data-solo-wear-guide');
     expect(source).toContain('Wear Solo');

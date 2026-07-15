@@ -271,4 +271,36 @@ describe('LayerCard expanded guidance', () => {
     expect(document.querySelector('[data-layer-feedback-ack]')).toBeNull();
     expect(document.body.textContent).toContain('Reflection Man');
   });
+
+  it('renders a visible exhausted-pool recovery state when no replacement layer is ready', () => {
+    const onRetryMood = vi.fn();
+    renderExpandedLayerCard({}, {
+      visibleLayerMode: null,
+      layerModes: {
+        balance: null,
+        bold: null,
+        smooth: null,
+        wild: null,
+      },
+      modeErrors: {
+        balance: 'No other layer is ready right now.',
+        bold: null,
+        smooth: null,
+        wild: null,
+      },
+      onRetryMood,
+    });
+
+    expect(document.body.textContent).toContain('No other layer is ready right now.');
+    expect(document.querySelector('[data-layer-feedback-button]')).toBeNull();
+    const retryButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Try again') as HTMLButtonElement | undefined;
+    expect(retryButton).toBeTruthy();
+
+    act(() => {
+      retryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(onRetryMood).toHaveBeenCalledWith('balance');
+  });
 });

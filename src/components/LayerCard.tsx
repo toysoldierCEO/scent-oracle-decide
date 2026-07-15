@@ -881,6 +881,7 @@ const LayerCard = ({
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
+  const layerPoolExhausted = moodError === 'No other layer is ready right now.';
   const layerRatioGuide = activeModeEntry
     ? resolveLayerRatioGuide(
         {
@@ -1523,14 +1524,15 @@ const LayerCard = ({
           ) : moodError ? (
             <>
               <p className="text-left text-sm font-serif leading-tight tracking-wide text-white/60">
-                Couldn't load {selectedMood} layer
+                {layerPoolExhausted ? moodError : `Couldn't load ${selectedMood} layer`}
               </p>
               {onRetryMood && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onRetryMood(selectedMood); }}
                   className="text-[11px] text-white/60 underline hover:text-white/80 transition-colors"
                 >
-                  Tap to retry
+                  {layerPoolExhausted ? 'Try again' : 'Tap to retry'}
                 </button>
               )}
             </>

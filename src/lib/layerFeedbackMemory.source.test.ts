@@ -71,8 +71,24 @@ describe('layer feedback memory UI plumbing', () => {
     expect(exclusionIndex).toBeGreaterThan(errorGuardIndex);
     expect(odaraScreenSource).toContain('collectLayerFeedbackImmediateExclusionIds(anchorId)');
     expect(odaraScreenSource).toContain("event.feedbackType === 'doesnt_work' && event.companionId === anchorId");
-    expect(odaraScreenSource).toContain('ensureMoodLaneDepth(anchorId, mood, 0, feedbackExcludedIds)');
-    expect(odaraScreenSource).toContain("No alternate layer is available for this mode right now.");
+    expect(odaraScreenSource).toContain('const replacementMoodOrder = [');
+    expect(odaraScreenSource).toContain('...LAYER_MODE_ORDER.filter((candidateMood) => candidateMood !== mood)');
+    expect(odaraScreenSource).toContain('const currentStack = readMoodLaneStack(targetMoodKey)');
+    expect(odaraScreenSource).toContain('ensureMoodLaneDepth(anchorId, targetMood, currentStack.length, feedbackExcludedIds)');
+    expect(odaraScreenSource).toContain('setSelectedMood(targetMood)');
+    expect(odaraScreenSource).toContain("const showLayeredWearGuide = !!visibleResolvedCurrentCard && effectiveWearMode === 'layered' && isWearModeLayeringUnlocked");
+    expect(odaraScreenSource).toContain("clearMoodLane(mood);");
+    expect(odaraScreenSource).toContain("No other layer is ready right now.");
+  });
+
+  it('screens cached and payload-backed layer companions against current eligible ownership', () => {
+    expect(odaraScreenSource).toContain('isLayerEligibleCollectionItem');
+    expect(odaraScreenSource).toContain('const signedInLayerEligibleFragranceIds = useMemo');
+    expect(odaraScreenSource).toContain('const isLayerCompanionInCurrentWardrobe = useCallback');
+    expect(odaraScreenSource).toContain('isLayerCompanionInCurrentWardrobe(cached.layer_fragrance_id)');
+    expect(odaraScreenSource).toContain('isLayerCompanionInCurrentWardrobe(entry.layer_fragrance_id)');
+    expect(odaraScreenSource).toContain('isLayerCompanionInCurrentWardrobe(candidateId)');
+    expect(odaraScreenSource).toContain('&& isLayerCompanionInCurrentWardrobe(entry.layer_fragrance_id)');
   });
 
   it('wires the existing three-option menu to the factual feedback payload', () => {
