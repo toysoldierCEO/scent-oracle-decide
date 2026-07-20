@@ -81,6 +81,20 @@ describe('layer feedback memory UI plumbing', () => {
     expect(odaraScreenSource).toContain("No other layer is ready right now.");
   });
 
+  it('preserves the exhausted-pool fallback across unsuccessful layer retries', () => {
+    expect(odaraScreenSource).toContain("const EXHAUSTED_LAYER_POOL_MESSAGE = 'No other layer is ready right now.'");
+    expect(odaraScreenSource).toContain("const EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE = \"No other layer is ready right now. Couldn't refresh. Try again.\"");
+    expect(odaraScreenSource).toContain('const modeErrorsRef = useRef(modeErrors)');
+    expect(odaraScreenSource).toContain('modeErrorsRef.current = modeErrors');
+    expect(odaraScreenSource).toContain('const preserveExhaustedLayerFallback = isRetry');
+    expect(odaraScreenSource).toContain('isExhaustedLayerPoolError(modeErrorsRef.current[mood])');
+    expect(odaraScreenSource).toContain('const restoreExhaustedLayerFallback = (retryFailed = false)');
+    expect(odaraScreenSource).toContain('restoreExhaustedLayerFallback(false)');
+    expect(odaraScreenSource).toContain('restoreExhaustedLayerFallback(true)');
+    expect(odaraScreenSource).toContain('[mood]: EXHAUSTED_LAYER_POOL_MESSAGE');
+    expect(odaraScreenSource).not.toContain("[mood]: 'No other layer is ready right now.'");
+  });
+
   it('screens cached and payload-backed layer companions against current eligible ownership', () => {
     expect(odaraScreenSource).toContain('isLayerEligibleCollectionItem');
     expect(odaraScreenSource).toContain('const signedInLayerEligibleFragranceIds = useMemo');

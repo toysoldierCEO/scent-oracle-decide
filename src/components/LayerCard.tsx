@@ -53,6 +53,8 @@ export const FAMILY_TINTS: Record<string, { bg: string; glow: string; border: st
 };
 
 const DEFAULT_TINT = { bg: "rgba(255,255,255,0.03)", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.08)", material: "rgba(255,255,255,0.02)" };
+const EXHAUSTED_LAYER_POOL_MESSAGE = 'No other layer is ready right now.';
+const EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE = "No other layer is ready right now. Couldn't refresh. Try again.";
 
 /** Display-only name shortening */
 function getDisplayName(name: string | null | undefined, brand?: string | null): string {
@@ -881,7 +883,8 @@ const LayerCard = ({
   const activeModeEntry = visibleLayerMode;
   const isLoadingSelectedMood = modeLoading?.[selectedMood] ?? loadingMood === selectedMood;
   const moodError = modeErrors?.[selectedMood] ?? null;
-  const layerPoolExhausted = moodError === 'No other layer is ready right now.';
+  const layerPoolRetryFailed = moodError === EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE;
+  const layerPoolExhausted = moodError === EXHAUSTED_LAYER_POOL_MESSAGE || layerPoolRetryFailed;
   const layerRatioGuide = activeModeEntry
     ? resolveLayerRatioGuide(
         {
@@ -1524,8 +1527,13 @@ const LayerCard = ({
           ) : moodError ? (
             <>
               <p className="text-left text-sm font-serif leading-tight tracking-wide text-white/60">
-                {layerPoolExhausted ? moodError : `Couldn't load ${selectedMood} layer`}
+                {layerPoolExhausted ? EXHAUSTED_LAYER_POOL_MESSAGE : `Couldn't load ${selectedMood} layer`}
               </p>
+              {layerPoolRetryFailed ? (
+                <p className="text-left text-[11px] leading-snug text-white/45" data-layer-retry-error>
+                  Couldn&apos;t refresh. Try again.
+                </p>
+              ) : null}
               {onRetryMood && (
                 <button
                   type="button"

@@ -292,6 +292,7 @@ describe('LayerCard expanded guidance', () => {
     });
 
     expect(document.body.textContent).toContain('No other layer is ready right now.');
+    expect(document.body.textContent).not.toContain('No layer loaded for this mode');
     expect(document.querySelector('[data-layer-feedback-button]')).toBeNull();
     const retryButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent === 'Try again') as HTMLButtonElement | undefined;
@@ -302,5 +303,30 @@ describe('LayerCard expanded guidance', () => {
     });
 
     expect(onRetryMood).toHaveBeenCalledWith('balance');
+  });
+
+  it('keeps exhausted-pool recovery visible after a technical retry failure', () => {
+    renderExpandedLayerCard({}, {
+      visibleLayerMode: null,
+      layerModes: {
+        balance: null,
+        bold: null,
+        smooth: null,
+        wild: null,
+      },
+      modeErrors: {
+        balance: "No other layer is ready right now. Couldn't refresh. Try again.",
+        bold: null,
+        smooth: null,
+        wild: null,
+      },
+      onRetryMood: vi.fn(),
+    });
+
+    expect(document.body.textContent).toContain('No other layer is ready right now.');
+    expect(document.body.textContent).toContain("Couldn't refresh. Try again.");
+    expect(document.body.textContent).toContain('Try again');
+    expect(document.body.textContent).not.toContain('No layer loaded for this mode');
+    expect(document.querySelector('[data-layer-retry-error]')?.textContent).toContain("Couldn't refresh. Try again.");
   });
 });

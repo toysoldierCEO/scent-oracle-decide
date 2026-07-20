@@ -2617,6 +2617,13 @@ const DEFAULT_MODE_ERROR_STATE: Record<LayerMood, string | null> = {
   smooth: null,
   wild: null,
 };
+const EXHAUSTED_LAYER_POOL_MESSAGE = 'No other layer is ready right now.';
+const EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE = "No other layer is ready right now. Couldn't refresh. Try again.";
+
+function isExhaustedLayerPoolError(value: string | null | undefined) {
+  return value === EXHAUSTED_LAYER_POOL_MESSAGE
+    || value === EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE;
+}
 
 function areSameModeLoadingMap(
   current: Record<LayerMood, boolean>,
@@ -16278,6 +16285,7 @@ const OdaraScreen = ({
   const [moodCacheVersion, setMoodCacheVersion] = useState(0); // bump to trigger re-render
   const [modeLoading, setModeLoading] = useState<Record<LayerMood, boolean>>({ balance: false, bold: false, smooth: false, wild: false });
   const [modeErrors, setModeErrors] = useState<Record<LayerMood, string | null>>({ balance: null, bold: null, smooth: null, wild: null });
+  const modeErrorsRef = useRef(modeErrors);
   const [layerDebugSource, setLayerDebugSource] = useState<string>('none');
   // Key: `${date}|${context}|${fragranceId}` → OracleAlternate[]
   const alternatesCacheRef = useRef<Map<string, OracleAlternate[]>>(new Map());
@@ -16294,6 +16302,10 @@ const OdaraScreen = ({
   const scentIntelCacheRef = useRef<Map<string, ScentIntelPayload>>(new Map());
   const scentIntelInFlightRef = useRef<Map<string, Promise<ScentIntelPayload>>>(new Map());
   const [scentIntelSheet, setScentIntelSheet] = useState<ScentIntelSheetState | null>(null);
+
+  useEffect(() => {
+    modeErrorsRef.current = modeErrors;
+  }, [modeErrors]);
 
   useEffect(() => {
     updateOdaraReloadCrashContext({
@@ -18498,6 +18510,17 @@ const OdaraScreen = ({
 
     // Capture slot at launch for stale guard
     const capturedSlot = stateKey;
+    const preserveExhaustedLayerFallback = isRetry
+      && isExhaustedLayerPoolError(modeErrorsRef.current[mood]);
+    const restoreExhaustedLayerFallback = (retryFailed = false) => {
+      if (!preserveExhaustedLayerFallback) return;
+      setModeErrors(prev => ({
+        ...prev,
+        [mood]: retryFailed
+          ? EXHAUSTED_LAYER_POOL_RETRY_FAILED_MESSAGE
+          : EXHAUSTED_LAYER_POOL_MESSAGE,
+      }));
+    };
 
     const fetchPromise = (async (): Promise<BackendModeEntry | null> => {
       try {
@@ -18555,7 +18578,11 @@ const OdaraScreen = ({
             odaraDebugLog('[Odara] mood RPC failed → seeded from home payload', mood);
             return fbEntry;
           }
-          setModeErrors(prev => ({ ...prev, [mood]: error.message }));
+          if (preserveExhaustedLayerFallback) {
+            restoreExhaustedLayerFallback(true);
+          } else {
+            setModeErrors(prev => ({ ...prev, [mood]: error.message }));
+          }
           setLayerDebugSource(`err:${error.message}`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
@@ -18565,6 +18592,7 @@ const OdaraScreen = ({
         const row = Array.isArray(data) ? data[0] : data;
         if (!row || !row.layer_fragrance_id) {
           // Empty result — no layer available for this mode. Not an error, just empty.
+          restoreExhaustedLayerFallback(false);
           setLayerDebugSource(`rpc:${mood}(empty)`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
@@ -18573,12 +18601,14 @@ const OdaraScreen = ({
 
         const entry = modeValueToBackendModeEntry(row, mood);
         if (!entry) {
+          restoreExhaustedLayerFallback(false);
           setLayerDebugSource(`rpc:${mood}(empty)`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
           return null;
         }
         if (entry.layer_fragrance_id && !isLayerCompanionInCurrentWardrobe(entry.layer_fragrance_id)) {
+          restoreExhaustedLayerFallback(false);
           setLayerDebugSource(`rpc:${mood}(ineligible)`);
           setModeLoading(prev => ({ ...prev, [mood]: false }));
           setMoodCacheVersion(v => v + 1);
@@ -18625,7 +18655,11 @@ const OdaraScreen = ({
           odaraDebugLog('[Odara] ignoring stale mood error for old slot', capturedSlot);
           return null;
         }
-        setModeErrors(prev => ({ ...prev, [mood]: e?.message ?? 'Fetch failed' }));
+        if (preserveExhaustedLayerFallback) {
+          restoreExhaustedLayerFallback(true);
+        } else {
+          setModeErrors(prev => ({ ...prev, [mood]: e?.message ?? 'Fetch failed' }));
+        }
         setLayerDebugSource(`err:${e?.message}`);
         setModeLoading(prev => ({ ...prev, [mood]: false }));
         setMoodCacheVersion(v => v + 1);
@@ -21526,7 +21560,7 @@ const OdaraScreen = ({
     ));
     setModeErrors((prev) => ({
       ...prev,
-      [mood]: 'No other layer is ready right now.',
+      [mood]: EXHAUSTED_LAYER_POOL_MESSAGE,
     }));
     setSelectedMood(mood);
     setLayerExpanded(true);
