@@ -94,6 +94,8 @@ describe('LayerCard expanded guidance', () => {
 
     expect(text).toContain('Layered');
     expect(text).toContain('Ratio');
+    expect(text.split('Ratio').length - 1).toBe(1);
+    expect(document.querySelectorAll('[data-layer-ratio-section]')).toHaveLength(1);
     expect(document.querySelector('[data-layer-ratio-visual]')?.getAttribute('aria-label')).toContain('1 Dark Pleasure : 2 Reflection Man');
     expect(document.querySelector('[data-layer-ratio-item="anchor"]')?.textContent).toContain('Dark Pleasure');
     expect(document.querySelector('[data-layer-ratio-item="anchor"]')?.textContent).toContain('x1');
@@ -111,6 +113,8 @@ describe('LayerCard expanded guidance', () => {
     expect(text).not.toContain('Layer:');
     expect(text).not.toContain('Dark Pleasure - 1 spray chest / close to body');
     expect(text).not.toContain('Reflection Man - 2 light sprays back neck and upper shirt');
+    expect(text).not.toContain('1 spray chest / close to body');
+    expect(text).not.toContain('2 light sprays back neck');
 
     const placementMaps = document.querySelectorAll('[data-spray-placement-map]');
     expect(placementMaps).toHaveLength(2);
@@ -120,6 +124,22 @@ describe('LayerCard expanded guidance', () => {
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-location="SHIRT"]')).not.toBeNull();
     expect(document.querySelector('[data-spray-placement-role="Layer"] [data-spray-placement-icon="shirt"]')).not.toBeNull();
     expect(document.querySelector('[data-layer-feedback-button]')?.getAttribute('aria-label')).toBe('More options for this pairing');
+  });
+
+  it('keeps collapsed LayerCard free of expanded compression sections', () => {
+    renderExpandedLayerCard({}, { isExpanded: false });
+    const text = document.body.textContent ?? '';
+
+    expect(text).toContain('Layered');
+    expect(text).toContain('Reflection Man');
+    expect(document.querySelector('[data-layer-feedback-button]')).not.toBeNull();
+    expect(document.querySelector('[data-layercard-compressed]')).toBeNull();
+    expect(text).not.toContain('Ratio');
+    expect(text).not.toContain('Placement');
+    expect(text).not.toContain('What happens in the air');
+    expect(text).not.toContain('Effect');
+    expect(text).not.toContain('Why this ratio');
+    expect(text).not.toContain('Spray guidance');
   });
 
   it('opens, closes, and acknowledges the pairing feedback popover when no persistence callback is supplied', async () => {
@@ -236,6 +256,12 @@ describe('LayerCard expanded guidance', () => {
       anchorName: 'Dark Pleasure',
       companionName: 'Reflection Man',
       selectedMood: 'balance',
+      ratioLabel: expect.stringContaining('Reflection Man'),
+      leadRole: 'Lead',
+      anchorSprays: expect.any(Number),
+      companionSprays: expect.any(Number),
+      anchorPlacement: expect.stringContaining('Dark Pleasure'),
+      companionPlacement: expect.stringContaining('Reflection Man'),
     });
     expect(document.body.textContent).toContain('Saving…');
 

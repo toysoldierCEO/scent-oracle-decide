@@ -450,71 +450,6 @@ interface MoodConfig {
   topZones: string;
 }
 
-/* ── Result text helpers ── */
-const ROLE_STRENGTHS: Record<string, string> = {
-  citrus: 'citrus lift', woody: 'woody backbone', spicy: 'spiced edge',
-  sweet: 'sweetness', floral: 'floral character', fresh: 'freshness',
-  leather: 'leather depth', resin: 'resinous weight', earthy: 'earthy base',
-  fruity: 'fruity brightness', musk: 'soft finish',
-};
-
-const ROLE_ADDITIONS: Record<string, string> = {
-  citrus: 'brightness on top', woody: 'woody structure underneath',
-  spicy: 'a warmer, spiced dimension', sweet: 'roundness in the drydown',
-  floral: 'floral complexity', fresh: 'a cleaner, fresher opening',
-  leather: 'textured depth', resin: 'anchoring weight', earthy: 'grounding warmth',
-  fruity: 'a lighter, fruitier surface', musk: 'a softer landing',
-};
-
-/* ── Effect text: outcome-focused, interaction-type-aware ── */
-const INTERACTION_EFFECT_TEMPLATES: Record<InteractionType, (mainStr: string, layerAdd: string) => string[]> = {
-  amplify: (ms, la) => [
-    `${ms} gets louder — ${la} reinforces it without changing direction.`,
-    `Doubles down on ${ms}, with ${la} adding density to the trail.`,
-  ],
-  balance: (ms, la) => [
-    `${ms} stays forward, ${la} fills in behind for a rounder finish.`,
-    `Opens with ${ms}, settles into ${la} without either dropping out.`,
-  ],
-  contrast: (ms, la) => [
-    `${ms} opens sharp, then ${la} pulls it somewhere different.`,
-    `Starts with ${ms}, shifts into ${la} as it develops on skin.`,
-  ],
-};
-
-function buildEffectText(
-  mood: LayerMood,
-  baseName: string,
-  layerName: string,
-  baseNotes: string[],
-  layerNotes: string[],
-  interactionType: InteractionType,
-  ratio: RatioOption = '1:1',
-): string {
-  const baseRole = detectRole(baseNotes);
-  const layerRole = detectRole(layerNotes);
-
-  const mainStrength = baseRole ? (ROLE_STRENGTHS[baseRole.role] ?? 'its character') : 'its character';
-  let layerAddition = layerRole ? (ROLE_ADDITIONS[layerRole.role] ?? 'a complementary layer') : 'a complementary layer';
-
-  if (baseRole && layerRole && baseRole.role === layerRole.role) {
-    const altRole = detectSecondaryRole(layerNotes, baseRole.role);
-    layerAddition = altRole ? (ROLE_ADDITIONS[altRole.role] ?? 'a contrasting edge') : 'a contrasting edge';
-  }
-
-  // Ratio-aware effect text
-  if (ratio === '2:1') {
-    return `${mainStrength.charAt(0).toUpperCase() + mainStrength.slice(1)} leads the wear — ${layerAddition} sits behind, felt more than heard.`;
-  } else if (ratio === '1:2') {
-    return `${layerAddition.charAt(0).toUpperCase() + layerAddition.slice(1)} pushes forward — ${mainStrength} anchors underneath without competing.`;
-  }
-  // 1:1 balanced — use interaction-type templates
-  const templateFn = INTERACTION_EFFECT_TEMPLATES[interactionType] ?? INTERACTION_EFFECT_TEMPLATES.balance;
-  const templates = templateFn(mainStrength, layerAddition);
-  const idx = (baseName.length + layerName.length) % templates.length;
-  return templates[idx];
-}
-
 function buildMoodConfig(
   mood: LayerMood,
   mainName: string,
@@ -1575,13 +1510,13 @@ const LayerCard = ({
         <>
           {hasLayerDetailContent && (
             <div
-              className="mt-3 w-full border-t pt-3"
+              className="mt-2.5 w-full border-t pt-2.5"
               style={{ borderColor: "rgba(255,255,255,0.1)" }}
               data-layercard-compressed
             >
               <div
                 key={detailIdentityKey || `${selectedMood}:${activeModeEntry?.id ?? 'none'}`}
-                className="space-y-3.5"
+                className="space-y-3"
               >
                 <section className="space-y-2" data-layer-ratio-section>
                   <span className="block text-center text-[9px] uppercase tracking-[0.15em] text-white/50">Ratio</span>
