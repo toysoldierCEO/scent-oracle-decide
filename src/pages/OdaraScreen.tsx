@@ -48,10 +48,15 @@ import {
 import { updateOdaraReloadCrashContext } from "@/lib/page-reload-crash-recorder";
 import { collectSameCardModeCompanionExclusionIds } from "@/lib/layerModeCompanionDiversity";
 import {
+  buildDailyLayerWearMemoryRpcParams,
+  type DailyLayerWearMemoryDisplayInput,
+} from "@/lib/dailyLayerMemory";
+import {
   buildLayerFeedbackRpcParams,
   type LayerFeedbackDisplayInput,
   type LayerFeedbackType,
 } from "@/lib/layerFeedbackMemory";
+import { resolveLayerRatioGuide } from "@/lib/layerRatioIntelligence";
 import {
   scoreLayerCombination,
   type LayerCombinationProfile,
@@ -20557,6 +20562,11 @@ const OdaraScreen = ({
     clearCarryoverCloseFlashTimeout();
   }, [selectedDate, clearCarryoverPulseTimeout, clearCarryoverCloseFlashTimeout]);
 
+  const buildCurrentDailyLayerMemoryInputRef = useRef<() => DailyLayerWearMemoryDisplayInput | null>(() => null);
+  const persistDailyLayerWearMemoryRef = useRef<(input: DailyLayerWearMemoryDisplayInput | null) => Promise<void>>(
+    async () => undefined,
+  );
+
   /* ──────────────────────────────────────────────────────────────
    * Card interaction contract:
    *   - guest: double tap on the main scent-card shell = lock
@@ -20644,10 +20654,20 @@ const OdaraScreen = ({
     // call it here alongside onAccept. Lock persistence runs through onAccept.
     const visibleHeroId = activeMainCardRender?.resolvedCurrentCard?.fragrance_id ?? visibleCard.fragrance_id;
     const visibleLayerId = activeMainCardRender?.activeLayer?.id ?? null;
+    const dailyLayerMemoryInput = buildCurrentDailyLayerMemoryInputRef.current();
+    let acceptPersisted = false;
     try {
       await onAccept(visibleHeroId, visibleLayerId);
+      acceptPersisted = true;
     } catch (err) {
       console.warn('[Odara] onAccept failed after double-tap lock', err);
+    }
+    if (acceptPersisted && dailyLayerMemoryInput) {
+      try {
+        await persistDailyLayerWearMemoryRef.current(dailyLayerMemoryInput);
+      } catch (err) {
+        console.warn('[Odara] daily layer memory write failed after double-tap lock', err);
+      }
     }
   }, [
     visibleCard,
@@ -21465,6 +21485,119 @@ const OdaraScreen = ({
     selectedAlternateIdx,
     promotedAltId,
   ]);
+
+  const buildCurrentDailyLayerMemoryInput = useCallback((): DailyLayerWearMemoryDisplayInput | null => {
+    if (
+      isGuestMode
+      || signedInIsReadOnlyHistoryCard
+      || !isWearModeLayeringUnlocked
+      || effectiveWearMode !== 'layered'
+      || !visibleResolvedCurrentCard
+      || !visibleResolvedLayer
+    ) {
+      return null;
+    }
+
+    const layerRatioGuide = resolveLayerRatioGuide(
+      {
+        name: visibleResolvedCurrentCard.name,
+        brand: visibleResolvedCurrentCard.brand,
+        family_key: visibleResolvedCurrentCard.family,
+        notes: visibleResolvedCurrentCard.notes,
+        top_notes: visibleHeroDetail?.top_notes ?? null,
+        middle_notes: visibleHeroDetail?.middle_notes ?? null,
+        base_notes: visibleHeroDetail?.base_notes ?? null,
+        projection: null,
+      },
+      {
+        name: visibleResolvedLayer.name,
+        brand: visibleResolvedLayer.brand,
+        family_key: visibleResolvedLayer.family_key,
+        notes: visibleResolvedLayer.notes,
+        top_notes: visibleResolvedLayer.top_notes,
+        middle_notes: visibleResolvedLayer.middle_notes,
+        base_notes: visibleResolvedLayer.base_notes,
+        accords: visibleResolvedLayer.accords,
+        projection: visibleResolvedLayer.projection,
+      },
+    );
+    const anchorSprays = layerRatioGuide.anchorSprays ?? visibleHeroSprayCount;
+    const companionSprays = layerRatioGuide.companionSprays ?? visibleLayerSprayCount;
+
+    return {
+      anchorFragranceId: visibleResolvedCurrentCard.fragrance_id,
+      companionFragranceId: visibleResolvedLayer.id,
+      leadFragranceId: visibleResolvedCurrentCard.fragrance_id,
+      accentFragranceId: visibleResolvedLayer.id,
+      recommendationIdentity: layerDetailIdentityKey,
+      layerMode: visibleResolvedSelectedMood,
+      ratioLabel: layerRatioGuide.ratioLabel,
+      anchorSprays,
+      companionSprays,
+      anchorPlacement: layerRatioGuide.anchorPlacement,
+      companionPlacement: layerRatioGuide.companionPlacement,
+      context: selectedContext,
+      temperature: resolvedTemperature,
+      wearDate: selectedDate,
+      acceptanceSource: 'layered_double_tap_lock',
+      presentation: {
+        anchorName: visibleResolvedCurrentCard.name,
+        anchorBrand: visibleResolvedCurrentCard.brand ?? null,
+        companionName: visibleResolvedLayer.name,
+        companionBrand: visibleResolvedLayer.brand ?? null,
+        selectedMood: visibleResolvedSelectedMood,
+        ratioValue: layerRatioGuide.ratioValue,
+        ratioLabel: layerRatioGuide.ratioLabel,
+        leadRole: layerRatioGuide.anchorRole,
+        companionRole: layerRatioGuide.companionRole,
+        anchorSprays,
+        companionSprays,
+        placement: {
+          anchor: layerRatioGuide.anchorPlacement,
+          companion: layerRatioGuide.companionPlacement,
+        },
+        anchorPlacement: layerRatioGuide.anchorPlacement,
+        companionPlacement: layerRatioGuide.companionPlacement,
+        matchedRule: layerRatioGuide.matchedRule,
+        dominanceReason: layerRatioGuide.dominanceReason,
+        recommendationIdentity: layerDetailIdentityKey,
+        acceptanceSource: 'layered_double_tap_lock',
+      },
+    };
+  }, [
+    isGuestMode,
+    signedInIsReadOnlyHistoryCard,
+    isWearModeLayeringUnlocked,
+    effectiveWearMode,
+    visibleResolvedCurrentCard,
+    visibleResolvedLayer,
+    visibleHeroDetail?.top_notes,
+    visibleHeroDetail?.middle_notes,
+    visibleHeroDetail?.base_notes,
+    visibleHeroSprayCount,
+    visibleLayerSprayCount,
+    layerDetailIdentityKey,
+    visibleResolvedSelectedMood,
+    selectedContext,
+    resolvedTemperature,
+    selectedDate,
+  ]);
+
+  const persistDailyLayerWearMemory = useCallback(async (input: DailyLayerWearMemoryDisplayInput | null) => {
+    if (!input || isGuestMode || signedInIsReadOnlyHistoryCard || !userId) return;
+
+    const rpcParams = buildDailyLayerWearMemoryRpcParams(userId, input);
+    const { error } = await odaraSupabase.rpc(
+      'submit_daily_layer_wear_memory_v1' as any,
+      rpcParams as any,
+    );
+
+    if (error) throw error;
+  }, [isGuestMode, signedInIsReadOnlyHistoryCard, userId]);
+
+  buildCurrentDailyLayerMemoryInputRef.current = buildCurrentDailyLayerMemoryInput;
+  persistDailyLayerWearMemoryRef.current = persistDailyLayerWearMemory;
+
   const handleLayerFeedback = useCallback(async (input: LayerFeedbackDisplayInput) => {
     if (isGuestMode || signedInIsReadOnlyHistoryCard || !userId) {
       throw new Error('Layer feedback requires an authenticated user.');
