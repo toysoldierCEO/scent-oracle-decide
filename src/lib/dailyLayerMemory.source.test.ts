@@ -101,6 +101,14 @@ describe('daily layer wear memory UI plumbing', () => {
     expect(builderSnippet).toContain("acceptanceSource: 'layered_double_tap_lock'");
   });
 
+  it('initializes visible hero detail before the daily layer memory callback reads it', () => {
+    const visibleHeroDetailIndex = odaraScreenSource.indexOf('const visibleHeroDetail = useMemo');
+    const builderIndex = odaraScreenSource.indexOf('const buildCurrentDailyLayerMemoryInput = useCallback');
+
+    expect(visibleHeroDetailIndex).toBeGreaterThan(-1);
+    expect(builderIndex).toBeGreaterThan(visibleHeroDetailIndex);
+  });
+
   it('does not write positive memory from view, skip, or negative feedback paths', () => {
     expect(odaraScreenSource.match(/submit_daily_layer_wear_memory_v1/g) ?? []).toHaveLength(1);
 
